@@ -1,69 +1,105 @@
-package main
+package main // Ensure this is package main
 
-import "encoding/json"
-
-var words = []string{"apple", "banana", "cloud", "house", "tree", "computer", "go", "svelte"}
+import (
+	"encoding/json"
+)
 
 // --- Message Constants ---
 const (
-	MsgTypeError        = "error"
-	MsgTypeAssignRole   = "assignRole"
-	MsgTypeGameState    = "gameState"
-	MsgTypeDrawEvent    = "drawEvent"
-	MsgTypeGuess        = "guess"
-	MsgTypeGuessResult  = "guessResult"
-	MsgTypePlayerJoined = "playerJoined" // Example, not fully used in this basic version
-	MsgTypePlayerLeft   = "playerLeft"
-	MsgTypeWaiting      = "waiting"
-	MsgTypeGameStart    = "gameStart"
-	MsgTypeGameOver     = "gameOver"
-	MsgTypeClearCanvas  = "clearCanvas" // Todo: Add a clear button
+	// Client -> Server
+	MsgTypeSetName   = "setName"
+	MsgTypeGuess     = "guess"
+	MsgTypeDrawEvent = "drawEvent" // Frontend sends this type
+	MsgTypeStartGame = "startGame"
+	// Server -> Client
+	MsgTypeError                  = "error"
+	MsgTypeGameInfo               = "gameInfo"
+	MsgTypePlayerUpdate           = "playerUpdate"
+	MsgTypeTurnStart              = "turnStart"
+	MsgTypePlayerGuessedCorrectly = "playerGuessedCorrectly"
+	MsgTypeChat                   = "chat"
+	MsgTypeDrawEventBroadcast     = "drawEvent" // <<< Use "drawEvent" to match frontend expectation
+	MsgTypeTurnEnd                = "turnEnd"
+	MsgTypeWaiting                = "waiting" // Added back for potential use
 )
 
 // --- Message Structs ---
 
-// Generic message structure to determine type before full unmarshalling
+// Generic message structure
 type Message struct {
 	Type    string          `json:"type"`
-	Payload json.RawMessage `json:"payload"` // Use RawMessage to delay parsing payload
+	Payload json.RawMessage `json:"payload"`
 }
 
-// Specific payload structures for different message types
+// --- Client -> Server Payloads ---
 
-type AssignRolePayload struct {
-	Role       string `json:"role"`                 // "drawer" or "guesser"
-	Word       string `json:"word,omitempty"`       // Only sent to drawer
-	WordLength int    `json:"wordLength,omitempty"` // Only sent to guesser
-}
-
-type DrawEventPayload struct {
-	// Define fields needed for drawing (match frontend)
-	EventType string  `json:"eventType"` // e.g., "start", "draw", "end"
-	X         float64 `json:"x"`
-	Y         float64 `json:"y"`
-	Color     string  `json:"color,omitempty"`     // Optional: Add color selection
-	LineWidth float64 `json:"lineWidth,omitempty"` // Optional: Add line width
+type SetNamePayload struct {
+	Name string `json:"name"`
 }
 
 type GuessPayload struct {
 	Guess string `json:"guess"`
 }
 
-type GuessResultPayload struct {
-	Correct bool   `json:"correct"`
-	Guess   string `json:"guess,omitempty"` // Optionally include the guess text for feedback
-	Word    string `json:"word,omitempty"`  // Send the correct word on game over
+type DrawEventPayload struct {
+	EventType string  `json:"eventType"`
+	X         float64 `json:"x"`
+	Y         float64 `json:"y"`
+	Color     string  `json:"color,omitempty"`
+	LineWidth float64 `json:"lineWidth,omitempty"`
 }
 
-type GameStatePayload struct {
-	State string `json:"state"` // e.g., "waiting", "active", "gameOver"
-}
+// StartGamePayload: No payload needed
+
+// --- Server -> Client Payloads ---
 
 type ErrorPayload struct {
 	Message string `json:"message"`
 }
 
-// Payload for player leaving (sent to remaining player)
-type PlayerLeftPayload struct {
+type PlayerInfo struct {
+	ID                  string `json:"id"`
+	Name                string `json:"name"`
+	IsHost              bool   `json:"isHost,omitempty"`
+	HasGuessedCorrectly bool   `json:"hasGuessedCorrectly,omitempty"`
+}
+
+type GameInfoPayload struct {
+	YourID          string       `json:"yourId"`
+	Players         []PlayerInfo `json:"players"`
+	HostID          string       `json:"hostId,omitempty"`
+	IsGameActive    bool         `json:"isGameActive"`
+	CurrentDrawerID string       `json:"currentDrawerId,omitempty"`
+	WordLength      int          `json:"wordLength,omitempty"`
+	Word            string       `json:"word,omitempty"` // For drawer on join/rejoin
+	TurnEndTime     int64        `json:"turnEndTime,omitempty"`
+}
+
+type PlayerUpdatePayload struct {
+	Players []PlayerInfo `json:"players"`
+	HostID  string       `json:"hostId,omitempty"`
+}
+
+type TurnStartPayload struct {
+	CurrentDrawerID string       `json:"currentDrawerId"`
+	Word            string       `json:"word,omitempty"`
+	WordLength      int          `json:"wordLength"`
+	Players         []PlayerInfo `json:"players"`
+	TurnEndTime     int64        `json:"turnEndTime"`
+}
+
+type PlayerGuessedCorrectlyPayload struct {
 	PlayerID string `json:"playerId"`
 }
+
+type ChatPayload struct {
+	SenderName string `json:"senderName"`
+	Message    string `json:"message"`
+	IsSystem   bool   `json:"isSystem,omitempty"`
+}
+
+type TurnEndPayload struct {
+	CorrectWord string `json:"correctWord"`
+}
+
+// WaitingPayload: No payload needed for MsgTypeWaiting

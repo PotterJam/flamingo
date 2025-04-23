@@ -9,23 +9,23 @@ import signal
 # --- Configuration ---
 FRONTEND_DIR = "frontend"
 BACKEND_DIR = "backend"
-# Svelte's build output directory (relative to FRONTEND_DIR)
-SVELTE_BUILD_DIR_NAME = "dist"
-# Directory where Go backend expects frontend assets (relative to BACKEND_DIR)
+# Vite's default build output directory (usually 'dist' for React too)
+BUILD_OUTPUT_DIR_NAME = "dist" # <<< RENAMED for clarity
+# Directory where Go backend expects frontend assets
 GO_PUBLIC_DIR_NAME = "public"
 # Name for the compiled Go executable
 GO_EXE_NAME = "scriblio_server"
 # Port the Go server listens on
 SERVER_PORT = 8080
 # Frontend build command (use 'pnpm build' if you use pnpm)
-FRONTEND_BUILD_CMD = ["npm", "run", "build"]
+FRONTEND_BUILD_CMD = ["npm", "run", "build"] # <<< Usually same for Vite React
 # --- End Configuration ---
 
 # Get absolute paths
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 frontend_path = os.path.join(SCRIPT_DIR, FRONTEND_DIR)
 backend_path = os.path.join(SCRIPT_DIR, BACKEND_DIR)
-svelte_build_path = os.path.join(frontend_path, SVELTE_BUILD_DIR_NAME)
+build_output_path = os.path.join(frontend_path, BUILD_OUTPUT_DIR_NAME) # Use new variable name
 go_public_path = os.path.join(backend_path, GO_PUBLIC_DIR_NAME)
 go_exe_path = os.path.join(backend_path, GO_EXE_NAME + (".exe" if sys.platform == "win32" else ""))
 
@@ -36,8 +36,7 @@ def run_command(cmd, cwd, step_name):
     print(f"--- Running Step: {step_name} ---")
     print(f"Executing: {' '.join(cmd)} in {cwd}")
     try:
-        # Use shell=True only if necessary (e.g., complex commands), otherwise False is safer
-        use_shell = sys.platform == "win32" # npm/pnpm might need shell on Windows
+        use_shell = sys.platform == "win32"
         result = subprocess.run(cmd, cwd=cwd, check=True, capture_output=True, text=True, shell=use_shell)
         print(result.stdout)
         print(f"--- {step_name} Successful ---")
@@ -59,21 +58,22 @@ def run_command(cmd, cwd, step_name):
 def cleanup():
     """Stops the server process if it's running."""
     global server_process
-    if server_process and server_process.poll() is None: # Check if process exists and is running
+    if server_process and server_process.poll() is None:
         print(f"\n--- Stopping Go server (PID: {server_process.pid}) ---")
         try:
-            # Graceful termination first
             if sys.platform == "win32":
-                server_process.send_signal(signal.CTRL_C_EVENT) # Simulate Ctrl+C on Windows
+                # Send Ctrl+C equivalent on Windows
+                # This might require creating the process differently if it doesn't work
+                # os.kill(server_process.pid, signal.CTRL_C_EVENT) # This needs process_group=True often
+                server_process.send_signal(signal.CTRL_C_EVENT) # Try simpler signal first
             else:
                  server_process.terminate() # SIGTERM on Unix-like
 
-            # Wait a bit
             server_process.wait(timeout=5)
             print("Server terminated gracefully.")
         except subprocess.TimeoutExpired:
             print("Server did not terminate gracefully, forcing kill.")
-            server_process.kill() # Force kill if terminate fails
+            server_process.kill()
             server_process.wait()
             print("Server killed.")
         except Exception as e:
@@ -87,7 +87,7 @@ def main():
     global server_process
     try:
         # 1. Build Frontend
-        if not run_command(FRONTEND_BUILD_CMD, frontend_path, "Build Svelte Frontend"):
+        if not run_command(FRONTEND_BUILD_CMD, frontend_path, "Build React Frontend"):
             sys.exit(1)
 
         # 2. Prepare Backend Public Directory
@@ -96,12 +96,12 @@ def main():
             print(f"Removing existing directory: {go_public_path}")
             shutil.rmtree(go_public_path)
 
-        if not os.path.exists(svelte_build_path):
-             print(f"!!! ERROR: Svelte build output directory not found: {svelte_build_path}")
+        if not os.path.exists(build_output_path): # Check using new variable name
+             print(f"!!! ERROR: React build output directory not found: {build_output_path}")
              sys.exit(1)
 
-        print(f"Copying '{svelte_build_path}' to '{go_public_path}'")
-        shutil.copytree(svelte_build_path, go_public_path)
+        print(f"Copying '{build_output_path}' to '{go_public_path}'")
+        shutil.copytree(build_output_path, go_public_path)
         print("--- Prepare Go Public Directory Successful ---")
 
         # 3. Build Backend
@@ -114,8 +114,9 @@ def main():
         print(f"Starting server: {go_exe_path}")
         try:
             # Start the server as a background process
-            # Run it from within the backend directory so it finds ./public
-            server_process = subprocess.Popen([go_exe_path], cwd=backend_path)
+            # On Windows, creating a process group might be needed for Ctrl+C handling
+            # creationflags = subprocess.CREATE_NEW_PROCESS_GROUP if sys.platform == "win32" else 0
+            server_process = subprocess.Popen([go_exe_path], cwd=backend_path) #, creationflags=creationflags)
             print(f"Server started successfully with PID: {server_process.pid}")
         except Exception as e:
             print(f"!!! ERROR starting Go server: {e} !!!")
@@ -157,30 +158,3 @@ def main():
 if __name__ == "__main__":
     main()
 
-
-# **How to Use:**
-
-# 1.  Save the code above as a Python file (e.g., `start_game.py`) in the **parent directory** that contains your `frontend` and `backend` folders.
-# 2.  Make sure your project structure looks like this:
-
-#     ```
-#     your_project_root/
-#     ├── start_game.py  <-- Save the script here
-#     ├── backend/
-#     │   ├── main.go
-#     │   ├── hub.go     (and other .go files)
-#     │   └── go.mod
-#     │   └── go.sum
-#     └── frontend/
-#         ├── src/
-#         ├── public/
-#         ├── package.json
-#         ├── vite.config.js (or similar)
-#         └── ... (other svelte files)
-#     ```
-
-# 3.  Open your terminal or command prompt.
-# 4.  Navigate **into** the `your_project_root` directory.
-# 5.  Run the script: `python start_game.py`
-# 6.  The script will execute the build steps, start the server, and open browser tabs.
-# 7.  When you are finished testing, go back to the terminal where the Python script is running and press `Ctrl+C`. The script will attempt to stop the Go server process automatical

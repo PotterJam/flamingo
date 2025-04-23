@@ -1,131 +1,170 @@
 package main
 
 import (
-	"encoding/json"
-	"github.com/gorilla/websocket"
-	"log"
+	"encoding/json" // Needed here
+	"log"           // Needed here
+
+	"github.com/gorilla/websocket" // Needed here
 )
 
-// Player represents a single connected client with a WebSocket connection.
+// Player represents a single connected client.
 type Player struct {
 	ID   string
+	Name string // Player's chosen name
 	Conn *websocket.Conn
-	Hub  *Hub        // Reference back to the central hub
-	Game *Game       // Reference to the game the player is currently in (nil if none)
-	Send chan []byte // Buffered channel for outbound messages to this player
+	Hub  *Hub
+	Send chan []byte // Buffered channel for outbound messages
 }
 
 // readPump pumps messages from the WebSocket connection to the hub.
-// It runs in its own goroutine for each player.
 func (p *Player) readPump() {
 	defer func() {
-		// Cleanup actions when the readPump exits (due to error or connection close)
-		p.Hub.Unregister <- p // Signal the hub to unregister this player
-		if p.Game != nil {
-			// If the player was in a game, notify the game logic
-			p.Game.HandleDisconnect(p)
-		}
-		p.Conn.Close() // Close the WebSocket connection
-		log.Printf("Player %s disconnected and cleaned up", p.ID)
+		p.Hub.Unregister <- p
+		p.Conn.Close()
+		log.Printf("Player %s (%s) disconnected and readPump cleaned up", p.ID, p.Name)
 	}()
-	// Optional: Set connection limits (read limit, deadlines for pong messages)
-	// p.Conn.SetReadLimit(maxMessageSize)
-	// p.Conn.SetReadDeadline(time.Now().Add(pongWait))
-	// p.Conn.SetPongHandler(func(string) error { p.Conn.SetReadDeadline(time.Now().Add(pongWait)); return nil })
 
-	// Loop indefinitely, reading messages from the WebSocket
+	hasSetName := false
+
 	for {
 		_, messageBytes, err := p.Conn.ReadMessage()
 		if err != nil {
-			// Check for expected close errors vs unexpected ones
 			if websocket.IsUnexpectedCloseError(err, websocket.CloseGoingAway, websocket.CloseAbnormalClosure) {
-				log.Printf("Player %s read error: %v", p.ID, err)
+				log.Printf("Player %s (%s) read error: %v", p.ID, p.Name, err)
 			} else {
-				log.Printf("Player %s connection closed normally.", p.ID)
+				log.Printf("Player %s (%s) connection closed normally.", p.ID, p.Name)
 			}
-			break // Exit loop on any error (triggers defer cleanup)
+			break
 		}
 
-		// Process the received message
 		var msg Message
 		if err := json.Unmarshal(messageBytes, &msg); err != nil {
-			log.Printf("Player %s: Error unmarshalling message: %v", p.ID, err)
-			p.SendError("Invalid message format") // Send error back to client
-			continue                              // Skip processing this message
+			log.Printf("Player %s (%s): Error unmarshalling message: %v", p.ID, p.Name, err)
+			if !hasSetName {
+				p.SendError("Invalid message format. Please set name first.")
+			} else {
+				p.SendError("Invalid message format")
+			}
+			continue
 		}
 
-		// Route the message to the Hub for handling (which might delegate to the Game)
-		p.Hub.HandleMessage(p, msg)
+		// --- Handle SetName directly in readPump ---
+		if msg.Type == MsgTypeSetName {
+			if !hasSetName { // Only process if name hasn't been set yet
+				var namePayload SetNamePayload
+				if err := json.Unmarshal(msg.Payload, &namePayload); err == nil {
+					trimmedName := namePayload.Name                  // Trim space later if needed
+					if trimmedName != "" && len(trimmedName) <= 20 { // Example length limit
+						p.Name = trimmedName // Set the player's name
+						hasSetName = true
+						log.Printf("Player %s set name to %s", p.ID, p.Name)
+						log.Printf("Player %s (%s) sending PlayerReady signal to Hub", p.ID, p.Name)
+						p.Hub.PlayerReady <- p // Signal Hub that player is ready
+					} else {
+						p.SendError("Invalid name. Must be 1-20 characters.")
+					}
+				} else {
+					log.Printf("Player %s (%s): Error unmarshalling SetName payload: %v", p.ID, p.Name, err)
+					p.SendError("Invalid name payload.")
+				}
+			} else {
+				// Name already set, ignore subsequent setName messages silently or send error
+				log.Printf("Player %s (%s) sent setName message after name was already set. Ignoring.", p.ID, p.Name)
+				// Optionally send an error: p.SendError("Name already set.")
+			}
+		} else if !hasSetName {
+			// Ignore other messages until name is set
+			log.Printf("Player %s (%s) sent message type %s before setting name.", p.ID, p.Name, msg.Type)
+			p.SendError("Please set your name first.")
+		} else {
+			// Name is set, route other valid messages to the Hub
+			p.Hub.HandleMessage(p, msg)
+		}
 	}
 }
 
 // writePump pumps messages from the player's Send channel to the WebSocket connection.
-// It runs in its own goroutine for each player.
 func (p *Player) writePump() {
-	// Optional: Setup a ticker for sending ping messages to keep connection alive
-	// ticker := time.NewTicker(pingPeriod)
 	defer func() {
-		// Cleanup actions when the writePump exits
-		// ticker.Stop()
-		p.Conn.Close() // Ensure connection is closed if writing fails
-		log.Printf("Player %s writePump stopped.", p.ID)
+		p.Conn.Close()
+		log.Printf("Player %s (%s) writePump stopped.", p.ID, p.Name)
 	}()
 
-	// Loop, taking messages from the Send channel and writing them to the WebSocket
-	for message := range p.Send {
-		// Optional: Set a write deadline
-		// p.Conn.SetWriteDeadline(time.Now().Add(writeWait))
-		w, err := p.Conn.NextWriter(websocket.TextMessage)
-		if err != nil {
-			log.Printf("Player %s write error getting writer: %v", p.ID, err)
-			return // Exit loop on error
-		}
-		_, err = w.Write(message)
-		if err != nil {
-			log.Printf("Player %s write error writing message: %v", p.ID, err)
-			// Attempt to close writer even on error
-			_ = w.Close()
-			return
-		}
+	for {
+		select {
+		case message, ok := <-p.Send:
+			if !ok {
+				log.Printf("Player %s (%s): Hub closed send channel.", p.ID, p.Name)
+				// Attempt to send close message, ignore error as connection might be dead
+				_ = p.Conn.WriteMessage(websocket.CloseMessage, []byte{})
+				return
+			}
 
-		// Optional: Add queued chat messages to the current websocket message.
-		// n := len(p.Send)
-		// for i := 0; i < n; i++ {
-		// 	w.Write(newline) // Assuming newline is defined elsewhere
-		// 	w.Write(<-p.Send)
-		// }
+			w, err := p.Conn.NextWriter(websocket.TextMessage)
+			if err != nil {
+				log.Printf("Player %s (%s) write error getting writer: %v", p.ID, p.Name, err)
+				return
+			}
+			_, err = w.Write(message)
+			if err != nil {
+				log.Printf("Player %s (%s) write error writing message: %v", p.ID, p.Name, err)
+				_ = w.Close() // Attempt to close writer even on error
+				return
+			}
 
-		// Close the writer to flush the message to the connection
-		if err := w.Close(); err != nil {
-			log.Printf("Player %s writer close error: %v", p.ID, err)
-			return // Exit loop on error
+			if err := w.Close(); err != nil {
+				log.Printf("Player %s (%s) writer close error: %v", p.ID, p.Name, err)
+				return
+			}
 		}
-
-		// Optional: Ping handling
-		// select {
-		// case <-ticker.C:
-		// 	p.Conn.SetWriteDeadline(time.Now().Add(writeWait))
-		// 	if err := p.Conn.WriteMessage(websocket.PingMessage, nil); err != nil {
-		// 		return
-		// 	}
-		// default:
-		// }
 	}
-	// If the loop exits, it means the p.Send channel was closed (likely during unregistration)
 }
 
-// SendError is a helper method to send a structured error message back to this specific player.
+// SendError sends a structured error message back to this specific player.
 func (p *Player) SendError(errMsg string) {
+	// Ensure player pointer is not nil (might happen during rapid disconnect/cleanup)
+	if p == nil {
+		return
+	}
 	payload := ErrorPayload{Message: errMsg}
 	// Use mustMarshal helper for simplicity, assuming payload struct is always valid
 	msgBytes, _ := json.Marshal(Message{Type: MsgTypeError, Payload: json.RawMessage(mustMarshal(payload))})
-
-	// Use a non-blocking send to avoid deadlocking if the send channel is full or closed
+	// Use a non-blocking send
 	select {
 	case p.Send <- msgBytes:
-		// Message sent successfully
 	default:
-		// Channel likely closed or full, log it
-		log.Printf("Player %s: Failed to send error message '%s', Send channel likely closed.", p.ID, errMsg)
+		log.Printf("Player %s (%s): Failed to send error message '%s', Send channel likely closed.", p.ID, p.Name, errMsg)
+	}
+}
+
+// SendMessage sends any message type to this player (non-blocking).
+func (p *Player) SendMessage(msgType string, payload interface{}) {
+	// Ensure player pointer is not nil
+	if p == nil {
+		return
+	}
+	// Use json.RawMessage(nil) for messages without payload
+	var payloadBytes []byte
+	var err error
+	if payload != nil {
+		payloadBytes, err = json.Marshal(payload)
+		if err != nil {
+			log.Printf("Player %s (%s): Error marshalling payload for type %s: %v", p.ID, p.Name, msgType, err)
+			return
+		}
+	}
+
+	msg := Message{Type: msgType, Payload: json.RawMessage(payloadBytes)}
+	msgBytes, err := json.Marshal(msg)
+	if err != nil {
+		log.Printf("Player %s (%s): Error marshalling message for type %s: %v", p.ID, p.Name, msgType, err)
+		return
+	}
+
+	// Use non-blocking send to avoid deadlocks if writePump is stuck or channel closed
+	select {
+	case p.Send <- msgBytes:
+	default:
+		log.Printf("Player %s (%s): Send channel full/closed for message type %s.", p.ID, p.Name, msgType)
 	}
 }

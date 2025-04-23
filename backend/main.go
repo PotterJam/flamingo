@@ -11,15 +11,21 @@ import (
 	"time"
 )
 
+// Configuration for WebSocket upgrader
 var upgrader = websocket.Upgrader{
 	ReadBufferSize:  1024,
 	WriteBufferSize: 1024,
-	CheckOrigin:     func(r *http.Request) bool { return true }, // Allow all origins for dev
+	CheckOrigin: func(r *http.Request) bool {
+		log.Printf("WebSocket CheckOrigin request from: %s", r.Header.Get("Origin"))
+		return true // Allow all for dev
+	},
 }
 
-// serveWs handles WebSocket upgrade requests from clients.
+// Word list
+var words = []string{"apple", "banana", "cloud", "house", "tree", "computer", "go", "svelte", "network", "game", "player", "draw", "timer", "guess", "score", "host", "lobby", "react"}
+
+// serveWs handles WebSocket upgrade requests.
 func serveWs(hub *Hub, w http.ResponseWriter, r *http.Request) {
-	// Upgrade the HTTP connection to a WebSocket connection
 	conn, err := upgrader.Upgrade(w, r, nil)
 	if err != nil {
 		log.Println("WebSocket upgrade error:", err)
@@ -27,70 +33,51 @@ func serveWs(hub *Hub, w http.ResponseWriter, r *http.Request) {
 	}
 	log.Println("Client connected via WebSocket from:", conn.RemoteAddr())
 
-	// Create a new Player instance for this connection
 	player := &Player{
-		ID:   uuid.NewString(), // Assign a unique ID to the player
+		ID:   uuid.NewString(),
+		Name: "", // Name set later
 		Conn: conn,
 		Hub:  hub,
-		Send: make(chan []byte, 256), // Create a buffered channel for outgoing messages
-		Game: nil,                    // Initially not in any game
+		Send: make(chan []byte, 256),
 	}
 
-	// Register the new player with the hub
-	player.Hub.Register <- player
+	log.Printf("Registering new player connection: %s", player.ID)
+	hub.Register <- player // Register connection with Hub
 
-	// Start the readPump and writePump goroutines for this player
-	// These handle communication for this specific connection.
 	go player.writePump()
-	go player.readPump() // readPump handles unregistration on disconnect/error
+	go player.readPump()
 }
 
 // main is the application entry point.
 func main() {
-	// Seed the random number generator (important for word selection/role assignment)
 	rand.Seed(time.Now().UnixNano())
-
-	// Create and run the central Hub in its own goroutine
 	hub := NewHub()
 	go hub.Run()
 
-	// Create a new router (using gorilla/mux here)
 	router := mux.NewRouter()
-
-	// WebSocket endpoint handler
 	router.HandleFunc("/ws", func(w http.ResponseWriter, r *http.Request) {
 		serveWs(hub, w, r)
 	})
 
-	// --- Static File Serving for Svelte Frontend ---
-	// Define the directory containing the built Svelte app
-	// IMPORTANT: Adjust "./public" if your Go executable runs from a different
-	// location relative to the 'public' folder.
-	staticDir := "./public"
-	// Create a file server handler
-	fs := http.FileServer(http.Dir(staticDir))
-
-	// Serve static files (CSS, JS, images) from the /assets path (or however Vite structures it)
-	// Adjust the path prefix based on your Svelte build output structure
-	router.PathPrefix("/assets/").Handler(fs)
-
-	// Serve the main index.html for the root path and potentially other routes
-	// This ensures that navigating directly to paths handled by Svelte's router works.
-	router.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-		http.ServeFile(w, r, staticDir+"/index.html")
+	// Static File Serving
+	staticDir := "./public" // Assumes React build is copied here
+	fileServer := http.FileServer(http.Dir(staticDir))
+	router.PathPrefix("/assets/").Handler(fileServer) // Vite typically uses /assets/
+	router.PathPrefix("/").HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		filePath := staticDir + r.URL.Path
+		if _, err := http.Dir(staticDir).Open(r.URL.Path); err != nil {
+			log.Printf("Serving index.html for path: %s", r.URL.Path)
+			http.ServeFile(w, r, staticDir+"/index.html") // Serve index for client routing
+			return
+		}
+		log.Printf("Serving static file: %s", filePath)
+		fileServer.ServeHTTP(w, r) // Serve existing static file
 	})
-	// Add more HandleFunc calls here if Svelte uses client-side routing for other paths,
-	// all pointing to index.html. Example:
-	// router.HandleFunc("/about", func(w http.ResponseWriter, r *http.Request) {
-	//     http.ServeFile(w, r, staticDir+"/index.html")
-	// })
 
-	// Define the server port
 	port := "8080"
 	log.Printf("Server starting on http://localhost:%s", port)
-
-	// Start the HTTP server
-	err := http.ListenAndServe(":"+port, router)
+	server := &http.Server{Addr: ":" + port, Handler: router}
+	err := server.ListenAndServe()
 	if err != nil {
 		log.Fatal("ListenAndServe Error: ", err)
 	}
