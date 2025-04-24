@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useCallback } from 'react';
+import { useEffect, useCallback } from 'react';
 import { useWebSocket, Player, ErrorPayload, TurnEndPayload } from './hooks/useWebSocket';
 
 import NameInput from './components/NameInput';
@@ -68,20 +68,21 @@ export const useAppStore = create<AppState & AppActions>()(immer((set) => ({
 
     gameState: initialGameState,
 
-    resetGameState: () => set((s) => s.gameState = initialGameState),
-    setLocalPlayerId: (id) => set((s) => s.gameState.localPlayerId = id),
-    setPlayers: (players) => set(s => s.gameState.players = players),
-    playerGuessedCorrect: (playerId) => set(s =>
+    resetGameState: () => set((s) => { s.gameState = initialGameState }),
+    setLocalPlayerId: (id) => set((s) => { s.gameState.localPlayerId = id }),
+    setPlayers: (players) => set(s => { s.gameState.players = players }),
+    playerGuessedCorrect: (playerId) => set(s => {
         s.gameState.players = s.gameState.players.map(p =>
             p.id === playerId ? { ...p, hasGuessedCorrectly: true } : p
         )
+    }
     ),
-    resetPlayerGuesses: () => set(s => s.gameState.players = s.gameState.players.map(p => ({ ...p, hasGuessedCorrectly: false }))),
-    setHostId: (id) => set(s => s.gameState.hostId = id),
-    setCurrentDrawer: (id) => set(s => s.gameState.currentDrawerId = id),
-    setWord: (word) => set(s => s.gameState.word = word),
-    addChatMessage: (message) => set(s => s.gameState.messages.push(message)),
-    setTurnEndTime: (time) => set(s => s.gameState.turnEndTime = time),
+    resetPlayerGuesses: () => set(s => { s.gameState.players = s.gameState.players.map(p => ({ ...p, hasGuessedCorrectly: false })) }),
+    setHostId: (id) => set(s => { s.gameState.hostId = id }),
+    setCurrentDrawer: (id) => set(s => { s.gameState.currentDrawerId = id }),
+    setWord: (word) => set(s => { s.gameState.word = word }),
+    addChatMessage: (message) => set(s => { s.gameState.messages.push(message) }),
+    setTurnEndTime: (time) => set(s => { s.gameState.turnEndTime = time }),
 })));
 
 function App() {
@@ -145,8 +146,8 @@ function App() {
                     setLocalPlayerId(payload.yourId);
                     setPlayers(payload.players || []);
                     setHostId(payload.hostId);
-                    setCurrentDrawer(payload.currentDrawerId);
-                    setTurnEndTime(payload.turnEndTime);
+                    payload.currentDrawerId && setCurrentDrawer(payload.currentDrawerId);
+                    payload.turnEndTime && setTurnEndTime(payload.turnEndTime);
 
                     if (payload.isGameActive) {
                         setAppState('active');
@@ -162,7 +163,7 @@ function App() {
                         console.error("Received playerUpdate with null payload");
                         break;
                     }
-                    setPlayers(payload.players || []);
+                    // setPlayers(payload.players || []);
                     setHostId(payload.hostId);
 
                     if (appState === 'active' && (payload.players?.length ?? 0) < MIN_PLAYERS) {

@@ -4,7 +4,7 @@ const WS_URL = 'ws://localhost:8080/ws'; // Adjust if needed
 
 export interface Player {
     id: string;
-    hasGuessedCorrectly: boolean;
+    hasGuessedCorrectly?: boolean;
     isHost: boolean;
     name: string;
 }
