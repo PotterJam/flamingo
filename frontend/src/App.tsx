@@ -324,108 +324,117 @@ function App() {
         }
     }, [canHostStartGame, sendMessage]);
 
-    return (
-        <Scaffolding>
-            {appState === 'enterName' ? (
-                <>
-                    <NameInput onNameSet={handleNameSet} />
-                    <StatusMessage message={statusText} />
-                </>
-            ) : !isConnected ? (
+    if (appState === 'enterName') {
+        return (
+            <Scaffolding>
+                <NameInput onNameSet={handleNameSet} />
+                <StatusMessage message={statusText} />
+            </Scaffolding>
+        );
+    }
+
+    if (!isConnected) {
+        return (
+            <Scaffolding>
                 <div className="text-center mt-10">
                     <StatusMessage message={statusText} />
                 </div>
-            ) : (
-                <>
-                    {appState === 'joining' || !localPlayerId ? (
-                        <div className="text-center mt-10">
-                            <StatusMessage message={statusText} />
-                            <p className="text-gray-500 animate-pulse mt-2">Waiting for server info...</p>
+            </Scaffolding>
+        );
+    }
+
+    if (appState === 'joining' || !localPlayerId) {
+        return (
+            <Scaffolding>
+                <div className="text-center mt-10">
+                    <StatusMessage message={statusText} />
+                    <p className="text-gray-500 animate-pulse mt-2">Waiting for server info...</p>
+                </div>
+            </Scaffolding>
+        );
+    }
+
+    return (
+        <Scaffolding>
+            <div className="flex justify-center w-full flex-grow">
+                <div className="flex flex-col lg:flex-row gap-4"
+                    style={{ width: `${250 + CANVAS_WIDTH + 32}px` }}>
+                    <aside
+                        className="w-full lg:w-[250px] bg-white shadow-lg rounded-lg p-4 flex flex-col gap-4 order-2 lg:order-1 flex-shrink-0"
+                        style={{ maxHeight: `${CANVAS_HEIGHT + 100}px` }}>
+                        <h2 className="text-xl font-semibold border-b pb-2 flex-shrink-0">Players
+                            ({players.length})</h2>
+                        <div className="flex-shrink overflow-y-auto mb-4 min-h-0">
+                            <PlayerList players={players} currentDrawerId={currentDrawerId}
+                                hostId={hostId} />
                         </div>
-                    ) : (
 
-                        <div className="flex justify-center w-full flex-grow">
-                            <div className="flex flex-col lg:flex-row gap-4"
-                                style={{ width: `${250 + CANVAS_WIDTH + 32}px` }}>
-                                <aside
-                                    className="w-full lg:w-[250px] bg-white shadow-lg rounded-lg p-4 flex flex-col gap-4 order-2 lg:order-1 flex-shrink-0"
-                                    style={{ maxHeight: `${CANVAS_HEIGHT + 100}px` }}>
-                                    <h2 className="text-xl font-semibold border-b pb-2 flex-shrink-0">Players
-                                        ({players.length})</h2>
-                                    <div className="flex-shrink overflow-y-auto mb-4 min-h-0">
-                                        <PlayerList players={players} currentDrawerId={currentDrawerId}
-                                            hostId={hostId} />
-                                    </div>
+                        {canHostStartGame && (
+                            <button
+                                onClick={handleStartGame}
+                                className="px-4 py-2 bg-green-500 text-black font-semibold rounded hover:bg-green-600 focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-offset-1 transition duration-150 ease-in-out flex-shrink-0"
+                            >
+                                Start Game ({players.length} players)
+                            </button>
+                        )}
 
-                                    {canHostStartGame && (
-                                        <button
-                                            onClick={handleStartGame}
-                                            className="px-4 py-2 bg-green-500 text-black font-semibold rounded hover:bg-green-600 focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-offset-1 transition duration-150 ease-in-out flex-shrink-0"
-                                        >
-                                            Start Game ({players.length} players)
-                                        </button>
-                                    )}
+                        <h2 className={`text-xl font-semibold border-b pb-2 flex-shrink-0 ${!canHostStartGame ? 'mt-auto' : ''}`}>Chat</h2>
+                        <div className="flex-grow overflow-y-hidden min-h-0">
+                            <ChatBox messages={chatMessages} />
+                        </div>
+                    </aside>
 
-                                    <h2 className={`text-xl font-semibold border-b pb-2 flex-shrink-0 ${!canHostStartGame ? 'mt-auto' : ''}`}>Chat</h2>
-                                    <div className="flex-grow overflow-y-hidden min-h-0">
-                                        <ChatBox messages={chatMessages} />
-                                    </div>
-                                </aside>
-
-                                <section
-                                    className="w-full lg:flex-1 bg-white shadow-lg rounded-lg p-6 flex flex-col order-1 lg:order-2">
-                                    {/* Top Bar */}
-                                    <div className="flex justify-between items-center mb-4 gap-4 flex-shrink-0">
-                                        <div className="flex-1 text-center min-w-0">
-                                            {(isLocalPlayerDrawer && appState === 'active') ? (
-                                                <WordDisplay word={secretWord} />
-                                            ) : (appState === 'active' && currentDrawerId) ? (
-                                                <WordDisplay blanks={getWordBlanks(wordLength)} length={wordLength} />
-                                            ) : (
-                                                <div className="h-8 md:h-10"></div>
-                                            )}
-                                        </div>
-                                        <div className="w-20 text-right flex-shrink-0">
-                                            {(appState === 'active' && turnEndTime) && (
-                                                <TimerDisplay endTime={turnEndTime} />
-                                            )}
-                                        </div>
-                                    </div>
-                                    <div
-                                        className="mb-4 border-2 border-black rounded overflow-hidden bg-white relative"
-                                        style={{
-                                            width: `${CANVAS_WIDTH}px`,
-                                            height: `${CANVAS_HEIGHT}px`
-                                        }}
-                                    >
-                                        <Whiteboard
-                                            key={whiteboardKey}
-                                            isDrawer={!!isLocalPlayerDrawer}
-                                            onDraw={handleDraw}
-                                            lastDrawEvent={lastMessage?.type === 'drawEvent' ? lastMessage.payload : null}
-                                            localPlayerIsDrawer={!!isLocalPlayerDrawer}
-                                            width={CANVAS_WIDTH}
-                                            height={CANVAS_HEIGHT}
-                                        />
-                                    </div>
-
-
-                                    <div className="mb-4 text-center flex-shrink-0">
-                                        <StatusMessage message={statusText} />
-                                    </div>
-
-                                    <div className="flex-shrink-0">
-                                        {canLocalPlayerGuess && (
-                                            <GuessInput onGuess={handleGuess} />
-                                        )}
-                                    </div>
-                                </section>
+                    <section
+                        className="w-full lg:flex-1 bg-white shadow-lg rounded-lg p-6 flex flex-col order-1 lg:order-2">
+                        {/* Top Bar */}
+                        <div className="flex justify-between items-center mb-4 gap-4 flex-shrink-0">
+                            <div className="flex-1 text-center min-w-0">
+                                {(isLocalPlayerDrawer && appState === 'active') ? (
+                                    <WordDisplay word={secretWord} />
+                                ) : (appState === 'active' && currentDrawerId) ? (
+                                    <WordDisplay blanks={getWordBlanks(wordLength)} length={wordLength} />
+                                ) : (
+                                    <div className="h-8 md:h-10"></div>
+                                )}
+                            </div>
+                            <div className="w-20 text-right flex-shrink-0">
+                                {(appState === 'active' && turnEndTime) && (
+                                    <TimerDisplay endTime={turnEndTime} />
+                                )}
                             </div>
                         </div>
-                    )}
-                </>
-            )}
-        </Scaffolding>
+                        <div
+                            className="mb-4 border-2 border-black rounded overflow-hidden bg-white relative"
+                            style={{
+                                width: `${CANVAS_WIDTH}px`,
+                                height: `${CANVAS_HEIGHT}px`
+                            }}
+                        >
+                            <Whiteboard
+                                key={whiteboardKey}
+                                isDrawer={!!isLocalPlayerDrawer}
+                                onDraw={handleDraw}
+                                lastDrawEvent={lastMessage?.type === 'drawEvent' ? lastMessage.payload : null}
+                                localPlayerIsDrawer={!!isLocalPlayerDrawer}
+                                width={CANVAS_WIDTH}
+                                height={CANVAS_HEIGHT}
+                            />
+                        </div>
+
+
+                        <div className="mb-4 text-center flex-shrink-0">
+                            <StatusMessage message={statusText} />
+                        </div>
+
+                        <div className="flex-shrink-0">
+                            {canLocalPlayerGuess && (
+                                <GuessInput onGuess={handleGuess} />
+                            )}
+                        </div>
+                    </section>
+                </div>
+            </div >
+        </Scaffolding >
     );
 }
 
