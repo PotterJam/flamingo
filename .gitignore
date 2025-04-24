@@ -2,3 +2,6 @@ node_modules/
 dist/
 build/
 backend/public/assets/
+
+# server produced by py script
+scriblio_server
