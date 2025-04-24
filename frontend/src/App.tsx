@@ -1,11 +1,13 @@
 import { useEffect, useCallback } from 'react';
-import { useWebSocket, Player, ErrorPayload, TurnEndPayload, WebsocketMessage } from './hooks/useWebSocket';
+import { useWebSocket, ErrorPayload, TurnEndPayload } from './hooks/useWebSocket';
 
 import NameInput from './components/NameInput';
 import { create } from 'zustand/react';
 import { Scaffolding } from './components/Scaffolding';
 import { Game } from './components/Game';
 import { immer } from 'zustand/middleware/immer';
+import { Player, SendMsg } from './messages';
+import { ReceivedMsg } from './messages';
 
 export interface ChatMessage {
     senderName: string;
@@ -42,16 +44,16 @@ type CurrentAppState = 'active'
     | 'enterName';
 
 export type AppState = {
-    sendMessage: (type: string, payload: unknown) => void;
-    lastMessage: WebsocketMessage | null;
+    sendMessage: (message: SendMsg) => void;
+    lastMessage: ReceivedMsg | null;
 
     appState: CurrentAppState;
     gameState: GameState;
 }
 
 export type AppActions = {
-    assignSendMessage: (func: (type: string, payload: unknown) => void) => void,
-    setLastMessage: (message: WebsocketMessage) => void,
+    assignSendMessage: (func: (message: SendMsg) => void) => void,
+    setLastMessage: (message: ReceivedMsg) => void,
 
     setState: (newState: CurrentAppState) => void;
 
@@ -259,7 +261,7 @@ function App() {
                     break;
                 }
                 default:
-                    console.warn("Received unhandled message type:", message.type);
+                    console.warn("Received unknown message: ", message);
             }
         }
     }, [lastMessage, addChatMessage, localPlayerId, currentDrawerId, hostId, appState]);
@@ -267,7 +269,7 @@ function App() {
     const handleNameSet = useCallback((name: string) => {
         console.log("handleNameSet called with name:", name);
         if (name && isConnected) {
-            sendMessage('setName', { name: name });
+            sendMessage({ type: 'setName', payload: { name: name } });
             setAppState('joining');
             console.log("Sent setName, moved state to 'joining'.");
         } else {

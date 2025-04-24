@@ -1,4 +1,4 @@
-import { Player } from '../hooks/useWebSocket.ts';
+import { Player } from "../messages";
 
 function PlayerList({ players = [], currentDrawerId = null, hostId = null }: { players: Player[], currentDrawerId: string | null, hostId: string | null }) {
     return (
