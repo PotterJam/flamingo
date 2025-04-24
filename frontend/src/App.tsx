@@ -2,7 +2,6 @@ import { useState, useEffect, useMemo, useCallback } from 'react';
 import { useWebSocket, Player, ErrorPayload, TurnEndPayload } from './hooks/useWebSocket';
 
 import NameInput from './components/NameInput';
-import StatusMessage from './components/StatusMessage';
 import { create } from 'zustand/react';
 import { Scaffolding } from './components/Scaffolding';
 import { Game } from './components/Game';
@@ -49,11 +48,18 @@ export type AppState = {
 
 export type AppActions = {
     setState: (newState: CurrentAppState) => void;
+
     resetGameState: () => void;
+
     setLocalPlayerId: (id: string) => void;
     setPlayers: (players: Player[]) => void;
     playerGuessedCorrect: (playerId: string) => void;
     resetPlayerGuesses: () => void;
+    setHostId: (id: string) => void;
+    setCurrentDrawer: (id: string) => void;
+    setWord: (word: string) => void;
+    addChatMessage: (message: ChatMessage) => void;
+    setTurnEndTime: (time: number | null) => void;
 }
 
 export const useAppStore = create<AppState & AppActions>()(immer((set) => ({
@@ -62,17 +68,20 @@ export const useAppStore = create<AppState & AppActions>()(immer((set) => ({
 
     gameState: initialGameState,
 
-    resetGameState: () => set((s) => { s.gameState = initialGameState }),
-    setLocalPlayerId: (id) => set((state) => { if (state.gameState) state.gameState.localPlayerId = id }),
+    resetGameState: () => set((s) => s.gameState = initialGameState),
+    setLocalPlayerId: (id) => set((s) => s.gameState.localPlayerId = id),
     setPlayers: (players) => set(s => s.gameState.players = players),
     playerGuessedCorrect: (playerId) => set(s =>
         s.gameState.players = s.gameState.players.map(p =>
             p.id === playerId ? { ...p, hasGuessedCorrectly: true } : p
         )
     ),
-    resetPlayerGuesses: () => set(s => s.gameState.players = s.gameState.players.map(p => ({ ...p, hasGuessedCorrectly: false }))
-    ),
-
+    resetPlayerGuesses: () => set(s => s.gameState.players = s.gameState.players.map(p => ({ ...p, hasGuessedCorrectly: false }))),
+    setHostId: (id) => set(s => s.gameState.hostId = id),
+    setCurrentDrawer: (id) => set(s => s.gameState.currentDrawerId = id),
+    setWord: (word) => set(s => s.gameState.word = word),
+    addChatMessage: (message) => set(s => s.gameState.messages.push(message)),
+    setTurnEndTime: (time) => set(s => s.gameState.turnEndTime = time),
 })));
 
 function App() {
@@ -90,20 +99,20 @@ function App() {
     const playerGuessedCorrect = useAppStore(s => s.playerGuessedCorrect);
     const resetPlayerGuesses = useAppStore(s => s.resetPlayerGuesses);
 
-    const [hostId, setHostId] = useState<string | null>(null);
-    const [currentDrawerId, setCurrentDrawerId] = useState<string | null>(null);
-    const [secretWord, setSecretWord] = useState('');
-    const [wordLength, setWordLength] = useState(0);
-    const [statusText, setStatusText] = useState('Connecting to server...');
-    const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
-    const [turnEndTime, setTurnEndTime] = useState<number | null>(null);
+    const hostId = useAppStore(s => s.gameState.hostId);
+    const setHostId = useAppStore(s => s.setHostId);
+
+    const currentDrawerId = useAppStore(s => s.gameState.currentDrawerId);
+    const setCurrentDrawer = useAppStore(s => s.setCurrentDrawer);
+
+    const setWord = useAppStore(s => s.setWord);
+
+    const pushChatMessage = useAppStore(s => s.addChatMessage);
+
+    const setTurnEndTime = useAppStore(s => s.setTurnEndTime);
 
     const addChatMessage = useCallback((msgPayload: ChatMessage) => {
-        setChatMessages(prevMessages => {
-            const newMessages = [...prevMessages, msgPayload];
-
-            return newMessages.length > 100 ? newMessages.slice(-100) : newMessages;
-        });
+        pushChatMessage(msgPayload);
     }, []);
 
     useEffect(() => {
@@ -111,20 +120,12 @@ function App() {
             if (appState === 'connecting') {
                 console.log("WebSocket connected, moving to enterName state.");
                 setAppState('enterName');
-                setStatusText('Please enter your name.');
             }
         } else {
             if (appState !== 'connecting') {
                 console.log("WebSocket disconnected.");
-                setAppState('connecting');
-                setStatusText('Disconnected. Trying to reconnect...');
                 resetGameState();
-                setHostId(null);
-                setCurrentDrawerId(null);
-                setSecretWord('');
-                setWordLength(0);
-                setChatMessages([]);
-                setTurnEndTime(null);
+                setAppState('connecting');
             }
         }
     }, [isConnected, appState, connect]);
@@ -143,11 +144,9 @@ function App() {
                     }
                     setLocalPlayerId(payload.yourId);
                     setPlayers(payload.players || []);
-                    setHostId(payload.hostId || null);
-                    setCurrentDrawerId(payload.currentDrawerId || null);
-                    setWordLength(payload.wordLength || 0);
-                    setTurnEndTime(payload.turnEndTime || null);
-                    setSecretWord('');
+                    setHostId(payload.hostId);
+                    setCurrentDrawer(payload.currentDrawerId);
+                    setTurnEndTime(payload.turnEndTime);
 
                     if (payload.isGameActive) {
                         setAppState('active');
@@ -164,14 +163,10 @@ function App() {
                         break;
                     }
                     setPlayers(payload.players || []);
-                    setHostId(payload.hostId || hostId);
+                    setHostId(payload.hostId);
 
                     if (appState === 'active' && (payload.players?.length ?? 0) < MIN_PLAYERS) {
                         console.log("Player count dropped below minimum, returning to waiting state.");
-                        setCurrentDrawerId(null);
-                        setTurnEndTime(null);
-                        setWordLength(0);
-                        setSecretWord('');
                         setAppState('waiting');
                     }
 
@@ -183,11 +178,9 @@ function App() {
                         console.error("Received turnStart with null payload");
                         break;
                     }
-                    setCurrentDrawerId(payload.currentDrawerId);
-                    setWordLength(payload.wordLength);
-                    setSecretWord(payload.word || '');
+                    setCurrentDrawer(payload.currentDrawerId);
+                    setWord(payload.word || '');
                     setPlayers(payload.players || players);
-                    setHostId(payload.players?.find(p => p.isHost)?.id || hostId);
                     setTurnEndTime(payload.turnEndTime);
                     setAppState('active');
                     break;
@@ -233,11 +226,6 @@ function App() {
                         break;
                     }
                     setTurnEndTime(null);
-                    if (localPlayerId !== currentDrawerId) {
-                        setWordLength(0);
-                    }
-
-                    setStatusText(`Word was: ${payload.correctWord}. Getting next turn ready...`);
 
                     resetPlayerGuesses();
                     break;
@@ -248,7 +236,6 @@ function App() {
                         console.error("Received error with null payload");
                         break;
                     }
-                    setStatusText(`Error: ${payload.message || 'Unknown error'}`);
                     addChatMessage({
                         senderName: 'System',
                         message: `Error: ${payload.message || 'Unknown error'}`,
@@ -267,11 +254,9 @@ function App() {
         if (name && isConnected) {
             sendMessage('setName', { name: name });
             setAppState('joining');
-            setStatusText('Joining game... Please wait.');
             console.log("Sent setName, moved state to 'joining'.");
         } else {
             console.error("Cannot set name - invalid name or WebSocket disconnected.");
-            setStatusText("Failed to set name. Please check connection and try again.");
         }
     }, [isConnected, sendMessage]);
 
@@ -279,7 +264,6 @@ function App() {
         return (
             <Scaffolding>
                 <NameInput onNameSet={handleNameSet} />
-                <StatusMessage message={statusText} />
             </Scaffolding>
         );
     }
@@ -288,7 +272,7 @@ function App() {
         return (
             <Scaffolding>
                 <div className="text-center mt-10">
-                    <StatusMessage message={statusText} />
+                    Loading...
                 </div>
             </Scaffolding>
         );
@@ -298,7 +282,6 @@ function App() {
         return (
             <Scaffolding>
                 <div className="text-center mt-10">
-                    <StatusMessage message={statusText} />
                     <p className="text-gray-500 animate-pulse mt-2">Waiting for server info...</p>
                 </div>
             </Scaffolding>
