@@ -12,8 +12,8 @@ function NameInput({ onNameSet }: { onNameSet: (name: string) => void }) {
     };
 
     return (
-        <div className="w-full max-w-sm mx-auto bg-white p-6 rounded-lg shadow-md text-center mt-10">
-            <h2 className="text-xl font-semibold mb-4 text-gray-700">
+        <div className="mx-auto mt-10 w-full max-w-sm rounded-lg bg-white p-6 text-center shadow-md">
+            <h2 className="mb-4 text-xl font-semibold text-gray-700">
                 Enter Your Name
             </h2>
             <form onSubmit={handleSubmit}>
@@ -24,12 +24,12 @@ function NameInput({ onNameSet }: { onNameSet: (name: string) => void }) {
                     placeholder="Your Name"
                     maxLength={20}
                     required
-                    className="w-full p-2 border border-gray-300 rounded mb-4 focus:outline-none focus:ring-2 focus:ring-blue-500 transition duration-150 ease-in-out"
+                    className="mb-4 w-full rounded border border-gray-300 p-2 transition duration-150 ease-in-out focus:ring-2 focus:ring-blue-500 focus:outline-none"
                     aria-label="Enter your name"
                 />
                 <button
                     type="submit"
-                    className="w-full px-4 py-2 bg-blue-500 text-black font-medium rounded hover:bg-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-1 transition duration-150 ease-in-out disabled:opacity-50 disabled:cursor-not-allowed"
+                    className="w-full rounded bg-blue-500 px-4 py-2 font-medium text-black transition duration-150 ease-in-out hover:bg-blue-600 focus:ring-2 focus:ring-blue-500 focus:ring-offset-1 focus:outline-none disabled:cursor-not-allowed disabled:opacity-50"
                     disabled={!name.trim()}
                 >
                     Join Game

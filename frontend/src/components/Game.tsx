@@ -78,19 +78,19 @@ export const Game: FC = () => {
     );
 
     return (
-        <div className="flex justify-center w-full flex-grow">
+        <div className="flex w-full flex-grow justify-center">
             <div
-                className="flex flex-col lg:flex-row gap-4"
+                className="flex flex-col gap-4 lg:flex-row"
                 style={{ width: `${250 + CANVAS_WIDTH + 32}px` }}
             >
                 <aside
-                    className="w-full lg:w-[250px] bg-white shadow-lg rounded-lg p-4 flex flex-col gap-4 order-2 lg:order-1 flex-shrink-0"
+                    className="order-2 flex w-full flex-shrink-0 flex-col gap-4 rounded-lg bg-white p-4 shadow-lg lg:order-1 lg:w-[250px]"
                     style={{ maxHeight: `${CANVAS_HEIGHT + 100}px` }}
                 >
-                    <h2 className="text-xl font-semibold border-b pb-2 flex-shrink-0">
+                    <h2 className="flex-shrink-0 border-b pb-2 text-xl font-semibold">
                         Players ({players.length})
                     </h2>
-                    <div className="flex-shrink overflow-y-auto mb-4 min-h-0">
+                    <div className="mb-4 min-h-0 flex-shrink overflow-y-auto">
                         <PlayerList
                             players={players}
                             currentDrawerId={currentDrawerId}
@@ -101,25 +101,25 @@ export const Game: FC = () => {
                     {canHostStartGame && (
                         <button
                             onClick={handleStartGame}
-                            className="px-4 py-2 bg-green-500 text-black font-semibold rounded hover:bg-green-600 focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-offset-1 transition duration-150 ease-in-out flex-shrink-0"
+                            className="flex-shrink-0 rounded bg-green-500 px-4 py-2 font-semibold text-black transition duration-150 ease-in-out hover:bg-green-600 focus:ring-2 focus:ring-green-500 focus:ring-offset-1 focus:outline-none"
                         >
                             Start Game
                         </button>
                     )}
 
                     <h2
-                        className={`text-xl font-semibold border-b pb-2 flex-shrink-0 ${!canHostStartGame ? 'mt-auto' : ''}`}
+                        className={`flex-shrink-0 border-b pb-2 text-xl font-semibold ${!canHostStartGame ? 'mt-auto' : ''}`}
                     >
                         Chat
                     </h2>
-                    <div className="flex-grow overflow-y-hidden min-h-0">
+                    <div className="min-h-0 flex-grow overflow-y-hidden">
                         <ChatBox messages={messages} />
                     </div>
                 </aside>
 
-                <section className="w-full lg:flex-1 bg-white shadow-lg rounded-lg p-6 flex flex-col order-1 lg:order-2">
-                    <div className="flex justify-between items-center mb-4 gap-4 flex-shrink-0">
-                        <div className="flex-1 text-center min-w-0">
+                <section className="order-1 flex w-full flex-col rounded-lg bg-white p-6 shadow-lg lg:order-2 lg:flex-1">
+                    <div className="mb-4 flex flex-shrink-0 items-center justify-between gap-4">
+                        <div className="min-w-0 flex-1 text-center">
                             {isLocalPlayerDrawer ? (
                                 <WordDisplay word={word ?? ''} />
                             ) : appState === 'active' && currentDrawerId ? (
@@ -131,14 +131,14 @@ export const Game: FC = () => {
                                 <div className="h-8 md:h-10"></div>
                             )}
                         </div>
-                        <div className="w-20 text-right flex-shrink-0">
+                        <div className="w-20 flex-shrink-0 text-right">
                             {appState === 'active' && turnEndTime && (
                                 <TimerDisplay endTime={turnEndTime} />
                             )}
                         </div>
                     </div>
                     <div
-                        className="mb-4 border-2 border-black rounded overflow-hidden bg-white relative"
+                        className="relative mb-4 overflow-hidden rounded border-2 border-black bg-white"
                         style={{
                             width: `${CANVAS_WIDTH}px`,
                             height: `${CANVAS_HEIGHT}px`,

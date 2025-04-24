@@ -1,6 +1,6 @@
 function WordDisplay({ word = '', blanks = '', length = 0 }) {
     return (
-        <div className="text-2xl lg:text-3xl font-semibold tracking-widest text-center p-2 rounded bg-gray-200 min-h-[3rem] flex items-center justify-center select-none">
+        <div className="flex min-h-[3rem] items-center justify-center rounded bg-gray-200 p-2 text-center text-2xl font-semibold tracking-widest select-none lg:text-3xl">
             {word ? (
                 <span>{word}</span>
             ) : blanks ? (

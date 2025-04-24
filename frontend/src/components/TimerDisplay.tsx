@@ -44,7 +44,7 @@ function TimerDisplay({ endTime }: { endTime: number }) {
 
     return (
         <div
-            className="text-lg font-mono font-semibold text-gray-700"
+            className="font-mono text-lg font-semibold text-gray-700"
             title="Time Remaining"
         >
             <span role="img" aria-label="Timer" className="mr-1">

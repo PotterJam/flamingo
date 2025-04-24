@@ -1,6 +1,6 @@
 function StatusMessage({ message = '' }) {
     return (
-        <div className="text-base lg:text-lg text-gray-700 min-h-[1.5rem] text-center transition-all duration-200">
+        <div className="min-h-[1.5rem] text-center text-base text-gray-700 transition-all duration-200 lg:text-lg">
             {message || '\u00A0'}
         </div>
     );

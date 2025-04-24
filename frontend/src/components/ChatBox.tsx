@@ -14,16 +14,16 @@ function ChatBox({ messages = [] }: { messages: ChatMessage[] }) {
     return (
         <div
             ref={chatContainerRef}
-            className="h-full border border-gray-200 rounded p-2 overflow-y-auto bg-gray-50 flex flex-col gap-1 text-sm"
+            className="flex h-full flex-col gap-1 overflow-y-auto rounded border border-gray-200 bg-gray-50 p-2 text-sm"
         >
             {messages.length > 0 ? (
                 messages.map((msg, i) => (
                     <div
                         key={i}
-                        className={`break-words ${msg.isSystem ? 'italic text-gray-600' : 'text-gray-800'}`}
+                        className={`break-words ${msg.isSystem ? 'text-gray-600 italic' : 'text-gray-800'}`}
                     >
                         {!msg.isSystem && (
-                            <span className="font-semibold mr-1">
+                            <span className="mr-1 font-semibold">
                                 {msg.senderName}:
                             </span>
                         )}
@@ -31,7 +31,7 @@ function ChatBox({ messages = [] }: { messages: ChatMessage[] }) {
                     </div>
                 ))
             ) : (
-                <p className="text-gray-400 m-auto italic">
+                <p className="m-auto text-gray-400 italic">
                     Chat messages will appear here...
                 </p>
             )}

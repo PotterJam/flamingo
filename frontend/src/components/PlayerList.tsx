@@ -10,7 +10,7 @@ function PlayerList({
     hostId: string | null;
 }) {
     return (
-        <div className="flex-grow overflow-y-auto pr-2 -mr-2">
+        <div className="-mr-2 flex-grow overflow-y-auto pr-2">
             {players.length === 0 ? (
                 <p className="text-gray-500 italic">No players yet...</p>
             ) : (
@@ -18,11 +18,7 @@ function PlayerList({
                     {players.map((player) => (
                         <li
                             key={player.id}
-                            className={`p-2 rounded transition-all duration-200 flex items-center gap-2 text-gray-800
-                                ${player.id === currentDrawerId ? 'bg-blue-100 font-semibold' : ''}
-                                ${player.hasGuessedCorrectly && player.id !== currentDrawerId ? 'bg-green-100' : ''}
-                                ${player.id === hostId ? 'border border-yellow-500 font-semibold' : ''}
-                            `}
+                            className={`flex items-center gap-2 rounded p-2 text-gray-800 transition-all duration-200 ${player.id === currentDrawerId ? 'bg-blue-100 font-semibold' : ''} ${player.hasGuessedCorrectly && player.id !== currentDrawerId ? 'bg-green-100' : ''} ${player.id === hostId ? 'border border-yellow-500 font-semibold' : ''} `}
                             title={
                                 player.id === hostId
                                     ? `${player.name} (Host)`
@@ -33,7 +29,7 @@ function PlayerList({
                                         : player.name
                             }
                         >
-                            <span className="w-5 h-5 inline-flex items-center justify-center text-lg flex-shrink-0">
+                            <span className="inline-flex h-5 w-5 flex-shrink-0 items-center justify-center text-lg">
                                 {player.id === hostId ? (
                                     '👑'
                                 ) : player.id === currentDrawerId ? (

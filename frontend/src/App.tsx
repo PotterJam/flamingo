@@ -314,7 +314,7 @@ function App() {
     if (!isConnected) {
         return (
             <Scaffolding>
-                <div className="text-center mt-10">Loading...</div>
+                <div className="mt-10 text-center">Loading...</div>
             </Scaffolding>
         );
     }
@@ -322,8 +322,8 @@ function App() {
     if (appState === 'joining' || !localPlayerId) {
         return (
             <Scaffolding>
-                <div className="text-center mt-10">
-                    <p className="text-gray-500 animate-pulse mt-2">
+                <div className="mt-10 text-center">
+                    <p className="mt-2 animate-pulse text-gray-500">
                         Waiting for server info...
                     </p>
                 </div>

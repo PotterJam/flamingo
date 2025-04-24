@@ -20,12 +20,12 @@ function GuessInput({ onGuess }: { onGuess: (guess: string) => void }) {
                 onChange={(e) => setCurrentGuess(e.target.value)}
                 placeholder="Enter your guess"
                 maxLength={50}
-                className="flex-grow p-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500 transition duration-150 ease-in-out"
+                className="flex-grow rounded border border-gray-300 p-2 transition duration-150 ease-in-out focus:ring-2 focus:ring-blue-500 focus:outline-none"
                 aria-label="Enter your guess"
             />
             <button
                 type="submit"
-                className="px-4 py-2 bg-blue-500 text-black font-medium rounded hover:bg-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-1 transition duration-150 ease-in-out disabled:opacity-50 disabled:cursor-not-allowed"
+                className="rounded bg-blue-500 px-4 py-2 font-medium text-black transition duration-150 ease-in-out hover:bg-blue-600 focus:ring-2 focus:ring-blue-500 focus:ring-offset-1 focus:outline-none disabled:cursor-not-allowed disabled:opacity-50"
                 disabled={!currentGuess.trim()}
             >
                 Guess
