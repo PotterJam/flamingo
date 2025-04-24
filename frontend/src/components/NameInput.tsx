@@ -7,7 +7,7 @@ function NameInput({ onNameSet }: { onNameSet: (name: string) => void }) {
         e.preventDefault();
         const trimmedName = name.trim();
         if (trimmedName) {
-            onNameSet(trimmedName); // Pass name directly
+            onNameSet(trimmedName);
         }
     };
 

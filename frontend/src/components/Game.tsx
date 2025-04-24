@@ -39,7 +39,7 @@ export const Game: FC = () => {
     const handleStartGame = useCallback(() => {
         console.log("Start Game button clicked by host.");
         if (canHostStartGame) {
-            sendMessage('startGame', null);
+            sendMessage({ type: 'startGame', payload: null });
         } else {
             console.warn("Start game attempted but conditions not met.");
         }
@@ -47,13 +47,13 @@ export const Game: FC = () => {
 
     const handleDraw = useCallback((drawData: any) => {
         if (isLocalPlayerDrawer && appState === 'active') {
-            sendMessage('drawEvent', drawData);
+            sendMessage({ type: 'drawEvent', payload: drawData });
         }
     }, [isLocalPlayerDrawer, appState, sendMessage]);
 
     const handleGuess = useCallback((guess: string) => {
         if (canLocalPlayerGuess) {
-            sendMessage('guess', { guess: guess });
+            sendMessage({ type: 'guess', payload: { guess: guess } });
         }
     }, [canLocalPlayerGuess, sendMessage]);
 

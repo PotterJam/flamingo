@@ -1,17 +1,13 @@
 import { useEffect, useCallback } from 'react';
-import { useWebSocket, Player, ErrorPayload, TurnEndPayload, WebsocketMessage } from './hooks/useWebSocket';
+import { useWebSocket, ErrorPayload } from './hooks/useWebSocket';
 
 import NameInput from './components/NameInput';
 import { create } from 'zustand/react';
 import { Scaffolding } from './components/Scaffolding';
 import { Game } from './components/Game';
 import { immer } from 'zustand/middleware/immer';
-
-export interface ChatMessage {
-    senderName: string;
-    message: string;
-    isSystem: boolean;
-}
+import { ChatMessage, Player, SendMsg } from './messages';
+import { ReceivedMsg } from './messages';
 
 const MIN_PLAYERS = 2;
 
@@ -42,16 +38,16 @@ type CurrentAppState = 'active'
     | 'enterName';
 
 export type AppState = {
-    sendMessage: (type: string, payload: unknown) => void;
-    lastMessage: WebsocketMessage | null;
+    sendMessage: (message: SendMsg) => void;
+    lastMessage: ReceivedMsg | null;
 
     appState: CurrentAppState;
     gameState: GameState;
 }
 
 export type AppActions = {
-    assignSendMessage: (func: (type: string, payload: unknown) => void) => void,
-    setLastMessage: (message: WebsocketMessage) => void,
+    assignSendMessage: (func: (message: SendMsg) => void) => void,
+    setLastMessage: (message: ReceivedMsg) => void,
 
     setState: (newState: CurrentAppState) => void;
 
@@ -153,10 +149,6 @@ function App() {
             switch (message.type) {
                 case 'gameInfo': {
                     const payload = message.payload;
-                    if (!payload) {
-                        console.error("Received gameInfo with null payload");
-                        break;
-                    }
                     setLocalPlayerId(payload.yourId);
                     setPlayers(payload.players || []);
                     setHostId(payload.hostId);
@@ -173,10 +165,6 @@ function App() {
                 }
                 case 'playerUpdate': {
                     const payload = message.payload;
-                    if (!payload) {
-                        console.error("Received playerUpdate with null payload");
-                        break;
-                    }
                     setPlayers(payload.players || []);
                     setHostId(payload.hostId);
 
@@ -189,10 +177,6 @@ function App() {
                 }
                 case 'turnStart': {
                     const payload = message.payload;
-                    if (!payload) {
-                        console.error("Received turnStart with null payload");
-                        break;
-                    }
                     setCurrentDrawer(payload.currentDrawerId);
                     setWord(payload.word || '');
                     setPlayers(payload.players || players);
@@ -202,10 +186,6 @@ function App() {
                 }
                 case 'playerGuessedCorrectly': {
                     const payload = message.payload;
-                    if (!payload) {
-                        console.error("Received playerGuessedCorrectly with null payload");
-                        break;
-                    }
                     const { playerId } = payload;
                     playerGuessedCorrect(playerId);
                     const guesser = players.find(p => p.id === playerId);
@@ -219,29 +199,15 @@ function App() {
                     break;
                 }
                 case 'chat': {
-                    const payload = message.payload as unknown as ChatMessage;
-                    if (!payload) {
-                        console.error("Received chat with null payload");
-                        break;
-                    }
+                    const payload = message.payload;
                     addChatMessage(payload);
                     break;
                 }
                 case 'drawEvent': {
-                    const payload = message.payload;
-                    if (!payload) {
-                        break;
-                    }
                     break;
                 }
                 case 'turnEnd': {
-                    const payload = message.payload as unknown as TurnEndPayload;
-                    if (!payload) {
-                        console.error("Received turnEnd with null payload");
-                        break;
-                    }
                     setTurnEndTime(null);
-
                     resetPlayerGuesses();
                     break;
                 }
@@ -259,7 +225,7 @@ function App() {
                     break;
                 }
                 default:
-                    console.warn("Received unhandled message type:", message.type);
+                    console.warn("Received unknown message: ", message);
             }
         }
     }, [lastMessage, addChatMessage, localPlayerId, currentDrawerId, hostId, appState]);
@@ -267,7 +233,7 @@ function App() {
     const handleNameSet = useCallback((name: string) => {
         console.log("handleNameSet called with name:", name);
         if (name && isConnected) {
-            sendMessage('setName', { name: name });
+            sendMessage({ type: 'setName', payload: { name: name } });
             setAppState('joining');
             console.log("Sent setName, moved state to 'joining'.");
         } else {

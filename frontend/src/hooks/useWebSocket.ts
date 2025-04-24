@@ -1,14 +1,8 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { useAppStore } from '../App';
+import { Player, SendMsg } from '../messages';
 
 const WS_URL = 'ws://localhost:8080/ws';
-
-export interface Player {
-    id: string;
-    hasGuessedCorrectly?: boolean;
-    isHost: boolean;
-    name: string;
-}
 
 export interface JankPayload {
     yourId: string;
@@ -91,12 +85,12 @@ export function useWebSocket() {
         ws.current = null;
     }, []);
 
-    const sendMessage = useCallback((type: string, payload: unknown) => {
+    const sendMessage = useCallback((message: SendMsg) => {
         if (ws.current && ws.current.readyState === WebSocket.OPEN) {
             try {
-                const message = JSON.stringify({ type, payload });
+                const msg = JSON.stringify(message);
                 console.log('[useWebSocket] Sending message:', message);
-                ws.current.send(message);
+                ws.current.send(msg);
             } catch (error) {
                 console.error('[useWebSocket] Error stringifying message:', error);
             }
