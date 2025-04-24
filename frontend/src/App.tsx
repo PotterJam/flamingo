@@ -2,16 +2,11 @@ import { useState, useEffect, useMemo, useCallback } from 'react';
 import { useWebSocket, Player, ErrorPayload, TurnEndPayload } from './hooks/useWebSocket';
 
 import NameInput from './components/NameInput';
-import PlayerList from './components/PlayerList';
-import ChatBox from './components/ChatBox';
-import Whiteboard from './components/Whiteboard';
-import WordDisplay from './components/WordDisplay';
-import TimerDisplay from './components/TimerDisplay';
-import GuessInput from './components/GuessInput';
 import StatusMessage from './components/StatusMessage';
 import { create } from 'zustand/react';
 import { Scaffolding } from './components/Scaffolding';
 import { Game } from './components/Game';
+import { immer } from 'zustand/middleware/immer';
 
 export interface ChatMessage {
     senderName: string;
@@ -23,13 +18,23 @@ const MIN_PLAYERS = 2;
 
 interface GameState {
     players: Player[];
-    currentDrawerId: string;
-    hostId: string;
-    localPlayerId: string;
-    word: string;
+    currentDrawerId: string | null;
+    hostId: string | null;
+    localPlayerId: string | null;
+    word: string | null;
     messages: ChatMessage[];
-    turnEndTime: number;
+    turnEndTime: number | null;
 }
+
+const initialGameState = {
+    players: [],
+    currentDrawerId: null,
+    hostId: null,
+    localPlayerId: null,
+    word: null,
+    messages: [],
+    turnEndTime: null
+};
 
 type CurrentAppState = 'active'
     | 'waiting'
@@ -37,27 +42,54 @@ type CurrentAppState = 'active'
     | 'joining'
     | 'enterName';
 
-interface AppState {
+export type AppState = {
     appState: CurrentAppState;
-    setState: (newState: CurrentAppState) => void;
-    gameState: GameState | null;
+    gameState: GameState;
 }
 
-export const useAppStore = create<AppState>((set) => ({
+export type AppActions = {
+    setState: (newState: CurrentAppState) => void;
+    resetGameState: () => void;
+    setLocalPlayerId: (id: string) => void;
+    setPlayers: (players: Player[]) => void;
+    playerGuessedCorrect: (playerId: string) => void;
+    resetPlayerGuesses: () => void;
+}
+
+export const useAppStore = create<AppState & AppActions>()(immer((set) => ({
     appState: 'connecting',
     setState: (newState) => set((_) => ({ appState: newState })),
-    gameState: null,
-}));
+
+    gameState: initialGameState,
+
+    resetGameState: () => set((s) => { s.gameState = initialGameState }),
+    setLocalPlayerId: (id) => set((state) => { if (state.gameState) state.gameState.localPlayerId = id }),
+    setPlayers: (players) => set(s => s.gameState.players = players),
+    playerGuessedCorrect: (playerId) => set(s =>
+        s.gameState.players = s.gameState.players.map(p =>
+            p.id === playerId ? { ...p, hasGuessedCorrectly: true } : p
+        )
+    ),
+    resetPlayerGuesses: () => set(s => s.gameState.players = s.gameState.players.map(p => ({ ...p, hasGuessedCorrectly: false }))
+    ),
+
+})));
 
 function App() {
     const { isConnected, lastMessage, sendMessage, connect } = useWebSocket();
 
     const appState = useAppStore((state) => state.appState);
     const setAppState = useAppStore((state) => state.setState);
+    const resetGameState = useAppStore(s => s.resetGameState);
 
-    const [localPlayerId, setLocalPlayerId] = useState<string | null>(null);
-    const [_localPlayerName, setLocalPlayerName] = useState<string | null>('');
-    const [players, setPlayers] = useState<Player[]>([]);
+    const localPlayerId = useAppStore(s => s.gameState.localPlayerId);
+    const setLocalPlayerId = useAppStore(s => s.setLocalPlayerId);
+
+    const players = useAppStore(s => s.gameState.players);
+    const setPlayers = useAppStore(s => s.setPlayers);
+    const playerGuessedCorrect = useAppStore(s => s.playerGuessedCorrect);
+    const resetPlayerGuesses = useAppStore(s => s.resetPlayerGuesses);
+
     const [hostId, setHostId] = useState<string | null>(null);
     const [currentDrawerId, setCurrentDrawerId] = useState<string | null>(null);
     const [secretWord, setSecretWord] = useState('');
@@ -65,9 +97,6 @@ function App() {
     const [statusText, setStatusText] = useState('Connecting to server...');
     const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
     const [turnEndTime, setTurnEndTime] = useState<number | null>(null);
-
-    const isLocalPlayerHost = useMemo(() => localPlayerId && hostId && localPlayerId === hostId, [localPlayerId, hostId]);
-    const isLocalPlayerDrawer = useMemo(() => localPlayerId && currentDrawerId && localPlayerId === currentDrawerId, [localPlayerId, currentDrawerId]);
 
     const addChatMessage = useCallback((msgPayload: ChatMessage) => {
         setChatMessages(prevMessages => {
@@ -89,9 +118,7 @@ function App() {
                 console.log("WebSocket disconnected.");
                 setAppState('connecting');
                 setStatusText('Disconnected. Trying to reconnect...');
-                setLocalPlayerId(null);
-                setLocalPlayerName('');
-                setPlayers([]);
+                resetGameState();
                 setHostId(null);
                 setCurrentDrawerId(null);
                 setSecretWord('');
@@ -114,7 +141,7 @@ function App() {
                         console.error("Received gameInfo with null payload");
                         break;
                     }
-                    setLocalPlayerId(payload.yourId || null);
+                    setLocalPlayerId(payload.yourId);
                     setPlayers(payload.players || []);
                     setHostId(payload.hostId || null);
                     setCurrentDrawerId(payload.currentDrawerId || null);
@@ -172,11 +199,7 @@ function App() {
                         break;
                     }
                     const { playerId } = payload;
-                    setPlayers(prevPlayers =>
-                        prevPlayers.map(p =>
-                            p.id === playerId ? { ...p, hasGuessedCorrectly: true } : p
-                        )
-                    );
+                    playerGuessedCorrect(playerId);
                     const guesser = players.find(p => p.id === playerId);
                     if (guesser) {
                         addChatMessage({
@@ -216,7 +239,7 @@ function App() {
 
                     setStatusText(`Word was: ${payload.correctWord}. Getting next turn ready...`);
 
-                    setPlayers(prevPlayers => prevPlayers.map(p => ({ ...p, hasGuessedCorrectly: false })));
+                    resetPlayerGuesses();
                     break;
                 }
                 case 'error': {
@@ -242,7 +265,6 @@ function App() {
     const handleNameSet = useCallback((name: string) => {
         console.log("handleNameSet called with name:", name);
         if (name && isConnected) {
-            setLocalPlayerName(name);
             sendMessage('setName', { name: name });
             setAppState('joining');
             setStatusText('Joining game... Please wait.');
