@@ -1,14 +1,11 @@
-import { useState, useEffect, useMemo, useCallback } from 'react';
-import { useWebSocket, Player, ErrorPayload, TurnEndPayload } from './hooks/useWebSocket';
+import { useEffect, useCallback } from 'react';
+import { useWebSocket, Player, ErrorPayload, TurnEndPayload, WebsocketMessage } from './hooks/useWebSocket';
 
 import NameInput from './components/NameInput';
-import PlayerList from './components/PlayerList';
-import ChatBox from './components/ChatBox';
-import Whiteboard from './components/Whiteboard';
-import WordDisplay from './components/WordDisplay';
-import TimerDisplay from './components/TimerDisplay';
-import GuessInput from './components/GuessInput';
-import StatusMessage from './components/StatusMessage';
+import { create } from 'zustand/react';
+import { Scaffolding } from './components/Scaffolding';
+import { Game } from './components/Game';
+import { immer } from 'zustand/middleware/immer';
 
 export interface ChatMessage {
     senderName: string;
@@ -16,117 +13,137 @@ export interface ChatMessage {
     isSystem: boolean;
 }
 
-const CANVAS_WIDTH = 800;
-const CANVAS_HEIGHT = 600;
 const MIN_PLAYERS = 2;
 
+interface GameState {
+    players: Player[];
+    currentDrawerId: string | null;
+    hostId: string | null;
+    localPlayerId: string | null;
+    word: string | null;
+    messages: ChatMessage[];
+    turnEndTime: number | null;
+}
+
+const initialGameState = {
+    players: [],
+    currentDrawerId: null,
+    hostId: null,
+    localPlayerId: null,
+    word: null,
+    messages: [],
+    turnEndTime: null
+};
+
+type CurrentAppState = 'active'
+    | 'waiting'
+    | 'connecting'
+    | 'joining'
+    | 'enterName';
+
+export type AppState = {
+    sendMessage: (type: string, payload: unknown) => void;
+    lastMessage: WebsocketMessage | null;
+
+    appState: CurrentAppState;
+    gameState: GameState;
+}
+
+export type AppActions = {
+    assignSendMessage: (func: (type: string, payload: unknown) => void) => void,
+    setLastMessage: (message: WebsocketMessage) => void,
+
+    setState: (newState: CurrentAppState) => void;
+
+    resetGameState: () => void;
+
+    setLocalPlayerId: (id: string) => void;
+    setPlayers: (players: Player[]) => void;
+    playerGuessedCorrect: (playerId: string) => void;
+    resetPlayerGuesses: () => void;
+    setHostId: (id: string) => void;
+    setCurrentDrawer: (id: string) => void;
+    setWord: (word: string) => void;
+    addChatMessage: (message: ChatMessage) => void;
+    setTurnEndTime: (time: number | null) => void;
+}
+
+export const useAppStore = create<AppState & AppActions>()(immer((set) => ({
+    sendMessage: () => { },
+    assignSendMessage: (func) => set(s => { s.sendMessage = func }),
+    lastMessage: null,
+    setLastMessage: (message) => set(s => { s.lastMessage = message }),
+
+    appState: 'connecting',
+    setState: (newState) => set((_) => ({ appState: newState })),
+
+    gameState: initialGameState,
+
+    resetGameState: () => set((s) => { s.gameState = initialGameState }),
+    setLocalPlayerId: (id) => set((s) => { s.gameState.localPlayerId = id }),
+    setPlayers: (players) => set(s => { s.gameState.players = players }),
+    playerGuessedCorrect: (playerId) => set(s => {
+        s.gameState.players = s.gameState.players.map(p =>
+            p.id === playerId ? { ...p, hasGuessedCorrectly: true } : p
+        )
+    }
+    ),
+    resetPlayerGuesses: () => set(s => { s.gameState.players = s.gameState.players.map(p => ({ ...p, hasGuessedCorrectly: false })) }),
+    setHostId: (id) => set(s => { s.gameState.hostId = id }),
+    setCurrentDrawer: (id) => set(s => { s.gameState.currentDrawerId = id }),
+    setWord: (word) => set(s => { s.gameState.word = word }),
+    addChatMessage: (message) => set(s => { s.gameState.messages.push(message) }),
+    setTurnEndTime: (time) => set(s => { s.gameState.turnEndTime = time }),
+})));
+
 function App() {
-    const { isConnected, lastMessage, sendMessage, connect } = useWebSocket();
+    const { isConnected, sendMessage, connect } = useWebSocket();
 
-    const [appState, setAppState] = useState('connecting');
-    const [localPlayerId, setLocalPlayerId] = useState<string | null>(null);
-    const [_localPlayerName, setLocalPlayerName] = useState<string | null>('');
-    const [players, setPlayers] = useState<Player[]>([]);
-    const [hostId, setHostId] = useState<string | null>(null);
-    const [currentDrawerId, setCurrentDrawerId] = useState<string | null>(null);
-    const [secretWord, setSecretWord] = useState('');
-    const [wordLength, setWordLength] = useState(0);
-    const [statusText, setStatusText] = useState('Connecting to server...');
-    const [whiteboardKey, setWhiteboardKey] = useState(Date.now());
-    const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
-    const [turnEndTime, setTurnEndTime] = useState<number | null>(null);
+    useAppStore(s => s.assignSendMessage)(sendMessage)
+    const lastMessage = useAppStore(s => s.lastMessage);
 
-    const isLocalPlayerHost = useMemo(() => localPlayerId && hostId && localPlayerId === hostId, [localPlayerId, hostId]);
-    const isLocalPlayerDrawer = useMemo(() => localPlayerId && currentDrawerId && localPlayerId === currentDrawerId, [localPlayerId, currentDrawerId]);
-    const canLocalPlayerGuess = useMemo(() => {
-        if (appState !== 'active' || !localPlayerId || !currentDrawerId || localPlayerId === currentDrawerId || !Array.isArray(players)) {
-            return false;
-        }
-        const localPlayer = players.find(p => p?.id === localPlayerId);
-        return !localPlayer?.hasGuessedCorrectly;
-    }, [appState, localPlayerId, currentDrawerId, players]);
-    const canHostStartGame = useMemo(() => isLocalPlayerHost && appState === 'waiting' && players.length >= MIN_PLAYERS, [isLocalPlayerHost, appState, players]);
+    const appState = useAppStore((state) => state.appState);
+    const setAppState = useAppStore((state) => state.setState);
+    const resetGameState = useAppStore(s => s.resetGameState);
 
+    const localPlayerId = useAppStore(s => s.gameState.localPlayerId);
+    const setLocalPlayerId = useAppStore(s => s.setLocalPlayerId);
+
+    const players = useAppStore(s => s.gameState.players);
+    const setPlayers = useAppStore(s => s.setPlayers);
+    const playerGuessedCorrect = useAppStore(s => s.playerGuessedCorrect);
+    const resetPlayerGuesses = useAppStore(s => s.resetPlayerGuesses);
+
+    const hostId = useAppStore(s => s.gameState.hostId);
+    const setHostId = useAppStore(s => s.setHostId);
+
+    const currentDrawerId = useAppStore(s => s.gameState.currentDrawerId);
+    const setCurrentDrawer = useAppStore(s => s.setCurrentDrawer);
+
+    const setWord = useAppStore(s => s.setWord);
+
+    const pushChatMessage = useAppStore(s => s.addChatMessage);
+
+    const setTurnEndTime = useAppStore(s => s.setTurnEndTime);
 
     const addChatMessage = useCallback((msgPayload: ChatMessage) => {
-        setChatMessages(prevMessages => {
-            const newMessages = [...prevMessages, msgPayload];
-
-            return newMessages.length > 100 ? newMessages.slice(-100) : newMessages;
-        });
+        pushChatMessage(msgPayload);
     }, []);
-
-    const getWordBlanks = useCallback((length: number) => {
-        if (length <= 0) return '';
-        return Array(length).fill('_').join(' ');
-    }, []);
-
-    const updateStatusText = useCallback(() => {
-        setAppState(currentAppState => {
-            let newStatus = statusText;
-
-            if (currentAppState === 'waiting' || currentAppState === 'joining') {
-                const host = players.find(p => p.isHost);
-                const hostName = host ? host.name : "Someone";
-                if (players.length < MIN_PLAYERS) {
-                    newStatus = `Waiting for more players... (${players.length}/${MIN_PLAYERS})`;
-                } else if (isLocalPlayerHost) {
-                    newStatus = `You are the host. Start the game when ready! (${players.length} players)`;
-                } else {
-                    newStatus = `Waiting for ${hostName} (Host) to start the game... (${players.length} players)`;
-                }
-                if (currentAppState === 'joining') newStatus = 'Joining game... Please wait.';
-            } else if (currentAppState === 'active') {
-                const drawer = players.find(p => p.id === currentDrawerId);
-                const drawerName = drawer ? drawer.name : 'Someone';
-                if (isLocalPlayerDrawer) {
-                    newStatus = `Your turn! Draw: ${secretWord}`;
-                } else {
-                    const localPlayer = players.find(p => p.id === localPlayerId);
-                    if (localPlayer?.hasGuessedCorrectly) {
-                        newStatus = `You guessed it! Waiting for others... (${drawerName} is drawing)`;
-                    } else {
-                        newStatus = `${drawerName} is drawing! Guess the word!`;
-                    }
-                }
-            }
-
-            if (newStatus !== statusText) {
-                setStatusText(newStatus);
-            }
-            return currentAppState;
-        });
-    }, [players, appState, isLocalPlayerHost, currentDrawerId, isLocalPlayerDrawer, secretWord, localPlayerId, statusText]);
-
 
     useEffect(() => {
         if (isConnected) {
             if (appState === 'connecting') {
                 console.log("WebSocket connected, moving to enterName state.");
                 setAppState('enterName');
-                setStatusText('Please enter your name.');
             }
         } else {
             if (appState !== 'connecting') {
                 console.log("WebSocket disconnected.");
+                resetGameState();
                 setAppState('connecting');
-                setStatusText('Disconnected. Trying to reconnect...');
-
-                setLocalPlayerId(null);
-                setLocalPlayerName('');
-                setPlayers([]);
-                setHostId(null);
-                setCurrentDrawerId(null);
-                setSecretWord('');
-                setWordLength(0);
-                setChatMessages([]);
-                setTurnEndTime(null);
-
-
             }
         }
     }, [isConnected, appState, connect]);
-
 
     useEffect(() => {
         if (lastMessage) {
@@ -140,13 +157,11 @@ function App() {
                         console.error("Received gameInfo with null payload");
                         break;
                     }
-                    setLocalPlayerId(payload.yourId || null);
+                    setLocalPlayerId(payload.yourId);
                     setPlayers(payload.players || []);
-                    setHostId(payload.hostId || null);
-                    setCurrentDrawerId(payload.currentDrawerId || null);
-                    setWordLength(payload.wordLength || 0);
-                    setTurnEndTime(payload.turnEndTime || null);
-                    setSecretWord('');
+                    setHostId(payload.hostId);
+                    payload.currentDrawerId && setCurrentDrawer(payload.currentDrawerId);
+                    payload.turnEndTime && setTurnEndTime(payload.turnEndTime);
 
                     if (payload.isGameActive) {
                         setAppState('active');
@@ -163,19 +178,13 @@ function App() {
                         break;
                     }
                     setPlayers(payload.players || []);
-                    setHostId(payload.hostId || hostId);
+                    setHostId(payload.hostId);
 
-                    setAppState(currentAppState => {
-                        if (currentAppState === 'active' && (payload.players?.length ?? 0) < MIN_PLAYERS) {
-                            console.log("Player count dropped below minimum, returning to waiting state.");
-                            setCurrentDrawerId(null);
-                            setTurnEndTime(null);
-                            setWordLength(0);
-                            setSecretWord('');
-                            return 'waiting';
-                        }
-                        return currentAppState;
-                    });
+                    if (appState === 'active' && (payload.players?.length ?? 0) < MIN_PLAYERS) {
+                        console.log("Player count dropped below minimum, returning to waiting state.");
+                        setAppState('waiting');
+                    }
+
                     break;
                 }
                 case 'turnStart': {
@@ -184,14 +193,11 @@ function App() {
                         console.error("Received turnStart with null payload");
                         break;
                     }
-                    setCurrentDrawerId(payload.currentDrawerId);
-                    setWordLength(payload.wordLength);
-                    setSecretWord(payload.word || '');
+                    setCurrentDrawer(payload.currentDrawerId);
+                    setWord(payload.word || '');
                     setPlayers(payload.players || players);
-                    setHostId(payload.players?.find(p => p.isHost)?.id || hostId);
                     setTurnEndTime(payload.turnEndTime);
                     setAppState('active');
-                    setWhiteboardKey(Date.now());
                     break;
                 }
                 case 'playerGuessedCorrectly': {
@@ -201,11 +207,7 @@ function App() {
                         break;
                     }
                     const { playerId } = payload;
-                    setPlayers(prevPlayers =>
-                        prevPlayers.map(p =>
-                            p.id === playerId ? { ...p, hasGuessedCorrectly: true } : p
-                        )
-                    );
+                    playerGuessedCorrect(playerId);
                     const guesser = players.find(p => p.id === playerId);
                     if (guesser) {
                         addChatMessage({
@@ -230,11 +232,6 @@ function App() {
                     if (!payload) {
                         break;
                     }
-
-
-
-
-
                     break;
                 }
                 case 'turnEnd': {
@@ -244,14 +241,8 @@ function App() {
                         break;
                     }
                     setTurnEndTime(null);
-                    if (localPlayerId !== currentDrawerId) {
-                        setWordLength(0);
-                    }
 
-
-                    setStatusText(`Word was: ${payload.correctWord}. Getting next turn ready...`);
-
-                    setPlayers(prevPlayers => prevPlayers.map(p => ({ ...p, hasGuessedCorrectly: false })));
+                    resetPlayerGuesses();
                     break;
                 }
                 case 'error': {
@@ -260,7 +251,6 @@ function App() {
                         console.error("Received error with null payload");
                         break;
                     }
-                    setStatusText(`Error: ${payload.message || 'Unknown error'}`);
                     addChatMessage({
                         senderName: 'System',
                         message: `Error: ${payload.message || 'Unknown error'}`,
@@ -272,160 +262,51 @@ function App() {
                     console.warn("Received unhandled message type:", message.type);
             }
         }
-    }, [lastMessage, addChatMessage, localPlayerId, currentDrawerId, hostId]);
-
-
-    useEffect(() => {
-        updateStatusText();
-    }, [appState, players, currentDrawerId, hostId, isLocalPlayerHost, isLocalPlayerDrawer, secretWord, localPlayerId, updateStatusText]);
-
-
+    }, [lastMessage, addChatMessage, localPlayerId, currentDrawerId, hostId, appState]);
 
     const handleNameSet = useCallback((name: string) => {
         console.log("handleNameSet called with name:", name);
         if (name && isConnected) {
-            setLocalPlayerName(name);
             sendMessage('setName', { name: name });
             setAppState('joining');
-            setStatusText('Joining game... Please wait.');
             console.log("Sent setName, moved state to 'joining'.");
         } else {
             console.error("Cannot set name - invalid name or WebSocket disconnected.");
-            setStatusText("Failed to set name. Please check connection and try again.");
         }
     }, [isConnected, sendMessage]);
 
-    const handleDraw = useCallback((drawData: any) => {
-        if (isLocalPlayerDrawer && appState === 'active') {
-            sendMessage('drawEvent', drawData);
-        }
-    }, [isLocalPlayerDrawer, appState, sendMessage]);
+    if (appState === 'enterName') {
+        return (
+            <Scaffolding>
+                <NameInput onNameSet={handleNameSet} />
+            </Scaffolding>
+        );
+    }
 
-    const handleGuess = useCallback((guess: string) => {
-        if (canLocalPlayerGuess) {
-            sendMessage('guess', { guess: guess });
-        }
-    }, [canLocalPlayerGuess, sendMessage]);
+    if (!isConnected) {
+        return (
+            <Scaffolding>
+                <div className="text-center mt-10">
+                    Loading...
+                </div>
+            </Scaffolding>
+        );
+    }
 
-    const handleStartGame = useCallback(() => {
-        console.log("Start Game button clicked by host.");
-        if (canHostStartGame) {
-            sendMessage('startGame', null);
-            setStatusText("Starting game...");
-        } else {
-            console.warn("Start game attempted but conditions not met.");
-        }
-    }, [canHostStartGame, sendMessage]);
-
+    if (appState === 'joining' || !localPlayerId) {
+        return (
+            <Scaffolding>
+                <div className="text-center mt-10">
+                    <p className="text-gray-500 animate-pulse mt-2">Waiting for server info...</p>
+                </div>
+            </Scaffolding>
+        );
+    }
 
     return (
-        <main className="flex flex-col items-center justify-start min-h-screen bg-gray-100 p-4 font-sans">
-            <h1 className="text-3xl font-bold mb-4 text-blue-600 flex-shrink-0">Scribblio Clone (React)</h1>
-
-            {appState === 'enterName' ? (
-                <>
-                    <NameInput onNameSet={handleNameSet} />
-                    <StatusMessage message={statusText} />
-                </>
-            ) : !isConnected && appState !== 'enterName' ? (
-                <div className="text-center mt-10">
-                    <StatusMessage message={statusText} />
-                    {/* Optional: Add reconnect button */}
-                    {/* <button onClick={connect} className="mt-4 ...">Reconnect</button> */}
-                </div>
-            ) : (
-                <>
-                    {appState === 'joining' || !localPlayerId ? (
-                        <div className="text-center mt-10">
-                            <StatusMessage message={statusText} />
-                            <p className="text-gray-500 animate-pulse mt-2">Waiting for server info...</p>
-                        </div>
-                    ) : (
-
-                        <div className="flex justify-center w-full flex-grow">
-                            <div className="flex flex-col lg:flex-row gap-4"
-                                style={{ width: `${250 + CANVAS_WIDTH + 32}px` }}> {/* Approx Left Panel Width + Canvas Width + Gaps */}
-                                {/* Left Panel */}
-                                <aside
-                                    className="w-full lg:w-[250px] bg-white shadow-lg rounded-lg p-4 flex flex-col gap-4 order-2 lg:order-1 flex-shrink-0"
-                                    style={{ maxHeight: `${CANVAS_HEIGHT + 100}px` }}> {/* Limit height relative to canvas */}
-                                    <h2 className="text-xl font-semibold border-b pb-2 flex-shrink-0">Players
-                                        ({players.length})</h2>
-                                    <div className="flex-shrink overflow-y-auto mb-4 min-h-0">
-                                        <PlayerList players={players} currentDrawerId={currentDrawerId}
-                                            hostId={hostId} />
-                                    </div>
-
-                                    {canHostStartGame && (
-                                        <button
-                                            onClick={handleStartGame}
-                                            className="px-4 py-2 bg-green-500 text-black font-semibold rounded hover:bg-green-600 focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-offset-1 transition duration-150 ease-in-out flex-shrink-0"
-                                        >
-                                            Start Game ({players.length} players)
-                                        </button>
-                                    )}
-
-                                    <h2 className={`text-xl font-semibold border-b pb-2 flex-shrink-0 ${!canHostStartGame ? 'mt-auto' : ''}`}>Chat</h2>
-                                    <div className="flex-grow overflow-y-hidden min-h-0">
-                                        <ChatBox messages={chatMessages} />
-                                    </div>
-                                </aside>
-
-                                {/* Center Panel */}
-                                <section
-                                    className="w-full lg:flex-1 bg-white shadow-lg rounded-lg p-6 flex flex-col order-1 lg:order-2">
-                                    {/* Top Bar */}
-                                    <div className="flex justify-between items-center mb-4 gap-4 flex-shrink-0">
-                                        <div className="flex-1 text-center min-w-0">
-                                            {(isLocalPlayerDrawer && appState === 'active') ? (
-                                                <WordDisplay word={secretWord} />
-                                            ) : (appState === 'active' && currentDrawerId) ? (
-                                                <WordDisplay blanks={getWordBlanks(wordLength)} length={wordLength} />
-                                            ) : (
-                                                <div className="h-8 md:h-10"></div>
-                                            )}
-                                        </div>
-                                        <div className="w-20 text-right flex-shrink-0">
-                                            {(appState === 'active' && turnEndTime) && (
-                                                <TimerDisplay endTime={turnEndTime} />
-                                            )}
-                                        </div>
-                                    </div>
-                                    <div
-                                        className="mb-4 border-2 border-black rounded overflow-hidden bg-white relative"
-                                        style={{
-                                            width: `${CANVAS_WIDTH}px`,
-                                            height: `${CANVAS_HEIGHT}px`
-                                        }}
-                                    >
-                                        <Whiteboard
-                                            key={whiteboardKey}
-                                            isDrawer={!!isLocalPlayerDrawer}
-                                            onDraw={handleDraw}
-                                            lastDrawEvent={lastMessage?.type === 'drawEvent' ? lastMessage.payload : null}
-                                            localPlayerIsDrawer={!!isLocalPlayerDrawer}
-                                        />
-                                    </div>
-
-
-                                    {/* Status */}
-                                    <div className="mb-4 text-center flex-shrink-0">
-                                        <StatusMessage message={statusText} />
-                                    </div>
-
-                                    {/* Guess Input */}
-                                    <div className="flex-shrink-0">
-                                        {canLocalPlayerGuess && (
-                                            <GuessInput onGuess={handleGuess} />
-                                        )}
-                                    </div>
-                                </section>
-                            </div>
-                        </div>
-                    )}
-                </>
-            )}
-        </main>
+        <Scaffolding>
+            <Game />
+        </Scaffolding >
     );
 }
 
