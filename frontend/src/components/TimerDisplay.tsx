@@ -43,8 +43,13 @@ function TimerDisplay({ endTime }: { endTime: number }) {
     }, [endTime]);
 
     return (
-        <div className="text-lg font-mono font-semibold text-gray-700" title="Time Remaining">
-            <span role="img" aria-label="Timer" className="mr-1">⏱️</span>
+        <div
+            className="text-lg font-mono font-semibold text-gray-700"
+            title="Time Remaining"
+        >
+            <span role="img" aria-label="Timer" className="mr-1">
+                ⏱️
+            </span>
             {remainingSeconds}s
         </div>
     );

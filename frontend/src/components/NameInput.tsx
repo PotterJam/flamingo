@@ -13,7 +13,9 @@ function NameInput({ onNameSet }: { onNameSet: (name: string) => void }) {
 
     return (
         <div className="w-full max-w-sm mx-auto bg-white p-6 rounded-lg shadow-md text-center mt-10">
-            <h2 className="text-xl font-semibold mb-4 text-gray-700">Enter Your Name</h2>
+            <h2 className="text-xl font-semibold mb-4 text-gray-700">
+                Enter Your Name
+            </h2>
             <form onSubmit={handleSubmit}>
                 <input
                     type="text"

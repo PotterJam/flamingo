@@ -1,7 +1,19 @@
 import { useRef, useEffect, useState, useCallback } from 'react';
 
-function Whiteboard({ isDrawer, onDraw, lastDrawEvent, localPlayerIsDrawer, width, height }: {
-    isDrawer: boolean, onDraw: any, lastDrawEvent: any, localPlayerIsDrawer: boolean, width: number, height: number
+function Whiteboard({
+    isDrawer,
+    onDraw,
+    lastDrawEvent,
+    localPlayerIsDrawer,
+    width,
+    height,
+}: {
+    isDrawer: boolean;
+    onDraw: any;
+    lastDrawEvent: any;
+    localPlayerIsDrawer: boolean;
+    width: number;
+    height: number;
 }) {
     const canvasRef = useRef<HTMLCanvasElement | null>(null);
     const ctxRef = useRef<CanvasRenderingContext2D | null>(null);
@@ -37,43 +49,78 @@ function Whiteboard({ isDrawer, onDraw, lastDrawEvent, localPlayerIsDrawer, widt
         const scaleY = canvas.height / rect.height;
         return {
             x: (clientX - rect.left) * scaleX,
-            y: (clientY - rect.top) * scaleY
+            y: (clientY - rect.top) * scaleY,
         };
     }, []);
 
-    const drawLine = useCallback((x1: number, y1: number, x2: number, y2: number, color: string, width: number) => {
-        const ctx = ctxRef.current;
-        if (!ctx) return;
-        ctx.beginPath();
-        ctx.strokeStyle = color;
-        ctx.lineWidth = width;
-        ctx.lineCap = 'round';
-        ctx.lineJoin = 'round';
-        ctx.moveTo(x1, y1);
-        ctx.lineTo(x2, y2);
-        ctx.stroke();
-        ctx.closePath();
-    }, []);
+    const drawLine = useCallback(
+        (
+            x1: number,
+            y1: number,
+            x2: number,
+            y2: number,
+            color: string,
+            width: number
+        ) => {
+            const ctx = ctxRef.current;
+            if (!ctx) return;
+            ctx.beginPath();
+            ctx.strokeStyle = color;
+            ctx.lineWidth = width;
+            ctx.lineCap = 'round';
+            ctx.lineJoin = 'round';
+            ctx.moveTo(x1, y1);
+            ctx.lineTo(x2, y2);
+            ctx.stroke();
+            ctx.closePath();
+        },
+        []
+    );
 
-    const startDrawing = useCallback((e: any) => {
-        if (!isDrawer) return;
-        const pos = getEventPos(e);
-        if (!pos) return;
-        setIsDrawing(true);
-        lastPosRef.current = pos;
-        onDraw({ eventType: 'start', x: pos.x, y: pos.y, color: strokeColor, lineWidth });
-        if (e.cancelable) e.preventDefault();
-    }, [isDrawer, getEventPos, onDraw]);
+    const startDrawing = useCallback(
+        (e: any) => {
+            if (!isDrawer) return;
+            const pos = getEventPos(e);
+            if (!pos) return;
+            setIsDrawing(true);
+            lastPosRef.current = pos;
+            onDraw({
+                eventType: 'start',
+                x: pos.x,
+                y: pos.y,
+                color: strokeColor,
+                lineWidth,
+            });
+            if (e.cancelable) e.preventDefault();
+        },
+        [isDrawer, getEventPos, onDraw]
+    );
 
-    const draw = useCallback((e: any) => {
-        if (!isDrawer || !isDrawing) return;
-        const pos = getEventPos(e);
-        if (!pos) return;
-        drawLine(lastPosRef.current.x, lastPosRef.current.y, pos.x, pos.y, strokeColor, lineWidth);
-        onDraw({ eventType: 'draw', x: pos.x, y: pos.y, color: strokeColor, lineWidth });
-        lastPosRef.current = pos;
-        if (e.cancelable) e.preventDefault();
-    }, [isDrawer, isDrawing, getEventPos, drawLine, onDraw]);
+    const draw = useCallback(
+        (e: any) => {
+            if (!isDrawer || !isDrawing) return;
+            const pos = getEventPos(e);
+            if (!pos) return;
+            drawLine(
+                lastPosRef.current.x,
+                lastPosRef.current.y,
+                pos.x,
+                pos.y,
+                strokeColor,
+                lineWidth
+            );
+            onDraw({
+                eventType: 'draw',
+                x: pos.x,
+                y: pos.y,
+                color: strokeColor,
+                lineWidth,
+            });
+            lastPosRef.current = pos;
+            if (e.cancelable) e.preventDefault();
+        },
+        [isDrawer, isDrawing, getEventPos, drawLine, onDraw]
+    );
 
     const stopDrawing = useCallback(() => {
         if (!isDrawer || !isDrawing) return;
@@ -107,15 +154,15 @@ function Whiteboard({ isDrawer, onDraw, lastDrawEvent, localPlayerIsDrawer, widt
         }
 
         clearCanvasLocal();
-        console.log(`[Whiteboard] Initialized with fixed size: ${width}x${height}`);
-
+        console.log(
+            `[Whiteboard] Initialized with fixed size: ${width}x${height}`
+        );
     }, [width, height, clearCanvasLocal]);
 
     useEffect(() => {
-        console.log("[Whiteboard] Key changed, clearing canvas.");
+        console.log('[Whiteboard] Key changed, clearing canvas.');
         clearCanvasLocal();
     }, [clearCanvasLocal]);
-
 
     useEffect(() => {
         if (localPlayerIsDrawer || !lastDrawEvent || !ctxRef.current) return;
@@ -128,20 +175,28 @@ function Whiteboard({ isDrawer, onDraw, lastDrawEvent, localPlayerIsDrawer, widt
             setRemoteIsDrawing(true);
             remoteLastPosRef.current = { x, y };
         } else if (eventType === 'draw' && remoteIsDrawing) {
-            drawLine(remoteLastPosRef.current.x, remoteLastPosRef.current.y, x, y, eventColor, eventLineWidth);
+            drawLine(
+                remoteLastPosRef.current.x,
+                remoteLastPosRef.current.y,
+                x,
+                y,
+                eventColor,
+                eventLineWidth
+            );
             remoteLastPosRef.current = { x, y };
         } else if (eventType === 'end') {
             setRemoteIsDrawing(false);
         }
-
     }, [lastDrawEvent, localPlayerIsDrawer, remoteIsDrawing, drawLine]);
-
 
     return (
         <canvas
             ref={canvasRef}
             className="block bg-white"
-            style={{ cursor: isDrawer ? 'crosshair' : 'default', touchAction: 'none' }}
+            style={{
+                cursor: isDrawer ? 'crosshair' : 'default',
+                touchAction: 'none',
+            }}
             onMouseDown={startDrawing}
             onMouseMove={draw}
             onMouseUp={stopDrawing}

@@ -33,10 +33,14 @@ export function useWebSocket() {
     const [isConnected, setIsConnected] = useState(false);
     const ws = useRef<WebSocket>(null); // Ref to hold the WebSocket instance
 
-    const setLastMessage = useAppStore(s => s.setLastMessage);
+    const setLastMessage = useAppStore((s) => s.setLastMessage);
 
     const connect = useCallback(() => {
-        if (ws.current && (ws.current.readyState === WebSocket.OPEN || ws.current.readyState === WebSocket.CONNECTING)) {
+        if (
+            ws.current &&
+            (ws.current.readyState === WebSocket.OPEN ||
+                ws.current.readyState === WebSocket.CONNECTING)
+        ) {
             console.log('[useWebSocket] Already connected or connecting.');
             return;
         }
@@ -56,7 +60,11 @@ export function useWebSocket() {
                     console.log('[useWebSocket] Message received:', message);
                     setLastMessage(message); // Update state with the new message
                 } catch (error) {
-                    console.error('[useWebSocket] Error parsing message:', error, event.data);
+                    console.error(
+                        '[useWebSocket] Error parsing message:',
+                        error,
+                        event.data
+                    );
                 }
             };
 
@@ -65,12 +73,21 @@ export function useWebSocket() {
             };
 
             ws.current.onclose = (event) => {
-                console.log('[useWebSocket] WebSocket connection closed:', event.code, event.reason, 'wasClean:', event.wasClean);
+                console.log(
+                    '[useWebSocket] WebSocket connection closed:',
+                    event.code,
+                    event.reason,
+                    'wasClean:',
+                    event.wasClean
+                );
                 setIsConnected(false);
                 ws.current = null; // Clear the ref
             };
         } catch (error) {
-            console.error("!!! CRITICAL ERROR: Failed to create WebSocket:", error);
+            console.error(
+                '!!! CRITICAL ERROR: Failed to create WebSocket:',
+                error
+            );
             setIsConnected(false);
             ws.current = null;
         }
@@ -92,10 +109,16 @@ export function useWebSocket() {
                 console.log('[useWebSocket] Sending message:', message);
                 ws.current.send(msg);
             } catch (error) {
-                console.error('[useWebSocket] Error stringifying message:', error);
+                console.error(
+                    '[useWebSocket] Error stringifying message:',
+                    error
+                );
             }
         } else {
-            console.error('[useWebSocket] WebSocket not connected. Cannot send. ReadyState:', ws.current?.readyState);
+            console.error(
+                '[useWebSocket] WebSocket not connected. Cannot send. ReadyState:',
+                ws.current?.readyState
+            );
         }
     }, []);
 

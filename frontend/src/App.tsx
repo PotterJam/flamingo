@@ -28,10 +28,11 @@ const initialGameState = {
     localPlayerId: null,
     word: null,
     messages: [],
-    turnEndTime: null
+    turnEndTime: null,
 };
 
-type CurrentAppState = 'active'
+type CurrentAppState =
+    | 'active'
     | 'waiting'
     | 'connecting'
     | 'joining'
@@ -43,11 +44,11 @@ export type AppState = {
 
     appState: CurrentAppState;
     gameState: GameState;
-}
+};
 
 export type AppActions = {
-    assignSendMessage: (func: (message: SendMsg) => void) => void,
-    setLastMessage: (message: ReceivedMsg) => void,
+    assignSendMessage: (func: (message: SendMsg) => void) => void;
+    setLastMessage: (message: ReceivedMsg) => void;
 
     setState: (newState: CurrentAppState) => void;
 
@@ -62,65 +63,103 @@ export type AppActions = {
     setWord: (word: string) => void;
     addChatMessage: (message: ChatMessage) => void;
     setTurnEndTime: (time: number | null) => void;
-}
+};
 
-export const useAppStore = create<AppState & AppActions>()(immer((set) => ({
-    sendMessage: () => { },
-    assignSendMessage: (func) => set(s => { s.sendMessage = func }),
-    lastMessage: null,
-    setLastMessage: (message) => set(s => { s.lastMessage = message }),
+export const useAppStore = create<AppState & AppActions>()(
+    immer((set) => ({
+        sendMessage: () => {},
+        assignSendMessage: (func) =>
+            set((s) => {
+                s.sendMessage = func;
+            }),
+        lastMessage: null,
+        setLastMessage: (message) =>
+            set((s) => {
+                s.lastMessage = message;
+            }),
 
-    appState: 'connecting',
-    setState: (newState) => set((_) => ({ appState: newState })),
+        appState: 'connecting',
+        setState: (newState) => set((_) => ({ appState: newState })),
 
-    gameState: initialGameState,
+        gameState: initialGameState,
 
-    resetGameState: () => set((s) => { s.gameState = initialGameState }),
-    setLocalPlayerId: (id) => set((s) => { s.gameState.localPlayerId = id }),
-    setPlayers: (players) => set(s => { s.gameState.players = players }),
-    playerGuessedCorrect: (playerId) => set(s => {
-        s.gameState.players = s.gameState.players.map(p =>
-            p.id === playerId ? { ...p, hasGuessedCorrectly: true } : p
-        )
-    }
-    ),
-    resetPlayerGuesses: () => set(s => { s.gameState.players = s.gameState.players.map(p => ({ ...p, hasGuessedCorrectly: false })) }),
-    setHostId: (id) => set(s => { s.gameState.hostId = id }),
-    setCurrentDrawer: (id) => set(s => { s.gameState.currentDrawerId = id }),
-    setWord: (word) => set(s => { s.gameState.word = word }),
-    addChatMessage: (message) => set(s => { s.gameState.messages.push(message) }),
-    setTurnEndTime: (time) => set(s => { s.gameState.turnEndTime = time }),
-})));
+        resetGameState: () =>
+            set((s) => {
+                s.gameState = initialGameState;
+            }),
+        setLocalPlayerId: (id) =>
+            set((s) => {
+                s.gameState.localPlayerId = id;
+            }),
+        setPlayers: (players) =>
+            set((s) => {
+                s.gameState.players = players;
+            }),
+        playerGuessedCorrect: (playerId) =>
+            set((s) => {
+                s.gameState.players = s.gameState.players.map((p) =>
+                    p.id === playerId ? { ...p, hasGuessedCorrectly: true } : p
+                );
+            }),
+        resetPlayerGuesses: () =>
+            set((s) => {
+                s.gameState.players = s.gameState.players.map((p) => ({
+                    ...p,
+                    hasGuessedCorrectly: false,
+                }));
+            }),
+        setHostId: (id) =>
+            set((s) => {
+                s.gameState.hostId = id;
+            }),
+        setCurrentDrawer: (id) =>
+            set((s) => {
+                s.gameState.currentDrawerId = id;
+            }),
+        setWord: (word) =>
+            set((s) => {
+                s.gameState.word = word;
+            }),
+        addChatMessage: (message) =>
+            set((s) => {
+                s.gameState.messages.push(message);
+            }),
+        setTurnEndTime: (time) =>
+            set((s) => {
+                s.gameState.turnEndTime = time;
+            }),
+    }))
+);
 
 function App() {
     const { isConnected, sendMessage, connect } = useWebSocket();
 
-    useAppStore(s => s.assignSendMessage)(sendMessage)
-    const lastMessage = useAppStore(s => s.lastMessage);
+    useAppStore((s) => s.assignSendMessage)(sendMessage);
+    const lastMessage = useAppStore((s) => s.lastMessage);
 
     const appState = useAppStore((state) => state.appState);
     const setAppState = useAppStore((state) => state.setState);
-    const resetGameState = useAppStore(s => s.resetGameState);
+    const resetGameState = useAppStore((s) => s.resetGameState);
 
-    const localPlayerId = useAppStore(s => s.gameState.localPlayerId);
-    const setLocalPlayerId = useAppStore(s => s.setLocalPlayerId);
+    const localPlayerId = useAppStore((s) => s.gameState.localPlayerId);
+    const setLocalPlayerId = useAppStore((s) => s.setLocalPlayerId);
 
-    const players = useAppStore(s => s.gameState.players);
-    const setPlayers = useAppStore(s => s.setPlayers);
-    const playerGuessedCorrect = useAppStore(s => s.playerGuessedCorrect);
-    const resetPlayerGuesses = useAppStore(s => s.resetPlayerGuesses);
+    const players = useAppStore((s) => s.gameState.players);
+    const setPlayers = useAppStore((s) => s.setPlayers);
+    const playerGuessedCorrect = useAppStore((s) => s.playerGuessedCorrect);
+    const resetPlayerGuesses = useAppStore((s) => s.resetPlayerGuesses);
 
-    const hostId = useAppStore(s => s.gameState.hostId);
-    const setHostId = useAppStore(s => s.setHostId);
+    const hostId = useAppStore((s) => s.gameState.hostId);
+    const setHostId = useAppStore((s) => s.setHostId);
 
-    const currentDrawerId = useAppStore(s => s.gameState.currentDrawerId);
-    const setCurrentDrawer = useAppStore(s => s.setCurrentDrawer);
+    const currentDrawerId = useAppStore((s) => s.gameState.currentDrawerId);
+    const setCurrentDrawer = useAppStore((s) => s.setCurrentDrawer);
 
-    const setWord = useAppStore(s => s.setWord);
+    const setWord = useAppStore((s) => s.setWord);
 
-    const pushChatMessage = useAppStore(s => s.addChatMessage);
+    const pushChatMessage = useAppStore((s) => s.addChatMessage);
 
-    const setTurnEndTime = useAppStore(s => s.setTurnEndTime);
+    const setTurnEndTime = useAppStore((s) => s.setTurnEndTime);
 
     const addChatMessage = useCallback((msgPayload: ChatMessage) => {
         pushChatMessage(msgPayload);
@@ -129,12 +168,12 @@ function App() {
     useEffect(() => {
         if (isConnected) {
             if (appState === 'connecting') {
-                console.log("WebSocket connected, moving to enterName state.");
+                console.log('WebSocket connected, moving to enterName state.');
                 setAppState('enterName');
             }
         } else {
             if (appState !== 'connecting') {
-                console.log("WebSocket disconnected.");
+                console.log('WebSocket disconnected.');
                 resetGameState();
                 setAppState('connecting');
             }
@@ -143,7 +182,7 @@ function App() {
 
     useEffect(() => {
         if (lastMessage) {
-            console.log("Processing message in useEffect:", lastMessage);
+            console.log('Processing message in useEffect:', lastMessage);
             const message = lastMessage;
 
             switch (message.type) {
@@ -152,7 +191,8 @@ function App() {
                     setLocalPlayerId(payload.yourId);
                     setPlayers(payload.players || []);
                     setHostId(payload.hostId);
-                    payload.currentDrawerId && setCurrentDrawer(payload.currentDrawerId);
+                    payload.currentDrawerId &&
+                        setCurrentDrawer(payload.currentDrawerId);
                     payload.turnEndTime && setTurnEndTime(payload.turnEndTime);
 
                     if (payload.isGameActive) {
@@ -160,7 +200,12 @@ function App() {
                     } else {
                         setAppState('waiting');
                     }
-                    console.log("Processed gameInfo. New State:", payload.isGameActive ? 'active' : 'waiting', "localId:", payload.yourId);
+                    console.log(
+                        'Processed gameInfo. New State:',
+                        payload.isGameActive ? 'active' : 'waiting',
+                        'localId:',
+                        payload.yourId
+                    );
                     break;
                 }
                 case 'playerUpdate': {
@@ -168,8 +213,13 @@ function App() {
                     setPlayers(payload.players || []);
                     setHostId(payload.hostId);
 
-                    if (appState === 'active' && (payload.players?.length ?? 0) < MIN_PLAYERS) {
-                        console.log("Player count dropped below minimum, returning to waiting state.");
+                    if (
+                        appState === 'active' &&
+                        (payload.players?.length ?? 0) < MIN_PLAYERS
+                    ) {
+                        console.log(
+                            'Player count dropped below minimum, returning to waiting state.'
+                        );
                         setAppState('waiting');
                     }
 
@@ -188,12 +238,12 @@ function App() {
                     const payload = message.payload;
                     const { playerId } = payload;
                     playerGuessedCorrect(playerId);
-                    const guesser = players.find(p => p.id === playerId);
+                    const guesser = players.find((p) => p.id === playerId);
                     if (guesser) {
                         addChatMessage({
                             senderName: 'System',
                             message: `${guesser?.name ?? 'Unknown'} guessed the word!`,
-                            isSystem: true
+                            isSystem: true,
                         });
                     }
                     break;
@@ -214,32 +264,44 @@ function App() {
                 case 'error': {
                     const payload = message.payload as unknown as ErrorPayload;
                     if (!payload) {
-                        console.error("Received error with null payload");
+                        console.error('Received error with null payload');
                         break;
                     }
                     addChatMessage({
                         senderName: 'System',
                         message: `Error: ${payload.message || 'Unknown error'}`,
-                        isSystem: true
+                        isSystem: true,
                     });
                     break;
                 }
                 default:
-                    console.warn("Received unknown message: ", message);
+                    console.warn('Received unknown message: ', message);
             }
         }
-    }, [lastMessage, addChatMessage, localPlayerId, currentDrawerId, hostId, appState]);
+    }, [
+        lastMessage,
+        addChatMessage,
+        localPlayerId,
+        currentDrawerId,
+        hostId,
+        appState,
+    ]);
 
-    const handleNameSet = useCallback((name: string) => {
-        console.log("handleNameSet called with name:", name);
-        if (name && isConnected) {
-            sendMessage({ type: 'setName', payload: { name: name } });
-            setAppState('joining');
-            console.log("Sent setName, moved state to 'joining'.");
-        } else {
-            console.error("Cannot set name - invalid name or WebSocket disconnected.");
-        }
-    }, [isConnected, sendMessage]);
+    const handleNameSet = useCallback(
+        (name: string) => {
+            console.log('handleNameSet called with name:', name);
+            if (name && isConnected) {
+                sendMessage({ type: 'setName', payload: { name: name } });
+                setAppState('joining');
+                console.log("Sent setName, moved state to 'joining'.");
+            } else {
+                console.error(
+                    'Cannot set name - invalid name or WebSocket disconnected.'
+                );
+            }
+        },
+        [isConnected, sendMessage]
+    );
 
     if (appState === 'enterName') {
         return (
@@ -252,9 +314,7 @@ function App() {
     if (!isConnected) {
         return (
             <Scaffolding>
-                <div className="text-center mt-10">
-                    Loading...
-                </div>
+                <div className="text-center mt-10">Loading...</div>
             </Scaffolding>
         );
     }
@@ -263,7 +323,9 @@ function App() {
         return (
             <Scaffolding>
                 <div className="text-center mt-10">
-                    <p className="text-gray-500 animate-pulse mt-2">Waiting for server info...</p>
+                    <p className="text-gray-500 animate-pulse mt-2">
+                        Waiting for server info...
+                    </p>
                 </div>
             </Scaffolding>
         );
@@ -272,7 +334,7 @@ function App() {
     return (
         <Scaffolding>
             <Game />
-        </Scaffolding >
+        </Scaffolding>
     );
 }
 

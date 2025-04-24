@@ -6,7 +6,8 @@ function ChatBox({ messages = [] }: { messages: ChatMessage[] }) {
 
     useEffect(() => {
         if (chatContainerRef.current) {
-            chatContainerRef.current.scrollTop = chatContainerRef.current.scrollHeight;
+            chatContainerRef.current.scrollTop =
+                chatContainerRef.current.scrollHeight;
         }
     }, [messages]);
 
@@ -22,13 +23,17 @@ function ChatBox({ messages = [] }: { messages: ChatMessage[] }) {
                         className={`break-words ${msg.isSystem ? 'italic text-gray-600' : 'text-gray-800'}`}
                     >
                         {!msg.isSystem && (
-                            <span className="font-semibold mr-1">{msg.senderName}:</span>
+                            <span className="font-semibold mr-1">
+                                {msg.senderName}:
+                            </span>
                         )}
                         {msg.message}
                     </div>
                 ))
             ) : (
-                <p className="text-gray-400 m-auto italic">Chat messages will appear here...</p>
+                <p className="text-gray-400 m-auto italic">
+                    Chat messages will appear here...
+                </p>
             )}
         </div>
     );
