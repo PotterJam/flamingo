@@ -291,7 +291,7 @@ function App() {
 
     return (
         <Scaffolding>
-            <Game />
+            <Game lastMessage={lastMessage} sendMessage={sendMessage} />
         </Scaffolding >
     );
 }
