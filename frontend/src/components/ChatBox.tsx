@@ -1,5 +1,5 @@
 import { useRef, useEffect } from 'react';
-import { ChatMessage } from '../App';
+import { ChatMessage } from '../messages';
 
 function ChatBox({ messages = [] }: { messages: ChatMessage[] }) {
     const chatContainerRef = useRef<HTMLDivElement>(null);

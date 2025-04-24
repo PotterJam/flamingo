@@ -27,13 +27,15 @@ export interface PlayerUpdateMsg {
     },
 }
 
+export interface ChatMessage {
+    senderName: string;
+    message: string;
+    isSystem: boolean;
+}
+
 export interface ChatMsg {
     type: 'chat',
-    payload: {
-        isSytem: boolean,
-        message: string,
-        senderName: string,
-    },
+    payload: ChatMessage,
 }
 
 export interface TurnStartMsg {
