@@ -35,6 +35,7 @@ function App() {
     const { isConnected, lastMessage, sendMessage, connect } = useWebSocket();
 
     const appState = useAppStore((state) => state.appState);
+    const setAppState = useAppStore((state) => state.setState);
 
     const [localPlayerId, setLocalPlayerId] = useState<string | null>(null);
     const [_localPlayerName, setLocalPlayerName] = useState<string | null>('');
@@ -74,40 +75,35 @@ function App() {
     }, []);
 
     const updateStatusText = useCallback(() => {
-        setAppState(currentAppState => {
-            let newStatus = statusText;
+        let newStatus = statusText;
 
-            if (currentAppState === 'waiting' || currentAppState === 'joining') {
-                const host = players.find(p => p.isHost);
-                const hostName = host ? host.name : "Someone";
-                if (players.length < MIN_PLAYERS) {
-                    newStatus = `Waiting for more players... (${players.length}/${MIN_PLAYERS})`;
-                } else if (isLocalPlayerHost) {
-                    newStatus = `You are the host. Start the game when ready! (${players.length} players)`;
+        if (appState === 'waiting' || appState === 'joining') {
+            const host = players.find(p => p.isHost);
+            const hostName = host ? host.name : "Someone";
+            if (players.length < MIN_PLAYERS) {
+                newStatus = `Waiting for more players... (${players.length}/${MIN_PLAYERS})`;
+            } else if (isLocalPlayerHost) {
+                newStatus = `You are the host. Start the game when ready! (${players.length} players)`;
+            } else {
+                newStatus = `Waiting for ${hostName} (Host) to start the game... (${players.length} players)`;
+            }
+            if (appState === 'joining') newStatus = 'Joining game... Please wait.';
+        } else if (appState === 'active') {
+            const drawer = players.find(p => p.id === currentDrawerId);
+            const drawerName = drawer ? drawer.name : 'Someone';
+            if (isLocalPlayerDrawer) {
+                newStatus = `Your turn! Draw: ${secretWord}`;
+            } else {
+                const localPlayer = players.find(p => p.id === localPlayerId);
+                if (localPlayer?.hasGuessedCorrectly) {
+                    newStatus = `You guessed it! Waiting for others... (${drawerName} is drawing)`;
                 } else {
-                    newStatus = `Waiting for ${hostName} (Host) to start the game... (${players.length} players)`;
-                }
-                if (currentAppState === 'joining') newStatus = 'Joining game... Please wait.';
-            } else if (currentAppState === 'active') {
-                const drawer = players.find(p => p.id === currentDrawerId);
-                const drawerName = drawer ? drawer.name : 'Someone';
-                if (isLocalPlayerDrawer) {
-                    newStatus = `Your turn! Draw: ${secretWord}`;
-                } else {
-                    const localPlayer = players.find(p => p.id === localPlayerId);
-                    if (localPlayer?.hasGuessedCorrectly) {
-                        newStatus = `You guessed it! Waiting for others... (${drawerName} is drawing)`;
-                    } else {
-                        newStatus = `${drawerName} is drawing! Guess the word!`;
-                    }
+                    newStatus = `${drawerName} is drawing! Guess the word!`;
                 }
             }
+        }
 
-            if (newStatus !== statusText) {
-                setStatusText(newStatus);
-            }
-            return currentAppState;
-        });
+        setStatusText(newStatus);
     }, [players, appState, isLocalPlayerHost, currentDrawerId, isLocalPlayerDrawer, secretWord, localPlayerId, statusText]);
 
 
@@ -177,17 +173,15 @@ function App() {
                     setPlayers(payload.players || []);
                     setHostId(payload.hostId || hostId);
 
-                    setAppState(currentAppState => {
-                        if (currentAppState === 'active' && (payload.players?.length ?? 0) < MIN_PLAYERS) {
-                            console.log("Player count dropped below minimum, returning to waiting state.");
-                            setCurrentDrawerId(null);
-                            setTurnEndTime(null);
-                            setWordLength(0);
-                            setSecretWord('');
-                            return 'waiting';
-                        }
-                        return currentAppState;
-                    });
+                    if (appState === 'active' && (payload.players?.length ?? 0) < MIN_PLAYERS) {
+                        console.log("Player count dropped below minimum, returning to waiting state.");
+                        setCurrentDrawerId(null);
+                        setTurnEndTime(null);
+                        setWordLength(0);
+                        setSecretWord('');
+                        setAppState('waiting');
+                    }
+
                     break;
                 }
                 case 'turnStart': {
@@ -278,7 +272,7 @@ function App() {
                     console.warn("Received unhandled message type:", message.type);
             }
         }
-    }, [lastMessage, addChatMessage, localPlayerId, currentDrawerId, hostId]);
+    }, [lastMessage, addChatMessage, localPlayerId, currentDrawerId, hostId, appState]);
 
 
     useEffect(() => {
