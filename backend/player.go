@@ -1,10 +1,9 @@
 package main
 
 import (
-	"encoding/json" // Needed here
-	"log"           // Needed here
-
-	"github.com/gorilla/websocket" // Needed here
+	"encoding/json"
+	"github.com/gorilla/websocket"
+	"log"
 )
 
 // Player represents a single connected client.
@@ -58,7 +57,6 @@ func (p *Player) writePump() {
 		case message, ok := <-p.Send:
 			if !ok {
 				log.Printf("Player %s (%s): Hub closed send channel.", p.ID, p.Name)
-				// Attempt to send close message, ignore error as connection might be dead
 				_ = p.Conn.WriteMessage(websocket.CloseMessage, []byte{})
 				return
 			}
@@ -71,7 +69,7 @@ func (p *Player) writePump() {
 			_, err = w.Write(message)
 			if err != nil {
 				log.Printf("Player %s (%s) write error writing message: %v", p.ID, p.Name, err)
-				_ = w.Close() // Attempt to close writer even on error
+				_ = w.Close()
 				return
 			}
 
@@ -83,14 +81,12 @@ func (p *Player) writePump() {
 	}
 }
 
-// SendError sends a structured error message back to this specific player.
 func (p *Player) SendError(errMsg string) {
-	// Ensure player pointer is not nil (might happen during rapid disconnect/cleanup)
 	if p == nil {
 		return
 	}
 	payload := ErrorPayload{Message: errMsg}
-	// Use mustMarshal helper for simplicity, assuming payload struct is always valid
+
 	msgBytes, _ := json.Marshal(Message{Type: MsgTypeError, Payload: json.RawMessage(mustMarshal(payload))})
 	// Use a non-blocking send
 	select {
@@ -102,11 +98,10 @@ func (p *Player) SendError(errMsg string) {
 
 // SendMessage sends any message type to this player (non-blocking).
 func (p *Player) SendMessage(msgType string, payload interface{}) {
-	// Ensure player pointer is not nil
 	if p == nil {
 		return
 	}
-	// Use json.RawMessage(nil) for messages without payload
+
 	var payloadBytes []byte
 	var err error
 	if payload != nil {

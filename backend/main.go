@@ -6,9 +6,7 @@ import (
 	"github.com/gorilla/mux"
 	"github.com/gorilla/websocket"
 	"log"
-	"math/rand"
 	"net/http"
-	"time"
 )
 
 // Configuration for WebSocket upgrader
@@ -21,10 +19,8 @@ var upgrader = websocket.Upgrader{
 	},
 }
 
-// Word list
 var words = []string{"apple", "banana", "cloud", "house", "tree", "computer", "go", "svelte", "network", "game", "player", "draw", "timer", "guess", "score", "host", "lobby", "react"}
 
-// serveWs handles WebSocket upgrade requests.
 func serveWs(hub *Hub, w http.ResponseWriter, r *http.Request) {
 	conn, err := upgrader.Upgrade(w, r, nil)
 	if err != nil {
@@ -42,15 +38,13 @@ func serveWs(hub *Hub, w http.ResponseWriter, r *http.Request) {
 	}
 
 	log.Printf("Registering new player connection: %s", player.ID)
-	hub.Register <- player // Register connection with Hub
+	hub.Register <- player
 
 	go player.writePump()
 	go player.readPump()
 }
 
-// main is the application entry point.
 func main() {
-	rand.Seed(time.Now().UnixNano())
 	hub := NewHub()
 	go hub.Run()
 
@@ -82,11 +76,6 @@ func main() {
 		log.Fatal("ListenAndServe Error: ", err)
 	}
 }
-
-// =====================================================
-// File: utils.go (or keep in main.go if small)
-// Purpose: Utility functions used across the application.
-// =====================================================
 
 // mustMarshal is a helper to marshal JSON, panicking on error.
 // Useful for internal message creation where the structure is known to be valid.
