@@ -23,7 +23,7 @@ export const Game: FC = () => {
     const { players, currentDrawerId, hostId, localPlayerId, word, messages, turnEndTime } = gameState;
 
     if (!players || !currentDrawerId || !hostId || !localPlayerId || !word || !turnEndTime) {
-        throw new Error('game might not be configued properly');
+        return (<div>Still waiting for players I guess? Otherwise I have no idea</div>);
     }
 
     const localPlayer = players.find(p => p.id === localPlayerId);
