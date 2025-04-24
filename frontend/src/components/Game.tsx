@@ -22,9 +22,7 @@ export const Game: FC = () => {
     }
     const { players, currentDrawerId, hostId, localPlayerId, word, messages, turnEndTime } = gameState;
 
-    if (!players || !currentDrawerId || !hostId || !localPlayerId || !word || !turnEndTime) {
-        return (<div>Still waiting for players I guess? Otherwise I have no idea</div>);
-    }
+    console.log(`players: ${players}, currentDrawerId: ${currentDrawerId}, hostId: ${hostId}, localId: ${localPlayerId}, word: ${word}, turnEnd: ${turnEndTime}`);
 
     const localPlayer = players.find(p => p.id === localPlayerId);
     if (!localPlayer) {
@@ -36,7 +34,7 @@ export const Game: FC = () => {
 
     const canLocalPlayerGuess = !isLocalPlayerDrawer && !localPlayer.hasGuessedCorrectly;
 
-    const wordBlanks = Array(word.length).fill('_').join(' ');
+    const wordBlanks = Array(word?.length || '').fill('_').join(' ');
 
     const handleStartGame = useCallback(() => {
         console.log("Start Game button clicked by host.");
@@ -93,9 +91,9 @@ export const Game: FC = () => {
                     <div className="flex justify-between items-center mb-4 gap-4 flex-shrink-0">
                         <div className="flex-1 text-center min-w-0">
                             {(isLocalPlayerDrawer) ? (
-                                <WordDisplay word={word} />
+                                <WordDisplay word={word ?? ''} />
                             ) : (appState === 'active' && currentDrawerId) ? (
-                                <WordDisplay blanks={wordBlanks} length={word.length} />
+                                <WordDisplay blanks={wordBlanks} length={word?.length ?? 0} />
                             ) : (
                                 <div className="h-8 md:h-10"></div>
                             )}

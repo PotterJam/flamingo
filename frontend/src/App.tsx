@@ -163,7 +163,7 @@ function App() {
                         console.error("Received playerUpdate with null payload");
                         break;
                     }
-                    // setPlayers(payload.players || []);
+                    setPlayers(payload.players || []);
                     setHostId(payload.hostId);
 
                     if (appState === 'active' && (payload.players?.length ?? 0) < MIN_PLAYERS) {
