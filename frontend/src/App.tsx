@@ -9,6 +9,7 @@ import WordDisplay from './components/WordDisplay';
 import TimerDisplay from './components/TimerDisplay';
 import GuessInput from './components/GuessInput';
 import StatusMessage from './components/StatusMessage';
+import { create } from 'zustand/react';
 
 export interface ChatMessage {
     senderName: string;
@@ -20,10 +21,21 @@ const CANVAS_WIDTH = 800;
 const CANVAS_HEIGHT = 600;
 const MIN_PLAYERS = 2;
 
+interface AppState {
+    appState: string;
+    setState: (newState: string) => void;
+}
+
+export const useAppStore = create<AppState>((set) => ({
+    appState: 'connecting',
+    setState: (newState) => set((_) => ({ appState: newState })),
+}));
+
 function App() {
     const { isConnected, lastMessage, sendMessage, connect } = useWebSocket();
 
-    const [appState, setAppState] = useState('connecting');
+    const appState = useAppStore((state) => state.appState);
+
     const [localPlayerId, setLocalPlayerId] = useState<string | null>(null);
     const [_localPlayerName, setLocalPlayerName] = useState<string | null>('');
     const [players, setPlayers] = useState<Player[]>([]);
@@ -230,11 +242,6 @@ function App() {
                     if (!payload) {
                         break;
                     }
-
-
-
-
-
                     break;
                 }
                 case 'turnEnd': {
@@ -247,7 +254,6 @@ function App() {
                     if (localPlayerId !== currentDrawerId) {
                         setWordLength(0);
                     }
-
 
                     setStatusText(`Word was: ${payload.correctWord}. Getting next turn ready...`);
 
@@ -330,8 +336,6 @@ function App() {
             ) : !isConnected && appState !== 'enterName' ? (
                 <div className="text-center mt-10">
                     <StatusMessage message={statusText} />
-                    {/* Optional: Add reconnect button */}
-                    {/* <button onClick={connect} className="mt-4 ...">Reconnect</button> */}
                 </div>
             ) : (
                 <>
@@ -344,11 +348,10 @@ function App() {
 
                         <div className="flex justify-center w-full flex-grow">
                             <div className="flex flex-col lg:flex-row gap-4"
-                                style={{ width: `${250 + CANVAS_WIDTH + 32}px` }}> {/* Approx Left Panel Width + Canvas Width + Gaps */}
-                                {/* Left Panel */}
+                                style={{ width: `${250 + CANVAS_WIDTH + 32}px` }}>
                                 <aside
                                     className="w-full lg:w-[250px] bg-white shadow-lg rounded-lg p-4 flex flex-col gap-4 order-2 lg:order-1 flex-shrink-0"
-                                    style={{ maxHeight: `${CANVAS_HEIGHT + 100}px` }}> {/* Limit height relative to canvas */}
+                                    style={{ maxHeight: `${CANVAS_HEIGHT + 100}px` }}>
                                     <h2 className="text-xl font-semibold border-b pb-2 flex-shrink-0">Players
                                         ({players.length})</h2>
                                     <div className="flex-shrink overflow-y-auto mb-4 min-h-0">
@@ -371,7 +374,6 @@ function App() {
                                     </div>
                                 </aside>
 
-                                {/* Center Panel */}
                                 <section
                                     className="w-full lg:flex-1 bg-white shadow-lg rounded-lg p-6 flex flex-col order-1 lg:order-2">
                                     {/* Top Bar */}
@@ -404,16 +406,16 @@ function App() {
                                             onDraw={handleDraw}
                                             lastDrawEvent={lastMessage?.type === 'drawEvent' ? lastMessage.payload : null}
                                             localPlayerIsDrawer={!!isLocalPlayerDrawer}
+                                            width={CANVAS_WIDTH}
+                                            height={CANVAS_HEIGHT}
                                         />
                                     </div>
 
 
-                                    {/* Status */}
                                     <div className="mb-4 text-center flex-shrink-0">
                                         <StatusMessage message={statusText} />
                                     </div>
 
-                                    {/* Guess Input */}
                                     <div className="flex-shrink-0">
                                         {canLocalPlayerGuess && (
                                             <GuessInput onGuess={handleGuess} />
