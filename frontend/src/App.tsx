@@ -22,6 +22,16 @@ const CANVAS_WIDTH = 800;
 const CANVAS_HEIGHT = 600;
 const MIN_PLAYERS = 2;
 
+interface GameState {
+    players: Player[];
+    currentDrawerId: string;
+    hostId: string;
+    localPlayerId: string;
+    word: string;
+    messages: ChatMessage[];
+    turnEndTime: number;
+}
+
 type CurrentAppState = 'active'
     | 'waiting'
     | 'connecting'
@@ -31,11 +41,13 @@ type CurrentAppState = 'active'
 interface AppState {
     appState: CurrentAppState;
     setState: (newState: CurrentAppState) => void;
+    gameState: GameState | null;
 }
 
 export const useAppStore = create<AppState>((set) => ({
     appState: 'connecting',
     setState: (newState) => set((_) => ({ appState: newState })),
+    gameState: null,
 }));
 
 function App() {
@@ -52,7 +64,6 @@ function App() {
     const [secretWord, setSecretWord] = useState('');
     const [wordLength, setWordLength] = useState(0);
     const [statusText, setStatusText] = useState('Connecting to server...');
-    const [whiteboardKey, setWhiteboardKey] = useState(Date.now());
     const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
     const [turnEndTime, setTurnEndTime] = useState<number | null>(null);
 
@@ -142,7 +153,6 @@ function App() {
         }
     }, [isConnected, appState, connect]);
 
-
     useEffect(() => {
         if (lastMessage) {
             console.log("Processing message in useEffect:", lastMessage);
@@ -204,7 +214,6 @@ function App() {
                     setHostId(payload.players?.find(p => p.isHost)?.id || hostId);
                     setTurnEndTime(payload.turnEndTime);
                     setAppState('active');
-                    setWhiteboardKey(Date.now());
                     break;
                 }
                 case 'playerGuessedCorrectly': {
@@ -356,6 +365,7 @@ function App() {
 
     return (
         <Scaffolding>
+            {/* <Game /> */}
             <div className="flex justify-center w-full flex-grow">
                 <div className="flex flex-col lg:flex-row gap-4"
                     style={{ width: `${250 + CANVAS_WIDTH + 32}px` }}>
@@ -411,7 +421,6 @@ function App() {
                             }}
                         >
                             <Whiteboard
-                                key={whiteboardKey}
                                 isDrawer={!!isLocalPlayerDrawer}
                                 onDraw={handleDraw}
                                 lastDrawEvent={lastMessage?.type === 'drawEvent' ? lastMessage.payload : null}
