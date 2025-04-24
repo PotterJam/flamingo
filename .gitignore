@@ -1,7 +1,7 @@
 node_modules/
 dist/
 build/
-backend/public/assets/
+backend/public/
 
 # server produced by py script
 scriblio_server
