@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { useAppStore } from '../App';
+import { useAppStore } from '../store';
 import { Player, SendMsg } from '../messages';
 
 const WS_URL = 'ws://localhost:8080/ws';

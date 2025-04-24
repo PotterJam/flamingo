@@ -1,5 +1,5 @@
 import { FC, useCallback } from 'react';
-import { useAppStore } from '../App';
+import { useAppStore } from '../store';
 import PlayerList from './PlayerList';
 import ChatBox from './ChatBox';
 import WordDisplay from './WordDisplay';
