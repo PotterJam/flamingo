@@ -21,9 +21,15 @@ const CANVAS_WIDTH = 800;
 const CANVAS_HEIGHT = 600;
 const MIN_PLAYERS = 2;
 
+type CurrentAppState = 'active'
+    | 'waiting'
+    | 'connecting'
+    | 'joining'
+    | 'enterName';
+
 interface AppState {
-    appState: string;
-    setState: (newState: string) => void;
+    appState: CurrentAppState;
+    setState: (newState: CurrentAppState) => void;
 }
 
 export const useAppStore = create<AppState>((set) => ({
@@ -327,7 +333,7 @@ function App() {
                     <NameInput onNameSet={handleNameSet} />
                     <StatusMessage message={statusText} />
                 </>
-            ) : !isConnected && appState !== 'enterName' ? (
+            ) : !isConnected ? (
                 <div className="text-center mt-10">
                     <StatusMessage message={statusText} />
                 </div>
