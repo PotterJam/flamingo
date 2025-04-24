@@ -1,5 +1,5 @@
 import { useEffect, useCallback } from 'react';
-import { useWebSocket, Player, ErrorPayload, TurnEndPayload } from './hooks/useWebSocket';
+import { useWebSocket, Player, ErrorPayload, TurnEndPayload, WebsocketMessage } from './hooks/useWebSocket';
 
 import NameInput from './components/NameInput';
 import { create } from 'zustand/react';
@@ -42,11 +42,17 @@ type CurrentAppState = 'active'
     | 'enterName';
 
 export type AppState = {
+    sendMessage: (type: string, payload: unknown) => void;
+    lastMessage: WebsocketMessage | null;
+
     appState: CurrentAppState;
     gameState: GameState;
 }
 
 export type AppActions = {
+    assignSendMessage: (func: (type: string, payload: unknown) => void) => void,
+    setLastMessage: (message: WebsocketMessage) => void,
+
     setState: (newState: CurrentAppState) => void;
 
     resetGameState: () => void;
@@ -63,6 +69,11 @@ export type AppActions = {
 }
 
 export const useAppStore = create<AppState & AppActions>()(immer((set) => ({
+    sendMessage: () => { },
+    assignSendMessage: (func) => set(s => { s.sendMessage = func }),
+    lastMessage: null,
+    setLastMessage: (message) => set(s => { s.lastMessage = message }),
+
     appState: 'connecting',
     setState: (newState) => set((_) => ({ appState: newState })),
 
@@ -86,7 +97,10 @@ export const useAppStore = create<AppState & AppActions>()(immer((set) => ({
 })));
 
 function App() {
-    const { isConnected, lastMessage, sendMessage, connect } = useWebSocket();
+    const { isConnected, sendMessage, connect } = useWebSocket();
+
+    useAppStore(s => s.assignSendMessage)(sendMessage)
+    const lastMessage = useAppStore(s => s.lastMessage);
 
     const appState = useAppStore((state) => state.appState);
     const setAppState = useAppStore((state) => state.setState);
@@ -291,7 +305,7 @@ function App() {
 
     return (
         <Scaffolding>
-            <Game lastMessage={lastMessage} sendMessage={sendMessage} />
+            <Game />
         </Scaffolding >
     );
 }

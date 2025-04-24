@@ -6,14 +6,15 @@ import WordDisplay from "./WordDisplay";
 import TimerDisplay from "./TimerDisplay";
 import Whiteboard from "./Whiteboard";
 import GuessInput from "./GuessInput";
-import { WebhookMessage } from "../hooks/useWebSocket";
 
 const CANVAS_WIDTH = 800;
 const CANVAS_HEIGHT = 600;
 const MIN_PLAYERS = 2;
 
 // Todo: having to pass the webhook stuff through cos reusing the hook causes a new webhook to open
-export const Game: FC<{ lastMessage: WebhookMessage | null, sendMessage: (type: string, payload: unknown) => void }> = ({ lastMessage, sendMessage }) => {
+export const Game: FC = () => {
+    const sendMessage = useAppStore(s => s.sendMessage);
+    const lastMessage = useAppStore(s => s.lastMessage);
     const appState = useAppStore(s => s.appState);
     const gameState = useAppStore(s => s.gameState);
     if (gameState === null) {

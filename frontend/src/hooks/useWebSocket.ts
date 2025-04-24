@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
+import { useAppStore } from '../App';
 
-const WS_URL = 'ws://localhost:8080/ws'; // Adjust if needed
+const WS_URL = 'ws://localhost:8080/ws';
 
 export interface Player {
     id: string;
@@ -22,25 +23,25 @@ export interface JankPayload {
 }
 
 export interface TurnEndPayload {
-	correctWord: string;
+    correctWord: string;
 }
 
 export interface ErrorPayload {
-	message: string;
+    message: string;
 }
 
-export interface WebhookMessage {
+export interface WebsocketMessage {
     type: string;
     payload: JankPayload;
 }
 
 export function useWebSocket() {
     const [isConnected, setIsConnected] = useState(false);
-    const [lastMessage, setLastMessage] = useState<WebhookMessage | null>(null);
     const ws = useRef<WebSocket>(null); // Ref to hold the WebSocket instance
 
+    const setLastMessage = useAppStore(s => s.setLastMessage);
+
     const connect = useCallback(() => {
-        // Avoid reconnecting if already connected or connecting
         if (ws.current && (ws.current.readyState === WebSocket.OPEN || ws.current.readyState === WebSocket.CONNECTING)) {
             console.log('[useWebSocket] Already connected or connecting.');
             return;
@@ -67,28 +68,25 @@ export function useWebSocket() {
 
             ws.current.onerror = (error) => {
                 console.error('[useWebSocket] WebSocket error:', error);
-                // onerror often precedes onclose, connection state is handled in onclose
             };
 
             ws.current.onclose = (event) => {
                 console.log('[useWebSocket] WebSocket connection closed:', event.code, event.reason, 'wasClean:', event.wasClean);
                 setIsConnected(false);
                 ws.current = null; // Clear the ref
-                // Optional: Implement automatic reconnection logic here
             };
         } catch (error) {
             console.error("!!! CRITICAL ERROR: Failed to create WebSocket:", error);
             setIsConnected(false);
             ws.current = null;
         }
-    }, []); // Empty dependency array means this function reference doesn't change
+    }, []);
 
     const disconnect = useCallback(() => {
         if (ws.current && ws.current.readyState === WebSocket.OPEN) {
             console.log('[useWebSocket] Closing WebSocket connection.');
             ws.current.close();
         }
-        // Clear state immediately
         setIsConnected(false);
         ws.current = null;
     }, []);
@@ -105,16 +103,14 @@ export function useWebSocket() {
         } else {
             console.error('[useWebSocket] WebSocket not connected. Cannot send. ReadyState:', ws.current?.readyState);
         }
-    }, []); // Depends only on ws ref state (implicitly)
+    }, []);
 
-    // Effect to connect on mount and disconnect on unmount
     useEffect(() => {
-        connect(); // Connect when hook is first used
-        // Cleanup function to disconnect when component unmounts
+        connect();
         return () => {
             disconnect();
         };
-    }, [connect, disconnect]); // Re-run if connect/disconnect functions change (they won't here)
+    }, [connect, disconnect]);
 
-    return { isConnected, lastMessage, sendMessage, connect, disconnect };
+    return { isConnected, sendMessage, connect, disconnect };
 }
