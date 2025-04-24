@@ -1,32 +1,30 @@
 package main
 
 import (
-	"encoding/json" // Needed here
-	"log"           // Needed here
-	"math/rand"     // Needed here
-	"sync"          // Needed here
-	"time"          // Needed here
-	// No websocket import needed here if Hub handles broadcast
+	"encoding/json"
+	"log"
+	"math/rand"
+	"sync"
+	"time"
 )
 
-const turnDuration = 60 * time.Second // 60 second timer for each turn
-const minPlayersToStart = 2           // Minimum players needed to start/continue
+const turnDuration = 60 * time.Second
+const minPlayersToStart = 2
 
 // Game represents the single, shared game session.
 type Game struct {
-	Players          []*Player       // Ordered list of players who have set their name
-	HostID           string          // ID of the player who is the host
+	Players          []*Player
+	HostID           string
 	CurrentDrawerIdx int             // Index in Players slice of the current drawer (-1 if no game)
 	Word             string          // The secret word for the current turn
 	GuessedCorrectly map[string]bool // Set of player IDs who guessed correctly this turn
-	Hub              *Hub            // Reference back to the hub
-	mu               sync.Mutex      // Mutex to protect concurrent access to game state
-	IsActive         bool            // Flag indicating if a round/turn is currently running
-	turnTimer        *time.Timer     // Timer for the current turn
-	turnEndTime      time.Time       // When the current turn is scheduled to end
+	Hub              *Hub
+	mu               sync.Mutex  // Mutex to protect concurrent access to game state
+	IsActive         bool        // Flag indicating if a round/turn is currently running
+	turnTimer        *time.Timer // Timer for the current turn
+	turnEndTime      time.Time   // When the current turn is scheduled to end
 }
 
-// NewGame creates the shared game instance.
 func NewGame(hub *Hub) *Game {
 	log.Println("Game: Creating new shared game instance.")
 	return &Game{
@@ -39,8 +37,6 @@ func NewGame(hub *Hub) *Game {
 	}
 }
 
-// PlayerIsReady adds a player who has set their name to the game list.
-// Called by the Hub when it receives the PlayerReady signal.
 func (g *Game) PlayerIsReady(player *Player) {
 	g.mu.Lock()
 	defer g.mu.Unlock()
@@ -49,7 +45,7 @@ func (g *Game) PlayerIsReady(player *Player) {
 	for _, p := range g.Players {
 		if p.ID == player.ID {
 			log.Printf("Game: Player %s (%s) already marked as ready.", player.ID, player.Name)
-			g.sendGameInfo(player) // Send current state again
+			g.sendGameInfo(player)
 			return
 		}
 	}
@@ -57,26 +53,16 @@ func (g *Game) PlayerIsReady(player *Player) {
 	g.Players = append(g.Players, player)
 	log.Printf("Game: Player %s (%s) marked ready. Total ready players: %d", player.ID, player.Name, len(g.Players))
 
-	// Assign host if this is the first ready player
+	// Assign host to the first player
 	if len(g.Players) == 1 {
 		g.HostID = player.ID
 		log.Printf("Game: Player %s (%s) assigned as Host.", player.ID, player.Name)
 	}
 
-	// Send current game state to the new player
-	g.sendGameInfo(player) // Assumes lock is held
-
-	// Broadcast updated player list and host ID to everyone
-	g.broadcastPlayerUpdate() // Assumes lock is held
-
-	// --- Game does NOT start automatically ---
-	if len(g.Players) >= minPlayersToStart && g.HostID == player.ID {
-		// Optional: Send a system message to the host that they can start
-		// go player.SendMessage("systemHint", map[string]string{"message": "You are the host. Start the game when ready!"})
-	}
+	g.sendGameInfo(player)
+	g.broadcastPlayerUpdate()
 }
 
-// RemovePlayer removes a player from the game list.
 func (g *Game) RemovePlayer(player *Player) {
 	g.mu.Lock()
 	defer g.mu.Unlock()
@@ -84,7 +70,7 @@ func (g *Game) RemovePlayer(player *Player) {
 	found := false
 	playerIndex := -1
 	for i, p := range g.Players {
-		if p != nil && p.ID == player.ID { // Add nil check
+		if p != nil && p.ID == player.ID {
 			found = true
 			playerIndex = i
 			break
@@ -96,20 +82,16 @@ func (g *Game) RemovePlayer(player *Player) {
 		return
 	}
 
-	// Remove player from slice
 	g.Players = append(g.Players[:playerIndex], g.Players[playerIndex+1:]...)
 	log.Printf("Game: Player %s (%s) removed. Remaining players: %d", player.ID, player.Name, len(g.Players))
 
-	// Clean up guess status
 	delete(g.GuessedCorrectly, player.ID)
 
 	wasHost := g.HostID == player.ID
 	wasDrawer := g.IsActive && g.CurrentDrawerIdx == playerIndex
 
-	// Handle Host Leaving
 	if wasHost {
 		if len(g.Players) > 0 {
-			// Assign the next player in the list as the new host
 			g.HostID = g.Players[0].ID
 			log.Printf("Game: Host %s (%s) left. New host assigned: %s (%s).", player.Name, player.ID, g.Players[0].Name, g.HostID)
 		} else {
@@ -118,19 +100,16 @@ func (g *Game) RemovePlayer(player *Player) {
 		}
 	}
 
-	// Handle Game State
 	if !g.IsActive {
 		g.broadcastPlayerUpdate() // Includes new host if changed
 		return
 	}
 
-	// If game was active:
 	if len(g.Players) < minPlayersToStart {
 		log.Println("Game: Player count dropped below minimum. Ending game.")
 		g.endGame("Not enough players.")
 		g.broadcastPlayerUpdate() // Includes new host if changed
 	} else {
-		// Adjust drawer index if necessary
 		if playerIndex < g.CurrentDrawerIdx {
 			g.CurrentDrawerIdx--
 		} else if playerIndex == g.CurrentDrawerIdx && len(g.Players) > 0 {
@@ -147,7 +126,7 @@ func (g *Game) RemovePlayer(player *Player) {
 	}
 }
 
-// startGame initializes the first turn. Called only by HandleStartGame. Assumes lock is held.
+// startGame initializes the first turn
 func (g *Game) startGame() {
 	log.Println("Game: startGame() called.")
 	if len(g.Players) < minPlayersToStart {
@@ -165,7 +144,7 @@ func (g *Game) startGame() {
 	g.nextTurn()
 }
 
-// endGame resets the game state (e.g., not enough players). Assumes lock is held.
+// endGame resets the game state (e.g., not enough players)
 func (g *Game) endGame(reason string) {
 	log.Printf("Game: endGame() called. Reason: %s", reason)
 	if g.turnTimer != nil {
@@ -180,7 +159,7 @@ func (g *Game) endGame(reason string) {
 	g.BroadcastSystemMessage("Game Over: " + reason)
 }
 
-// nextTurn selects next drawer, picks word, starts timer, notifies clients. Assumes lock is held.
+// nextTurn selects next drawer, picks word, starts timer, notifies clients
 func (g *Game) nextTurn() {
 	log.Println("Game: nextTurn() called.")
 	if !g.IsActive {
@@ -250,7 +229,6 @@ func (g *Game) nextTurn() {
 	g.BroadcastSystemMessage(newDrawer.Name + " is drawing!")
 }
 
-// endTurn is called when a turn finishes. Assumes lock is held.
 func (g *Game) endTurn() {
 	log.Println("Game: endTurn() called.")
 	if !g.IsActive {
@@ -284,14 +262,16 @@ func (g *Game) endTurn() {
 	})
 }
 
-// sendGameInfo sends the initial game state to a player. Assumes lock is held.
+// sendGameInfo sends the initial game state to a player
 func (g *Game) sendGameInfo(player *Player) {
 	payload := GameInfoPayload{
 		YourID:       player.ID,
-		Players:      g.getPlayerInfoList(), // Assumes lock held
+		Players:      g.getPlayerInfoList(),
 		HostID:       g.HostID,
 		IsGameActive: g.IsActive,
 	}
+
+	// TODO: this pattern comes up a few times and is grim. Make a fn for it
 	if g.IsActive && g.CurrentDrawerIdx >= 0 && g.CurrentDrawerIdx < len(g.Players) {
 		payload.CurrentDrawerID = g.Players[g.CurrentDrawerIdx].ID
 		payload.WordLength = len(g.Word)
@@ -304,24 +284,21 @@ func (g *Game) sendGameInfo(player *Player) {
 	go player.SendMessage(MsgTypeGameInfo, payload)
 }
 
-// HandleMessage processes messages relevant to the game state.
 func (g *Game) HandleMessage(sender *Player, msg Message) {
 	switch msg.Type {
 	case MsgTypeDrawEvent:
 		g.HandleDrawEvent(sender, msg.Payload)
 	case MsgTypeGuess:
 		g.HandleGuess(sender, msg.Payload)
-	case MsgTypeStartGame: // New case for host starting game
+	case MsgTypeStartGame:
 		g.HandleStartGame(sender)
 	default:
-		// Ignore setName here explicitly as well, though Hub should catch it first
 		if msg.Type != MsgTypeSetName {
 			log.Printf("Game: Received unhandled message type '%s' from player %s (%s)", msg.Type, sender.ID, sender.Name)
 		}
 	}
 }
 
-// HandleStartGame allows the host to start the game.
 func (g *Game) HandleStartGame(sender *Player) {
 	g.mu.Lock()
 	defer g.mu.Unlock()
@@ -351,17 +328,16 @@ func (g *Game) HandleStartGame(sender *Player) {
 // HandleDrawEvent processes drawing data and forwards it.
 func (g *Game) HandleDrawEvent(sender *Player, payload json.RawMessage) {
 	g.mu.Lock()
-	isActive := g.IsActive
-	isDrawer := isActive && g.CurrentDrawerIdx >= 0 && g.CurrentDrawerIdx < len(g.Players) && g.Players[g.CurrentDrawerIdx].ID == sender.ID
+	isDrawer := g.IsActive && g.CurrentDrawerIdx >= 0 && g.CurrentDrawerIdx < len(g.Players) && g.Players[g.CurrentDrawerIdx].ID == sender.ID
 	playersCopy := make([]*Player, 0, len(g.Players))
-	if isActive {
+	if g.IsActive {
 		for _, p := range g.Players {
 			playersCopy = append(playersCopy, p)
 		}
 	}
 	g.mu.Unlock()
 
-	if !isActive {
+	if !g.IsActive {
 		return
 	}
 	if !isDrawer {
@@ -369,18 +345,17 @@ func (g *Game) HandleDrawEvent(sender *Player, payload json.RawMessage) {
 		return
 	}
 
-	// Use the correct constant for broadcasting draw events
 	drawMsgBytes := mustMarshal(Message{Type: MsgTypeDrawEventBroadcast, Payload: payload})
 	playersToSendTo := make([]*Player, 0, len(playersCopy)-1)
 	for _, p := range playersCopy {
 		if p != nil && p.ID != sender.ID {
 			playersToSendTo = append(playersToSendTo, p)
 		}
-	} // Add nil check
+	}
+
 	go g.Hub.BroadcastToPlayers(drawMsgBytes, playersToSendTo)
 }
 
-// HandleGuess processes a guess attempt.
 func (g *Game) HandleGuess(sender *Player, payload json.RawMessage) {
 	g.mu.Lock()
 	defer g.mu.Unlock()
@@ -393,6 +368,7 @@ func (g *Game) HandleGuess(sender *Player, payload json.RawMessage) {
 		sender.SendError("The drawer cannot make guesses.")
 		return
 	}
+
 	if g.GuessedCorrectly[sender.ID] {
 		sender.SendError("You already guessed the word correctly this turn.")
 		return
@@ -423,28 +399,23 @@ func (g *Game) HandleGuess(sender *Player, payload json.RawMessage) {
 	}
 }
 
-// checkAllGuessed checks if all non-drawer players have guessed correctly. Assumes lock is held.
 func (g *Game) checkAllGuessed() bool {
-	if !g.IsActive || len(g.Players) < minPlayersToStart || g.CurrentDrawerIdx < 0 || g.CurrentDrawerIdx >= len(g.Players) {
+	totalPlayers := len(g.Players)
+
+	if !g.IsActive || totalPlayers < minPlayersToStart || g.CurrentDrawerIdx < 0 || g.CurrentDrawerIdx >= len(g.Players) {
 		return false
 	}
-	totalPlayers := len(g.Players)
 	correctCount := 0
 	for i, p := range g.Players {
 		if i != g.CurrentDrawerIdx && g.GuessedCorrectly[p.ID] {
 			correctCount++
 		}
 	}
+
 	requiredCorrect := totalPlayers - 1
-	if requiredCorrect < 0 {
-		requiredCorrect = 0
-	}
 	return correctCount == requiredCorrect
 }
 
-// --- Broadcasting Helpers (Assume lock is held when called, but broadcast via Hub) ---
-
-// broadcastPlayerUpdate sends the current player list and host ID.
 func (g *Game) broadcastPlayerUpdate() {
 	payload := PlayerUpdatePayload{
 		Players: g.getPlayerInfoList(), // Assumes lock held
@@ -454,26 +425,23 @@ func (g *Game) broadcastPlayerUpdate() {
 	go g.Hub.Broadcast(msgBytes)
 }
 
-// BroadcastChatMessage sends an incorrect guess or system message.
 func (g *Game) BroadcastChatMessage(senderName, message string) {
 	payload := ChatPayload{SenderName: senderName, Message: message, IsSystem: false}
 	msgBytes := mustMarshal(Message{Type: MsgTypeChat, Payload: json.RawMessage(mustMarshal(payload))})
 	go g.Hub.Broadcast(msgBytes)
 }
 
-// BroadcastSystemMessage sends a system message.
 func (g *Game) BroadcastSystemMessage(message string) {
 	payload := ChatPayload{SenderName: "System", Message: message, IsSystem: true}
 	msgBytes := mustMarshal(Message{Type: MsgTypeChat, Payload: json.RawMessage(mustMarshal(payload))})
 	go g.Hub.Broadcast(msgBytes)
 }
 
-// getPlayerInfoList creates PlayerInfo list, including host and guess status. Assumes lock is held.
 func (g *Game) getPlayerInfoList() []PlayerInfo {
-	infoList := make([]PlayerInfo, 0, len(g.Players)) // Initialize with 0 length
+	infoList := make([]PlayerInfo, 0, len(g.Players))
 	for _, p := range g.Players {
 		if p != nil {
-			infoList = append(infoList, PlayerInfo{ // Append valid players
+			infoList = append(infoList, PlayerInfo{
 				ID:                  p.ID,
 				Name:                p.Name,
 				IsHost:              p.ID == g.HostID,
