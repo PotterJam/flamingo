@@ -8,7 +8,7 @@ function GuessInput({ onGuess }: { onGuess: (guess: string) => void }) {
         const guessToSend = currentGuess.trim();
         if (guessToSend) {
             onGuess(guessToSend);
-            setCurrentGuess(''); // Clear input
+            setCurrentGuess('');
         }
     };
 

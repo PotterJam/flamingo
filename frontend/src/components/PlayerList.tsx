@@ -2,7 +2,7 @@ import { Player } from "../messages";
 
 function PlayerList({ players = [], currentDrawerId = null, hostId = null }: { players: Player[], currentDrawerId: string | null, hostId: string | null }) {
     return (
-        <div className="flex-grow overflow-y-auto pr-2 -mr-2"> {/* Adjust padding/margin for scrollbar */}
+        <div className="flex-grow overflow-y-auto pr-2 -mr-2">
             {players.length === 0 ? (
                 <p className="text-gray-500 italic">No players yet...</p>
             ) : (
@@ -17,16 +17,12 @@ function PlayerList({ players = [], currentDrawerId = null, hostId = null }: { p
                             `}
                             title={player.id === hostId ? `${player.name} (Host)` : (player.id === currentDrawerId ? `${player.name} is drawing` : (player.hasGuessedCorrectly ? `${player.name} guessed correctly!` : player.name))}
                         >
-                            {/* Icon */}
                             <span className="w-5 h-5 inline-flex items-center justify-center text-lg flex-shrink-0">
                                 {player.id === hostId ? '👑' :
                                     player.id === currentDrawerId ? '✏️' :
                                         player.hasGuessedCorrectly ? <span className="text-green-600">✅</span> : ''}
                             </span>
-                            {/* Name */}
                             <span className="flex-grow truncate">{player.name || player.id}</span>
-                            {/* Score (Placeholder) */}
-                            {/* <span className="ml-auto font-mono text-sm text-gray-500">{player.score || 0}</span> */}
                         </li>
                     ))}
                 </ul>

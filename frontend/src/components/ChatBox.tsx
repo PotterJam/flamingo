@@ -4,12 +4,11 @@ import { ChatMessage } from '../messages';
 function ChatBox({ messages = [] }: { messages: ChatMessage[] }) {
     const chatContainerRef = useRef<HTMLDivElement>(null);
 
-    // Effect to scroll to bottom when messages change
     useEffect(() => {
         if (chatContainerRef.current) {
             chatContainerRef.current.scrollTop = chatContainerRef.current.scrollHeight;
         }
-    }, [messages]); // Dependency array includes messages
+    }, [messages]);
 
     return (
         <div
@@ -19,7 +18,6 @@ function ChatBox({ messages = [] }: { messages: ChatMessage[] }) {
             {messages.length > 0 ? (
                 messages.map((msg, i) => (
                     <div
-                        // Using index as key is okay for chat if messages aren't reordered/deleted often
                         key={i}
                         className={`break-words ${msg.isSystem ? 'italic text-gray-600' : 'text-gray-800'}`}
                     >

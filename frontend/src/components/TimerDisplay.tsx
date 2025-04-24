@@ -23,27 +23,24 @@ function TimerDisplay({ endTime }: { endTime: number }) {
             }
         }
 
-        // Clear previous interval if endTime changes
         if (intervalId) {
             clearInterval(intervalId);
             intervalId = null;
         }
 
-        // Start new timer if valid endTime is provided and time remains
         if (typeof endTime === 'number' && endTime > Date.now()) {
-            updateRemaining(); // Update immediately
+            updateRemaining();
             intervalId = setInterval(updateRemaining, 1000);
         } else {
-            setRemainingSeconds(0); // Ensure display is 0 if time is already past or invalid
+            setRemainingSeconds(0);
         }
 
-        // Cleanup function for when component unmounts or endTime changes
         return () => {
             if (intervalId) {
                 clearInterval(intervalId);
             }
         };
-    }, [endTime]); // Re-run effect when endTime prop changes
+    }, [endTime]);
 
     return (
         <div className="text-lg font-mono font-semibold text-gray-700" title="Time Remaining">
