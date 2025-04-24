@@ -1,5 +1,5 @@
 import { useEffect, useCallback } from 'react';
-import { useWebSocket, ErrorPayload } from './hooks/useWebSocket';
+import { useWebSocket } from './hooks/useWebSocket';
 import NameInput from './components/NameInput';
 import { Scaffolding } from './components/Scaffolding';
 import { Game } from './components/Game';
@@ -139,7 +139,7 @@ function App() {
                     break;
                 }
                 case 'error': {
-                    const payload = message.payload as unknown as ErrorPayload;
+                    const payload = message.payload;
                     if (!payload) {
                         console.error('Received error with null payload');
                         break;

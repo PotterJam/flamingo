@@ -1,37 +1,12 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { useAppStore } from '../store';
-import { Player, SendMsg } from '../messages';
+import { SendMsg } from '../messages';
 
 const WS_URL = 'ws://localhost:8080/ws';
 
-export interface JankPayload {
-    yourId: string;
-    playerId: string;
-    players: Player[];
-    hostId: string;
-    currentDrawerId: string;
-    wordLength: number;
-    turnEndTime: number;
-    isGameActive: boolean;
-    word: string | null;
-}
-
-export interface TurnEndPayload {
-    correctWord: string;
-}
-
-export interface ErrorPayload {
-    message: string;
-}
-
-export interface WebsocketMessage {
-    type: string;
-    payload: JankPayload;
-}
-
 export function useWebSocket() {
     const [isConnected, setIsConnected] = useState(false);
-    const ws = useRef<WebSocket>(null); // Ref to hold the WebSocket instance
+    const ws = useRef<WebSocket>(null);
 
     const setLastMessage = useAppStore((s) => s.setLastMessage);
 
@@ -58,7 +33,7 @@ export function useWebSocket() {
                 try {
                     const message = JSON.parse(event.data);
                     console.log('[useWebSocket] Message received:', message);
-                    setLastMessage(message); // Update state with the new message
+                    setLastMessage(message);
                 } catch (error) {
                     console.error(
                         '[useWebSocket] Error parsing message:',
@@ -81,7 +56,7 @@ export function useWebSocket() {
                     event.wasClean
                 );
                 setIsConnected(false);
-                ws.current = null; // Clear the ref
+                ws.current = null;
             };
         } catch (error) {
             console.error(
