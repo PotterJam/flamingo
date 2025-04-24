@@ -10,6 +10,7 @@ import TimerDisplay from './components/TimerDisplay';
 import GuessInput from './components/GuessInput';
 import StatusMessage from './components/StatusMessage';
 import { create } from 'zustand/react';
+import { Scaffolding } from './components/Scaffolding';
 
 export interface ChatMessage {
     senderName: string;
@@ -323,11 +324,8 @@ function App() {
         }
     }, [canHostStartGame, sendMessage]);
 
-
     return (
-        <main className="flex flex-col items-center justify-start min-h-screen bg-gray-100 p-4 font-sans">
-            <h1 className="text-3xl font-bold mb-4 text-pink-400 flex-shrink-0">Flamin<span className="text-sky-400">go</span></h1>
-
+        <Scaffolding>
             {appState === 'enterName' ? (
                 <>
                     <NameInput onNameSet={handleNameSet} />
@@ -427,7 +425,7 @@ function App() {
                     )}
                 </>
             )}
-        </main>
+        </Scaffolding>
     );
 }
 
