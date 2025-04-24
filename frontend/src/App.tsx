@@ -355,8 +355,7 @@ function App() {
                                     </div>
                                 </div>
 
-                                {/* Whiteboard */}
-                                <div className="mb-4 border-2 border-black rounded overflow-hidden aspect-video bg-white flex-grow">
+                                <div className="mb-4 border-2 border-black rounded overflow-hidden bg-white flex-grow relative">
                                     <Whiteboard
                                         key={whiteboardKey} // Use key to force reset
                                         isDrawer={!!isLocalPlayerDrawer}

@@ -86,19 +86,28 @@ function Whiteboard({ isDrawer, onDraw, lastDrawEvent, localPlayerIsDrawer }: { 
 
         const resizeCanvas = () => {
             const parent = canvas.parentElement;
-            if (!parent) return;
-            const { width } = parent.getBoundingClientRect();
-            if (width <= 0) return;
-            const height = (width * 9) / 16; // Maintain aspect ratio
+            if (!parent || !ctx) return; // Check context as well
+            const dpr = window.devicePixelRatio || 1; // Get Device Pixel Ratio
+            const { width: cssWidth, height: cssHeight } = parent.getBoundingClientRect();
 
-            if (!ctx) return;
+            // Set canvas buffer size based on DPR
+            canvas.width = Math.round(cssWidth * dpr);
+            canvas.height = Math.round(cssHeight * dpr);
 
-            // Simple clear on resize for React - preserving drawing is more complex
-            // Store state outside if needed, or redraw based on event history
-            canvas.width = width;
-            canvas.height = height;
-            ctx.fillStyle = '#FFFFFF';
-            ctx?.fillRect(0, 0, width, height);
+            // Set display size using CSS (or style attribute)
+            canvas.style.width = `${cssWidth}px`;
+            canvas.style.height = `${cssHeight}px`;
+
+            // Scale the context for drawing operations
+            ctx.scale(dpr, dpr);
+
+            // Restore context settings after resize/scale
+            ctx.lineCap = 'round';
+            ctx.lineJoin = 'round';
+            ctx.lineWidth = lineWidth; // Base line width (will be scaled by context)
+            ctx.strokeStyle = strokeColor;
+
+            console.log(`[Whiteboard] Resized. CSS: ${cssWidth}x${cssHeight}, Attr: ${canvas.width}x${canvas.height}, DPR: ${dpr}`);
         };
 
         resizeCanvas(); // Initial size
@@ -147,7 +156,7 @@ function Whiteboard({ isDrawer, onDraw, lastDrawEvent, localPlayerIsDrawer }: { 
     return (
         <canvas
             ref={canvasRef}
-            className="w-full h-full block bg-white"
+            className="block bg-white absolute top-0 left-0"
             style={{ cursor: isDrawer ? 'crosshair' : 'default', touchAction: 'none' }}
             onMouseDown={startDrawing}
             onMouseMove={draw}
