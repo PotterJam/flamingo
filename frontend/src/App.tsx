@@ -320,7 +320,7 @@ function App() {
 
     return (
         <main className="flex flex-col items-center justify-start min-h-screen bg-gray-100 p-4 font-sans">
-            <h1 className="text-3xl font-bold mb-4 text-blue-600 flex-shrink-0">Scribblio Clone (React)</h1>
+            <h1 className="text-3xl font-bold mb-4 text-pink-400 flex-shrink-0">Flamin<span className="text-sky-400">go</span></h1>
 
             {appState === 'enterName' ? (
                 <>
