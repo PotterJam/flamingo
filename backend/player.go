@@ -10,7 +10,7 @@ import (
 // Player represents a single connected client.
 type Player struct {
 	ID   string
-	Name string // Player's chosen name
+	Name *string // Player's chosen name
 	Conn *websocket.Conn
 	Hub  *Hub
 	Send chan []byte // Buffered channel for outbound messages
@@ -20,11 +20,9 @@ type Player struct {
 func (p *Player) readPump() {
 	defer func() {
 		p.Hub.Unregister <- p
-		p.Conn.Close()
+		_ = p.Conn.Close()
 		log.Printf("Player %s (%s) disconnected and readPump cleaned up", p.ID, p.Name)
 	}()
-
-	hasSetName := false
 
 	for {
 		_, messageBytes, err := p.Conn.ReadMessage()
@@ -40,46 +38,11 @@ func (p *Player) readPump() {
 		var msg Message
 		if err := json.Unmarshal(messageBytes, &msg); err != nil {
 			log.Printf("Player %s (%s): Error unmarshalling message: %v", p.ID, p.Name, err)
-			if !hasSetName {
-				p.SendError("Invalid message format. Please set name first.")
-			} else {
-				p.SendError("Invalid message format")
-			}
+			p.SendError("Invalid message format")
 			continue
 		}
 
-		// --- Handle SetName directly in readPump ---
-		if msg.Type == MsgTypeSetName {
-			if !hasSetName { // Only process if name hasn't been set yet
-				var namePayload SetNamePayload
-				if err := json.Unmarshal(msg.Payload, &namePayload); err == nil {
-					trimmedName := namePayload.Name                  // Trim space later if needed
-					if trimmedName != "" && len(trimmedName) <= 20 { // Example length limit
-						p.Name = trimmedName // Set the player's name
-						hasSetName = true
-						log.Printf("Player %s set name to %s", p.ID, p.Name)
-						log.Printf("Player %s (%s) sending PlayerReady signal to Hub", p.ID, p.Name)
-						p.Hub.PlayerReady <- p // Signal Hub that player is ready
-					} else {
-						p.SendError("Invalid name. Must be 1-20 characters.")
-					}
-				} else {
-					log.Printf("Player %s (%s): Error unmarshalling SetName payload: %v", p.ID, p.Name, err)
-					p.SendError("Invalid name payload.")
-				}
-			} else {
-				// Name already set, ignore subsequent setName messages silently or send error
-				log.Printf("Player %s (%s) sent setName message after name was already set. Ignoring.", p.ID, p.Name)
-				// Optionally send an error: p.SendError("Name already set.")
-			}
-		} else if !hasSetName {
-			// Ignore other messages until name is set
-			log.Printf("Player %s (%s) sent message type %s before setting name.", p.ID, p.Name, msg.Type)
-			p.SendError("Please set your name first.")
-		} else {
-			// Name is set, route other valid messages to the Hub
-			p.Hub.HandleMessage(p, msg)
-		}
+		p.Hub.HandleMessage(p, msg)
 	}
 }
 

@@ -35,7 +35,7 @@ func serveWs(hub *Hub, w http.ResponseWriter, r *http.Request) {
 
 	player := &Player{
 		ID:   uuid.NewString(),
-		Name: "", // Name set later
+		Name: nil, // Name set by player
 		Conn: conn,
 		Hub:  hub,
 		Send: make(chan []byte, 256),

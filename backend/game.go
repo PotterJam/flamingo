@@ -226,7 +226,7 @@ func (g *Game) nextTurn() {
 	log.Printf("Game: Sending TurnStart (no word) to %d guessers", len(playersToSendTo))
 	go g.Hub.BroadcastToPlayers(msgBytes, playersToSendTo)
 
-	g.BroadcastSystemMessage(newDrawer.Name + " is drawing!")
+	g.BroadcastSystemMessage(*newDrawer.Name + " is drawing!")
 }
 
 func (g *Game) endTurn() {
@@ -286,16 +286,45 @@ func (g *Game) sendGameInfo(player *Player) {
 
 func (g *Game) HandleMessage(sender *Player, msg Message) {
 	switch msg.Type {
-	case MsgTypeDrawEvent:
-		g.HandleDrawEvent(sender, msg.Payload)
-	case MsgTypeGuess:
-		g.HandleGuess(sender, msg.Payload)
-	case MsgTypeStartGame:
-		g.HandleStartGame(sender)
-	default:
-		if msg.Type != MsgTypeSetName {
-			log.Printf("Game: Received unhandled message type '%s' from player %s (%s)", msg.Type, sender.ID, sender.Name)
+	case MsgTypeSetName:
+		if sender.Name != nil {
+			ParseAndSetName(sender, msg)
+		} else {
+			log.Printf("Player %s (%s) sent setName message after name was already set. Ignoring.", sender.ID, sender.Name)
 		}
+	default:
+		if sender.Name == nil {
+			log.Printf("Player %s (%s) sent message type %s before setting name.", sender.ID, sender.Name, msg.Type)
+			sender.SendError("Please set your name first.")
+		} else {
+			switch msg.Type {
+			case MsgTypeDrawEvent:
+				g.HandleDrawEvent(sender, msg.Payload)
+			case MsgTypeGuess:
+				g.HandleGuess(sender, msg.Payload)
+			case MsgTypeStartGame:
+				g.HandleStartGame(sender)
+				log.Printf("Game: Received unhandled message type '%s' from player %s (%s)", msg.Type, sender.ID, sender.Name)
+			}
+		}
+	}
+}
+
+func ParseAndSetName(sender *Player, msg Message) {
+	var namePayload SetNamePayload
+	if err := json.Unmarshal(msg.Payload, &namePayload); err == nil {
+		trimmedName := namePayload.Name
+		if trimmedName != "" && len(trimmedName) <= 20 {
+			sender.Name = &trimmedName
+			log.Printf("Player %s set name to %s", sender.ID, sender.Name)
+			log.Printf("Player %s (%s) sending PlayerReady signal to Hub", sender.ID, sender.Name)
+			sender.Hub.PlayerReady <- sender
+		} else {
+			sender.SendError("Invalid name. Must be 1-20 characters.")
+		}
+	} else {
+		log.Printf("Player %s (%s): Error unmarshalling SetName payload: %v", sender.ID, sender.Name, err)
+		sender.SendError("Invalid name payload.")
 	}
 }
 
@@ -395,7 +424,7 @@ func (g *Game) HandleGuess(sender *Player, payload json.RawMessage) {
 			g.endTurn() // Assumes lock held
 		}
 	} else {
-		g.BroadcastChatMessage(sender.Name, guessPayload.Guess) // Assumes lock held
+		g.BroadcastChatMessage(*sender.Name, guessPayload.Guess) // Assumes lock held
 	}
 }
 
@@ -443,7 +472,7 @@ func (g *Game) getPlayerInfoList() []PlayerInfo {
 		if p != nil {
 			infoList = append(infoList, PlayerInfo{
 				ID:                  p.ID,
-				Name:                p.Name,
+				Name:                *p.Name,
 				IsHost:              p.ID == g.HostID,
 				HasGuessedCorrectly: g.GuessedCorrectly[p.ID],
 			})
