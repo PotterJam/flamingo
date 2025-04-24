@@ -190,15 +190,15 @@ function App() {
                     const payload = message.payload;
                     if (!payload) { console.error("Received playerGuessedCorrectly with null payload"); break; }
                     const { playerId } = payload;
-                    setPlayers(prevPlayers =>
-                        prevPlayers.map(p =>
-                            p.id === playerId ? { ...p, hasGuessedCorrectly: true } : p
-                        )
-                    );
+                    // setPlayers(prevPlayers =>
+                    //     prevPlayers.map(p =>
+                    //         p.id === playerId ? { ...p, hasGuessedCorrectly: true } : p
+                    //     )
+                    // );
                     const guesser = players.find(p => p.id === playerId); // Use current players state
-                    if (guesser) {
-                        addChatMessage({ senderName: 'System', message: `${guesser.name} guessed the word!`, isSystem: true });
-                    }
+                    // if (guesser) {
+                        addChatMessage({ senderName: 'System', message: `${guesser?.name ?? 'Unknown'} guessed the word!`, isSystem: true });
+                    //}
                     break;
                 }
                 case 'chat': {
