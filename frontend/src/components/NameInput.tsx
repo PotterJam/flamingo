@@ -2,8 +2,8 @@ import { useState } from 'react';
 import { useAppStore } from '../store';
 
 function NameInput() {
-    const sendMessage = useAppStore(s => s.sendMessage);
-    const setAppState = useAppStore(s => s.setState);
+    const sendMessage = useAppStore((s) => s.sendMessage);
+    const setAppState = useAppStore((s) => s.setState);
     const [name, setName] = useState('');
 
     const handleSubmit = (e: any) => {

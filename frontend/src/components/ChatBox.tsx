@@ -1,7 +1,8 @@
 import { useRef, useEffect } from 'react';
-import { ChatMessage } from '../messages';
+import { useAppStore } from '../store';
 
-function ChatBox({ messages = [] }: { messages: ChatMessage[] }) {
+function ChatBox() {
+    const messages = useAppStore((s) => s.gameState.messages);
     const chatContainerRef = useRef<HTMLDivElement>(null);
 
     useEffect(() => {

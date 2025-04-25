@@ -11,7 +11,6 @@ const CANVAS_WIDTH = 800;
 const CANVAS_HEIGHT = 600;
 const MIN_PLAYERS = 2;
 
-// Todo: having to pass the webhook stuff through cos reusing the hook causes a new webhook to open
 export const Game: FC = () => {
     const sendMessage = useAppStore((s) => s.sendMessage);
     const lastMessage = useAppStore((s) => s.lastMessage);
@@ -26,7 +25,6 @@ export const Game: FC = () => {
         hostId,
         localPlayerId,
         word,
-        messages,
         turnEndTime,
     } = gameState;
 
@@ -113,7 +111,7 @@ export const Game: FC = () => {
                         Chat
                     </h2>
                     <div className="min-h-0 flex-grow overflow-y-hidden">
-                        <ChatBox messages={messages} />
+                        <ChatBox />
                     </div>
                 </aside>
 
