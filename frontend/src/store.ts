@@ -56,15 +56,8 @@ export type AppActions = {
 
     resetGameState: () => void;
 
-    setLocalPlayerId: (id: string) => void;
-    setPlayers: (players: Player[]) => void;
-    playerGuessedCorrect: (playerId: string) => void;
     resetPlayerGuesses: () => void;
-    setHostId: (id: string) => void;
-    setCurrentDrawer: (id: string) => void;
-    setWord: (word: string) => void;
     addChatMessage: (message: ChatMessage) => void;
-    setTurnEndTime: (time: number | null) => void;
 };
 
 export type MessageHandlers = {
@@ -99,20 +92,6 @@ export const useAppStore = create<AppState & AppActions & MessageHandlers>()(
             set((s) => {
                 s.gameState = initialGameState;
             }),
-        setLocalPlayerId: (id) =>
-            set((s) => {
-                s.gameState.localPlayerId = id;
-            }),
-        setPlayers: (players) =>
-            set((s) => {
-                s.gameState.players = players;
-            }),
-        playerGuessedCorrect: (playerId) =>
-            set((s) => {
-                s.gameState.players = s.gameState.players.map((p) =>
-                    p.id === playerId ? { ...p, hasGuessedCorrectly: true } : p
-                );
-            }),
         resetPlayerGuesses: () =>
             set((s) => {
                 s.gameState.players = s.gameState.players.map((p) => ({
@@ -120,25 +99,9 @@ export const useAppStore = create<AppState & AppActions & MessageHandlers>()(
                     hasGuessedCorrectly: false,
                 }));
             }),
-        setHostId: (id) =>
-            set((s) => {
-                s.gameState.hostId = id;
-            }),
-        setCurrentDrawer: (id) =>
-            set((s) => {
-                s.gameState.currentDrawerId = id;
-            }),
-        setWord: (word) =>
-            set((s) => {
-                s.gameState.word = word;
-            }),
         addChatMessage: (message) =>
             set((s) => {
                 s.gameState.messages.push(message);
-            }),
-        setTurnEndTime: (time) =>
-            set((s) => {
-                s.gameState.turnEndTime = time;
             }),
 
         // Message receivers
