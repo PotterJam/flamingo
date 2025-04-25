@@ -13,7 +13,6 @@ const MIN_PLAYERS = 2;
 
 export const Game: FC = () => {
     const sendMessage = useAppStore((s) => s.sendMessage);
-    const lastMessage = useAppStore((s) => s.lastMessage);
     const appState = useAppStore((s) => s.appState);
     const gameState = useAppStore((s) => s.gameState);
     if (gameState === null) {
@@ -145,11 +144,6 @@ export const Game: FC = () => {
                         <Whiteboard
                             isDrawer={!!isLocalPlayerDrawer}
                             onDraw={handleDraw}
-                            lastDrawEvent={
-                                lastMessage?.type === 'drawEvent'
-                                    ? lastMessage.payload
-                                    : null
-                            }
                             localPlayerIsDrawer={!!isLocalPlayerDrawer}
                             width={CANVAS_WIDTH}
                             height={CANVAS_HEIGHT}

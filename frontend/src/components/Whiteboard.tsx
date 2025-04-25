@@ -1,16 +1,15 @@
 import { useRef, useEffect, useState, useCallback } from 'react';
+import { useAppStore } from '../store';
 
 function Whiteboard({
     isDrawer,
     onDraw,
-    lastDrawEvent,
     localPlayerIsDrawer,
     width,
     height,
 }: {
     isDrawer: boolean;
     onDraw: any;
-    lastDrawEvent: any;
     localPlayerIsDrawer: boolean;
     width: number;
     height: number;
@@ -19,6 +18,8 @@ function Whiteboard({
     const ctxRef = useRef<CanvasRenderingContext2D | null>(null);
     const [isDrawing, setIsDrawing] = useState(false);
     const lastPosRef = useRef({ x: 0, y: 0 });
+
+    const lastDrawEvent = useAppStore((s) => s.gameState.lastDrawEvent);
 
     const remoteLastPosRef = useRef({ x: 0, y: 0 });
     const [remoteIsDrawing, setRemoteIsDrawing] = useState(false);
@@ -165,16 +166,21 @@ function Whiteboard({
     }, [clearCanvasLocal]);
 
     useEffect(() => {
+        // I guess we treat the drawing players canvas as the source of truth
+        // makes sense cos they only send draw events never receive them
         if (localPlayerIsDrawer || !lastDrawEvent || !ctxRef.current) return;
 
-        const { eventType, x, y, color, lineWidth: lw } = lastDrawEvent;
-        const eventColor = color || '#000000';
-        const eventLineWidth = lw || 3;
-
-        if (eventType === 'start') {
+        if (lastDrawEvent.eventType === 'start') {
+            const { x, y } = lastDrawEvent;
             setRemoteIsDrawing(true);
             remoteLastPosRef.current = { x, y };
-        } else if (eventType === 'draw' && remoteIsDrawing) {
+        } else if (lastDrawEvent.eventType === 'end') {
+            setRemoteIsDrawing(false);
+        } else {
+            const { x, y, color, lineWidth: lw } = lastDrawEvent;
+            const eventColor = color || '#000000';
+            const eventLineWidth = lw || 3;
+
             drawLine(
                 remoteLastPosRef.current.x,
                 remoteLastPosRef.current.y,
@@ -184,8 +190,6 @@ function Whiteboard({
                 eventLineWidth
             );
             remoteLastPosRef.current = { x, y };
-        } else if (eventType === 'end') {
-            setRemoteIsDrawing(false);
         }
     }, [lastDrawEvent, localPlayerIsDrawer, remoteIsDrawing, drawLine]);
 

@@ -1,6 +1,8 @@
 import { create } from 'zustand/react';
 import {
     ChatMessage,
+    DrawEvent,
+    DrawEventMsg,
     GameInfoMsg,
     Player,
     PlayerGuessedCorrectlyMsg,
@@ -21,9 +23,10 @@ export interface GameState {
     word: string | null;
     messages: ChatMessage[];
     turnEndTime: number | null;
+    lastDrawEvent: DrawEvent | null;
 }
 
-const initialGameState = {
+const initialGameState: GameState = {
     players: [],
     currentDrawerId: null,
     hostId: null,
@@ -31,6 +34,7 @@ const initialGameState = {
     word: null,
     messages: [],
     turnEndTime: null,
+    lastDrawEvent: null,
 };
 
 export type CurrentAppState =
@@ -66,6 +70,7 @@ export type MessageHandlers = {
     handlePlayerUpdate: (msg: PlayerUpdateMsg) => void;
     handlePlayerGuessedCorrectly: (msg: PlayerGuessedCorrectlyMsg) => void;
     handleTurnEnd: (msg: TurnEndMsg) => void;
+    handleDraw: (msg: DrawEventMsg) => void;
 };
 
 export const useAppStore = create<AppState & AppActions & MessageHandlers>()(
@@ -167,6 +172,10 @@ export const useAppStore = create<AppState & AppActions & MessageHandlers>()(
             set((s) => {
                 s.gameState.turnEndTime = null;
                 s.resetPlayerGuesses();
+            }),
+        handleDraw: ({ payload }) =>
+            set((s) => {
+                s.gameState.lastDrawEvent = payload;
             }),
     }))
 );

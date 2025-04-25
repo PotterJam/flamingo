@@ -9,6 +9,7 @@ export const useHandleMessage = (message: ReceivedMsg | null) => {
         (s) => s.handlePlayerGuessedCorrectly
     );
     const handleTurnEnd = useAppStore((s) => s.handleTurnEnd);
+    const handleDraw = useAppStore((s) => s.handleDraw);
     const addChatMessage = useAppStore((s) => s.addChatMessage);
 
     if (message) {
@@ -36,6 +37,7 @@ export const useHandleMessage = (message: ReceivedMsg | null) => {
                 break;
             }
             case 'drawEvent': {
+                handleDraw(message);
                 break;
             }
             case 'turnEnd': {
