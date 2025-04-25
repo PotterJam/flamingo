@@ -9,10 +9,11 @@ import { useAppStore } from './store';
 const MIN_PLAYERS = 2;
 
 function App() {
-    const { isConnected, sendMessage, connect } = useWebSocket();
+    const { isConnected, receivedMessage, sendMessage, connect } =
+        useWebSocket();
 
     useAppStore((s) => s.assignSendMessage)(sendMessage);
-    const lastMessage = useAppStore((s) => s.lastMessage);
+    // const lastMessage = useAppStore((s) => s.lastMessage);
 
     const appState = useAppStore((state) => state.appState);
     const setAppState = useAppStore((state) => state.setState);
@@ -26,10 +27,10 @@ function App() {
     const playerGuessedCorrect = useAppStore((s) => s.playerGuessedCorrect);
     const resetPlayerGuesses = useAppStore((s) => s.resetPlayerGuesses);
 
-    const hostId = useAppStore((s) => s.gameState.hostId);
+    // const hostId = useAppStore((s) => s.gameState.hostId);
     const setHostId = useAppStore((s) => s.setHostId);
 
-    const currentDrawerId = useAppStore((s) => s.gameState.currentDrawerId);
+    // const currentDrawerId = useAppStore((s) => s.gameState.currentDrawerId);
     const setCurrentDrawer = useAppStore((s) => s.setCurrentDrawer);
 
     const setWord = useAppStore((s) => s.setWord);
@@ -58,9 +59,9 @@ function App() {
     }, [isConnected, appState, connect]);
 
     useEffect(() => {
-        if (lastMessage) {
-            console.log('Processing message in useEffect:', lastMessage);
-            const message = lastMessage;
+        if (receivedMessage) {
+            console.log('Processing message in useEffect:', receivedMessage);
+            const message = receivedMessage;
 
             switch (message.type) {
                 case 'gameInfo': {
@@ -155,14 +156,7 @@ function App() {
                     console.warn('Received unknown message: ', message);
             }
         }
-    }, [
-        lastMessage,
-        addChatMessage,
-        localPlayerId,
-        currentDrawerId,
-        hostId,
-        appState,
-    ]);
+    }, [receivedMessage, appState]);
 
     const handleNameSet = useCallback(
         (name: string) => {
