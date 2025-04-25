@@ -1,12 +1,11 @@
-import { useEffect, useCallback } from 'react';
+import { useEffect } from 'react';
 import { useWebSocket } from './hooks/useWebSocket';
 import NameInput from './components/NameInput';
 import { Scaffolding } from './components/Scaffolding';
 import { Game } from './components/Game';
-import { ChatMessage } from './messages';
 import { useAppStore } from './store';
 
-const MIN_PLAYERS = 2;
+export const MIN_PLAYERS = 2;
 
 function App() {
     const { isConnected, receivedMessage, sendMessage, connect } =
@@ -16,29 +15,18 @@ function App() {
 
     const appState = useAppStore((state) => state.appState);
     const setAppState = useAppStore((state) => state.setState);
+
+    const handleGameInfo = useAppStore((s) => s.handleGameInfo);
+    const handleTurnStart = useAppStore((s) => s.handleTurnStart);
+    const handlePlayerUpdate = useAppStore((s) => s.handlePlayerUpdate);
+    const handlePlayerGuessedCorrectly = useAppStore(
+        (s) => s.handlePlayerGuessedCorrectly
+    );
+    const handleTurnEnd = useAppStore((s) => s.handleTurnEnd);
+    const addChatMessage = useAppStore((s) => s.addChatMessage);
     const resetGameState = useAppStore((s) => s.resetGameState);
 
     const localPlayerId = useAppStore((s) => s.gameState.localPlayerId);
-    const setLocalPlayerId = useAppStore((s) => s.setLocalPlayerId);
-
-    const players = useAppStore((s) => s.gameState.players);
-    const setPlayers = useAppStore((s) => s.setPlayers);
-    const playerGuessedCorrect = useAppStore((s) => s.playerGuessedCorrect);
-    const resetPlayerGuesses = useAppStore((s) => s.resetPlayerGuesses);
-
-    const setHostId = useAppStore((s) => s.setHostId);
-
-    const setCurrentDrawer = useAppStore((s) => s.setCurrentDrawer);
-
-    const setWord = useAppStore((s) => s.setWord);
-
-    const pushChatMessage = useAppStore((s) => s.addChatMessage);
-
-    const setTurnEndTime = useAppStore((s) => s.setTurnEndTime);
-
-    const addChatMessage = useCallback((msgPayload: ChatMessage) => {
-        pushChatMessage(msgPayload);
-    }, []);
 
     useEffect(() => {
         if (isConnected) {
@@ -58,86 +46,37 @@ function App() {
     useEffect(() => {
         if (receivedMessage) {
             console.log('Processing message in useEffect:', receivedMessage);
-            const message = receivedMessage;
 
-            switch (message.type) {
+            switch (receivedMessage.type) {
                 case 'gameInfo': {
-                    const payload = message.payload;
-                    setLocalPlayerId(payload.yourId);
-                    setPlayers(payload.players || []);
-                    setHostId(payload.hostId);
-                    payload.currentDrawerId &&
-                        setCurrentDrawer(payload.currentDrawerId);
-                    payload.turnEndTime && setTurnEndTime(payload.turnEndTime);
-
-                    if (payload.isGameActive) {
-                        setAppState('active');
-                    } else {
-                        setAppState('waiting');
-                    }
-                    console.log(
-                        'Processed gameInfo. New State:',
-                        payload.isGameActive ? 'active' : 'waiting',
-                        'localId:',
-                        payload.yourId
-                    );
+                    handleGameInfo(receivedMessage);
                     break;
                 }
                 case 'playerUpdate': {
-                    const payload = message.payload;
-                    setPlayers(payload.players || []);
-                    setHostId(payload.hostId);
-
-                    if (
-                        appState === 'active' &&
-                        (payload.players?.length ?? 0) < MIN_PLAYERS
-                    ) {
-                        console.log(
-                            'Player count dropped below minimum, returning to waiting state.'
-                        );
-                        setAppState('waiting');
-                    }
-
+                    handlePlayerUpdate(receivedMessage);
                     break;
                 }
                 case 'turnStart': {
-                    const payload = message.payload;
-                    setCurrentDrawer(payload.currentDrawerId);
-                    setWord(payload.word || '');
-                    setPlayers(payload.players || players);
-                    setTurnEndTime(payload.turnEndTime);
-                    setAppState('active');
+                    handleTurnStart(receivedMessage);
                     break;
                 }
                 case 'playerGuessedCorrectly': {
-                    const payload = message.payload;
-                    const { playerId } = payload;
-                    playerGuessedCorrect(playerId);
-                    const guesser = players.find((p) => p.id === playerId);
-                    if (guesser) {
-                        addChatMessage({
-                            senderName: 'System',
-                            message: `${guesser?.name ?? 'Unknown'} guessed the word!`,
-                            isSystem: true,
-                        });
-                    }
+                    handlePlayerGuessedCorrectly(receivedMessage);
                     break;
                 }
                 case 'chat': {
-                    const payload = message.payload;
-                    addChatMessage(payload);
+                    addChatMessage(receivedMessage.payload);
                     break;
                 }
                 case 'drawEvent': {
                     break;
                 }
                 case 'turnEnd': {
-                    setTurnEndTime(null);
-                    resetPlayerGuesses();
+                    handleTurnEnd(receivedMessage);
                     break;
                 }
                 case 'error': {
-                    const payload = message.payload;
+                    const payload = receivedMessage.payload;
                     if (!payload) {
                         console.error('Received error with null payload');
                         break;
@@ -150,7 +89,7 @@ function App() {
                     break;
                 }
                 default:
-                    console.warn('Received unknown message: ', message);
+                    console.warn('Received unknown message: ', receivedMessage);
             }
         }
     }, [receivedMessage, appState]);
