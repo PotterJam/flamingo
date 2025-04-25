@@ -67,6 +67,7 @@ func (h *Hub) Run() {
 }
 
 func (h *Hub) HandleMessage(player *Player, msg Message) {
+	// TODO: when implementing rooms (the spokes of the hub), we'll need to direct you to the right game here
 	h.Game.HandleMessage(player, msg)
 }
 
@@ -80,27 +81,23 @@ func (h *Hub) Broadcast(message []byte) {
 	}
 	h.mu.Unlock()
 
-	for _, player := range playersToSend {
+	for _, p := range playersToSend {
 		go func() {
-			if player == nil {
+			if p == nil {
 				return
 			}
 			select {
-			case player.Send <- message:
+			case p.Send <- message:
 			default:
-				log.Printf("Hub Broadcast Warn: Player %s (%s) send buffer full/closed.", player.ID, player.Name)
+				log.Printf("Hub Broadcast Warn: Player %s (%s) send buffer full/closed.", p.ID, p.Name)
 			}
 		}()
 	}
 }
 
 func (h *Hub) BroadcastToPlayers(message []byte, players []*Player) {
-	for _, player := range players {
-		p := player
+	for _, p := range players {
 		go func() {
-			if p == nil {
-				return
-			}
 			select {
 			case p.Send <- message:
 			default:

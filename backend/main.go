@@ -9,7 +9,6 @@ import (
 	"net/http"
 )
 
-// Configuration for WebSocket upgrader
 var upgrader = websocket.Upgrader{
 	ReadBufferSize:  1024,
 	WriteBufferSize: 1024,
@@ -77,7 +76,7 @@ func main() {
 	}
 }
 
-// mustMarshal is a helper to marshal JSON, panicking on error.
+// mustMarshal will panic on error.
 // Useful for internal message creation where the structure is known to be valid.
 // Use with caution for external or user-provided data.
 func mustMarshal(v interface{}) []byte {
