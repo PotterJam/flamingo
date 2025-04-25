@@ -1,7 +1,7 @@
 import { useEffect } from 'react';
 import { useWebSocket } from './hooks/useWebSocket';
 import { useAppStore } from './store';
-import { useHandleMessage } from './components/event-wrapper';
+import { useHandleMessage } from './hooks/useHandleMessage';
 import { Scaffolding } from './components/Scaffolding';
 import NameInput from './components/NameInput';
 import { Game } from './components/Game';
