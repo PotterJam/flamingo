@@ -213,10 +213,10 @@ func (g *Game) nextTurn() {
 	drawerPayload := turnPayloadBase
 	drawerPayload.Word = g.Word
 	log.Printf("Game: Sending TurnStart (with word) to drawer %s", newDrawer.Name)
-	go newDrawer.SendMessage(MsgTypeTurnStart, drawerPayload)
+	go newDrawer.SendMessage(TurnStartResponse, drawerPayload)
 
 	guesserPayload := turnPayloadBase
-	msgBytes := mustMarshal(Message{Type: MsgTypeTurnStart, Payload: json.RawMessage(mustMarshal(guesserPayload))})
+	msgBytes := mustMarshal(Message{Type: TurnStartResponse, Payload: json.RawMessage(mustMarshal(guesserPayload))})
 	playersToSendTo := make([]*Player, 0, len(g.Players)-1)
 	for i, p := range g.Players {
 		if i != g.CurrentDrawerIdx {
@@ -245,7 +245,7 @@ func (g *Game) endTurn() {
 
 	g.BroadcastSystemMessage("Turn over! The word was: " + g.Word)
 	turnEndPayload := TurnEndPayload{CorrectWord: g.Word}
-	turnEndMsgBytes := mustMarshal(Message{Type: MsgTypeTurnEnd, Payload: json.RawMessage(mustMarshal(turnEndPayload))})
+	turnEndMsgBytes := mustMarshal(Message{Type: TurnEndResponse, Payload: json.RawMessage(mustMarshal(turnEndPayload))})
 	log.Println("Game: Broadcasting TurnEnd message.")
 	go g.Hub.Broadcast(turnEndMsgBytes)
 
@@ -280,11 +280,11 @@ func (g *Game) sendGameInfo(player *Player) {
 		}
 	}
 	log.Printf("Game: Sending game info to player %s (%s). Active: %t, Host: %s", player.ID, player.Name, payload.IsGameActive, g.HostID)
-	go player.SendMessage(MsgTypeGameInfo, payload)
+	go player.SendMessage(GameInfoResponse, payload)
 }
 
 func (g *Game) HandleMessage(sender *Player, msg Message) {
-	if msg.Type == MsgTypeRegisterUser {
+	if msg.Type == ClientRegisterUser {
 		if sender.Name != nil {
 			ParseAndSetName(sender, msg)
 		} else {
@@ -295,11 +295,11 @@ func (g *Game) HandleMessage(sender *Player, msg Message) {
 		sender.SendError("Please set your name first.")
 	} else {
 		switch msg.Type {
-		case MsgTypeDrawEvent:
+		case ClientDrawEvent:
 			g.HandleDrawEvent(sender, msg.Payload)
-		case MsgTypeGuess:
+		case ClientGuess:
 			g.HandleGuess(sender, msg.Payload)
-		case MsgTypeStartGame:
+		case ClientStartGame:
 			g.HandleStartGame(sender)
 			log.Printf("Game: Received unhandled message type '%s' from player %s (%s)", msg.Type, sender.ID, sender.Name)
 		}
@@ -365,7 +365,7 @@ func (g *Game) HandleDrawEvent(sender *Player, payload json.RawMessage) {
 		return
 	}
 
-	drawMsgBytes := mustMarshal(Message{Type: MsgTypeDrawEventBroadcast, Payload: payload})
+	drawMsgBytes := mustMarshal(Message{Type: DrawEventBroadcastResponse, Payload: payload})
 	playersToSendTo := make([]*Player, 0, len(g.Players)-1)
 	for _, p := range g.Players {
 		if p != nil && p.ID != sender.ID {
@@ -407,7 +407,7 @@ func (g *Game) HandleGuess(sender *Player, payload json.RawMessage) {
 		g.GuessedCorrectly[sender.ID] = true
 
 		correctPayload := PlayerGuessedCorrectlyPayload{PlayerID: sender.ID}
-		msgBytes := mustMarshal(Message{Type: MsgTypePlayerGuessedCorrectly, Payload: json.RawMessage(mustMarshal(correctPayload))})
+		msgBytes := mustMarshal(Message{Type: PlayerGuessedCorrectlyResponse, Payload: json.RawMessage(mustMarshal(correctPayload))})
 		go g.Hub.Broadcast(msgBytes)
 
 		if g.checkAllGuessed() {
@@ -441,19 +441,19 @@ func (g *Game) broadcastPlayerUpdate() {
 		Players: g.getPlayerInfoList(), // Assumes lock held
 		HostID:  g.HostID,
 	}
-	msgBytes := mustMarshal(Message{Type: MsgTypePlayerUpdate, Payload: json.RawMessage(mustMarshal(payload))})
+	msgBytes := mustMarshal(Message{Type: PlayerUpdateResponse, Payload: json.RawMessage(mustMarshal(payload))})
 	go g.Hub.Broadcast(msgBytes)
 }
 
 func (g *Game) BroadcastChatMessage(senderName, message string) {
 	payload := ChatPayload{SenderName: senderName, Message: message, IsSystem: false}
-	msgBytes := mustMarshal(Message{Type: MsgTypeChat, Payload: json.RawMessage(mustMarshal(payload))})
+	msgBytes := mustMarshal(Message{Type: ChatResponse, Payload: json.RawMessage(mustMarshal(payload))})
 	go g.Hub.Broadcast(msgBytes)
 }
 
 func (g *Game) BroadcastSystemMessage(message string) {
 	payload := ChatPayload{SenderName: "System", Message: message, IsSystem: true}
-	msgBytes := mustMarshal(Message{Type: MsgTypeChat, Payload: json.RawMessage(mustMarshal(payload))})
+	msgBytes := mustMarshal(Message{Type: ChatResponse, Payload: json.RawMessage(mustMarshal(payload))})
 	go g.Hub.Broadcast(msgBytes)
 }
 

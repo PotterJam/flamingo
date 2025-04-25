@@ -6,21 +6,19 @@ import (
 
 // --- Message Constants ---
 const (
-	// Client -> Server
-	MsgTypeRegisterUser = "setName"
-	MsgTypeGuess        = "guess"
-	MsgTypeDrawEvent    = "drawEvent"
-	MsgTypeStartGame    = "startGame"
+	ClientRegisterUser = "setName"
+	ClientGuess        = "guess"
+	ClientDrawEvent    = "drawEvent"
+	ClientStartGame    = "startGame"
 	// Server -> Client
-	MsgTypeError                  = "error"
-	MsgTypeGameInfo               = "gameInfo"
-	MsgTypePlayerUpdate           = "playerUpdate"
-	MsgTypeTurnStart              = "turnStart"
-	MsgTypePlayerGuessedCorrectly = "playerGuessedCorrectly"
-	MsgTypeChat                   = "chat"
-	MsgTypeDrawEventBroadcast     = "drawEvent" // <<< Use "drawEvent" to match frontend expectation
-	MsgTypeTurnEnd                = "turnEnd"
-	MsgTypeWaiting                = "waiting" // Added back for potential use
+	TypeErrorResponse              = "error"
+	GameInfoResponse               = "gameInfo"
+	PlayerUpdateResponse           = "playerUpdate"
+	TurnStartResponse              = "turnStart"
+	PlayerGuessedCorrectlyResponse = "playerGuessedCorrectly"
+	ChatResponse                   = "chat"
+	DrawEventBroadcastResponse     = "drawEvent" // <<< Using "drawEvent" to match frontend expectation
+	TurnEndResponse                = "turnEnd"
 )
 
 // --- Message Structs ---

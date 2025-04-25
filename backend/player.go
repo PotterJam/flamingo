@@ -87,7 +87,7 @@ func (p *Player) SendError(errMsg string) {
 	}
 	payload := ErrorPayload{Message: errMsg}
 
-	msgBytes, _ := json.Marshal(Message{Type: MsgTypeError, Payload: json.RawMessage(mustMarshal(payload))})
+	msgBytes, _ := json.Marshal(Message{Type: TypeErrorResponse, Payload: json.RawMessage(mustMarshal(payload))})
 	// Use a non-blocking send
 	select {
 	case p.Send <- msgBytes:
