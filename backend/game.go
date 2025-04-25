@@ -18,21 +18,21 @@ type Game struct {
 	CurrentDrawerIdx int             // Index in Players slice of the current drawer (-1 if no game)
 	Word             string          // The secret word for the current turn
 	GuessedCorrectly map[string]bool // Set of player IDs who guessed correctly this turn
-	Hub              *Hub
+	Room             *Room
 	mu               sync.Mutex  // Mutex to protect concurrent access to game state
 	IsActive         bool        // Flag indicating if a round/turn is currently running
 	turnTimer        *time.Timer // Timer for the current turn
 	turnEndTime      time.Time   // When the current turn is scheduled to end
 }
 
-func NewGame(hub *Hub) *Game {
+func NewGame(room *Room) *Game {
 	log.Println("Game: Creating new shared game instance.")
 	return &Game{
 		Players:          make([]*Player, 0, 10),
 		HostID:           "", // No host initially
 		CurrentDrawerIdx: -1,
 		GuessedCorrectly: make(map[string]bool),
-		Hub:              hub,
+		Room:             room,
 		IsActive:         false,
 	}
 }
@@ -224,7 +224,7 @@ func (g *Game) nextTurn() {
 		}
 	}
 	log.Printf("Game: Sending TurnStart (no word) to %d guessers", len(playersToSendTo))
-	go g.Hub.BroadcastToPlayers(msgBytes, playersToSendTo)
+	go g.Room.BroadcastToPlayers(msgBytes, playersToSendTo)
 
 	g.BroadcastSystemMessage(*newDrawer.Name + " is drawing!")
 }
@@ -247,7 +247,7 @@ func (g *Game) endTurn() {
 	turnEndPayload := TurnEndPayload{CorrectWord: g.Word}
 	turnEndMsgBytes := mustMarshal(Message{Type: TurnEndResponse, Payload: json.RawMessage(mustMarshal(turnEndPayload))})
 	log.Println("Game: Broadcasting TurnEnd message.")
-	go g.Hub.Broadcast(turnEndMsgBytes)
+	go g.Room.Broadcast(turnEndMsgBytes)
 
 	log.Println("Game: Scheduling next turn.")
 	time.AfterFunc(3*time.Second, func() {
@@ -313,8 +313,8 @@ func ParseAndSetName(sender *Player, msg Message) {
 		if trimmedName != "" && len(trimmedName) <= 20 {
 			sender.Name = &trimmedName
 			log.Printf("Player %s set name to %s", sender.ID, sender.Name)
-			log.Printf("Player %s (%s) sending PlayerReady signal to Hub", sender.ID, sender.Name)
-			sender.Hub.PlayerReady <- sender
+			log.Printf("Player %s (%s) sending PlayerReady signal to Room", sender.ID, sender.Name)
+			sender.Room.PlayerReady <- sender
 		} else {
 			sender.SendError("Invalid name. Must be 1-20 characters.")
 		}
@@ -373,7 +373,7 @@ func (g *Game) HandleDrawEvent(sender *Player, payload json.RawMessage) {
 		}
 	}
 
-	go g.Hub.BroadcastToPlayers(drawMsgBytes, playersToSendTo)
+	go g.Room.BroadcastToPlayers(drawMsgBytes, playersToSendTo)
 }
 
 func (g *Game) HandleGuess(sender *Player, payload json.RawMessage) {
@@ -408,7 +408,7 @@ func (g *Game) HandleGuess(sender *Player, payload json.RawMessage) {
 
 		correctPayload := PlayerGuessedCorrectlyPayload{PlayerID: sender.ID}
 		msgBytes := mustMarshal(Message{Type: PlayerGuessedCorrectlyResponse, Payload: json.RawMessage(mustMarshal(correctPayload))})
-		go g.Hub.Broadcast(msgBytes)
+		go g.Room.Broadcast(msgBytes)
 
 		if g.checkAllGuessed() {
 			log.Println("Game: All players have guessed correctly.")
@@ -442,19 +442,19 @@ func (g *Game) broadcastPlayerUpdate() {
 		HostID:  g.HostID,
 	}
 	msgBytes := mustMarshal(Message{Type: PlayerUpdateResponse, Payload: json.RawMessage(mustMarshal(payload))})
-	go g.Hub.Broadcast(msgBytes)
+	go g.Room.Broadcast(msgBytes)
 }
 
 func (g *Game) BroadcastChatMessage(senderName, message string) {
 	payload := ChatPayload{SenderName: senderName, Message: message, IsSystem: false}
 	msgBytes := mustMarshal(Message{Type: ChatResponse, Payload: json.RawMessage(mustMarshal(payload))})
-	go g.Hub.Broadcast(msgBytes)
+	go g.Room.Broadcast(msgBytes)
 }
 
 func (g *Game) BroadcastSystemMessage(message string) {
 	payload := ChatPayload{SenderName: "System", Message: message, IsSystem: true}
 	msgBytes := mustMarshal(Message{Type: ChatResponse, Payload: json.RawMessage(mustMarshal(payload))})
-	go g.Hub.Broadcast(msgBytes)
+	go g.Room.Broadcast(msgBytes)
 }
 
 func (g *Game) getPlayerInfoList() []PlayerInfo {

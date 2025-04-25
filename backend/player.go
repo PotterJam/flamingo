@@ -11,14 +11,14 @@ type Player struct {
 	ID   string
 	Name *string // Player's chosen name
 	Conn *websocket.Conn
-	Hub  *Hub
+	Room *Room
 	Send chan []byte // Buffered channel for outbound messages
 }
 
 // readPump pumps messages from the WebSocket connection to the hub.
 func (p *Player) readPump() {
 	defer func() {
-		p.Hub.Unregister <- p
+		p.Room.Unregister <- p
 		_ = p.Conn.Close()
 		log.Printf("Player %s (%s) disconnected and readPump cleaned up", p.ID, p.Name)
 	}()
@@ -41,7 +41,7 @@ func (p *Player) readPump() {
 			continue
 		}
 
-		p.Hub.HandleMessage(p, msg)
+		p.Room.HandleMessage(p, msg)
 	}
 }
 
@@ -56,7 +56,7 @@ func (p *Player) writePump() {
 		select {
 		case message, ok := <-p.Send:
 			if !ok {
-				log.Printf("Player %s (%s): Hub closed send channel.", p.ID, p.Name)
+				log.Printf("Player %s (%s): Room closed send channel.", p.ID, p.Name)
 				_ = p.Conn.WriteMessage(websocket.CloseMessage, []byte{})
 				return
 			}

@@ -1,5 +1,10 @@
 package main
 
+import (
+	"encoding/json"
+	"log"
+)
+
 func MustMarshal(v any) []byte {
 	bytes, err := json.Marshal(v)
 	if err != nil {

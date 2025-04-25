@@ -20,7 +20,7 @@ var upgrader = websocket.Upgrader{
 
 var words = []string{"apple", "banana", "cloud", "house", "tree", "computer", "go", "svelte", "network", "game", "player", "draw", "timer", "guess", "score", "host", "lobby", "react"}
 
-func serveWs(hub *Hub, w http.ResponseWriter, r *http.Request) {
+func serveWs(room *Room, w http.ResponseWriter, r *http.Request) {
 	conn, err := upgrader.Upgrade(w, r, nil)
 	if err != nil {
 		log.Println("WebSocket upgrade error:", err)
@@ -32,24 +32,24 @@ func serveWs(hub *Hub, w http.ResponseWriter, r *http.Request) {
 		ID:   uuid.NewString(),
 		Name: nil, // Name set by player
 		Conn: conn,
-		Hub:  hub,
+		Room: room,
 		Send: make(chan []byte, 256),
 	}
 
 	log.Printf("Registering new player connection: %s", player.ID)
-	hub.Register <- player
+	room.Register <- player
 
 	go player.writePump()
 	go player.readPump()
 }
 
 func main() {
-	hub := NewHub()
-	go hub.Run()
+	room := NewRoom()
+	go room.Run()
 
 	router := mux.NewRouter()
 	router.HandleFunc("/ws", func(w http.ResponseWriter, r *http.Request) {
-		serveWs(hub, w, r)
+		serveWs(room, w, r)
 	})
 
 	staticDir := "./public"
