@@ -58,7 +58,7 @@ export type AppActions = {
 
 export const useAppStore = create<AppState & AppActions>()(
     immer((set) => ({
-        sendMessage: () => {},
+        sendMessage: () => { throw new Error('sending message without sender configured') },
         assignSendMessage: (func) =>
             set((s) => {
                 s.sendMessage = func;
