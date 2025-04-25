@@ -192,7 +192,7 @@ func (g *Game) nextTurn() {
 	g.turnTimer = time.AfterFunc(turnDuration, func() {
 		log.Printf("Game: Turn timer expired callback initiated for drawer %s (%s), word '%s'", newDrawer.ID, newDrawer.Name, g.Word)
 		g.mu.Lock()
-		if g.IsActive && g.CurrentDrawerIdx >= 0 && g.CurrentDrawerIdx < len(g.Players) && g.Players[g.CurrentDrawerIdx].ID == newDrawer.ID {
+		if g.isDrawer(newDrawer) {
 			log.Println("Game: Timer expired, calling endTurn().")
 			g.endTurn()
 		} else {
@@ -271,7 +271,6 @@ func (g *Game) sendGameInfo(player *Player) {
 		IsGameActive: g.IsActive,
 	}
 
-	// TODO: this pattern comes up a few times and is grim. Make a fn for it
 	if g.IsActive && g.CurrentDrawerIdx >= 0 && g.CurrentDrawerIdx < len(g.Players) {
 		payload.CurrentDrawerID = g.Players[g.CurrentDrawerIdx].ID
 		payload.WordLength = len(g.Word)
@@ -285,27 +284,24 @@ func (g *Game) sendGameInfo(player *Player) {
 }
 
 func (g *Game) HandleMessage(sender *Player, msg Message) {
-	switch msg.Type {
-	case MsgTypeSetName:
+	if msg.Type == MsgTypeRegisterUser {
 		if sender.Name != nil {
 			ParseAndSetName(sender, msg)
 		} else {
 			log.Printf("Player %s (%s) sent setName message after name was already set. Ignoring.", sender.ID, sender.Name)
 		}
-	default:
-		if sender.Name == nil {
-			log.Printf("Player %s (%s) sent message type %s before setting name.", sender.ID, sender.Name, msg.Type)
-			sender.SendError("Please set your name first.")
-		} else {
-			switch msg.Type {
-			case MsgTypeDrawEvent:
-				g.HandleDrawEvent(sender, msg.Payload)
-			case MsgTypeGuess:
-				g.HandleGuess(sender, msg.Payload)
-			case MsgTypeStartGame:
-				g.HandleStartGame(sender)
-				log.Printf("Game: Received unhandled message type '%s' from player %s (%s)", msg.Type, sender.ID, sender.Name)
-			}
+	} else if sender.Name == nil {
+		log.Printf("Player %s (%s) sent message type %s before setting name.", sender.ID, sender.Name, msg.Type)
+		sender.SendError("Please set your name first.")
+	} else {
+		switch msg.Type {
+		case MsgTypeDrawEvent:
+			g.HandleDrawEvent(sender, msg.Payload)
+		case MsgTypeGuess:
+			g.HandleGuess(sender, msg.Payload)
+		case MsgTypeStartGame:
+			g.HandleStartGame(sender)
+			log.Printf("Game: Received unhandled message type '%s' from player %s (%s)", msg.Type, sender.ID, sender.Name)
 		}
 	}
 }
@@ -351,32 +347,27 @@ func (g *Game) HandleStartGame(sender *Player) {
 	}
 
 	log.Printf("Game: Host %s (%s) is starting the game.", sender.Name, sender.ID)
-	g.startGame() // Assumes lock is held
+	g.startGame()
 }
 
 // HandleDrawEvent processes drawing data and forwards it.
 func (g *Game) HandleDrawEvent(sender *Player, payload json.RawMessage) {
-	g.mu.Lock()
-	isDrawer := g.IsActive && g.CurrentDrawerIdx >= 0 && g.CurrentDrawerIdx < len(g.Players) && g.Players[g.CurrentDrawerIdx].ID == sender.ID
-	playersCopy := make([]*Player, 0, len(g.Players))
-	if g.IsActive {
-		for _, p := range g.Players {
-			playersCopy = append(playersCopy, p)
-		}
-	}
-	g.mu.Unlock()
-
 	if !g.IsActive {
 		return
 	}
+
+	g.mu.Lock()
+	defer g.mu.Unlock()
+
+	isDrawer := g.isDrawer(sender)
 	if !isDrawer {
 		sender.SendError("Only the current drawer can send drawing events.")
 		return
 	}
 
 	drawMsgBytes := mustMarshal(Message{Type: MsgTypeDrawEventBroadcast, Payload: payload})
-	playersToSendTo := make([]*Player, 0, len(playersCopy)-1)
-	for _, p := range playersCopy {
+	playersToSendTo := make([]*Player, 0, len(g.Players)-1)
+	for _, p := range g.Players {
 		if p != nil && p.ID != sender.ID {
 			playersToSendTo = append(playersToSendTo, p)
 		}
@@ -393,7 +384,7 @@ func (g *Game) HandleGuess(sender *Player, payload json.RawMessage) {
 		return
 	}
 
-	if g.CurrentDrawerIdx >= 0 && g.CurrentDrawerIdx < len(g.Players) && g.Players[g.CurrentDrawerIdx].ID == sender.ID {
+	if g.isDrawer(sender) {
 		sender.SendError("The drawer cannot make guesses.")
 		return
 	}
@@ -481,4 +472,16 @@ func (g *Game) getPlayerInfoList() []PlayerInfo {
 		}
 	}
 	return infoList
+}
+
+func (g *Game) isDrawer(p *Player) bool {
+	if !g.IsActive {
+		return false
+	}
+
+	if g.CurrentDrawerIdx < 0 || g.CurrentDrawerIdx >= len(g.Players) {
+		return false
+	}
+
+	return g.Players[g.CurrentDrawerIdx].ID == p.ID
 }

@@ -7,10 +7,10 @@ import (
 // --- Message Constants ---
 const (
 	// Client -> Server
-	MsgTypeSetName   = "setName"
-	MsgTypeGuess     = "guess"
-	MsgTypeDrawEvent = "drawEvent" // Frontend sends this type
-	MsgTypeStartGame = "startGame"
+	MsgTypeRegisterUser = "setName"
+	MsgTypeGuess        = "guess"
+	MsgTypeDrawEvent    = "drawEvent"
+	MsgTypeStartGame    = "startGame"
 	// Server -> Client
 	MsgTypeError                  = "error"
 	MsgTypeGameInfo               = "gameInfo"
