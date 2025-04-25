@@ -9,7 +9,7 @@ import { Game } from './components/Game';
 export const MIN_PLAYERS = 2;
 
 function App() {
-    const { isConnected, receivedMessage, sendMessage, connect } =
+    const { isConnected, receivedMessage, sendMessage } =
         useWebSocket();
     useHandleMessage(receivedMessage);
 
@@ -36,7 +36,7 @@ function App() {
                 setAppState('connecting');
             }
         }
-    }, [isConnected, appState, connect]);
+    }, [isConnected, appState]);
 
     if (appState === 'enterName') {
         return (

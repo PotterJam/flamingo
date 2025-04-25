@@ -10,8 +10,6 @@ export function useWebSocket() {
     );
     const ws = useRef<WebSocket>(null);
 
-    // const setLastMessage = useAppStore((s) => s.setLastMessage);
-
     const connect = useCallback(() => {
         if (
             ws.current &&
@@ -106,5 +104,5 @@ export function useWebSocket() {
         };
     }, [connect, disconnect]);
 
-    return { isConnected, sendMessage, receivedMessage, connect, disconnect };
+    return { isConnected, sendMessage, receivedMessage };
 }
