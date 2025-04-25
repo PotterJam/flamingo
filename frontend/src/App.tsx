@@ -1,46 +1,27 @@
-import { useEffect, useCallback } from 'react';
+import { useEffect } from 'react';
 import { useWebSocket } from './hooks/useWebSocket';
-import NameInput from './components/NameInput';
-import { Scaffolding } from './components/Scaffolding';
-import { Game } from './components/Game';
-import { ChatMessage } from './messages';
 import { useAppStore } from './store';
+import { useHandleMessage } from './hooks/useHandleMessage';
+import { Scaffolding } from './components/Scaffolding';
+import NameInput from './components/NameInput';
+import { Game } from './components/Game';
 
-const MIN_PLAYERS = 2;
+export const MIN_PLAYERS = 2;
 
 function App() {
-    const { isConnected, sendMessage, connect } = useWebSocket();
+    const { isConnected, receivedMessage, sendMessage, connect } =
+        useWebSocket();
+    useHandleMessage(receivedMessage);
 
-    useAppStore((s) => s.assignSendMessage)(sendMessage);
-    const lastMessage = useAppStore((s) => s.lastMessage);
+    const assignSendMessage = useAppStore((s) => s.assignSendMessage);
 
     const appState = useAppStore((state) => state.appState);
     const setAppState = useAppStore((state) => state.setState);
+    const localPlayerId = useAppStore((s) => s.gameState.localPlayerId);
+
     const resetGameState = useAppStore((s) => s.resetGameState);
 
-    const localPlayerId = useAppStore((s) => s.gameState.localPlayerId);
-    const setLocalPlayerId = useAppStore((s) => s.setLocalPlayerId);
-
-    const players = useAppStore((s) => s.gameState.players);
-    const setPlayers = useAppStore((s) => s.setPlayers);
-    const playerGuessedCorrect = useAppStore((s) => s.playerGuessedCorrect);
-    const resetPlayerGuesses = useAppStore((s) => s.resetPlayerGuesses);
-
-    const hostId = useAppStore((s) => s.gameState.hostId);
-    const setHostId = useAppStore((s) => s.setHostId);
-
-    const currentDrawerId = useAppStore((s) => s.gameState.currentDrawerId);
-    const setCurrentDrawer = useAppStore((s) => s.setCurrentDrawer);
-
-    const setWord = useAppStore((s) => s.setWord);
-
-    const pushChatMessage = useAppStore((s) => s.addChatMessage);
-
-    const setTurnEndTime = useAppStore((s) => s.setTurnEndTime);
-
-    const addChatMessage = useCallback((msgPayload: ChatMessage) => {
-        pushChatMessage(msgPayload);
-    }, []);
+    useEffect(() => assignSendMessage(sendMessage), [sendMessage]);
 
     useEffect(() => {
         if (isConnected) {
@@ -57,133 +38,10 @@ function App() {
         }
     }, [isConnected, appState, connect]);
 
-    useEffect(() => {
-        if (lastMessage) {
-            console.log('Processing message in useEffect:', lastMessage);
-            const message = lastMessage;
-
-            switch (message.type) {
-                case 'gameInfo': {
-                    const payload = message.payload;
-                    setLocalPlayerId(payload.yourId);
-                    setPlayers(payload.players || []);
-                    setHostId(payload.hostId);
-                    payload.currentDrawerId &&
-                        setCurrentDrawer(payload.currentDrawerId);
-                    payload.turnEndTime && setTurnEndTime(payload.turnEndTime);
-
-                    if (payload.isGameActive) {
-                        setAppState('active');
-                    } else {
-                        setAppState('waiting');
-                    }
-                    console.log(
-                        'Processed gameInfo. New State:',
-                        payload.isGameActive ? 'active' : 'waiting',
-                        'localId:',
-                        payload.yourId
-                    );
-                    break;
-                }
-                case 'playerUpdate': {
-                    const payload = message.payload;
-                    setPlayers(payload.players || []);
-                    setHostId(payload.hostId);
-
-                    if (
-                        appState === 'active' &&
-                        (payload.players?.length ?? 0) < MIN_PLAYERS
-                    ) {
-                        console.log(
-                            'Player count dropped below minimum, returning to waiting state.'
-                        );
-                        setAppState('waiting');
-                    }
-
-                    break;
-                }
-                case 'turnStart': {
-                    const payload = message.payload;
-                    setCurrentDrawer(payload.currentDrawerId);
-                    setWord(payload.word || '');
-                    setPlayers(payload.players || players);
-                    setTurnEndTime(payload.turnEndTime);
-                    setAppState('active');
-                    break;
-                }
-                case 'playerGuessedCorrectly': {
-                    const payload = message.payload;
-                    const { playerId } = payload;
-                    playerGuessedCorrect(playerId);
-                    const guesser = players.find((p) => p.id === playerId);
-                    if (guesser) {
-                        addChatMessage({
-                            senderName: 'System',
-                            message: `${guesser?.name ?? 'Unknown'} guessed the word!`,
-                            isSystem: true,
-                        });
-                    }
-                    break;
-                }
-                case 'chat': {
-                    const payload = message.payload;
-                    addChatMessage(payload);
-                    break;
-                }
-                case 'drawEvent': {
-                    break;
-                }
-                case 'turnEnd': {
-                    setTurnEndTime(null);
-                    resetPlayerGuesses();
-                    break;
-                }
-                case 'error': {
-                    const payload = message.payload;
-                    if (!payload) {
-                        console.error('Received error with null payload');
-                        break;
-                    }
-                    addChatMessage({
-                        senderName: 'System',
-                        message: `Error: ${payload.message || 'Unknown error'}`,
-                        isSystem: true,
-                    });
-                    break;
-                }
-                default:
-                    console.warn('Received unknown message: ', message);
-            }
-        }
-    }, [
-        lastMessage,
-        addChatMessage,
-        localPlayerId,
-        currentDrawerId,
-        hostId,
-        appState,
-    ]);
-
-    const handleNameSet = useCallback(
-        (name: string) => {
-            console.log('handleNameSet called with name:', name);
-            if (name && isConnected) {
-                sendMessage({ type: 'setName', payload: { name: name } });
-                setAppState('joining');
-                console.log("Sent setName, moved state to 'joining'.");
-            } else {
-                console.error(
-                    'Cannot set name - invalid name or WebSocket disconnected.'
-                );
-            }
-        },
-        [isConnected, sendMessage]
-    );
-
     if (appState === 'enterName') {
         return (
             <Scaffolding>
-                <NameInput onNameSet={handleNameSet} />
+                <NameInput />
             </Scaffolding>
         );
     }

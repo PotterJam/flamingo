@@ -2,7 +2,7 @@
 @import 'tailwindcss';
 
 @theme {
-    --font-lilita: "Lilita One";
+    --font-lilita: 'Lilita One';
 }
 
 :root {

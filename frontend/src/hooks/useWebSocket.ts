@@ -1,14 +1,16 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { useAppStore } from '../store';
-import { SendMsg } from '../messages';
+import { ReceivedMsg, SendMsg } from '../messages';
 
 const WS_URL = 'ws://localhost:8080/ws';
 
 export function useWebSocket() {
     const [isConnected, setIsConnected] = useState(false);
+    const [receivedMessage, setReceivedMessage] = useState<ReceivedMsg | null>(
+        null
+    );
     const ws = useRef<WebSocket>(null);
 
-    const setLastMessage = useAppStore((s) => s.setLastMessage);
+    // const setLastMessage = useAppStore((s) => s.setLastMessage);
 
     const connect = useCallback(() => {
         if (
@@ -33,7 +35,7 @@ export function useWebSocket() {
                 try {
                     const message = JSON.parse(event.data);
                     console.log('[useWebSocket] Message received:', message);
-                    setLastMessage(message);
+                    setReceivedMessage(message);
                 } catch (error) {
                     console.error(
                         '[useWebSocket] Error parsing message:',
@@ -104,5 +106,5 @@ export function useWebSocket() {
         };
     }, [connect, disconnect]);
 
-    return { isConnected, sendMessage, connect, disconnect };
+    return { isConnected, sendMessage, receivedMessage, connect, disconnect };
 }

@@ -1,14 +1,19 @@
 import { useState } from 'react';
+import { useAppStore } from '../store';
 
-function NameInput({ onNameSet }: { onNameSet: (name: string) => void }) {
+function NameInput() {
+    const sendMessage = useAppStore((s) => s.sendMessage);
+    const setAppState = useAppStore((s) => s.setState);
     const [name, setName] = useState('');
 
     const handleSubmit = (e: any) => {
         e.preventDefault();
         const trimmedName = name.trim();
-        if (trimmedName) {
-            onNameSet(trimmedName);
-        }
+
+        console.log('handleNameSet called with name:', name);
+        sendMessage({ type: 'setName', payload: { name: trimmedName } });
+        setAppState('joining');
+        console.log("Sent setName, moved state to 'joining'.");
     };
 
     return (
