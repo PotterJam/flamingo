@@ -13,7 +13,6 @@ function App() {
         useWebSocket();
 
     useAppStore((s) => s.assignSendMessage)(sendMessage);
-    // const lastMessage = useAppStore((s) => s.lastMessage);
 
     const appState = useAppStore((state) => state.appState);
     const setAppState = useAppStore((state) => state.setState);
@@ -27,10 +26,8 @@ function App() {
     const playerGuessedCorrect = useAppStore((s) => s.playerGuessedCorrect);
     const resetPlayerGuesses = useAppStore((s) => s.resetPlayerGuesses);
 
-    // const hostId = useAppStore((s) => s.gameState.hostId);
     const setHostId = useAppStore((s) => s.setHostId);
 
-    // const currentDrawerId = useAppStore((s) => s.gameState.currentDrawerId);
     const setCurrentDrawer = useAppStore((s) => s.setCurrentDrawer);
 
     const setWord = useAppStore((s) => s.setWord);
