@@ -1,17 +1,23 @@
 import { useEffect } from 'react';
 import { useWebSocket } from './hooks/useWebSocket';
 import { useAppStore } from './store';
-import { EventWrapper } from './components/event-wrapper';
+import { useHandleMessage } from './components/event-wrapper';
+import { Scaffolding } from './components/Scaffolding';
+import NameInput from './components/NameInput';
+import { Game } from './components/Game';
 
 export const MIN_PLAYERS = 2;
 
 function App() {
     const { isConnected, receivedMessage, sendMessage, connect } =
         useWebSocket();
+    useHandleMessage(receivedMessage);
+
     const assignSendMessage = useAppStore((s) => s.assignSendMessage);
 
     const appState = useAppStore((state) => state.appState);
     const setAppState = useAppStore((state) => state.setState);
+    const localPlayerId = useAppStore((s) => s.gameState.localPlayerId);
 
     const resetGameState = useAppStore((s) => s.resetGameState);
 
@@ -32,11 +38,38 @@ function App() {
         }
     }, [isConnected, appState, connect]);
 
+    if (appState === 'enterName') {
+        return (
+            <Scaffolding>
+                <NameInput />
+            </Scaffolding>
+        );
+    }
+
+    if (!isConnected) {
+        return (
+            <Scaffolding>
+                <div className="mt-10 text-center">Loading...</div>
+            </Scaffolding>
+        );
+    }
+
+    if (appState === 'joining' || !localPlayerId) {
+        return (
+            <Scaffolding>
+                <div className="mt-10 text-center">
+                    <p className="mt-2 animate-pulse text-gray-500">
+                        Waiting for server info...
+                    </p>
+                </div>
+            </Scaffolding>
+        );
+    }
+
     return (
-        <EventWrapper
-            isConnected={isConnected}
-            receivedMessage={receivedMessage}
-        />
+        <Scaffolding>
+            <Game />
+        </Scaffolding>
     );
 }
 
