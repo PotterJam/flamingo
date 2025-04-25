@@ -158,26 +158,10 @@ function App() {
         }
     }, [receivedMessage, appState]);
 
-    const handleNameSet = useCallback(
-        (name: string) => {
-            console.log('handleNameSet called with name:', name);
-            if (name && isConnected) {
-                sendMessage({ type: 'setName', payload: { name: name } });
-                setAppState('joining');
-                console.log("Sent setName, moved state to 'joining'.");
-            } else {
-                console.error(
-                    'Cannot set name - invalid name or WebSocket disconnected.'
-                );
-            }
-        },
-        [isConnected, sendMessage]
-    );
-
     if (appState === 'enterName') {
         return (
             <Scaffolding>
-                <NameInput onNameSet={handleNameSet} />
+                <NameInput />
             </Scaffolding>
         );
     }
