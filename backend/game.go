@@ -285,7 +285,7 @@ func (g *Game) sendGameInfo(player *Player) {
 
 func (g *Game) HandleMessage(sender *Player, msg Message) {
 	if msg.Type == ClientRegisterUser {
-		if sender.Name != nil {
+		if sender.Name == nil {
 			ParseAndSetName(sender, msg)
 		} else {
 			log.Printf("Player %s (%s) sent setName message after name was already set. Ignoring.", sender.ID, sender.Name)
