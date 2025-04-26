@@ -97,7 +97,7 @@ func (p *Player) SendError(errMsg string) {
 }
 
 // SendMessage sends any message type to this player (non-blocking).
-func (p *Player) SendMessage(msgType string, payload interface{}) {
+func (p *Player) SendMessage(msgType string, payload any) {
 	if p == nil {
 		return
 	}

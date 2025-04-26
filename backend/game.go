@@ -6,6 +6,7 @@ import (
 	"math/rand"
 	"sync"
 	"time"
+	"slices"
 )
 
 const turnDuration = 60 * time.Second
@@ -82,7 +83,7 @@ func (g *Game) RemovePlayer(player *Player) {
 		return
 	}
 
-	g.Players = append(g.Players[:playerIndex], g.Players[playerIndex+1:]...)
+	g.Players = slices.Delete(g.Players, playerIndex, playerIndex+1)
 	log.Printf("Game: Player %s (%s) removed. Remaining players: %d", player.ID, *player.Name, len(g.Players))
 
 	delete(g.GuessedCorrectly, player.ID)
