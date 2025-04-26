@@ -3,23 +3,55 @@ package main
 import (
 	"log"
 	"sync"
+
+	"github.com/google/uuid"
 )
+
+// Maintains the list of currently alive rooms
+type RoomManager struct {
+	rooms map[string]*Room
+	mu    sync.Mutex
+}
+
+func NewRoomManager() *RoomManager {
+	return &RoomManager{
+		rooms: make(map[string]*Room),
+	}
+}
+
+func (rm *RoomManager) Run() {
+	log.Print("starting room manager")
+}
+
+func (rm *RoomManager) CreateRoom() *Room {
+	rm.mu.Lock()
+	defer rm.mu.Unlock()
+
+	room := NewRoom()
+	rm.rooms[room.Id] = room
+
+	return room
+}
 
 // Room maintains the set of players connected to the server and the game(s)
 type Room struct {
+	Id          string
 	Players     map[string]*Player // Registered players (Player ID -> Player) - Connection tracking
 	Game        *Game              // The single shared game instance
 	Register    chan *Player
 	Unregister  chan *Player
 	PlayerReady chan *Player
+	Slug        string
 	mu          sync.Mutex // Mutex to protect concurrent access to Players map
 }
 
 func NewRoom() *Room {
 	room := &Room{
+		Id:          uuid.NewString(),
 		Players:     make(map[string]*Player),
 		Register:    make(chan *Player),
 		Unregister:  make(chan *Player),
+		Slug:        GenerateSlug(),
 		PlayerReady: make(chan *Player),
 	}
 	room.Game = NewGame(room)
