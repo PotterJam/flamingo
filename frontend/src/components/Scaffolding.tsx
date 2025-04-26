@@ -1,5 +1,5 @@
 import { FC, PropsWithChildren } from 'react';
-import { FlamingoBackground } from './background';
+import { FlamingoBackground } from './Background';
 
 export const Scaffolding: FC<PropsWithChildren<{}>> = ({ children }) => {
     return (
