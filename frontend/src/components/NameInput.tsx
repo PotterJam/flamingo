@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { useAppStore } from '../store';
+import { PrimaryButton } from './buttons/PrimaryButton';
 
 function NameInput() {
     const sendMessage = useAppStore((s) => s.sendMessage);
@@ -32,13 +33,9 @@ function NameInput() {
                     className="mb-4 w-full rounded border border-gray-300 p-2 transition duration-150 ease-in-out focus:ring-2 focus:ring-blue-500 focus:outline-none"
                     aria-label="Enter your name"
                 />
-                <button
-                    type="submit"
-                    className="w-full rounded bg-blue-500 px-4 py-2 font-medium text-black transition duration-150 ease-in-out hover:bg-blue-600 focus:ring-2 focus:ring-blue-500 focus:ring-offset-1 focus:outline-none disabled:cursor-not-allowed disabled:opacity-50"
-                    disabled={!name.trim()}
-                >
+                <PrimaryButton disabled={!name.trim()} onClick={handleSubmit}>
                     Join Game
-                </button>
+                </PrimaryButton>
             </form>
         </div>
     );

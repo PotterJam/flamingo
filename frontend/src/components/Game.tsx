@@ -6,6 +6,7 @@ import WordDisplay from './WordDisplay';
 import TimerDisplay from './TimerDisplay';
 import Whiteboard from './Whiteboard';
 import GuessInput from './GuessInput';
+import { PrimaryButton } from './buttons/PrimaryButton';
 
 const CANVAS_WIDTH = 800;
 const CANVAS_HEIGHT = 600;
@@ -96,12 +97,9 @@ export const Game: FC = () => {
                     </div>
 
                     {canHostStartGame && (
-                        <button
-                            onClick={handleStartGame}
-                            className="flex-shrink-0 rounded bg-green-500 px-4 py-2 font-semibold text-black transition duration-150 ease-in-out hover:bg-green-600 focus:ring-2 focus:ring-green-500 focus:ring-offset-1 focus:outline-none"
-                        >
+                        <PrimaryButton onClick={handleStartGame}>
                             Start Game
-                        </button>
+                        </PrimaryButton>
                     )}
 
                     <h2

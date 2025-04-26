@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { PrimaryButton } from './buttons/PrimaryButton';
 
 function GuessInput({ onGuess }: { onGuess: (guess: string) => void }) {
     const [currentGuess, setCurrentGuess] = useState('');
@@ -20,16 +21,16 @@ function GuessInput({ onGuess }: { onGuess: (guess: string) => void }) {
                 onChange={(e) => setCurrentGuess(e.target.value)}
                 placeholder="Enter your guess"
                 maxLength={50}
-                className="flex-grow rounded border border-gray-300 p-2 transition duration-150 ease-in-out focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                className="flex-1 rounded border border-gray-300 p-2 transition duration-150 ease-in-out focus:ring-2 focus:ring-blue-500 focus:outline-none"
                 aria-label="Enter your guess"
             />
-            <button
+            <PrimaryButton
                 type="submit"
-                className="rounded bg-blue-500 px-4 py-2 font-medium text-black transition duration-150 ease-in-out hover:bg-blue-600 focus:ring-2 focus:ring-blue-500 focus:ring-offset-1 focus:outline-none disabled:cursor-not-allowed disabled:opacity-50"
                 disabled={!currentGuess.trim()}
+                className="flex-0"
             >
                 Guess
-            </button>
+            </PrimaryButton>
         </form>
     );
 }
