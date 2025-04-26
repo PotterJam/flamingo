@@ -5,8 +5,8 @@ import (
 	"sync"
 )
 
-// Hub maintains the set of players connected to the server and the game(s)
-type Hub struct {
+// Room maintains the set of players connected to the server and the game(s)
+type Room struct {
 	Players     map[string]*Player // Registered players (Player ID -> Player) - Connection tracking
 	Game        *Game              // The single shared game instance
 	Register    chan *Player
@@ -15,63 +15,63 @@ type Hub struct {
 	mu          sync.Mutex // Mutex to protect concurrent access to Players map
 }
 
-func NewHub() *Hub {
-	hub := &Hub{
+func NewRoom() *Room {
+	room := &Room{
 		Players:     make(map[string]*Player),
 		Register:    make(chan *Player),
 		Unregister:  make(chan *Player),
 		PlayerReady: make(chan *Player),
 	}
-	hub.Game = NewGame(hub)
-	log.Println("Hub created and initialized shared game.")
-	return hub
+	room.Game = NewGame(room)
+	log.Println("Room created and initialized shared game.")
+	return room
 }
 
-// Run starts the Hub's main loop, listening on its channels.
-func (h *Hub) Run() {
-	log.Println("Hub running...")
+// Run starts the Room's main loop, listening on its channels.
+func (room *Room) Run() {
+	log.Println("Room running...")
 	for {
 		select {
-		case player := <-h.Register:
-			h.mu.Lock()
-			h.Players[player.ID] = player
-			log.Printf("Hub: Player %s connection registered. Total tracked: %d. Waiting for name.", player.ID, len(h.Players))
-			h.mu.Unlock()
+		case player := <-room.Register:
+			room.mu.Lock()
+			room.Players[player.ID] = player
+			log.Printf("Room: Player %s connection registered. Total tracked: %d. Waiting for name.", player.ID, len(room.Players))
+			room.mu.Unlock()
 
-		case player := <-h.Unregister:
-			h.mu.Lock()
+		case player := <-room.Unregister:
+			room.mu.Lock()
 			var playerToRemove *Player
-			if existingPlayer, ok := h.Players[player.ID]; ok {
-				delete(h.Players, player.ID)
+			if existingPlayer, ok := room.Players[player.ID]; ok {
+				delete(room.Players, player.ID)
 				select {
 				case <-existingPlayer.Send:
 				default:
 					close(existingPlayer.Send)
 				}
-				log.Printf("Hub: Player %s (%s) connection unregistered. Total tracked: %d", player.ID, existingPlayer.Name, len(h.Players))
+				log.Printf("Room: Player %s (%s) connection unregistered. Total tracked: %d", player.ID, *existingPlayer.Name, len(room.Players))
 				playerToRemove = existingPlayer
 			} else {
-				log.Printf("Hub: Player %s (%s) already unregistered from Hub map.", player.ID, player.Name)
+				log.Printf("Room: Player %s (%s) already unregistered from Room map.", player.ID, *player.Name)
 			}
-			h.mu.Unlock()
+			room.mu.Unlock()
 
 			if playerToRemove != nil {
-				h.Game.RemovePlayer(playerToRemove)
+				room.Game.RemovePlayer(playerToRemove)
 			}
 
-		case player := <-h.PlayerReady:
-			log.Printf("Hub: Received PlayerReady signal for %s (%s). Adding to game.", player.ID, player.Name)
-			h.Game.PlayerIsReady(player)
+		case player := <-room.PlayerReady:
+			log.Printf("Room: Received PlayerReady signal for %s (%s). Adding to game.", player.ID, *player.Name)
+			room.Game.PlayerIsReady(player)
 		}
 	}
 }
 
-func (h *Hub) HandleMessage(player *Player, msg Message) {
+func (r *Room) HandleMessage(player *Player, msg Message) {
 	// TODO: when implementing rooms (the spokes of the hub), we'll need to direct you to the right game here
-	h.Game.HandleMessage(player, msg)
+	r.Game.HandleMessage(player, msg)
 }
 
-func (h *Hub) Broadcast(message []byte) {
+func (h *Room) Broadcast(message []byte) {
 	h.mu.Lock()
 	playersToSend := make([]*Player, 0, len(h.Players))
 	for _, player := range h.Players {
@@ -89,19 +89,19 @@ func (h *Hub) Broadcast(message []byte) {
 			select {
 			case p.Send <- message:
 			default:
-				log.Printf("Hub Broadcast Warn: Player %s (%s) send buffer full/closed.", p.ID, p.Name)
+				log.Printf("Room Broadcast Warn: Player %s (%s) send buffer full/closed.", p.ID, *p.Name)
 			}
 		}()
 	}
 }
 
-func (h *Hub) BroadcastToPlayers(message []byte, players []*Player) {
+func (r *Room) BroadcastToPlayers(message []byte, players []*Player) {
 	for _, p := range players {
 		go func() {
 			select {
 			case p.Send <- message:
 			default:
-				log.Printf("Hub BroadcastToPlayers Warn: Player %s (%s) send buffer full/closed.", p.ID, p.Name)
+				log.Printf("Room BroadcastToPlayers Warn: Player %s (%s) send buffer full/closed.", p.ID, *p.Name)
 			}
 		}()
 	}
