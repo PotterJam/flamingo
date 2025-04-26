@@ -2,22 +2,19 @@ import { useEffect } from 'react';
 import { useWebSocket } from './hooks/useWebSocket';
 import { useAppStore } from './store';
 import { useHandleMessage } from './hooks/useHandleMessage';
-import { Scaffolding } from './components/Scaffolding';
-import NameInput from './components/NameInput';
-import { Game } from './components/Game';
+import { Flamingo } from './components/Scaffolding';
+import { FlamingoBackground } from './components/Background';
 
 export const MIN_PLAYERS = 2;
 
 function App() {
-    const { isConnected, receivedMessage, sendMessage } =
-        useWebSocket();
+    const { isConnected, receivedMessage, sendMessage } = useWebSocket();
     useHandleMessage(receivedMessage);
 
     const assignSendMessage = useAppStore((s) => s.assignSendMessage);
 
     const appState = useAppStore((state) => state.appState);
     const setAppState = useAppStore((state) => state.setState);
-    const localPlayerId = useAppStore((s) => s.gameState.localPlayerId);
 
     const resetGameState = useAppStore((s) => s.resetGameState);
 
@@ -38,38 +35,22 @@ function App() {
         }
     }, [isConnected, appState]);
 
-    if (appState === 'enterName') {
-        return (
-            <Scaffolding>
-                <NameInput />
-            </Scaffolding>
-        );
-    }
-
     if (!isConnected) {
         return (
-            <Scaffolding>
+            <>
+                <FlamingoBackground />
                 <div className="mt-10 text-center">Loading...</div>
-            </Scaffolding>
-        );
-    }
-
-    if (appState === 'joining' || !localPlayerId) {
-        return (
-            <Scaffolding>
-                <div className="mt-10 text-center">
-                    <p className="mt-2 animate-pulse text-gray-500">
-                        Waiting for server info...
-                    </p>
-                </div>
-            </Scaffolding>
+            </>
         );
     }
 
     return (
-        <Scaffolding>
-            <Game />
-        </Scaffolding>
+        <>
+            <FlamingoBackground />
+            <main className="flex min-h-screen flex-col items-center justify-start bg-gray-100 p-4 font-sans">
+                <Flamingo />
+            </main>
+        </>
     );
 }
 
