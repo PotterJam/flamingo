@@ -4,6 +4,7 @@ import { useAppStore } from './store';
 import { useHandleMessage } from './hooks/useHandleMessage';
 import { Flamingo } from './components/Scaffolding';
 import { FlamingoBackground } from './components/Background';
+import { RoomConnection } from './components/RoomConnection';
 
 export const MIN_PLAYERS = 2;
 
@@ -12,11 +13,10 @@ function App() {
     useHandleMessage(receivedMessage);
 
     const assignSendMessage = useAppStore((s) => s.assignSendMessage);
-
     const appState = useAppStore((state) => state.appState);
     const setAppState = useAppStore((state) => state.setState);
-
     const resetGameState = useAppStore((s) => s.resetGameState);
+    const room = useAppStore((s) => s.room);
 
     useEffect(() => assignSendMessage(sendMessage), [sendMessage]);
 
@@ -47,7 +47,7 @@ function App() {
     return (
         <main className="m-auto w-screen">
             <FlamingoBackground />
-            <Flamingo />
+            {room ? <Flamingo /> : <RoomConnection />}
         </main>
     );
 }

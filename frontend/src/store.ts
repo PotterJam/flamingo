@@ -26,6 +26,11 @@ export interface GameState {
     lastDrawEvent: DrawEvent | null;
 }
 
+export interface Room {
+    roomId: string;
+    roomSlug: string;
+}
+
 const initialGameState: GameState = {
     players: [],
     currentDrawerId: null,
@@ -50,6 +55,7 @@ export type AppState = {
 
     appState: CurrentAppState;
     gameState: GameState;
+    room: Room | null;
 };
 
 export type AppActions = {
@@ -57,6 +63,8 @@ export type AppActions = {
     setLastMessage: (message: ReceivedMsg) => void;
 
     setState: (newState: CurrentAppState) => void;
+
+    roomCreated: (room: Room) => void;
 
     resetGameState: () => void;
 
@@ -75,6 +83,10 @@ export type MessageHandlers = {
 
 export const useAppStore = create<AppState & AppActions & MessageHandlers>()(
     immer((set) => ({
+        gameState: initialGameState,
+        room: null,
+        appState: 'connecting',
+
         sendMessage: () => {
             throw new Error('sending message without sender configured');
         },
@@ -88,10 +100,12 @@ export const useAppStore = create<AppState & AppActions & MessageHandlers>()(
                 s.lastMessage = message;
             }),
 
-        appState: 'connecting',
         setState: (newState) => set((_) => ({ appState: newState })),
 
-        gameState: initialGameState,
+        roomCreated: (room) =>
+            set((s) => {
+                s.room = room;
+            }),
 
         resetGameState: () =>
             set((s) => {
