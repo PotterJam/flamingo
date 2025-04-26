@@ -20,16 +20,17 @@ func (p *Player) readPump() {
 	defer func() {
 		p.Room.Unregister <- p
 		_ = p.Conn.Close()
-		log.Printf("Player %s (%s) disconnected and readPump cleaned up", p.ID, *p.Name)
+
+		log.Printf("Player %s (%s) disconnected and readPump cleaned up", p.ID, LogName(p.Name))
 	}()
 
 	for {
 		_, messageBytes, err := p.Conn.ReadMessage()
 		if err != nil {
 			if websocket.IsUnexpectedCloseError(err, websocket.CloseGoingAway, websocket.CloseAbnormalClosure) {
-				log.Printf("Player %s (%s) read error: %v", p.ID, *p.Name, err)
+				log.Printf("Player %s (%s) read error: %v", p.ID, LogName(p.Name), err)
 			} else {
-				log.Printf("Player %s (%s) connection closed normally.", p.ID, *p.Name)
+				log.Printf("Player %s (%s) connection closed normally.", p.ID, LogName(p.Name))
 			}
 			break
 		}
@@ -49,32 +50,32 @@ func (p *Player) readPump() {
 func (p *Player) writePump() {
 	defer func() {
 		p.Conn.Close()
-		log.Printf("Player %s (%s) writePump stopped.", p.ID, *p.Name)
+		log.Printf("Player %s (%s) writePump stopped.", p.ID, LogName(p.Name))
 	}()
 
 	for {
 		select {
 		case message, ok := <-p.Send:
 			if !ok {
-				log.Printf("Player %s (%s): Room closed send channel.", p.ID, *p.Name)
+				log.Printf("Player %s (%s): Room closed send channel.", p.ID, LogName(p.Name))
 				_ = p.Conn.WriteMessage(websocket.CloseMessage, []byte{})
 				return
 			}
 
 			w, err := p.Conn.NextWriter(websocket.TextMessage)
 			if err != nil {
-				log.Printf("Player %s (%s) write error getting writer: %v", p.ID, *p.Name, err)
+				log.Printf("Player %s (%s) write error getting writer: %v", p.ID, LogName(p.Name), err)
 				return
 			}
 			_, err = w.Write(message)
 			if err != nil {
-				log.Printf("Player %s (%s) write error writing message: %v", p.ID, *p.Name, err)
+				log.Printf("Player %s (%s) write error writing message: %v", p.ID, LogName(p.Name), err)
 				_ = w.Close()
 				return
 			}
 
 			if err := w.Close(); err != nil {
-				log.Printf("Player %s (%s) writer close error: %v", p.ID, *p.Name, err)
+				log.Printf("Player %s (%s) writer close error: %v", p.ID, LogName(p.Name), err)
 				return
 			}
 		}

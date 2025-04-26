@@ -4,9 +4,9 @@ import (
 	"encoding/json"
 	"log"
 	"math/rand"
+	"slices"
 	"sync"
 	"time"
-	"slices"
 )
 
 const turnDuration = 60 * time.Second
@@ -79,7 +79,7 @@ func (g *Game) RemovePlayer(player *Player) {
 	}
 
 	if !found {
-		log.Printf("Game: Attempted to remove player %s (%s) who was not found (or not ready).", player.ID, *player.Name)
+		log.Printf("Game: Attempted to remove player %s (%s) who was not found (or not ready).", player.ID, LogName(player.Name))
 		return
 	}
 

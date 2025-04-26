@@ -48,7 +48,7 @@ func (room *Room) Run() {
 				default:
 					close(existingPlayer.Send)
 				}
-				log.Printf("Room: Player %s (%s) connection unregistered. Total tracked: %d", player.ID, *existingPlayer.Name, len(room.Players))
+				log.Printf("Room: Player %s (%s) connection unregistered. Total tracked: %d", player.ID, LogName(existingPlayer.Name), len(room.Players))
 				playerToRemove = existingPlayer
 			} else {
 				log.Printf("Room: Player %s (%s) already unregistered from Room map.", player.ID, *player.Name)
