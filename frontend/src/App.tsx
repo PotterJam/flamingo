@@ -45,12 +45,10 @@ function App() {
     }
 
     return (
-        <>
+        <main className="m-auto w-screen">
             <FlamingoBackground />
-            <main className="flex min-h-screen flex-col items-center justify-start bg-gray-100 p-4 font-sans">
-                <Flamingo />
-            </main>
-        </>
+            <Flamingo />
+        </main>
     );
 }
 
