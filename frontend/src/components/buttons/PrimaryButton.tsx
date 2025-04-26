@@ -1,15 +1,17 @@
 import { FC } from 'react';
 
 interface PrimaryButtonProps {
-    onClick: React.MouseEventHandler<HTMLButtonElement>;
+    onClick?: React.MouseEventHandler<HTMLButtonElement>;
     disabled?: boolean;
     children: React.ReactNode;
+    type?: any;
 }
 
 export const PrimaryButton: FC<PrimaryButtonProps> = ({
     onClick,
     disabled = false,
     children,
+    type,
 }) => {
     const enabledStyles =
         'w-full rounded bg-pink-400 px-4 py-2 font-bold text-white hover:bg-pink-500';
@@ -20,6 +22,7 @@ export const PrimaryButton: FC<PrimaryButtonProps> = ({
             onClick={onClick}
             disabled={disabled}
             className={disabled ? disabledStyles : enabledStyles}
+            type={type}
         >
             {children}
         </button>
