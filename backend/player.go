@@ -20,23 +20,23 @@ func (p *Player) readPump() {
 	defer func() {
 		p.Room.Unregister <- p
 		_ = p.Conn.Close()
-		log.Printf("Player %s (%s) disconnected and readPump cleaned up", p.ID, p.Name)
+		log.Printf("Player %s (%s) disconnected and readPump cleaned up", p.ID, *p.Name)
 	}()
 
 	for {
 		_, messageBytes, err := p.Conn.ReadMessage()
 		if err != nil {
 			if websocket.IsUnexpectedCloseError(err, websocket.CloseGoingAway, websocket.CloseAbnormalClosure) {
-				log.Printf("Player %s (%s) read error: %v", p.ID, p.Name, err)
+				log.Printf("Player %s (%s) read error: %v", p.ID, *p.Name, err)
 			} else {
-				log.Printf("Player %s (%s) connection closed normally.", p.ID, p.Name)
+				log.Printf("Player %s (%s) connection closed normally.", p.ID, *p.Name)
 			}
 			break
 		}
 
 		var msg Message
 		if err := json.Unmarshal(messageBytes, &msg); err != nil {
-			log.Printf("Player %s (%s): Error unmarshalling message: %v", p.ID, p.Name, err)
+			log.Printf("Player %s (%s): Error unmarshalling message: %v", p.ID, *p.Name, err)
 			p.SendError("Invalid message format")
 			continue
 		}
@@ -49,32 +49,32 @@ func (p *Player) readPump() {
 func (p *Player) writePump() {
 	defer func() {
 		p.Conn.Close()
-		log.Printf("Player %s (%s) writePump stopped.", p.ID, p.Name)
+		log.Printf("Player %s (%s) writePump stopped.", p.ID, *p.Name)
 	}()
 
 	for {
 		select {
 		case message, ok := <-p.Send:
 			if !ok {
-				log.Printf("Player %s (%s): Room closed send channel.", p.ID, p.Name)
+				log.Printf("Player %s (%s): Room closed send channel.", p.ID, *p.Name)
 				_ = p.Conn.WriteMessage(websocket.CloseMessage, []byte{})
 				return
 			}
 
 			w, err := p.Conn.NextWriter(websocket.TextMessage)
 			if err != nil {
-				log.Printf("Player %s (%s) write error getting writer: %v", p.ID, p.Name, err)
+				log.Printf("Player %s (%s) write error getting writer: %v", p.ID, *p.Name, err)
 				return
 			}
 			_, err = w.Write(message)
 			if err != nil {
-				log.Printf("Player %s (%s) write error writing message: %v", p.ID, p.Name, err)
+				log.Printf("Player %s (%s) write error writing message: %v", p.ID, *p.Name, err)
 				_ = w.Close()
 				return
 			}
 
 			if err := w.Close(); err != nil {
-				log.Printf("Player %s (%s) writer close error: %v", p.ID, p.Name, err)
+				log.Printf("Player %s (%s) writer close error: %v", p.ID, *p.Name, err)
 				return
 			}
 		}
@@ -92,7 +92,7 @@ func (p *Player) SendError(errMsg string) {
 	select {
 	case p.Send <- msgBytes:
 	default:
-		log.Printf("Player %s (%s): Failed to send error message '%s', Send channel likely closed.", p.ID, p.Name, errMsg)
+		log.Printf("Player %s (%s): Failed to send error message '%s', Send channel likely closed.", p.ID, *p.Name, errMsg)
 	}
 }
 
@@ -107,7 +107,7 @@ func (p *Player) SendMessage(msgType string, payload interface{}) {
 	if payload != nil {
 		payloadBytes, err = json.Marshal(payload)
 		if err != nil {
-			log.Printf("Player %s (%s): Error marshalling payload for type %s: %v", p.ID, p.Name, msgType, err)
+			log.Printf("Player %s (%s): Error marshalling payload for type %s: %v", p.ID, *p.Name, msgType, err)
 			return
 		}
 	}
@@ -115,7 +115,7 @@ func (p *Player) SendMessage(msgType string, payload interface{}) {
 	msg := Message{Type: msgType, Payload: json.RawMessage(payloadBytes)}
 	msgBytes, err := json.Marshal(msg)
 	if err != nil {
-		log.Printf("Player %s (%s): Error marshalling message for type %s: %v", p.ID, p.Name, msgType, err)
+		log.Printf("Player %s (%s): Error marshalling message for type %s: %v", p.ID, *p.Name, msgType, err)
 		return
 	}
 
@@ -123,6 +123,6 @@ func (p *Player) SendMessage(msgType string, payload interface{}) {
 	select {
 	case p.Send <- msgBytes:
 	default:
-		log.Printf("Player %s (%s): Send channel full/closed for message type %s.", p.ID, p.Name, msgType)
+		log.Printf("Player %s (%s): Send channel full/closed for message type %s.", p.ID, *p.Name, msgType)
 	}
 }
