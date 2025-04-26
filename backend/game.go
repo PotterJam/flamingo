@@ -216,7 +216,7 @@ func (g *Game) nextTurn() {
 	go newDrawer.SendMessage(TurnStartResponse, drawerPayload)
 
 	guesserPayload := turnPayloadBase
-	msgBytes := mustMarshal(Message{Type: TurnStartResponse, Payload: json.RawMessage(mustMarshal(guesserPayload))})
+	msgBytes := MustMarshal(Message{Type: TurnStartResponse, Payload: json.RawMessage(MustMarshal(guesserPayload))})
 	playersToSendTo := make([]*Player, 0, len(g.Players)-1)
 	for i, p := range g.Players {
 		if i != g.CurrentDrawerIdx {
@@ -245,7 +245,7 @@ func (g *Game) endTurn() {
 
 	g.BroadcastSystemMessage("Turn over! The word was: " + g.Word)
 	turnEndPayload := TurnEndPayload{CorrectWord: g.Word}
-	turnEndMsgBytes := mustMarshal(Message{Type: TurnEndResponse, Payload: json.RawMessage(mustMarshal(turnEndPayload))})
+	turnEndMsgBytes := MustMarshal(Message{Type: TurnEndResponse, Payload: json.RawMessage(MustMarshal(turnEndPayload))})
 	log.Println("Game: Broadcasting TurnEnd message.")
 	go g.Room.Broadcast(turnEndMsgBytes)
 
@@ -365,7 +365,7 @@ func (g *Game) HandleDrawEvent(sender *Player, payload json.RawMessage) {
 		return
 	}
 
-	drawMsgBytes := mustMarshal(Message{Type: DrawEventBroadcastResponse, Payload: payload})
+	drawMsgBytes := MustMarshal(Message{Type: DrawEventBroadcastResponse, Payload: payload})
 	playersToSendTo := make([]*Player, 0, len(g.Players)-1)
 	for _, p := range g.Players {
 		if p != nil && p.ID != sender.ID {
@@ -407,7 +407,7 @@ func (g *Game) HandleGuess(sender *Player, payload json.RawMessage) {
 		g.GuessedCorrectly[sender.ID] = true
 
 		correctPayload := PlayerGuessedCorrectlyPayload{PlayerID: sender.ID}
-		msgBytes := mustMarshal(Message{Type: PlayerGuessedCorrectlyResponse, Payload: json.RawMessage(mustMarshal(correctPayload))})
+		msgBytes := MustMarshal(Message{Type: PlayerGuessedCorrectlyResponse, Payload: json.RawMessage(MustMarshal(correctPayload))})
 		go g.Room.Broadcast(msgBytes)
 
 		if g.checkAllGuessed() {
@@ -441,19 +441,19 @@ func (g *Game) broadcastPlayerUpdate() {
 		Players: g.getPlayerInfoList(), // Assumes lock held
 		HostID:  g.HostID,
 	}
-	msgBytes := mustMarshal(Message{Type: PlayerUpdateResponse, Payload: json.RawMessage(mustMarshal(payload))})
+	msgBytes := MustMarshal(Message{Type: PlayerUpdateResponse, Payload: json.RawMessage(MustMarshal(payload))})
 	go g.Room.Broadcast(msgBytes)
 }
 
 func (g *Game) BroadcastChatMessage(senderName, message string) {
 	payload := ChatPayload{SenderName: senderName, Message: message, IsSystem: false}
-	msgBytes := mustMarshal(Message{Type: ChatResponse, Payload: json.RawMessage(mustMarshal(payload))})
+	msgBytes := MustMarshal(Message{Type: ChatResponse, Payload: json.RawMessage(MustMarshal(payload))})
 	go g.Room.Broadcast(msgBytes)
 }
 
 func (g *Game) BroadcastSystemMessage(message string) {
 	payload := ChatPayload{SenderName: "System", Message: message, IsSystem: true}
-	msgBytes := mustMarshal(Message{Type: ChatResponse, Payload: json.RawMessage(mustMarshal(payload))})
+	msgBytes := MustMarshal(Message{Type: ChatResponse, Payload: json.RawMessage(MustMarshal(payload))})
 	go g.Room.Broadcast(msgBytes)
 }
 

@@ -1,7 +1,6 @@
 package main
 
 import (
-	"encoding/json"
 	"github.com/google/uuid"
 	"github.com/gorilla/mux"
 	"github.com/gorilla/websocket"
@@ -14,7 +13,7 @@ var upgrader = websocket.Upgrader{
 	WriteBufferSize: 1024,
 	CheckOrigin: func(r *http.Request) bool {
 		log.Printf("WebSocket CheckOrigin request from: %s", r.Header.Get("Origin"))
-		return true // Allow all for dev
+		return true // TODO: needs to be localhost or the registered domain
 	},
 }
 
