@@ -13,19 +13,39 @@ type Game struct {
 
 func (g *Game) HandleMessage(playerID *Player, msg Message) {
 	g.GameState.mu.Lock()
-	defer g.GameState.mu.Unlock()
 
 	var newHandler GamePhaseHandler
-	if g.GameState.turnTimer != nil && time.Now().After(g.GameState.turnEndTime) {
-		newHandler = g.GameHandler.HandleTimeOut(g.GameState)
-	} else {
-		newHandler = g.GameHandler.HandleMessage(g.GameState, playerID, msg)
+	newHandler = g.GameHandler.HandleMessage(g.GameState, playerID, msg)
+
+	g.GameState.mu.Unlock()
+
+	g.updateHandler(newHandler)
+}
+
+func (g *Game) updateHandler(newHandler GamePhaseHandler) {
+	if newHandler.Phase() == g.GameHandler.Phase() {
+		return
 	}
 
-	if newHandler.Phase() != g.GameHandler.Phase() {
-		newHandler.StartPhase(g.GameState)
-		g.GameHandler = newHandler
+	g.GameHandler = newHandler
+	timeout := g.GameHandler.StartPhase(g.GameState)
+
+	phase := g.GameHandler.Phase()
+
+	if timeout != nil {
+		time.AfterFunc(*timeout, func() {
+			g.GameState.mu.Lock()
+			defer g.GameState.mu.Unlock()
+
+			if g.GameState.Phase.Phase() != phase {
+				return
+			}
+
+			handlerAfterTimeout := g.GameHandler.HandleTimeOut(g.GameState)
+			g.updateHandler(handlerAfterTimeout)
+		})
 	}
+
 }
 
 func NewGame(room *Room) *Game {

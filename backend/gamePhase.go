@@ -7,7 +7,8 @@ import (
 	"time"
 )
 
-const turnDuration = 60 * time.Second
+var turnDuration = 60 * time.Second
+
 const minPlayersToStart = 2
 
 type GamePhase int
@@ -35,7 +36,7 @@ func (ss GamePhase) String() string {
 
 type GamePhaseHandler interface {
 	Phase() GamePhase
-	StartPhase(gs *GameState)
+	StartPhase(gs *GameState) *time.Duration
 	HandleMessage(gs *GameState, playerID *Player, msg Message) GamePhaseHandler
 	HandleTimeOut(gs *GameState) GamePhaseHandler // Some phases have timeouts, this is good enough for now but can be improved
 }
@@ -46,11 +47,12 @@ func (p *WaitingInLobbyHandler) Phase() GamePhase {
 	return GamePhaseWaitingInLobby
 }
 
-func (p *WaitingInLobbyHandler) StartPhase(gs *GameState) {
+func (p *WaitingInLobbyHandler) StartPhase(gs *GameState) *time.Duration {
 	if !gs.IsActive {
-		return
+		return nil
 	}
 
+	return nil
 }
 
 func (p *WaitingInLobbyHandler) HandleMessage(gs *GameState, player *Player, msg Message) GamePhaseHandler {
@@ -77,11 +79,12 @@ func (p *RoundSetupHandler) Phase() GamePhase {
 	return GamePhaseRoundSetup
 }
 
-func (p *RoundSetupHandler) StartPhase(gs *GameState) {
+func (p *RoundSetupHandler) StartPhase(gs *GameState) *time.Duration {
 	// Pick the new drawer
 	// Send updated player info
 	// Get 3 words
 	// Send them to the new drawer
+	return nil
 }
 
 func (p *RoundSetupHandler) HandleMessage(gs *GameState, player *Player, msg Message) GamePhaseHandler {
@@ -93,19 +96,8 @@ func (p *RoundSetupHandler) HandleMessage(gs *GameState, player *Player, msg Mes
 	}
 
 	if gs.turnTimer != nil {
-		gs.turnTimer.Stop()
+		gs.turnTimer = nil
 	}
-
-	if gs.CurrentDrawerIdx < -1 || gs.CurrentDrawerIdx >= len(gs.Players) {
-		log.Printf("GameState: Resetting invalid CurrentDrawerIdx (%d) before next turn.", gs.CurrentDrawerIdx)
-		gs.CurrentDrawerIdx = -1
-	}
-	gs.CurrentDrawerIdx = (gs.CurrentDrawerIdx + 1) % len(gs.Players)
-	newDrawer := gs.Players[gs.CurrentDrawerIdx]
-
-	gs.Word = words[rand.Intn(len(words))]
-
-	log.Printf("GameState: Starting turn. Drawer: %s (%s), Word: %s, Ends At: %v", newDrawer.Id, newDrawer.Name, gs.Word, gs.turnEndTime.Format(time.Kitchen))
 
 	return gs.Phase
 }
@@ -120,16 +112,18 @@ func (p *RoundInProgressHandler) Phase() GamePhase {
 	return GamePhaseRoundInProgress
 }
 
-func (p *RoundInProgressHandler) StartPhase(gs *GameState) {
+func (p *RoundInProgressHandler) StartPhase(gs *GameState) *time.Duration {
 	gs.GuessedCorrectly = make(map[string]bool)
 
-	gs.turnEndTime = time.Now().Add(turnDuration)
-	log.Printf("GameState: Setting turn timer for %v.", turnDuration)
-	gs.turnTimer = time.AfterFunc(turnDuration, func() {
-		if gs.Phase.Phase() != GamePhaseRoundInProgress {
-			return
-		}
-	})
+	if gs.CurrentDrawerIdx < -1 || gs.CurrentDrawerIdx >= len(gs.Players) {
+		log.Printf("GameState: Resetting invalid CurrentDrawerIdx (%d) before next turn.", gs.CurrentDrawerIdx)
+		gs.CurrentDrawerIdx = -1
+	}
+	gs.CurrentDrawerIdx = (gs.CurrentDrawerIdx + 1) % len(gs.Players)
+	newDrawer := gs.Players[gs.CurrentDrawerIdx]
+
+	gs.Word = words[rand.Intn(len(words))]
+
 	turnPayloadBase := TurnStartPayload{
 		CurrentDrawerID: newDrawer.Id,
 		WordLength:      len(gs.Word),
@@ -154,6 +148,7 @@ func (p *RoundInProgressHandler) StartPhase(gs *GameState) {
 	go gs.Room.BroadcastToPlayers(msgBytes, playersToSendTo)
 
 	gs.BroadcastSystemMessage(newDrawer.Name + " is drawing!")
+	return &turnDuration
 }
 
 func (p *RoundInProgressHandler) HandleMessage(gs *GameState, player *Player, msg Message) GamePhaseHandler {
@@ -208,7 +203,7 @@ func (p *RoundFinishedHandler) Phase() GamePhase {
 	return GamePhaseRoundFinished
 }
 
-func (p *RoundFinishedHandler) StartPhase(gs *GameState) {
+func (p *RoundFinishedHandler) StartPhase(gs *GameState) *time.Duration {
 	if gs.turnTimer != nil {
 		gs.turnTimer.Stop()
 		gs.turnTimer = nil
@@ -227,6 +222,7 @@ func (p *RoundFinishedHandler) StartPhase(gs *GameState) {
 			log.Println("GameState: GameState became inactive during turn delay, not starting next turn.")
 		}
 	})
+	return nil
 }
 
 func (p *RoundFinishedHandler) HandleMessage(gs *GameState, player *Player, msg Message) GamePhaseHandler {
@@ -244,8 +240,9 @@ func (p *GameOverHandler) Phase() GamePhase {
 	return GamePhaseGameOver
 }
 
-func (p *GameOverHandler) StartPhase(gs *GameState) {
+func (p *GameOverHandler) StartPhase(gs *GameState) *time.Duration {
 	// todo
+	return nil
 }
 
 func (p *GameOverHandler) HandleMessage(gs *GameState, player *Player, msg Message) GamePhaseHandler {
@@ -263,8 +260,9 @@ func (p *ErrorHandler) Phase() GamePhase {
 	return GamePhaseGameOver
 }
 
-func (p *ErrorHandler) StartPhase(gs *GameState) {
+func (p *ErrorHandler) StartPhase(gs *GameState) *time.Duration {
 	// todo
+	return nil
 }
 
 func (p *ErrorHandler) HandleMessage(gs *GameState, player *Player, msg Message) GamePhaseHandler {
