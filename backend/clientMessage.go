@@ -5,6 +5,7 @@ const (
 	ClientGuess        = "guess"
 	ClientDrawEvent    = "drawEvent"
 	ClientStartGame    = "startGame"
+	ClientSelectedWord = "selectedWord"
 )
 
 type SetNamePayload struct {

@@ -23,6 +23,7 @@ type PlayerInfo struct {
 }
 
 type GameInfoPayload struct {
+	GamePhase       string       `json:"gamePhase"`
 	YourID          string       `json:"yourId"`
 	Players         []PlayerInfo `json:"players"`
 	HostID          string       `json:"hostId,omitempty"`
