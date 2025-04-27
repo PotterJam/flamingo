@@ -13,6 +13,7 @@ const CANVAS_HEIGHT = 600;
 const MIN_PLAYERS = 2;
 
 export const Game: FC = () => {
+    const roomId = useAppStore((s) => s.roomId) ?? '';
     const sendMessage = useAppStore((s) => s.sendMessage);
     const appState = useAppStore((s) => s.appState);
     const gameState = useAppStore((s) => s.gameState);
@@ -77,6 +78,7 @@ export const Game: FC = () => {
 
     return (
         <div className="flex w-full flex-grow justify-center">
+            <h2>{roomId}</h2>
             <div
                 className="flex flex-col gap-4 lg:flex-row"
                 style={{ width: `${250 + CANVAS_WIDTH + 32}px` }}

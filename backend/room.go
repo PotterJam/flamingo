@@ -5,8 +5,45 @@ import (
 	"sync"
 )
 
+// Maintains the list of currently alive rooms
+type RoomManager struct {
+	rooms map[string]*Room
+	mu    sync.Mutex
+}
+
+func NewRoomManager() *RoomManager {
+	return &RoomManager{
+		rooms: make(map[string]*Room),
+	}
+}
+
+func (rm *RoomManager) GetRoom(roomId string) *Room {
+	room, ok := rm.rooms[roomId]
+	if !ok {
+		return nil
+	}
+	return room
+}
+
+func (rm *RoomManager) Run() {
+	log.Print("starting room manager")
+}
+
+func (rm *RoomManager) CreateRoom() *Room {
+	rm.mu.Lock()
+	defer rm.mu.Unlock()
+
+	room := NewRoom()
+	rm.rooms[room.Id] = room
+
+	go room.Run()
+
+	return room
+}
+
 // Room maintains the set of players connected to the server and the game(s)
 type Room struct {
+	Id          string
 	Players     map[string]*Player // Registered players (Player ID -> Player) - Connection tracking
 	Game        *Game              // The single shared game instance
 	Register    chan *Player
@@ -17,6 +54,7 @@ type Room struct {
 
 func NewRoom() *Room {
 	room := &Room{
+		Id:          GenerateSlug(),
 		Players:     make(map[string]*Player),
 		Register:    make(chan *Player),
 		Unregister:  make(chan *Player),
@@ -48,10 +86,10 @@ func (room *Room) Run() {
 				default:
 					close(existingPlayer.Send)
 				}
-				log.Printf("Room: Player %s (%s) connection unregistered. Total tracked: %d", player.ID, LogName(existingPlayer.Name), len(room.Players))
+				log.Printf("Room: Player %s (%s) connection unregistered. Total tracked: %d", player.ID, existingPlayer.Name, len(room.Players))
 				playerToRemove = existingPlayer
 			} else {
-				log.Printf("Room: Player %s (%s) already unregistered from Room map.", player.ID, *player.Name)
+				log.Printf("Room: Player %s (%s) already unregistered from Room map.", player.ID, player.Name)
 			}
 			room.mu.Unlock()
 
@@ -60,7 +98,7 @@ func (room *Room) Run() {
 			}
 
 		case player := <-room.PlayerReady:
-			log.Printf("Room: Received PlayerReady signal for %s (%s). Adding to game.", player.ID, *player.Name)
+			log.Printf("Room: Received PlayerReady signal for %s (%s). Adding to game.", player.ID, player.Name)
 			room.Game.PlayerIsReady(player)
 		}
 	}
@@ -89,7 +127,7 @@ func (h *Room) Broadcast(message []byte) {
 			select {
 			case p.Send <- message:
 			default:
-				log.Printf("Room Broadcast Warn: Player %s (%s) send buffer full/closed.", p.ID, *p.Name)
+				log.Printf("Room Broadcast Warn: Player %s (%s) send buffer full/closed.", p.ID, p.Name)
 			}
 		}()
 	}
@@ -101,7 +139,7 @@ func (r *Room) BroadcastToPlayers(message []byte, players []*Player) {
 			select {
 			case p.Send <- message:
 			default:
-				log.Printf("Room BroadcastToPlayers Warn: Player %s (%s) send buffer full/closed.", p.ID, *p.Name)
+				log.Printf("Room BroadcastToPlayers Warn: Player %s (%s) send buffer full/closed.", p.ID, p.Name)
 			}
 		}()
 	}

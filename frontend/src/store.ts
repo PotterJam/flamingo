@@ -26,6 +26,10 @@ export interface GameState {
     lastDrawEvent: DrawEvent | null;
 }
 
+export interface Room {
+    roomId: string;
+}
+
 const initialGameState: GameState = {
     players: [],
     currentDrawerId: null,
@@ -41,15 +45,19 @@ export type CurrentAppState =
     | 'active'
     | 'waiting'
     | 'connecting'
-    | 'joining'
-    | 'enterName';
+    | 'joining';
 
 export type AppState = {
     sendMessage: (message: SendMsg) => void;
     lastMessage: ReceivedMsg | null;
 
+    selfName: string;
+    selfId: string;
+    launchAsHost: boolean;
+
     appState: CurrentAppState;
     gameState: GameState;
+    roomId: string | null;
 };
 
 export type AppActions = {
@@ -57,6 +65,11 @@ export type AppActions = {
     setLastMessage: (message: ReceivedMsg) => void;
 
     setState: (newState: CurrentAppState) => void;
+
+    nameChosen: (name: string) => void;
+
+    roomCreated: (roomId: string) => void;
+    joinRoom: (roomId: string) => void;
 
     resetGameState: () => void;
 
@@ -75,6 +88,14 @@ export type MessageHandlers = {
 
 export const useAppStore = create<AppState & AppActions & MessageHandlers>()(
     immer((set) => ({
+        gameState: initialGameState,
+        roomId: null,
+        appState: 'connecting',
+        selfName: '',
+        selfId: '',
+        launchAsHost: false,
+        lastMessage: null,
+
         sendMessage: () => {
             throw new Error('sending message without sender configured');
         },
@@ -82,17 +103,25 @@ export const useAppStore = create<AppState & AppActions & MessageHandlers>()(
             set((s) => {
                 s.sendMessage = func;
             }),
-        lastMessage: null,
         setLastMessage: (message) =>
             set((s) => {
                 s.lastMessage = message;
             }),
-
-        appState: 'connecting',
         setState: (newState) => set((_) => ({ appState: newState })),
-
-        gameState: initialGameState,
-
+        nameChosen: (name) =>
+            set((s) => {
+                s.selfName = name;
+            }),
+        roomCreated: (room) =>
+            set((s) => {
+                s.roomId = room;
+                s.launchAsHost = true;
+            }),
+        joinRoom: (roomId) =>
+            set((s) => {
+                s.roomId = roomId;
+                s.launchAsHost = false;
+            }),
         resetGameState: () =>
             set((s) => {
                 s.gameState = initialGameState;
