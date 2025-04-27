@@ -23,13 +23,12 @@ export const Flamingo: FC<FlamingoProps> = ({ wsUrl }) => {
     const resetGameState = useAppStore((s) => s.resetGameState);
 
     useEffect(() => {
-        if (isConnected && appState !== 'connecting') {
+        if (appState !== 'connecting' && !isConnected) {
             console.log('WebSocket disconnected.');
             resetGameState();
             setAppState('connecting');
         }
     }, [isConnected, appState]);
-
     if (!isConnected) {
         return <div className="mt-10 text-center">Loading...</div>;
     }
