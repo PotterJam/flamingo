@@ -45,8 +45,7 @@ export type CurrentAppState =
     | 'active'
     | 'waiting'
     | 'connecting'
-    | 'joining'
-    | 'enterName';
+    | 'joining';
 
 export type AppState = {
     sendMessage: (message: SendMsg) => void;
