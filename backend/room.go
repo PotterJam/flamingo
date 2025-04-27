@@ -3,8 +3,6 @@ package main
 import (
 	"log"
 	"sync"
-
-	"github.com/google/uuid"
 )
 
 // Maintains the list of currently alive rooms
@@ -41,17 +39,15 @@ type Room struct {
 	Register    chan *Player
 	Unregister  chan *Player
 	PlayerReady chan *Player
-	Slug        string
 	mu          sync.Mutex // Mutex to protect concurrent access to Players map
 }
 
 func NewRoom() *Room {
 	room := &Room{
-		Id:          uuid.NewString(),
+		Id:          GenerateSlug(),
 		Players:     make(map[string]*Player),
 		Register:    make(chan *Player),
 		Unregister:  make(chan *Player),
-		Slug:        GenerateSlug(),
 		PlayerReady: make(chan *Player),
 	}
 	room.Game = NewGame(room)

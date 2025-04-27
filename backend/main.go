@@ -45,8 +45,7 @@ func serveWs(room *Room, w http.ResponseWriter, r *http.Request) {
 }
 
 type CreateRoomResponse struct {
-	RoomId   string `json:"roomId"`
-	RoomSlug string `json:"roomSlug"`
+	RoomId string `json:"roomId"`
 }
 
 func main() {
@@ -79,17 +78,16 @@ func main() {
 
 	router.PathPrefix("/create-room").Methods(http.MethodPost).HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		room := rm.CreateRoom()
-		log.Printf("created new room [%s] %s", room.Id, room.Slug)
+		log.Printf("created new room %s", room.Id)
 
 		res := CreateRoomResponse{
-			RoomId:   room.Id,
-			RoomSlug: room.Slug,
+			RoomId: room.Id,
 		}
 
 		w.WriteHeader(http.StatusOK)
 		err := json.NewEncoder(w).Encode(res)
 		if err != nil {
-			log.Printf("failed to respond to room creation: %e", err.Error())
+			log.Printf("failed to respond to room creation: %s", err.Error())
 		}
 	})
 
