@@ -35,14 +35,14 @@ function App() {
         }
     }, [isConnected, appState]);
 
-    if (!isConnected) {
-        return (
-            <>
-                <FlamingoBackground />
-                <div className="mt-10 text-center">Loading...</div>
-            </>
-        );
-    }
+    // if (!isConnected) {
+    //     return (
+    //         <>
+    //             <FlamingoBackground />
+    //             <div className="mt-10 text-center">Loading...</div>
+    //         </>
+    //     );
+    // }
 
     return (
         <main className="m-auto w-screen">
