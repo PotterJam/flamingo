@@ -28,7 +28,6 @@ export interface GameState {
 
 export interface Room {
     roomId: string;
-    roomSlug: string;
 }
 
 const initialGameState: GameState = {
