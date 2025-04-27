@@ -7,6 +7,7 @@ import TimerDisplay from './TimerDisplay';
 import Whiteboard from './Whiteboard';
 import GuessInput from './GuessInput';
 import { PrimaryButton } from './buttons/PrimaryButton';
+import { OutlineButton } from './buttons/OutlineButton';
 
 const CANVAS_WIDTH = 800;
 const CANVAS_HEIGHT = 600;
@@ -76,17 +77,39 @@ export const Game: FC = () => {
         [canLocalPlayerGuess, sendMessage]
     );
 
+    const copyRoomName = () => {
+        navigator.clipboard.writeText(roomId);
+    };
+
     return (
         <div className="flex w-full flex-grow justify-center">
-            <h2>{roomId}</h2>
             <div
                 className="flex flex-col gap-4 lg:flex-row"
                 style={{ width: `${250 + CANVAS_WIDTH + 32}px` }}
             >
                 <aside
-                    className="order-2 flex w-full flex-shrink-0 flex-col gap-4 rounded-lg bg-white p-4 shadow-lg lg:order-1 lg:w-[250px]"
+                    className="flex w-full flex-shrink-0 flex-col gap-4 rounded-lg bg-white p-4 shadow-lg lg:order-1 lg:w-[250px]"
                     style={{ maxHeight: `${CANVAS_HEIGHT + 100}px` }}
                 >
+                    {isHost && appState === 'waiting' && (
+                        <div className="flex flex-row items-center justify-between">
+                            <p className="text-l font-bold text-blue-400">
+                                {roomId}
+                            </p>
+                            <OutlineButton
+                                className="w-20"
+                                onClick={() => copyRoomName()}
+                            >
+                                Copy
+                            </OutlineButton>
+                        </div>
+                    )}
+                    {canHostStartGame && (
+                        <PrimaryButton onClick={handleStartGame}>
+                            Start Game
+                        </PrimaryButton>
+                    )}
+
                     <h2 className="flex-shrink-0 border-b pb-2 text-xl font-semibold">
                         Players ({players.length})
                     </h2>
@@ -97,12 +120,6 @@ export const Game: FC = () => {
                             hostId={hostId}
                         />
                     </div>
-
-                    {canHostStartGame && (
-                        <PrimaryButton onClick={handleStartGame}>
-                            Start Game
-                        </PrimaryButton>
-                    )}
 
                     <h2
                         className={`flex-shrink-0 border-b pb-2 text-xl font-semibold ${!canHostStartGame ? 'mt-auto' : ''}`}
