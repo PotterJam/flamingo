@@ -1,11 +1,9 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { ReceivedMsg, SendMsg } from '../messages';
 
-const WS_URL = 'ws://localhost:8080/ws';
+export const WS_ROOT = 'ws://localhost:8080/ws';
 
-export function useWebSocket(roomId: string) {
-    const url = `${WS_URL}/${roomId}`;
-
+export function useWebSocket(url: string) {
     const [isConnected, setIsConnected] = useState(false);
     const [receivedMessage, setReceivedMessage] = useState<ReceivedMsg | null>(
         null

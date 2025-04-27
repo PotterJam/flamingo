@@ -86,10 +86,10 @@ func (room *Room) Run() {
 				default:
 					close(existingPlayer.Send)
 				}
-				log.Printf("Room: Player %s (%s) connection unregistered. Total tracked: %d", player.ID, LogName(existingPlayer.Name), len(room.Players))
+				log.Printf("Room: Player %s (%s) connection unregistered. Total tracked: %d", player.ID, existingPlayer.Name, len(room.Players))
 				playerToRemove = existingPlayer
 			} else {
-				log.Printf("Room: Player %s (%s) already unregistered from Room map.", player.ID, *player.Name)
+				log.Printf("Room: Player %s (%s) already unregistered from Room map.", player.ID, player.Name)
 			}
 			room.mu.Unlock()
 
@@ -98,7 +98,7 @@ func (room *Room) Run() {
 			}
 
 		case player := <-room.PlayerReady:
-			log.Printf("Room: Received PlayerReady signal for %s (%s). Adding to game.", player.ID, *player.Name)
+			log.Printf("Room: Received PlayerReady signal for %s (%s). Adding to game.", player.ID, player.Name)
 			room.Game.PlayerIsReady(player)
 		}
 	}
@@ -127,7 +127,7 @@ func (h *Room) Broadcast(message []byte) {
 			select {
 			case p.Send <- message:
 			default:
-				log.Printf("Room Broadcast Warn: Player %s (%s) send buffer full/closed.", p.ID, *p.Name)
+				log.Printf("Room Broadcast Warn: Player %s (%s) send buffer full/closed.", p.ID, p.Name)
 			}
 		}()
 	}
@@ -139,7 +139,7 @@ func (r *Room) BroadcastToPlayers(message []byte, players []*Player) {
 			select {
 			case p.Send <- message:
 			default:
-				log.Printf("Room BroadcastToPlayers Warn: Player %s (%s) send buffer full/closed.", p.ID, *p.Name)
+				log.Printf("Room BroadcastToPlayers Warn: Player %s (%s) send buffer full/closed.", p.ID, p.Name)
 			}
 		}()
 	}

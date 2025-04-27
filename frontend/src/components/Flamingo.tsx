@@ -6,15 +6,17 @@ import { useHandleMessage } from '../hooks/useHandleMessage';
 import { useWebSocket } from '../hooks/useWebSocket';
 
 interface FlamingoProps {
-    roomId: string;
+    wsUrl: string;
 }
 
-export const Flamingo: FC<FlamingoProps> = ({ roomId }) => {
-    const { isConnected, receivedMessage, sendMessage } = useWebSocket(roomId);
+export const Flamingo: FC<FlamingoProps> = ({ wsUrl }) => {
+    const { isConnected, receivedMessage, sendMessage } = useWebSocket(wsUrl);
     useHandleMessage(receivedMessage);
 
     const assignSendMessage = useAppStore((s) => s.assignSendMessage);
-    useEffect(() => assignSendMessage(sendMessage), [sendMessage]);
+    useEffect(() => {
+        assignSendMessage(sendMessage);
+    }, [sendMessage]);
 
     const appState = useAppStore((state) => state.appState);
     const localPlayerId = useAppStore((s) => s.gameState.localPlayerId);

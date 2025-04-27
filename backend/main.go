@@ -37,6 +37,12 @@ func serveWs(rm *RoomManager, w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	playerName := r.URL.Query().Get("playerName")
+	if playerName == "" {
+		w.WriteHeader(http.StatusBadRequest)
+		return
+	}
+
 	conn, err := upgrader.Upgrade(w, r, nil)
 	if err != nil {
 		log.Println("WebSocket upgrade error:", err)
@@ -46,7 +52,7 @@ func serveWs(rm *RoomManager, w http.ResponseWriter, r *http.Request) {
 
 	player := &Player{
 		ID:   uuid.NewString(),
-		Name: nil, // Name set by player
+		Name: playerName,
 		Conn: conn,
 		Room: room,
 		Send: make(chan []byte, 256),
@@ -54,6 +60,7 @@ func serveWs(rm *RoomManager, w http.ResponseWriter, r *http.Request) {
 
 	log.Printf("Registering new player connection to room %s: %s", roomId, player.ID)
 	room.Register <- player
+	room.PlayerReady <- player
 
 	go player.writePump()
 	go player.readPump()

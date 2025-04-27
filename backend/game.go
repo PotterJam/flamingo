@@ -45,19 +45,19 @@ func (g *Game) PlayerIsReady(player *Player) {
 	// Avoid adding duplicates
 	for _, p := range g.Players {
 		if p.ID == player.ID {
-			log.Printf("Game: Player %s (%s) already marked as ready.", player.ID, *player.Name)
+			log.Printf("Game: Player %s (%s) already marked as ready.", player.ID, player.Name)
 			g.sendGameInfo(player)
 			return
 		}
 	}
 
 	g.Players = append(g.Players, player)
-	log.Printf("Game: Player %s (%s) marked ready. Total ready players: %d", player.ID, *player.Name, len(g.Players))
+	log.Printf("Game: Player %s (%s) marked ready. Total ready players: %d", player.ID, player.Name, len(g.Players))
 
 	// Assign host to the first player
 	if len(g.Players) == 1 {
 		g.HostID = player.ID
-		log.Printf("Game: Player %s (%s) assigned as Host.", player.ID, *player.Name)
+		log.Printf("Game: Player %s (%s) assigned as Host.", player.ID, player.Name)
 	}
 
 	g.sendGameInfo(player)
@@ -79,12 +79,12 @@ func (g *Game) RemovePlayer(player *Player) {
 	}
 
 	if !found {
-		log.Printf("Game: Attempted to remove player %s (%s) who was not found (or not ready).", player.ID, LogName(player.Name))
+		log.Printf("Game: Attempted to remove player %s (%s) who was not found (or not ready).", player.ID, player.Name)
 		return
 	}
 
 	g.Players = slices.Delete(g.Players, playerIndex, playerIndex+1)
-	log.Printf("Game: Player %s (%s) removed. Remaining players: %d", player.ID, *player.Name, len(g.Players))
+	log.Printf("Game: Player %s (%s) removed. Remaining players: %d", player.ID, player.Name, len(g.Players))
 
 	delete(g.GuessedCorrectly, player.ID)
 
@@ -94,7 +94,7 @@ func (g *Game) RemovePlayer(player *Player) {
 	if wasHost {
 		if len(g.Players) > 0 {
 			g.HostID = g.Players[0].ID
-			log.Printf("Game: Host %s (%s) left. New host assigned: %s (%s).", *player.Name, player.ID, *g.Players[0].Name, g.HostID)
+			log.Printf("Game: Host %s (%s) left. New host assigned: %s (%s).", player.Name, player.ID, g.Players[0].Name, g.HostID)
 		} else {
 			g.HostID = ""
 			log.Println("Game: Host left. No players remaining.")
@@ -121,7 +121,7 @@ func (g *Game) RemovePlayer(player *Player) {
 		g.broadcastPlayerUpdate() // Send update *before* potentially ending turn
 
 		if wasDrawer || allGuessed {
-			log.Printf("Game: Ending turn early due to player %s leaving (was drawer: %t, all guessed now: %t).", *player.Name, wasDrawer, allGuessed)
+			log.Printf("Game: Ending turn early due to player %s leaving (was drawer: %t, all guessed now: %t).", player.Name, wasDrawer, allGuessed)
 			g.endTurn()
 		}
 	}
@@ -191,7 +191,7 @@ func (g *Game) nextTurn() {
 	g.turnEndTime = time.Now().Add(turnDuration)
 	log.Printf("Game: Setting turn timer for %v.", turnDuration)
 	g.turnTimer = time.AfterFunc(turnDuration, func() {
-		log.Printf("Game: Turn timer expired callback initiated for drawer %s (%s), word '%s'", newDrawer.ID, *newDrawer.Name, g.Word)
+		log.Printf("Game: Turn timer expired callback initiated for drawer %s (%s), word '%s'", newDrawer.ID, newDrawer.Name, g.Word)
 		g.mu.Lock()
 		if g.isDrawer(newDrawer) {
 			log.Println("Game: Timer expired, calling endTurn().")
@@ -202,7 +202,7 @@ func (g *Game) nextTurn() {
 		g.mu.Unlock()
 	})
 
-	log.Printf("Game: Starting turn. Drawer: %s (%s), Word: %s, Ends At: %v", newDrawer.ID, *newDrawer.Name, g.Word, g.turnEndTime.Format(time.Kitchen))
+	log.Printf("Game: Starting turn. Drawer: %s (%s), Word: %s, Ends At: %v", newDrawer.ID, newDrawer.Name, g.Word, g.turnEndTime.Format(time.Kitchen))
 
 	turnPayloadBase := TurnStartPayload{
 		CurrentDrawerID: newDrawer.ID,
@@ -213,7 +213,7 @@ func (g *Game) nextTurn() {
 
 	drawerPayload := turnPayloadBase
 	drawerPayload.Word = g.Word
-	log.Printf("Game: Sending TurnStart (with word) to drawer %s", *newDrawer.Name)
+	log.Printf("Game: Sending TurnStart (with word) to drawer %s", newDrawer.Name)
 	go newDrawer.SendMessage(TurnStartResponse, drawerPayload)
 
 	guesserPayload := turnPayloadBase
@@ -227,7 +227,7 @@ func (g *Game) nextTurn() {
 	log.Printf("Game: Sending TurnStart (no word) to %d guessers", len(playersToSendTo))
 	go g.Room.BroadcastToPlayers(msgBytes, playersToSendTo)
 
-	g.BroadcastSystemMessage(*newDrawer.Name + " is drawing!")
+	g.BroadcastSystemMessage(newDrawer.Name + " is drawing!")
 }
 
 func (g *Game) endTurn() {
@@ -280,30 +280,19 @@ func (g *Game) sendGameInfo(player *Player) {
 			payload.Word = g.Word
 		}
 	}
-	log.Printf("Game: Sending game info to player %s (%s). Active: %t, Host: %s", player.ID, *player.Name, payload.IsGameActive, g.HostID)
+	log.Printf("Game: Sending game info to player %s (%s). Active: %t, Host: %s", player.ID, player.Name, payload.IsGameActive, g.HostID)
 	go player.SendMessage(GameInfoResponse, payload)
 }
 
 func (g *Game) HandleMessage(sender *Player, msg Message) {
-	if msg.Type == ClientRegisterUser {
-		if sender.Name == nil {
-			ParseAndSetName(sender, msg)
-		} else {
-			log.Printf("Player %s (%s) sent setName message after name was already set. Ignoring.", sender.ID, *sender.Name)
-		}
-	} else if sender.Name == nil {
-		log.Printf("Player %s (%s) sent message type %s before setting name.", sender.ID, *sender.Name, msg.Type)
-		sender.SendError("Please set your name first.")
-	} else {
-		switch msg.Type {
-		case ClientDrawEvent:
-			g.HandleDrawEvent(sender, msg.Payload)
-		case ClientGuess:
-			g.HandleGuess(sender, msg.Payload)
-		case ClientStartGame:
-			g.HandleStartGame(sender)
-			log.Printf("Game: Received unhandled message type '%s' from player %s (%s)", msg.Type, sender.ID, *sender.Name)
-		}
+	switch msg.Type {
+	case ClientDrawEvent:
+		g.HandleDrawEvent(sender, msg.Payload)
+	case ClientGuess:
+		g.HandleGuess(sender, msg.Payload)
+	case ClientStartGame:
+		g.HandleStartGame(sender)
+		log.Printf("Game: Received unhandled message type '%s' from player %s (%s)", msg.Type, sender.ID, sender.Name)
 	}
 }
 
@@ -312,15 +301,15 @@ func ParseAndSetName(sender *Player, msg Message) {
 	if err := json.Unmarshal(msg.Payload, &namePayload); err == nil {
 		trimmedName := namePayload.Name
 		if trimmedName != "" && len(trimmedName) <= 20 {
-			sender.Name = &trimmedName
-			log.Printf("Player %s set name to %s", sender.ID, *sender.Name)
-			log.Printf("Player %s (%s) sending PlayerReady signal to Room", sender.ID, *sender.Name)
+			sender.Name = trimmedName
+			log.Printf("Player %s set name to %s", sender.ID, sender.Name)
+			log.Printf("Player %s (%s) sending PlayerReady signal to Room", sender.ID, sender.Name)
 			sender.Room.PlayerReady <- sender
 		} else {
 			sender.SendError("Invalid name. Must be 1-20 characters.")
 		}
 	} else {
-		log.Printf("Player %s (%s): Error unmarshalling SetName payload: %v", sender.ID, *sender.Name, err)
+		log.Printf("Player %s (%s): Error unmarshalling SetName payload: %v", sender.ID, sender.Name, err)
 		sender.SendError("Invalid name payload.")
 	}
 }
@@ -329,10 +318,10 @@ func (g *Game) HandleStartGame(sender *Player) {
 	g.mu.Lock()
 	defer g.mu.Unlock()
 
-	log.Printf("Game: Received StartGame request from %s (%s)", sender.ID, *sender.Name)
+	log.Printf("Game: Received StartGame request from %s (%s)", sender.ID, sender.Name)
 
 	if sender.ID != g.HostID {
-		log.Printf("Game: StartGame denied. Player %s is not the host (%s).", *sender.Name, g.HostID)
+		log.Printf("Game: StartGame denied. Player %s is not the host (%s).", sender.Name, g.HostID)
 		sender.SendError("Only the host can start the game.")
 		return
 	}
@@ -347,7 +336,7 @@ func (g *Game) HandleStartGame(sender *Player) {
 		return
 	}
 
-	log.Printf("Game: Host %s (%s) is starting the game.", *sender.Name, sender.ID)
+	log.Printf("Game: Host %s (%s) is starting the game.", sender.Name, sender.ID)
 	g.startGame()
 }
 
@@ -404,7 +393,7 @@ func (g *Game) HandleGuess(sender *Player, payload json.RawMessage) {
 	correct := guessPayload.Guess == g.Word
 
 	if correct {
-		log.Printf("Game: Guess '%s' by %s (%s) is CORRECT!", guessPayload.Guess, *sender.Name, sender.ID)
+		log.Printf("Game: Guess '%s' by %s (%s) is CORRECT!", guessPayload.Guess, sender.Name, sender.ID)
 		g.GuessedCorrectly[sender.ID] = true
 
 		correctPayload := PlayerGuessedCorrectlyPayload{PlayerID: sender.ID}
@@ -416,7 +405,7 @@ func (g *Game) HandleGuess(sender *Player, payload json.RawMessage) {
 			g.endTurn() // Assumes lock held
 		}
 	} else {
-		g.BroadcastChatMessage(*sender.Name, guessPayload.Guess) // Assumes lock held
+		g.BroadcastChatMessage(sender.Name, guessPayload.Guess) // Assumes lock held
 	}
 }
 
@@ -464,7 +453,7 @@ func (g *Game) getPlayerInfoList() []PlayerInfo {
 		if p != nil {
 			infoList = append(infoList, PlayerInfo{
 				ID:                  p.ID,
-				Name:                *p.Name,
+				Name:                p.Name,
 				IsHost:              p.ID == g.HostID,
 				HasGuessedCorrectly: g.GuessedCorrectly[p.ID],
 			})

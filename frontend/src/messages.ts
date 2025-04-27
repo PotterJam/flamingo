@@ -1,8 +1,13 @@
 export interface Player {
     id: string;
-    hasGuessedCorrectly?: boolean;
-    isHost?: boolean;
     name: string;
+    isHost?: boolean;
+    hasGuessedCorrectly?: boolean;
+}
+
+export interface LoginMsg {
+    type: 'login';
+    payload: { playerName: string; roomId: string; isHost: boolean };
 }
 
 export interface GameInfoMsg {

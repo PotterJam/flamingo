@@ -10,6 +10,7 @@ export const RoomConnection: FC = () => {
     const [roomName, setRoomName] = useState('');
     const [roomNotFound, setRoomNotFound] = useState(false);
 
+    const nameChosen = useAppStore((s) => s.nameChosen);
     const roomCreated = useAppStore((s) => s.roomCreated);
     const joinRoom = useAppStore((s) => s.joinRoom);
 
@@ -20,7 +21,8 @@ export const RoomConnection: FC = () => {
         });
         const room: CreateRoomResponse = await response.json();
 
-        roomCreated(room);
+        nameChosen(name);
+        roomCreated(room.roomId);
     };
 
     const findRoom = async () => {
@@ -29,7 +31,7 @@ export const RoomConnection: FC = () => {
         });
 
         if (response.status == 200) {
-            console.log('room found');
+            nameChosen(name);
             setRoomNotFound(false);
             joinRoom(roomName);
         }

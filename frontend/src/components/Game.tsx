@@ -13,7 +13,7 @@ const CANVAS_HEIGHT = 600;
 const MIN_PLAYERS = 2;
 
 export const Game: FC = () => {
-    const roomId = useAppStore((s) => s.room?.roomId) ?? '';
+    const roomId = useAppStore((s) => s.roomId) ?? '';
     const sendMessage = useAppStore((s) => s.sendMessage);
     const appState = useAppStore((s) => s.appState);
     const gameState = useAppStore((s) => s.gameState);
