@@ -8,8 +8,10 @@ import { OutlineButton } from './buttons/OutlineButton';
 export const RoomConnection: FC = () => {
     const [name, setName] = useState('');
     const [roomName, setRoomName] = useState('');
+    const [roomNotFound, setRoomNotFound] = useState(false);
 
     const roomCreated = useAppStore((s) => s.roomCreated);
+    const joinRoom = useAppStore((s) => s.joinRoom);
 
     const createRoom = async () => {
         const response = await fetch('/create-room', {
@@ -19,6 +21,23 @@ export const RoomConnection: FC = () => {
         const room: CreateRoomResponse = await response.json();
 
         roomCreated(room);
+    };
+
+    const findRoom = async () => {
+        const response = await fetch(`/${roomName}`, {
+            method: 'GET',
+        });
+
+        if (response.status == 200) {
+            console.log('room found');
+            setRoomNotFound(false);
+            joinRoom(roomName);
+        }
+
+        if (response.status == 404) {
+            console.log('room not found');
+            setRoomNotFound(true);
+        }
     };
 
     return (
@@ -36,18 +55,25 @@ export const RoomConnection: FC = () => {
             />
             <hr className="text-gray-300" />
             <div>
+                {roomNotFound && (
+                    <p className="text-red-400">That room doesn't exist</p>
+                )}
                 <div className="flex flex-row gap-1">
                     <input
                         type="text"
                         placeholder="Room name"
                         value={roomName}
-                        onChange={(e) => setRoomName(e.target.value)}
+                        onChange={(e) => {
+                            setRoomName(e.target.value);
+                            setRoomNotFound(false);
+                        }}
                         area-label="Enter room name to join"
                         className="w-full flex-1 rounded border border-gray-300 p-2 transition duration-150 ease-in-out focus:ring-2 focus:ring-blue-500 focus:outline-none"
                     />
                     <OutlineButton
                         disabled={!(roomName.trim() && name.trim())}
                         className="flex-0"
+                        onClick={findRoom}
                     >
                         Join
                     </OutlineButton>

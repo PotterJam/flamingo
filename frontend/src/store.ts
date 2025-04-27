@@ -64,6 +64,7 @@ export type AppActions = {
     setState: (newState: CurrentAppState) => void;
 
     roomCreated: (room: Room) => void;
+    joinRoom: (roomId: string) => void;
 
     resetGameState: () => void;
 
@@ -104,6 +105,10 @@ export const useAppStore = create<AppState & AppActions & MessageHandlers>()(
         roomCreated: (room) =>
             set((s) => {
                 s.room = room;
+            }),
+        joinRoom: (roomId) =>
+            set((s) => {
+                s.room = { roomId: roomId };
             }),
 
         resetGameState: () =>

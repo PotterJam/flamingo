@@ -103,6 +103,26 @@ func main() {
 		}
 	})
 
+	router.PathPrefix("/{roomId}").Methods(http.MethodGet).HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		vars := mux.Vars(r)
+		roomId, ok := vars["roomId"]
+		if !ok {
+			log.Println("no room id provided for get room")
+			w.WriteHeader(http.StatusNotFound)
+			return
+		}
+
+		room := rm.GetRoom(roomId)
+		if room == nil {
+			log.Printf("no room found %s", roomId)
+			w.WriteHeader(http.StatusNotFound)
+			return
+		}
+
+		w.WriteHeader(http.StatusOK)
+		return
+	})
+
 	port := "8080"
 	log.Printf("Server starting on http://localhost:%s", port)
 	server := &http.Server{Addr: ":" + port, Handler: router}
