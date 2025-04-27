@@ -296,24 +296,6 @@ func (g *Game) HandleMessage(sender *Player, msg Message) {
 	}
 }
 
-func ParseAndSetName(sender *Player, msg Message) {
-	var namePayload SetNamePayload
-	if err := json.Unmarshal(msg.Payload, &namePayload); err == nil {
-		trimmedName := namePayload.Name
-		if trimmedName != "" && len(trimmedName) <= 20 {
-			sender.Name = trimmedName
-			log.Printf("Player %s set name to %s", sender.ID, sender.Name)
-			log.Printf("Player %s (%s) sending PlayerReady signal to Room", sender.ID, sender.Name)
-			sender.Room.PlayerReady <- sender
-		} else {
-			sender.SendError("Invalid name. Must be 1-20 characters.")
-		}
-	} else {
-		log.Printf("Player %s (%s): Error unmarshalling SetName payload: %v", sender.ID, sender.Name, err)
-		sender.SendError("Invalid name payload.")
-	}
-}
-
 func (g *Game) HandleStartGame(sender *Player) {
 	g.mu.Lock()
 	defer g.mu.Unlock()
