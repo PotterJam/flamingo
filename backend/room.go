@@ -17,6 +17,14 @@ func NewRoomManager() *RoomManager {
 	}
 }
 
+func (rm *RoomManager) GetRoom(roomId string) *Room {
+	room, ok := rm.rooms[roomId]
+	if !ok {
+		return nil
+	}
+	return room
+}
+
 func (rm *RoomManager) Run() {
 	log.Print("starting room manager")
 }
@@ -27,6 +35,8 @@ func (rm *RoomManager) CreateRoom() *Room {
 
 	room := NewRoom()
 	rm.rooms[room.Id] = room
+
+	go room.Run()
 
 	return room
 }

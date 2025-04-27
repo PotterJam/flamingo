@@ -3,7 +3,9 @@ import { ReceivedMsg, SendMsg } from '../messages';
 
 const WS_URL = 'ws://localhost:8080/ws';
 
-export function useWebSocket() {
+export function useWebSocket(roomId: string) {
+    const url = `${WS_URL}/${roomId}`;
+
     const [isConnected, setIsConnected] = useState(false);
     const [receivedMessage, setReceivedMessage] = useState<ReceivedMsg | null>(
         null
@@ -20,9 +22,9 @@ export function useWebSocket() {
             return;
         }
 
-        console.log('[useWebSocket] Attempting to connect to:', WS_URL);
+        console.log('[useWebSocket] Attempting to connect to:', url);
         try {
-            ws.current = new WebSocket(WS_URL);
+            ws.current = new WebSocket(url);
 
             ws.current.onopen = () => {
                 console.log('[useWebSocket] WebSocket connection established.');

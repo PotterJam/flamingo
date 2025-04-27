@@ -21,7 +21,22 @@ var upgrader = websocket.Upgrader{
 
 var words = []string{"apple", "banana", "cloud", "house", "tree", "computer", "go", "svelte", "network", "game", "player", "draw", "timer", "guess", "score", "host", "lobby", "react"}
 
-func serveWs(room *Room, w http.ResponseWriter, r *http.Request) {
+func serveWs(rm *RoomManager, w http.ResponseWriter, r *http.Request) {
+	vars := mux.Vars(r)
+	roomId, ok := vars["roomId"]
+	if !ok {
+		log.Println("no room id provided")
+		w.WriteHeader(http.StatusNotFound)
+		return
+	}
+
+	room := rm.GetRoom(roomId)
+	if room == nil {
+		log.Printf("room %s not found", roomId)
+		w.WriteHeader(http.StatusNotFound)
+		return
+	}
+
 	conn, err := upgrader.Upgrade(w, r, nil)
 	if err != nil {
 		log.Println("WebSocket upgrade error:", err)
@@ -37,7 +52,7 @@ func serveWs(room *Room, w http.ResponseWriter, r *http.Request) {
 		Send: make(chan []byte, 256),
 	}
 
-	log.Printf("Registering new player connection: %s", player.ID)
+	log.Printf("Registering new player connection to room %s: %s", roomId, player.ID)
 	room.Register <- player
 
 	go player.writePump()
@@ -52,12 +67,9 @@ func main() {
 	rm := NewRoomManager()
 	go rm.Run()
 
-	room := NewRoom()
-	go room.Run()
-
 	router := mux.NewRouter()
-	router.HandleFunc("/ws", func(w http.ResponseWriter, r *http.Request) {
-		serveWs(room, w, r)
+	router.HandleFunc("/ws/{roomId}", func(w http.ResponseWriter, r *http.Request) {
+		serveWs(rm, w, r)
 	})
 
 	staticDir := "./public"

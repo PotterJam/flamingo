@@ -11,7 +11,7 @@ function App() {
     return (
         <main className="m-auto w-screen">
             <FlamingoBackground />
-            {room ? <Flamingo /> : <RoomConnection />}
+            {room ? <Flamingo roomId={room.roomId} /> : <RoomConnection />}
         </main>
     );
 }

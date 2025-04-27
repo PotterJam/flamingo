@@ -5,8 +5,12 @@ import { Game } from './Game';
 import { useHandleMessage } from '../hooks/useHandleMessage';
 import { useWebSocket } from '../hooks/useWebSocket';
 
-export const Flamingo: FC = () => {
-    const { isConnected, receivedMessage, sendMessage } = useWebSocket();
+interface FlamingoProps {
+    roomId: string;
+}
+
+export const Flamingo: FC<FlamingoProps> = ({ roomId }) => {
+    const { isConnected, receivedMessage, sendMessage } = useWebSocket(roomId);
     useHandleMessage(receivedMessage);
 
     const assignSendMessage = useAppStore((s) => s.assignSendMessage);
