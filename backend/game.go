@@ -33,6 +33,7 @@ func (g *Game) updateHandler(newHandler GamePhaseHandler) {
 	phase := g.GameHandler.Phase()
 
 	if timeout != nil {
+		// I think we need messages and timeouts in channels and then this'll be good
 		time.AfterFunc(*timeout, func() {
 			g.GameState.mu.Lock()
 			defer g.GameState.mu.Unlock()
@@ -133,7 +134,6 @@ func (g *Game) RemovePlayer(player *Player) {
 	delete(state.GuessedCorrectly, player.Id)
 
 	wasHost := state.HostId == player.Id
-	wasDrawer := state.IsActive && state.CurrentDrawerIdx == playerIndex
 
 	if wasHost {
 		if len(state.Players) > 0 {
@@ -146,21 +146,23 @@ func (g *Game) RemovePlayer(player *Player) {
 
 	state.broadcastPlayerUpdate()
 
-	if len(state.Players) < minPlayersToStart {
-		state.Phase = GamePhaseHandler(&GameOverHandler{})
-	} else {
-		if playerIndex < state.CurrentDrawerIdx {
-			state.CurrentDrawerIdx--
-		} else if playerIndex == state.CurrentDrawerIdx && len(state.Players) > 0 {
-			state.CurrentDrawerIdx = (playerIndex - 1 + len(state.Players)) % len(state.Players)
-		}
-
-		allGuessed := state.checkAllGuessed()
-		state.broadcastPlayerUpdate() // Send update *before* potentially ending turn
-
-		if wasDrawer || allGuessed {
-			log.Printf("GameState: Ending turn early due to player %s leaving (was drawer: %t, all guessed now: %t).", player.Name, wasDrawer, allGuessed)
-			state.endTurn()
-		}
-	}
+	// wasDrawer := state.IsActive && state.CurrentDrawerIdx == playerIndex
+	// TODO: need this event in a channel so things can pick it up and react to it with the below
+	//if len(state.Players) < minPlayersToStart {
+	//	g.updateHandler(GamePhaseHandler(&GameOverHandler{}))
+	//} else {
+	//	if playerIndex < state.CurrentDrawerIdx {
+	//		state.CurrentDrawerIdx--
+	//	} else if playerIndex == state.CurrentDrawerIdx && len(state.Players) > 0 {
+	//		state.CurrentDrawerIdx = (playerIndex - 1 + len(state.Players)) % len(state.Players)
+	//	}
+	//
+	//	allGuessed := state.checkAllGuessed()
+	//	state.broadcastPlayerUpdate() // Send update *before* potentially ending turn
+	//
+	//	if wasDrawer || allGuessed {
+	//		log.Printf("GameState: Ending turn early due to player %s leaving (was drawer: %t, all guessed now: %t).", player.Name, wasDrawer, allGuessed)
+	//
+	//	}
+	//}
 }

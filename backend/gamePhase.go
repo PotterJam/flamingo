@@ -318,9 +318,6 @@ func (g *GameState) HandleStartGame(sender *Player) {
 		sender.SendError("Not enough players to start the game (minimum " + string(minPlayersToStart+'0') + ").")
 		return
 	}
-
-	log.Printf("GameState: Host %s (%s) is starting the game.", sender.Name, sender.Id)
-	g.startGame()
 }
 
 func (g *GameState) checkAllGuessed() bool {
