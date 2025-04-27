@@ -11,12 +11,20 @@ type Game struct {
 	GameState   *GameState
 }
 
-func (state *Game) HandleMessage(playerID *Player, msg Message) {
-	newHandler := state.GameHandler.HandleMessage(state.GameState, playerID, msg)
+func (g *Game) HandleMessage(playerID *Player, msg Message) {
+	g.GameState.mu.Lock()
+	defer g.GameState.mu.Unlock()
 
-	if newHandler.Phase() != state.GameHandler.Phase() {
-		newHandler.StartPhase(state.GameState)
-		state.GameHandler = newHandler
+	var newHandler GamePhaseHandler
+	if g.GameState.turnTimer != nil && time.Now().After(g.GameState.turnEndTime) {
+		newHandler = g.GameHandler.HandleTimeOut(g.GameState)
+	} else {
+		newHandler = g.GameHandler.HandleMessage(g.GameState, playerID, msg)
+	}
+
+	if newHandler.Phase() != g.GameHandler.Phase() {
+		newHandler.StartPhase(g.GameState)
+		g.GameHandler = newHandler
 	}
 }
 
