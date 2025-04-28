@@ -26,6 +26,7 @@ var stateName = map[GamePhase]string{
 	GamePhaseWaitingInLobby:  "WaitingInLobby",
 	GamePhaseRoundSetup:      "RoundSetup",
 	GamePhaseRoundInProgress: "RoundInProgress",
+	GamePhaseRoundFinished:   "RoundFinished",
 	GamePhaseGameOver:        "GameOver",
 	GamePhaseError:           "Error",
 }
@@ -48,10 +49,6 @@ func (p *WaitingInLobbyHandler) Phase() GamePhase {
 }
 
 func (p *WaitingInLobbyHandler) StartPhase(gs *GameState) {
-	if !gs.IsActive {
-		return
-	}
-
 	return
 }
 
@@ -69,7 +66,7 @@ func (p *WaitingInLobbyHandler) HandleMessage(gs *GameState, player *Player, msg
 }
 
 func (p *WaitingInLobbyHandler) HandleTimeOut(gs *GameState) GamePhaseHandler {
-	return gs.Phase
+	return p
 }
 
 // RoundSetupHandler Useless for now until adding word selection etc
@@ -96,18 +93,18 @@ func (p *RoundSetupHandler) HandleMessage(gs *GameState, player *Player, msg Mes
 	//	log.Println("GameState: Cannot start next turn, less than minimum players.")
 	//	gs.resetGameState("Not enough players.")
 	//	gs.broadcastPlayerUpdate()
-	//	return gs.Phase
+	//	return p
 	//}
 	//
 	//if gs.turnTimer != nil {
 	//	gs.turnTimer = nil
 	//}
 
-	return gs.Phase
+	return p
 }
 
 func (p *RoundSetupHandler) HandleTimeOut(gs *GameState) GamePhaseHandler {
-	return gs.Phase
+	return p
 }
 
 type RoundInProgressHandler struct{}
@@ -163,13 +160,13 @@ func (p *RoundInProgressHandler) HandleMessage(gs *GameState, player *Player, ms
 	if msg.Type == ClientGuess && !gs.isDrawer(player) {
 		if gs.GuessedCorrectly[player.Id] {
 			player.SendError("You already guessed the word correctly this turn.")
-			return gs.Phase
+			return p
 		}
 
 		var guessPayload GuessPayload
 		if err := json.Unmarshal(msg.Payload, &guessPayload); err != nil {
 			player.SendError("Invalid guess format.")
-			return gs.Phase
+			return p
 		}
 
 		correct := guessPayload.Guess == gs.Word
@@ -198,11 +195,11 @@ func (p *RoundInProgressHandler) HandleMessage(gs *GameState, player *Player, ms
 
 		go gs.Room.BroadcastToPlayers(drawMsgBytes, playersToSendTo)
 	}
-	return gs.Phase
+	return p
 }
 
 func (p *RoundInProgressHandler) HandleTimeOut(gs *GameState) GamePhaseHandler {
-	return gs.Phase
+	return p
 }
 
 type RoundFinishedHandler struct{}
@@ -223,13 +220,14 @@ func (p *RoundFinishedHandler) StartPhase(gs *GameState) {
 }
 
 func (p *RoundFinishedHandler) HandleMessage(gs *GameState, player *Player, msg Message) GamePhaseHandler {
-	return gs.Phase
+	return p
 }
 
 func (p *RoundFinishedHandler) HandleTimeOut(gs *GameState) GamePhaseHandler {
 	log.Println("GameState: Delay finished, attempting to start next turn.")
 	if gs.IsActive {
-		return GamePhaseHandler(&RoundSetupHandler{})
+		// TODO: change to round setup handler when in use
+		return GamePhaseHandler(&RoundInProgressHandler{})
 	} else {
 		log.Println("GameState: GameState became inactive during turn delay, not starting next turn.")
 		return GamePhaseHandler(&WaitingInLobbyHandler{})
@@ -249,11 +247,11 @@ func (p *GameOverHandler) StartPhase(gs *GameState) {
 
 func (p *GameOverHandler) HandleMessage(gs *GameState, player *Player, msg Message) GamePhaseHandler {
 	// todo
-	return gs.Phase
+	return p
 }
 
 func (p *GameOverHandler) HandleTimeOut(gs *GameState) GamePhaseHandler {
-	return gs.Phase
+	return p
 }
 
 type ErrorHandler struct{}
@@ -269,37 +267,34 @@ func (p *ErrorHandler) StartPhase(gs *GameState) {
 
 func (p *ErrorHandler) HandleMessage(gs *GameState, player *Player, msg Message) GamePhaseHandler {
 	// todo
-	return gs.Phase
+	return p
 }
 
 func (p *ErrorHandler) HandleTimeOut(gs *GameState) GamePhaseHandler {
-	return gs.Phase
+	return p
 }
 
 // sendGameInfo sends the initial game state to a player
-func (g *GameState) sendGameInfo(player *Player) {
+func (g *Game) sendGameInfo(player *Player) {
+	state := g.GameState
 	payload := GameInfoPayload{
-		GamePhase:    g.Phase.Phase().String(),
+		GamePhase:    g.GameHandler.Phase().String(),
 		YourID:       player.Id,
-		Players:      g.getPlayerInfoList(),
-		HostID:       g.HostId,
-		IsGameActive: g.IsActive,
+		Players:      state.getPlayerInfoList(),
+		HostID:       state.HostId,
+		IsGameActive: state.IsActive,
 	}
 
-	if g.IsActive && g.CurrentDrawerIdx >= 0 && g.CurrentDrawerIdx < len(g.Players) {
-		payload.CurrentDrawerID = g.Players[g.CurrentDrawerIdx].Id
-		payload.WordLength = len(g.Word)
-		payload.TurnEndTime = g.turnEndTime.UnixMilli()
+	if state.IsActive && state.CurrentDrawerIdx >= 0 && state.CurrentDrawerIdx < len(state.Players) {
+		payload.CurrentDrawerID = state.Players[state.CurrentDrawerIdx].Id
+		payload.WordLength = len(state.Word)
+		payload.TurnEndTime = state.turnEndTime.UnixMilli()
 		if player.Id == payload.CurrentDrawerID {
-			payload.Word = g.Word
+			payload.Word = state.Word
 		}
 	}
-	log.Printf("GameState: Sending game info to player %s (%s). Active: %t, Host: %s", player.Id, player.Name, payload.IsGameActive, g.HostId)
+	log.Printf("GameState: Sending game info to player %s (%s). Active: %t, Host: %s", player.Id, player.Name, payload.IsGameActive, state.HostId)
 	go player.SendMessage(GameInfoResponse, payload)
-}
-
-func (g *GameState) HandleMessage(sender *Player, msg Message) {
-	g.Phase.HandleMessage(g, sender, msg)
 }
 
 func (g *GameState) HandleStartGame(sender *Player) {

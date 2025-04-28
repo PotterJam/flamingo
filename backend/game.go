@@ -3,6 +3,7 @@ package main
 import (
 	"log"
 	"slices"
+	"time"
 )
 
 type GameMessage struct {
@@ -18,14 +19,27 @@ type Game struct {
 
 func (g *Game) HandleEvents() {
 	for {
+		var timerChan <-chan time.Time
+		g.GameState.mu.Lock()
+		if g.GameState.timerForTimeout != nil {
+			timerChan = g.GameState.timerForTimeout.C
+		}
+		g.GameState.mu.Unlock()
+
 		var newHandler GamePhaseHandler
 		select {
 		case msg := <-g.Messages:
 			g.GameState.mu.Lock()
 			newHandler = g.GameHandler.HandleMessage(g.GameState, msg.player, msg.msg)
 
-		case <-g.GameState.timerForTimeout.C:
+		case <-timerChan:
 			g.GameState.mu.Lock()
+
+			if g.GameState.timerForTimeout == nil {
+				// We've had an update to the store that means we no longer want to respect the timeout, ignore
+				continue
+			}
+
 			newHandler = g.GameHandler.HandleTimeOut(g.GameState)
 		}
 
@@ -50,8 +64,7 @@ func (g *Game) updateHandler(newHandler GamePhaseHandler) {
 }
 
 func NewGame(room *Room) *Game {
-	initialHandler := WaitingInLobbyHandler{}
-	handler := GamePhaseHandler(&initialHandler)
+	handler := GamePhaseHandler(&WaitingInLobbyHandler{})
 
 	return &Game{
 		GameState: &GameState{
@@ -91,7 +104,7 @@ func (g *Game) AddPlayer(player *Player) {
 	for _, p := range state.Players {
 		if p.Id == player.Id {
 			log.Printf("GameState: Player %s (%s) already marked as ready.", player.Id, player.Name)
-			state.sendGameInfo(player)
+			g.sendGameInfo(player)
 			return
 		}
 	}
@@ -105,7 +118,7 @@ func (g *Game) AddPlayer(player *Player) {
 		log.Printf("GameState: Player %s (%s) assigned as Host.", player.Id, player.Name)
 	}
 
-	state.sendGameInfo(player)
+	g.sendGameInfo(player)
 	state.broadcastPlayerUpdate()
 }
 

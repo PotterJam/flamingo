@@ -10,7 +10,6 @@ import (
 // TODO: move a bunch of this state into the phases
 // GameState represents the single, shared game session.
 type GameState struct {
-	Phase            GamePhaseHandler
 	Players          []*Player
 	HostId           string
 	CurrentDrawerIdx int             // Index in Players slice of the current drawer (-1 if no game)
