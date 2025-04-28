@@ -18,13 +18,14 @@ type Game struct {
 
 func (g *Game) HandleEvents() {
 	for {
-		g.GameState.mu.Lock()
-
 		var newHandler GamePhaseHandler
 		select {
 		case msg := <-g.Messages:
+			g.GameState.mu.Lock()
 			newHandler = g.GameHandler.HandleMessage(g.GameState, msg.player, msg.msg)
+
 		case <-g.GameState.timerForTimeout.C:
+			g.GameState.mu.Lock()
 			newHandler = g.GameHandler.HandleTimeOut(g.GameState)
 		}
 
@@ -146,23 +147,22 @@ func (g *Game) RemovePlayer(player *Player) {
 
 	state.broadcastPlayerUpdate()
 
-	// wasDrawer := state.IsActive && state.CurrentDrawerIdx == playerIndex
-	// TODO: need this event in a channel so things can pick it up and react to it with the below
-	//if len(state.Players) < minPlayersToStart {
-	//	g.updateHandler(GamePhaseHandler(&GameOverHandler{}))
-	//} else {
-	//	if playerIndex < state.CurrentDrawerIdx {
-	//		state.CurrentDrawerIdx--
-	//	} else if playerIndex == state.CurrentDrawerIdx && len(state.Players) > 0 {
-	//		state.CurrentDrawerIdx = (playerIndex - 1 + len(state.Players)) % len(state.Players)
-	//	}
-	//
-	//	allGuessed := state.checkAllGuessed()
-	//	state.broadcastPlayerUpdate() // Send update *before* potentially ending turn
-	//
-	//	if wasDrawer || allGuessed {
-	//		log.Printf("GameState: Ending turn early due to player %s leaving (was drawer: %t, all guessed now: %t).", player.Name, wasDrawer, allGuessed)
-	//
-	//	}
-	//}
+	wasDrawer := state.IsActive && state.CurrentDrawerIdx == playerIndex
+	if len(state.Players) < minPlayersToStart {
+		g.updateHandler(GamePhaseHandler(&GameOverHandler{}))
+	} else {
+		if playerIndex < state.CurrentDrawerIdx {
+			state.CurrentDrawerIdx--
+		} else if playerIndex == state.CurrentDrawerIdx && len(state.Players) > 0 {
+			state.CurrentDrawerIdx = (playerIndex - 1 + len(state.Players)) % len(state.Players)
+		}
+
+		allGuessed := state.checkAllGuessed()
+		state.broadcastPlayerUpdate() // Send update *before* potentially ending turn
+
+		if wasDrawer || allGuessed {
+			log.Printf("GameState: Ending turn early due to player %s leaving (was drawer: %t, all guessed now: %t).", player.Name, wasDrawer, allGuessed)
+			g.updateHandler(GamePhaseHandler(&RoundFinishedHandler{}))
+		}
+	}
 }
