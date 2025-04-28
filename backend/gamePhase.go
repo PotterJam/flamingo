@@ -61,8 +61,7 @@ func (p *WaitingInLobbyHandler) HandleMessage(gs *GameState, player *Player, msg
 			gs.BroadcastSystemMessage("Game start aborted, not enough players.")
 		} else if !gs.IsActive {
 			gs.IsActive = true
-			gs.CurrentDrawerIdx = 0
-			return GamePhaseHandler(&RoundSetupHandler{})
+			return GamePhaseHandler(&RoundInProgressHandler{})
 		}
 	}
 
@@ -73,6 +72,7 @@ func (p *WaitingInLobbyHandler) HandleTimeOut(gs *GameState) GamePhaseHandler {
 	return gs.Phase
 }
 
+// RoundSetupHandler Useless for now until adding word selection etc
 type RoundSetupHandler struct{}
 
 func (p *RoundSetupHandler) Phase() GamePhase {
@@ -88,16 +88,20 @@ func (p *RoundSetupHandler) StartPhase(gs *GameState) *time.Duration {
 }
 
 func (p *RoundSetupHandler) HandleMessage(gs *GameState, player *Player, msg Message) GamePhaseHandler {
-	if len(gs.Players) < minPlayersToStart {
-		log.Println("GameState: Cannot start next turn, less than minimum players.")
-		gs.resetGameState("Not enough players.")
-		gs.broadcastPlayerUpdate()
-		return gs.Phase
-	}
-
-	if gs.turnTimer != nil {
-		gs.turnTimer = nil
-	}
+	//if msg.Type != ClientSelectedWord {
+	//
+	//}
+	//
+	//if len(gs.Players) < minPlayersToStart {
+	//	log.Println("GameState: Cannot start next turn, less than minimum players.")
+	//	gs.resetGameState("Not enough players.")
+	//	gs.broadcastPlayerUpdate()
+	//	return gs.Phase
+	//}
+	//
+	//if gs.turnTimer != nil {
+	//	gs.turnTimer = nil
+	//}
 
 	return gs.Phase
 }
@@ -119,6 +123,7 @@ func (p *RoundInProgressHandler) StartPhase(gs *GameState) *time.Duration {
 		log.Printf("GameState: Resetting invalid CurrentDrawerIdx (%d) before next turn.", gs.CurrentDrawerIdx)
 		gs.CurrentDrawerIdx = -1
 	}
+
 	gs.CurrentDrawerIdx = (gs.CurrentDrawerIdx + 1) % len(gs.Players)
 	newDrawer := gs.Players[gs.CurrentDrawerIdx]
 
@@ -174,7 +179,7 @@ func (p *RoundInProgressHandler) HandleMessage(gs *GameState, player *Player, ms
 			go gs.Room.Broadcast(msgBytes)
 
 			if gs.checkAllGuessed() {
-				return GamePhaseHandler(&RoundSetupHandler{})
+				return GamePhaseHandler(&RoundFinishedHandler{})
 			}
 		} else {
 			gs.BroadcastChatMessage(player.Name, guessPayload.Guess)
