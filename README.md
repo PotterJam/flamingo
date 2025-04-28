@@ -16,8 +16,8 @@
     * WebSockets: `gorilla/websocket`
     * Routing: `gorilla/mux`
 * **Frontend:** React (using Vite)
-    * Styling: Tailwind CSS
-    * State Management: zustand
+    * Styling: `Tailwind CSS`
+    * State Management: `Zustand`
 * **Build/Run Script:** Python 3
 
 ## Prerequisites
@@ -46,7 +46,7 @@ The easiest way to build and run both the frontend and backend is using the prov
 1.  **Navigate** to the root directory of the project
 2.  **Run the script:**
     ```bash
-    python start_game.py
+    python startup.py
     ```
 3.  The script will:
     * Build the React frontend (`npm run build`).
