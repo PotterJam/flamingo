@@ -17,11 +17,12 @@ type GameState struct {
 	Word             string          // The secret word for the current turn
 	GuessedCorrectly map[string]bool // Set of player IDs who guessed correctly this turn
 	// TODO: Replace reference to room with channel
-	Room        *Room
-	mu          sync.Mutex  // Mutex to protect concurrent access to game state
-	IsActive    bool        // Flag indicating if a round/turn is currently running
-	turnTimer   *time.Timer // Timer for the current turn
-	turnEndTime time.Time   // When the current turn is scheduled to end
+	Room     *Room
+	mu       sync.Mutex // Mutex to protect concurrent access to game state
+	IsActive bool       // Flag indicating if a round/turn is currently running
+
+	timerForTimeout *time.Timer
+	turnEndTime     time.Time
 }
 
 func (g *GameState) broadcastPlayerUpdate() {

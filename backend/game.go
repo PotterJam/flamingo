@@ -3,23 +3,35 @@ package main
 import (
 	"log"
 	"slices"
-	"time"
 )
+
+type GameMessage struct {
+	player *Player
+	msg    Message
+}
 
 type Game struct {
 	GameHandler GamePhaseHandler
 	GameState   *GameState
+	Messages    chan GameMessage
 }
 
-func (g *Game) HandleMessage(playerID *Player, msg Message) {
-	g.GameState.mu.Lock()
+func (g *Game) HandleEvents() {
+	for {
+		g.GameState.mu.Lock()
 
-	var newHandler GamePhaseHandler
-	newHandler = g.GameHandler.HandleMessage(g.GameState, playerID, msg)
+		var newHandler GamePhaseHandler
+		select {
+		case msg := <-g.Messages:
+			newHandler = g.GameHandler.HandleMessage(g.GameState, msg.player, msg.msg)
+		case <-g.GameState.timerForTimeout.C:
+			newHandler = g.GameHandler.HandleTimeOut(g.GameState)
+		}
 
-	g.GameState.mu.Unlock()
+		g.updateHandler(newHandler)
 
-	g.updateHandler(newHandler)
+		g.GameState.mu.Unlock()
+	}
 }
 
 func (g *Game) updateHandler(newHandler GamePhaseHandler) {
@@ -27,26 +39,13 @@ func (g *Game) updateHandler(newHandler GamePhaseHandler) {
 		return
 	}
 
-	g.GameHandler = newHandler
-	timeout := g.GameHandler.StartPhase(g.GameState)
-
-	phase := g.GameHandler.Phase()
-
-	if timeout != nil {
-		// I think we need messages and timeouts in channels and then this'll be good
-		time.AfterFunc(*timeout, func() {
-			g.GameState.mu.Lock()
-			defer g.GameState.mu.Unlock()
-
-			if g.GameState.Phase.Phase() != phase {
-				return
-			}
-
-			handlerAfterTimeout := g.GameHandler.HandleTimeOut(g.GameState)
-			g.updateHandler(handlerAfterTimeout)
-		})
+	if g.GameState.timerForTimeout != nil {
+		g.GameState.timerForTimeout.Stop()
+		g.GameState.timerForTimeout = nil
 	}
 
+	g.GameHandler = newHandler
+	g.GameHandler.StartPhase(g.GameState)
 }
 
 func NewGame(room *Room) *Game {
@@ -61,22 +60,23 @@ func NewGame(room *Room) *Game {
 			GuessedCorrectly: make(map[string]bool),
 			Room:             room,
 			IsActive:         false,
+			timerForTimeout:  nil,
 		},
 		GameHandler: handler,
+		Messages:    make(chan GameMessage, 5),
 	}
 }
 
 // resetGameState resets the game state (e.g., not enough players)
 func (g *GameState) resetGameState(reason string) {
-	if g.turnTimer != nil {
-		g.turnTimer.Stop()
-		g.turnTimer = nil
+	if g.timerForTimeout != nil {
+		g.timerForTimeout = nil
 	}
+
 	g.IsActive = false
 	g.CurrentDrawerIdx = -1
 	g.Word = ""
 	g.GuessedCorrectly = make(map[string]bool)
-	g.turnEndTime = time.Time{}
 	g.BroadcastSystemMessage("GameState Over: " + reason)
 }
 

@@ -42,7 +42,7 @@ func (p *Player) readPump() {
 			continue
 		}
 
-		p.Room.Game.HandleMessage(p, msg)
+		p.Room.Game.Messages <- GameMessage{p, msg}
 	}
 }
 

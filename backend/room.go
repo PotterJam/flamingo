@@ -94,6 +94,7 @@ func (room *Room) Run() {
 			room.mu.Unlock()
 
 			if playerToRemove != nil {
+				// TODO: removing player needs to be handled better by the phases, somehow. Channel?
 				room.Game.RemovePlayer(playerToRemove)
 			}
 
