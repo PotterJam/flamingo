@@ -51,19 +51,20 @@ func serveWs(rm *RoomManager, w http.ResponseWriter, r *http.Request) {
 	log.Println("Client connected via WebSocket from:", conn.RemoteAddr())
 
 	player := &Player{
-		ID:   uuid.NewString(),
+		Id:   uuid.NewString(),
 		Name: playerName,
 		Conn: conn,
 		Room: room,
 		Send: make(chan []byte, 256),
 	}
 
-	log.Printf("Registering new player connection to room %s: %s", roomId, player.ID)
+	log.Printf("Registering new player connection to room %s: %s", roomId, player.Id)
 	room.Register <- player
 	room.PlayerReady <- player
 
 	go player.writePump()
 	go player.readPump()
+	go room.Game.HandleEvents()
 }
 
 type CreateRoomResponse struct {
