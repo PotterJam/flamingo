@@ -7,7 +7,7 @@ import (
 	"time"
 )
 
-var turnDuration = 60 * time.Second
+var turnDuration = 59 * time.Second
 
 const minPlayersToStart = 2
 
