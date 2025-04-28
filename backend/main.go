@@ -64,6 +64,7 @@ func serveWs(rm *RoomManager, w http.ResponseWriter, r *http.Request) {
 
 	go player.writePump()
 	go player.readPump()
+	go room.Game.HandleEvents()
 }
 
 type CreateRoomResponse struct {
