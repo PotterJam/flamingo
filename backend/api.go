@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/json"
 	"log"
 	"net/http"
 
@@ -62,4 +63,50 @@ func ServeWS(rm *RoomManager, w http.ResponseWriter, r *http.Request) {
 	go player.writePump()
 	go player.readPump()
 	go room.Game.HandleEvents()
+}
+
+func HandleCreateRoom(rm *RoomManager, w http.ResponseWriter, r *http.Request) {
+	room := rm.CreateRoom()
+	log.Printf("created new room %s", room.Id)
+
+	res := CreateRoomResponse{
+		RoomId: room.Id,
+	}
+
+	w.WriteHeader(http.StatusOK)
+	err := json.NewEncoder(w).Encode(res)
+	if err != nil {
+		log.Printf("failed to respond to room creation: %s", err.Error())
+	}
+}
+
+func HandleGetRoom(rm *RoomManager, w http.ResponseWriter, r *http.Request) {
+	vars := mux.Vars(r)
+	roomId, ok := vars["roomId"]
+	if !ok {
+		log.Println("no room id provided for get room")
+		w.WriteHeader(http.StatusNotFound)
+		return
+	}
+
+	room := rm.GetRoom(roomId)
+	if room == nil {
+		log.Printf("no room found %s", roomId)
+		w.WriteHeader(http.StatusNotFound)
+		return
+	}
+
+	w.WriteHeader(http.StatusOK)
+	return
+}
+
+func HandleIndex(staticDir string, fs http.Handler, w http.ResponseWriter, r *http.Request) {
+	filePath := staticDir + r.URL.Path
+	if _, err := http.Dir(staticDir).Open(r.URL.Path); err != nil {
+		log.Printf("Serving index.html for path: %s", r.URL.Path)
+		http.ServeFile(w, r, staticDir+"/index.html")
+		return
+	}
+	log.Printf("Serving static file: %s", filePath)
+	fs.ServeHTTP(w, r)
 }

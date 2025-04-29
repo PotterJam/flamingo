@@ -19,6 +19,7 @@ func main() {
 	go rm.Run()
 
 	router := mux.NewRouter()
+
 	router.HandleFunc("/ws/{roomId}", func(w http.ResponseWriter, r *http.Request) {
 		ServeWS(rm, w, r)
 	})
@@ -28,51 +29,11 @@ func main() {
 
 	router.PathPrefix("/assets/").Handler(fileServer)
 
-	router.Path("/").HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		filePath := staticDir + r.URL.Path
-		if _, err := http.Dir(staticDir).Open(r.URL.Path); err != nil {
-			log.Printf("Serving index.html for path: %s", r.URL.Path)
-			http.ServeFile(w, r, staticDir+"/index.html")
-			return
-		}
-		log.Printf("Serving static file: %s", filePath)
-		fileServer.ServeHTTP(w, r)
-	})
+	router.Path("/").HandlerFunc(func(w http.ResponseWriter, r *http.Request) { HandleIndex(staticDir, fileServer, w, r) })
 
-	router.PathPrefix("/create-room").Methods(http.MethodPost).HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		room := rm.CreateRoom()
-		log.Printf("created new room %s", room.Id)
+	router.PathPrefix("/create-room").Methods(http.MethodPost).HandlerFunc(func(w http.ResponseWriter, r *http.Request) { HandleCreateRoom(rm, w, r) })
 
-		res := CreateRoomResponse{
-			RoomId: room.Id,
-		}
-
-		w.WriteHeader(http.StatusOK)
-		err := json.NewEncoder(w).Encode(res)
-		if err != nil {
-			log.Printf("failed to respond to room creation: %s", err.Error())
-		}
-	})
-
-	router.PathPrefix("/{roomId}").Methods(http.MethodGet).HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		vars := mux.Vars(r)
-		roomId, ok := vars["roomId"]
-		if !ok {
-			log.Println("no room id provided for get room")
-			w.WriteHeader(http.StatusNotFound)
-			return
-		}
-
-		room := rm.GetRoom(roomId)
-		if room == nil {
-			log.Printf("no room found %s", roomId)
-			w.WriteHeader(http.StatusNotFound)
-			return
-		}
-
-		w.WriteHeader(http.StatusOK)
-		return
-	})
+	router.PathPrefix("/{roomId}").Methods(http.MethodGet).HandlerFunc(func(w http.ResponseWriter, r *http.Request) { HandleGetRoom(rm, w, r) })
 
 	port := "8080"
 	log.Printf("Server starting on http://localhost:%s", port)
