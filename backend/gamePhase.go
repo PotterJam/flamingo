@@ -7,6 +7,8 @@ import (
 	"time"
 )
 
+var words = []string{"apple", "banana", "cloud", "house", "tree", "computer", "go", "svelte", "network", "game", "player", "draw", "timer", "guess", "score", "host", "lobby", "react"}
+
 var turnDuration = 59 * time.Second
 
 const (
