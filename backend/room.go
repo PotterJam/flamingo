@@ -37,6 +37,7 @@ func (rm *RoomManager) CreateRoom() *Room {
 	rm.rooms[room.Id] = room
 
 	go room.Run()
+	go room.Game.HandleEvents()
 
 	return room
 }
