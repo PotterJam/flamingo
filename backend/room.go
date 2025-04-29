@@ -83,11 +83,7 @@ func (r *Room) Run() {
 			var playerToRemove *Player
 			if existingPlayer, ok := r.Players[player.Id]; ok {
 				delete(r.Players, player.Id)
-				select {
-				case <-existingPlayer.Send:
-				default:
 					close(existingPlayer.Send)
-				}
 				log.Printf("{%s} Player %s (%s) connection unregistered. Total tracked: %d", r.Id, player.Id, existingPlayer.Name, len(r.Players))
 				playerToRemove = existingPlayer
 			} else {
