@@ -7,8 +7,8 @@ import (
 	"time"
 )
 
-// TODO: move a bunch of this state into the phases
 // GameState represents the single, shared game session.
+// TODO: move a bunch of this state into the phases.
 type GameState struct {
 	Players           []*Player
 	HostId            string

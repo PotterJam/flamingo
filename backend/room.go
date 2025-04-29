@@ -67,54 +67,54 @@ func NewRoom() *Room {
 }
 
 // Run starts the Room's main loop, listening on its channels.
-func (room *Room) Run() {
+func (r *Room) Run() {
 	log.Println("Room running...")
 	for {
 		select {
-		case player := <-room.Register:
-			room.mu.Lock()
-			room.Players[player.Id] = player
-			log.Printf("Room: Player %s connection registered. Total tracked: %d. Waiting for name.", player.Id, len(room.Players))
-			room.mu.Unlock()
+		case player := <-r.Register:
+			r.mu.Lock()
+			r.Players[player.Id] = player
+			log.Printf("Room: Player %s connection registered. Total tracked: %d. Waiting for name.", player.Id, len(r.Players))
+			r.mu.Unlock()
 
-		case player := <-room.Unregister:
-			room.mu.Lock()
+		case player := <-r.Unregister:
+			r.mu.Lock()
 			var playerToRemove *Player
-			if existingPlayer, ok := room.Players[player.Id]; ok {
-				delete(room.Players, player.Id)
+			if existingPlayer, ok := r.Players[player.Id]; ok {
+				delete(r.Players, player.Id)
 				select {
 				case <-existingPlayer.Send:
 				default:
 					close(existingPlayer.Send)
 				}
-				log.Printf("Room: Player %s (%s) connection unregistered. Total tracked: %d", player.Id, existingPlayer.Name, len(room.Players))
+				log.Printf("Room: Player %s (%s) connection unregistered. Total tracked: %d", player.Id, existingPlayer.Name, len(r.Players))
 				playerToRemove = existingPlayer
 			} else {
 				log.Printf("Room: Player %s (%s) already unregistered from Room map.", player.Id, player.Name)
 			}
-			room.mu.Unlock()
+			r.mu.Unlock()
 
 			if playerToRemove != nil {
 				// TODO: removing player needs to be handled better by the phases, somehow. Channel?
-				room.Game.RemovePlayer(playerToRemove)
+				r.Game.RemovePlayer(playerToRemove)
 			}
 
-		case playerToAdd := <-room.PlayerReady:
+		case playerToAdd := <-r.PlayerReady:
 			log.Printf("Room: Received PlayerReady signal for %s (%s). Adding to game.", playerToAdd.Id, playerToAdd.Name)
-			room.Game.AddPlayer(playerToAdd)
+			r.Game.AddPlayer(playerToAdd)
 		}
 	}
 }
 
-func (h *Room) Broadcast(message []byte) {
-	h.mu.Lock()
-	playersToSend := make([]*Player, 0, len(h.Players))
-	for _, player := range h.Players {
+func (r *Room) Broadcast(message []byte) {
+	r.mu.Lock()
+	playersToSend := make([]*Player, 0, len(r.Players))
+	for _, player := range r.Players {
 		if player != nil {
 			playersToSend = append(playersToSend, player)
 		}
 	}
-	h.mu.Unlock()
+	r.mu.Unlock()
 
 	for _, p := range playersToSend {
 		go func() {
