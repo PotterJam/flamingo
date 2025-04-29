@@ -43,6 +43,17 @@ export interface ChatMsg {
     payload: ChatMessage;
 }
 
+export interface TurnSetupMsg {
+    type: 'turnSetup';
+    payload: {
+        currentDrawerId: string;
+        players: Player[];
+        turnEndTime: number;
+        wordChoices?: string[]; // undefined for guessing players
+    };
+}
+
+
 export interface TurnStartMsg {
     type: 'turnStart';
     payload: {
