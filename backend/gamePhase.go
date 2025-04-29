@@ -58,7 +58,7 @@ func (p *WaitingInLobbyHandler) HandleMessage(gs *GameState, player *Player, msg
 			gs.BroadcastSystemMessage("Game start aborted, not enough players.")
 		} else if !gs.IsActive {
 			gs.IsActive = true
-			return GamePhaseHandler(&RoundInProgressHandler{})
+			return GamePhaseHandler(&RoundSetupHandler{})
 		}
 	}
 
@@ -70,44 +70,79 @@ func (p *WaitingInLobbyHandler) HandleTimeOut(gs *GameState) GamePhaseHandler {
 }
 
 // RoundSetupHandler Useless for now until adding word selection etc
-type RoundSetupHandler struct{}
+type RoundSetupHandler struct {
+	WordToPickFrom []string
+}
 
 func (p *RoundSetupHandler) Phase() GamePhase {
 	return GamePhaseRoundSetup
 }
 
 func (p *RoundSetupHandler) StartPhase(gs *GameState) {
-	// Pick the new drawer
-	// Send updated player info
-	// Get 3 words
-	// Send them to the new drawer
+	gs.turnEndTime = time.Now().Add(10 * time.Second)
+	gs.timerForTimeout = time.NewTimer(10 * time.Second)
+
+	gs.CurrentDrawerIdx = (gs.CurrentDrawerIdx + 1) % len(gs.Players)
+	newDrawer := gs.Players[gs.CurrentDrawerIdx]
+
+	wordChoices := make([]string, 3)
+	for i := range wordChoices {
+		// TODO create word choices
+	}
+
+	turnPayloadBase := TurnSetupPayload{
+		CurrentDrawerID: newDrawer.Id,
+		Players:         gs.getPlayerInfoList(), // Assumes lock held
+		TurnEndTime:     gs.turnEndTime.UnixMilli(),
+	}
+
+	drawerPayload := turnPayloadBase
+	drawerPayload.WordChoices = wordChoices
+	log.Printf("GameState: Sending TurnSetup (with word choices) to drawer %s", newDrawer.Name)
+	go newDrawer.SendMessage(TurnSetupResponse, drawerPayload)
+
+	guesserPayload := turnPayloadBase
+	msgBytes := MustMarshal(Message{Type: TurnSetupResponse, Payload: json.RawMessage(MustMarshal(guesserPayload))})
+	playersToSendTo := make([]*Player, 0, len(gs.Players)-1)
+	for i, p := range gs.Players {
+		if i != gs.CurrentDrawerIdx {
+			playersToSendTo = append(playersToSendTo, p)
+		}
+	}
+	log.Printf("GameState: Sending TurnSetup (no word choices) to %d guessers", len(playersToSendTo))
+	go gs.Room.BroadcastToPlayers(msgBytes, playersToSendTo)
+
+	gs.BroadcastSystemMessage(newDrawer.Name + " is choosing a word.")
 	return
 }
 
 func (p *RoundSetupHandler) HandleMessage(gs *GameState, player *Player, msg Message) GamePhaseHandler {
-	//if msg.Type != ClientSelectedWord {
-	//
-	//}
-	//
-	//if len(gs.Players) < minPlayersToStart {
-	//	log.Println("GameState: Cannot start next turn, less than minimum players.")
-	//	gs.resetGameState("Not enough players.")
-	//	gs.broadcastPlayerUpdate()
-	//	return p
-	//}
-	//
-	//if gs.turnTimer != nil {
-	//	gs.turnTimer = nil
-	//}
+	if msg.Type != ClientSelectRoundWord {
+		return p
+	}
 
-	return p
+	if len(gs.Players) < minPlayersToStart {
+		log.Println("GameState: Cannot start next turn, less than minimum players.")
+		return GamePhaseHandler(&GameOverHandler{})
+	}
+
+	var roundWordPayload SelectRoundWordPayload
+	if err := json.Unmarshal(msg.Payload, &roundWordPayload); err != nil {
+		player.SendError("Invalid guess format.")
+		return p
+	}
+
+	return GamePhaseHandler(&RoundInProgressHandler{Word: roundWordPayload.Word})
 }
 
 func (p *RoundSetupHandler) HandleTimeOut(gs *GameState) GamePhaseHandler {
-	return p
+	word := p.WordToPickFrom[rand.Intn(len(p.WordToPickFrom))]
+	return GamePhaseHandler(&RoundInProgressHandler{Word: word})
 }
 
-type RoundInProgressHandler struct{}
+type RoundInProgressHandler struct {
+	Word string
+}
 
 func (p *RoundInProgressHandler) Phase() GamePhase {
 	return GamePhaseRoundInProgress
@@ -121,25 +156,24 @@ func (p *RoundInProgressHandler) StartPhase(gs *GameState) {
 		gs.CurrentDrawerIdx = -1
 	}
 
-	gs.CurrentDrawerIdx = (gs.CurrentDrawerIdx + 1) % len(gs.Players)
-	newDrawer := gs.Players[gs.CurrentDrawerIdx]
+	drawer := gs.Players[gs.CurrentDrawerIdx]
 
-	gs.Word = words[rand.Intn(len(words))]
-
+	gs.Word = p.Word
 	gs.turnEndTime = time.Now().Add(turnDuration)
 	gs.timerForTimeout = time.NewTimer(turnDuration)
 
 	turnPayloadBase := TurnStartPayload{
-		CurrentDrawerID: newDrawer.Id,
+		CurrentDrawerID: drawer.Id,
 		WordLength:      len(gs.Word),
 		Players:         gs.getPlayerInfoList(), // Assumes lock held
 		TurnEndTime:     gs.turnEndTime.UnixMilli(),
+		Word:            gs.Word,
 	}
 
 	drawerPayload := turnPayloadBase
 	drawerPayload.Word = gs.Word
-	log.Printf("GameState: Sending TurnStart (with word) to drawer %s", newDrawer.Name)
-	go newDrawer.SendMessage(TurnStartResponse, drawerPayload)
+	log.Printf("GameState: Sending TurnStart (with word) to drawer %s", drawer.Name)
+	go drawer.SendMessage(TurnStartResponse, drawerPayload)
 
 	guesserPayload := turnPayloadBase
 	msgBytes := MustMarshal(Message{Type: TurnStartResponse, Payload: json.RawMessage(MustMarshal(guesserPayload))})
@@ -152,7 +186,7 @@ func (p *RoundInProgressHandler) StartPhase(gs *GameState) {
 	log.Printf("GameState: Sending TurnStart (no word) to %d guessers", len(playersToSendTo))
 	go gs.Room.BroadcastToPlayers(msgBytes, playersToSendTo)
 
-	gs.BroadcastSystemMessage(newDrawer.Name + " is drawing!")
+	gs.BroadcastSystemMessage(drawer.Name + " is drawing!")
 	return
 }
 
