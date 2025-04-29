@@ -1,11 +1,11 @@
 package main
 
 const (
-	ClientRegisterUser = "setName"
-	ClientGuess        = "guess"
-	ClientDrawEvent    = "drawEvent"
-	ClientStartGame    = "startGame"
-	ClientSelectedWord = "selectedWord"
+	ClientRegisterUser    = "setName"
+	ClientGuess           = "guess"
+	ClientDrawEvent       = "drawEvent"
+	ClientStartGame       = "startGame"
+	ClientSelectRoundWord = "selectRoundWord"
 )
 
 type SetNamePayload struct {
@@ -14,6 +14,10 @@ type SetNamePayload struct {
 
 type GuessPayload struct {
 	Guess string `json:"guess"`
+}
+
+type SelectRoundWordPayload struct {
+	Word string `json:"word"`
 }
 
 type DrawEventPayload struct {

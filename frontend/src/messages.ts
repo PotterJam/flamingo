@@ -127,6 +127,13 @@ export interface SetNameMsg {
     };
 }
 
+export interface SelectRoundWordMsg {
+    type: 'selectRoundWord';
+    payload: {
+        word: string;
+    };
+}
+
 export interface GuessMsg {
     type: 'guess';
     payload: {
