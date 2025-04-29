@@ -65,6 +65,10 @@ func ServeWS(rm *RoomManager, w http.ResponseWriter, r *http.Request) {
 	go room.Game.HandleEvents()
 }
 
+type CreateRoomResponse struct {
+	RoomId string `json:"roomId"`
+}
+
 func HandleCreateRoom(rm *RoomManager, w http.ResponseWriter, r *http.Request) {
 	room := rm.CreateRoom()
 	log.Printf("created new room %s", room.Id)

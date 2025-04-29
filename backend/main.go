@@ -7,19 +7,13 @@ import (
 	"github.com/gorilla/mux"
 )
 
-type CreateRoomResponse struct {
-	RoomId string `json:"roomId"`
-}
-
 func main() {
 	rm := NewRoomManager()
 	go rm.Run()
 
 	router := mux.NewRouter()
 
-	router.HandleFunc("/ws/{roomId}", func(w http.ResponseWriter, r *http.Request) {
-		ServeWS(rm, w, r)
-	})
+	router.HandleFunc("/ws/{roomId}", func(w http.ResponseWriter, r *http.Request) { ServeWS(rm, w, r) })
 
 	staticDir := "./public"
 	fileServer := http.FileServer(http.Dir(staticDir))
