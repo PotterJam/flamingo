@@ -70,7 +70,6 @@ type CreateRoomResponse struct {
 
 func HandleCreateRoom(rm *RoomManager, w http.ResponseWriter, r *http.Request) {
 	room := rm.CreateRoom()
-	log.Printf("created new room %s", room.Id)
 
 	res := CreateRoomResponse{
 		RoomId: room.Id,
