@@ -30,14 +30,14 @@ func (g *GameState) broadcastPlayerUpdate() {
 		Players: g.getPlayerInfoList(), // Assumes lock held
 		HostID:  g.HostId,
 	}
-	msgBytes := MustMarshal(Message{Type: PlayerUpdateResponse, Payload: json.RawMessage(MustMarshal(payload))})
-	go g.Room.Broadcast(msgBytes)
+	msg := Message{Type: PlayerUpdateResponse, Payload: json.RawMessage(MustMarshal(payload))}
+	go g.Room.Broadcast(msg)
 }
 
 func (g *GameState) BroadcastSystemMessage(message string) {
 	payload := ChatPayload{SenderName: "System", Message: message, IsSystem: true}
-	msgBytes := MustMarshal(Message{Type: ChatResponse, Payload: json.RawMessage(MustMarshal(payload))})
-	go g.Room.Broadcast(msgBytes)
+	msg := Message{Type: ChatResponse, Payload: json.RawMessage(MustMarshal(payload))}
+	go g.Room.Broadcast(msg)
 }
 
 func (g *GameState) getPlayerInfoList() []PlayerInfo {

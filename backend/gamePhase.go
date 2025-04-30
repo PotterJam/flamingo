@@ -266,8 +266,8 @@ func (p *RoundFinishedHandler) StartPhase(gs *GameState) {
 		Players:     gs.getPlayerInfoList(),
 		RoundScores: playerRoundScores,
 	}
-	turnEndMsgBytes := MustMarshal(Message{Type: TurnEndResponse, Payload: json.RawMessage(MustMarshal(turnEndPayload))})
-	go gs.Room.Broadcast(turnEndMsgBytes)
+	turnEndMsg := Message{Type: TurnEndResponse, Payload: json.RawMessage(MustMarshal(turnEndPayload))}
+	go gs.Room.Broadcast(turnEndMsg)
 }
 
 func (p *RoundFinishedHandler) HandleMessage(gs *GameState, player *Player, msg Message) GamePhaseHandler {
@@ -392,6 +392,6 @@ func (g *GameState) checkAllGuessed() bool {
 
 func (g *GameState) BroadcastChatMessage(senderName, message string) {
 	payload := ChatPayload{SenderName: senderName, Message: message, IsSystem: false}
-	msgBytes := MustMarshal(Message{Type: ChatResponse, Payload: json.RawMessage(MustMarshal(payload))})
-	go g.Room.Broadcast(msgBytes)
+	msg := Message{Type: ChatResponse, Payload: json.RawMessage(MustMarshal(payload))}
+	go g.Room.Broadcast(msg)
 }

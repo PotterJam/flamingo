@@ -103,7 +103,7 @@ func (r *Room) Run() {
 	}
 }
 
-func (r *Room) Broadcast(message []byte) {
+func (r *Room) Broadcast(m Message) {
 	r.mu.Lock()
 	// copy first to minimise time lock is held
 	// I'm not convinced this is needed since spawning a go routine is very fast
@@ -120,7 +120,7 @@ func (r *Room) Broadcast(message []byte) {
 			if p == nil {
 				return
 			}
-			p.Send <- message
+			p.Send <- MustMarshal(m)
 		}()
 	}
 }
