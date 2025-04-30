@@ -171,6 +171,8 @@ export const useAppStore = create<AppState & AppActions & MessageHandlers>()(
             }),
         handleTurnStart: ({ payload }) =>
             set((s) => {
+                s.gameState.wordChoices = null; // The word has been chosen
+
                 s.gameState.currentDrawerId = payload.currentDrawerId;
                 s.gameState.word = payload.word ?? null;
                 s.gameState.wordLength = payload.wordLength ?? null;
@@ -216,6 +218,9 @@ export const useAppStore = create<AppState & AppActions & MessageHandlers>()(
             set((s) => {
                 s.gameState.turnEndTime = null;
                 s.resetPlayerGuesses();
+                s.gameState.word = null;
+                s.gameState.wordLength = null;
+                s.gameState.wordChoices = null;
             }),
         handleDraw: ({ payload }) =>
             set((s) => {

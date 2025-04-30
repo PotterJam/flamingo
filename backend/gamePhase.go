@@ -58,7 +58,7 @@ func (p *WaitingInLobbyHandler) HandleMessage(gs *GameState, player *Player, msg
 			gs.BroadcastSystemMessage("Game start aborted, not enough players.")
 		} else if !gs.IsActive {
 			gs.IsActive = true
-			return GamePhaseHandler(&RoundSetupHandler{})
+			return GamePhaseHandler(&RoundSetupHandler{WordToPickFrom: nil})
 		}
 	}
 
@@ -71,7 +71,7 @@ func (p *WaitingInLobbyHandler) HandleTimeOut(gs *GameState) GamePhaseHandler {
 
 // RoundSetupHandler Useless for now until adding word selection etc
 type RoundSetupHandler struct {
-	WordToPickFrom []string
+	WordToPickFrom *[]string
 }
 
 func (p *RoundSetupHandler) Phase() GamePhase {
@@ -86,11 +86,11 @@ func (p *RoundSetupHandler) StartPhase(gs *GameState) {
 	newDrawer := gs.Players[gs.CurrentDrawerIdx]
 
 	wordChoices := make([]string, 3)
-
 	perms := rand.Perm(len(words))
 	for i, r := range perms[:len(wordChoices)] {
 		wordChoices[i] = words[r]
 	}
+	p.WordToPickFrom = &wordChoices
 
 	turnPayloadBase := TurnSetupPayload{
 		CurrentDrawerID: newDrawer.Id,
@@ -99,7 +99,7 @@ func (p *RoundSetupHandler) StartPhase(gs *GameState) {
 	}
 
 	drawerPayload := turnPayloadBase
-	drawerPayload.WordChoices = wordChoices
+	drawerPayload.WordChoices = *p.WordToPickFrom
 	log.Printf("GameState: Sending TurnSetup (with word choices) to drawer %s", newDrawer.Name)
 	go newDrawer.SendMessage(TurnSetupResponse, drawerPayload)
 
@@ -119,7 +119,7 @@ func (p *RoundSetupHandler) StartPhase(gs *GameState) {
 }
 
 func (p *RoundSetupHandler) HandleMessage(gs *GameState, player *Player, msg Message) GamePhaseHandler {
-	if msg.Type != ClientSelectRoundWord {
+	if msg.Type != ClientSelectRoundWord || !gs.isDrawer(player) {
 		return p
 	}
 
@@ -134,11 +134,12 @@ func (p *RoundSetupHandler) HandleMessage(gs *GameState, player *Player, msg Mes
 		return p
 	}
 
+	// TODO: check that player hasn't picked a random word, make sure it's in the list of p.WordToPickFrom
 	return GamePhaseHandler(&RoundInProgressHandler{Word: roundWordPayload.Word})
 }
 
 func (p *RoundSetupHandler) HandleTimeOut(gs *GameState) GamePhaseHandler {
-	word := p.WordToPickFrom[rand.Intn(len(p.WordToPickFrom))]
+	word := (*p.WordToPickFrom)[rand.Intn(len(*p.WordToPickFrom))]
 	return GamePhaseHandler(&RoundInProgressHandler{Word: word})
 }
 
@@ -169,7 +170,6 @@ func (p *RoundInProgressHandler) StartPhase(gs *GameState) {
 		WordLength:      len(gs.Word),
 		Players:         gs.getPlayerInfoList(), // Assumes lock held
 		TurnEndTime:     gs.turnEndTime.UnixMilli(),
-		Word:            gs.Word,
 	}
 
 	drawerPayload := turnPayloadBase
@@ -263,7 +263,7 @@ func (p *RoundFinishedHandler) HandleTimeOut(gs *GameState) GamePhaseHandler {
 	log.Println("GameState: Delay finished, attempting to start next turn.")
 	if gs.IsActive {
 		// TODO: change to round setup handler when in use
-		return GamePhaseHandler(&RoundInProgressHandler{})
+		return GamePhaseHandler(&RoundSetupHandler{WordToPickFrom: nil})
 	} else {
 		log.Println("GameState: GameState became inactive during turn delay, not starting next turn.")
 		return GamePhaseHandler(&WaitingInLobbyHandler{})

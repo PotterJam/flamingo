@@ -8,6 +8,7 @@ import Whiteboard from './Whiteboard';
 import GuessInput from './GuessInput';
 import {PrimaryButton} from './buttons/PrimaryButton';
 import {OutlineButton} from './buttons/OutlineButton';
+import {WordChoiceModal} from "./WordChoiceModal.tsx";
 
 const CANVAS_WIDTH = 800;
 const CANVAS_HEIGHT = 600;
@@ -28,6 +29,7 @@ export const Game: FC = () => {
         localPlayerId,
         word,
         wordLength,
+        wordChoices,
         turnEndTime,
     } = gameState;
 
@@ -46,6 +48,21 @@ export const Game: FC = () => {
 
     const canLocalPlayerGuess =
         !isLocalPlayerDrawer && !localPlayer.hasGuessedCorrectly;
+
+    const showWordChoiceModal =
+        appState === 'active' &&
+        isLocalPlayerDrawer &&
+        !!wordChoices &&
+        wordChoices.length > 0 &&
+        !word; // Only show if 'word' is not yet set for the turn
+
+    const handleWordChosen = useCallback(
+        (chosenWord: string) => {
+            sendMessage({ type: 'selectRoundWord', payload: { word: chosenWord } });
+
+        },
+        [sendMessage]
+    );
 
     const handleStartGame = useCallback(() => {
         console.log('Start Game button clicked by host.');
@@ -171,6 +188,14 @@ export const Game: FC = () => {
                     )}
                 </section>
             </div>
+            {wordChoices && turnEndTime && (
+                <WordChoiceModal
+                    isOpen={showWordChoiceModal}
+                    wordChoices={wordChoices}
+                    turnEndTime={turnEndTime}
+                    onWordChosen={handleWordChosen}
+                />
+            )}
         </div>
     );
 };
