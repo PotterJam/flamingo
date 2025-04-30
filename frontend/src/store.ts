@@ -22,6 +22,7 @@ export interface GameState {
     localPlayerId: string | null;
     word: string | null;
     wordLength: number | null ;
+    wordChoices: string[] | null;
     messages: ChatMessage[];
     turnEndTime: number | null;
     lastDrawEvent: DrawEvent | null;
@@ -37,6 +38,7 @@ const initialGameState: GameState = {
     hostId: null,
     localPlayerId: null,
     word: null,
+    wordChoices: null,
     wordLength: null,
     messages: [],
     turnEndTime: null,
