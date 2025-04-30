@@ -21,6 +21,7 @@ export interface GameState {
     hostId: string | null;
     localPlayerId: string | null;
     word: string | null;
+    wordLength: number | null ;
     messages: ChatMessage[];
     turnEndTime: number | null;
     lastDrawEvent: DrawEvent | null;
@@ -36,6 +37,7 @@ const initialGameState: GameState = {
     hostId: null,
     localPlayerId: null,
     word: null,
+    wordLength: null,
     messages: [],
     turnEndTime: null,
     lastDrawEvent: null,
@@ -159,6 +161,7 @@ export const useAppStore = create<AppState & AppActions & MessageHandlers>()(
             set((s) => {
                 s.gameState.currentDrawerId = payload.currentDrawerId;
                 s.gameState.word = payload.word ?? null;
+                s.gameState.wordLength = payload.wordLength ?? null;
                 s.gameState.players = payload.players;
                 s.gameState.turnEndTime = payload.turnEndTime;
 

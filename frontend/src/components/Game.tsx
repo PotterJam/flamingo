@@ -1,13 +1,13 @@
-import { FC, useCallback } from 'react';
-import { useAppStore } from '../store';
+import {FC, useCallback} from 'react';
+import {useAppStore} from '../store';
 import PlayerList from './PlayerList';
 import ChatBox from './ChatBox';
 import WordDisplay from './WordDisplay';
 import TimerDisplay from './TimerDisplay';
 import Whiteboard from './Whiteboard';
 import GuessInput from './GuessInput';
-import { PrimaryButton } from './buttons/PrimaryButton';
-import { OutlineButton } from './buttons/OutlineButton';
+import {PrimaryButton} from './buttons/PrimaryButton';
+import {OutlineButton} from './buttons/OutlineButton';
 
 const CANVAS_WIDTH = 800;
 const CANVAS_HEIGHT = 600;
@@ -27,6 +27,7 @@ export const Game: FC = () => {
         hostId,
         localPlayerId,
         word,
+        wordLength,
         turnEndTime,
     } = gameState;
 
@@ -45,10 +46,6 @@ export const Game: FC = () => {
 
     const canLocalPlayerGuess =
         !isLocalPlayerDrawer && !localPlayer.hasGuessedCorrectly;
-
-    const wordBlanks = Array(word?.length || '')
-        .fill('_')
-        .join(' ');
 
     const handleStartGame = useCallback(() => {
         console.log('Start Game button clicked by host.');
@@ -138,8 +135,8 @@ export const Game: FC = () => {
                                 <WordDisplay word={word ?? ''} />
                             ) : appState === 'active' && currentDrawerId ? (
                                 <WordDisplay
-                                    blanks={wordBlanks}
-                                    length={word?.length ?? 0}
+                                    blanks={Array(wordLength || '').fill('_').join(' ')}
+                                    length={wordLength ?? 0}
                                 />
                             ) : (
                                 <div className="h-8 md:h-10"></div>
