@@ -10,19 +10,19 @@ import (
 
 // Player represents a single connected client.
 type Player struct {
-	Id         string
-	Name       string
-	Score      int
-	Conn       *websocket.Conn
-	Room       *room.Room
-	Unregister chan *Player
-	Send       chan []byte // Buffered channel for outbound messages
+	Id           string
+	Name         string
+	Score        int
+	Conn         *websocket.Conn
+	Unregister   chan *Player
+	GameMessages chan GameMessage
+	Send         chan []byte // Buffered channel for outbound messages
 }
 
 // readPump pumps messages from the WebSocket connection to the hub.
 func (p *Player) readPump() {
 	defer func() {
-		p.Room.Unregister <- p
+		p.Unregister <- p
 		_ = p.Conn.Close()
 
 		log.Printf("Player %s (%s) disconnected and readPump cleaned up", p.Id, p.Name)
@@ -46,7 +46,7 @@ func (p *Player) readPump() {
 			continue
 		}
 
-		p.Room.Game.Messages <- GameMessage{p, msg}
+		p.GameMessages <- GameMessage{p, msg}
 	}
 }
 
