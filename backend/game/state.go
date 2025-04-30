@@ -1,10 +1,16 @@
 package game
 
 import (
-	"backend/room"
+	"backend/messages"
+	"encoding/json"
+	"log"
 	"sync"
 	"time"
 )
+
+type Broadcaster interface {
+	Broadcast(m messages.Message)
+}
 
 // GameState represents the single, shared game session.
 // TODO: move a bunch of this state into the phases.
@@ -15,36 +21,35 @@ type GameState struct {
 	Word              string               // The secret word for the current turn
 	CorrectGuessTimes map[string]time.Time // player ID -> time they guessed correctly
 	TurnStartTime     time.Time            // When the current turn (drawing phase) started
-	// TODO: Replace reference to room with channel
-	Room     *room.Room
-	mu       sync.Mutex // Mutex to protect concurrent access to game state
-	IsActive bool       // Flag indicating if a round/turn is currently running
+	Broadcaster       Broadcaster
+	mu                sync.Mutex // Mutex to protect concurrent access to game state
+	IsActive          bool       // Flag indicating if a round/turn is currently running
 
 	timerForTimeout *time.Timer
 	turnEndTime     time.Time
 }
 
 func (g *GameState) broadcastPlayerUpdate() {
-	payload := PlayerUpdatePayload{
+	payload := messages.PlayerUpdatePayload{
 		Players: g.getPlayerInfoList(), // Assumes lock held
 		HostID:  g.HostId,
 	}
-	msg := Message{Type: PlayerUpdateResponse, Payload: json.RawMessage(MustMarshal(payload))}
-	go g.Room.Broadcast(msg)
+	msg := messages.Message{Type: messages.PlayerUpdateResponse, Payload: json.RawMessage(messages.MustMarshal(payload))}
+	go g.Broadcaster.Broadcast(msg)
 }
 
 func (g *GameState) BroadcastSystemMessage(message string) {
-	payload := ChatPayload{SenderName: "System", Message: message, IsSystem: true}
-	msg := Message{Type: ChatResponse, Payload: json.RawMessage(MustMarshal(payload))}
-	go g.Room.Broadcast(msg)
+	payload := messages.ChatPayload{SenderName: "System", Message: message, IsSystem: true}
+	msg := messages.Message{Type: messages.ChatResponse, Payload: json.RawMessage(messages.MustMarshal(payload))}
+	go g.Broadcaster.Broadcast(msg)
 }
 
-func (g *GameState) getPlayerInfoList() []PlayerInfo {
-	infoList := make([]PlayerInfo, 0, len(g.Players))
+func (g *GameState) getPlayerInfoList() []messages.PlayerInfo {
+	infoList := make([]messages.PlayerInfo, 0, len(g.Players))
 	for _, p := range g.Players {
 		if p != nil {
 			_, hasGuessedCorrectly := g.CorrectGuessTimes[p.Id]
-			infoList = append(infoList, PlayerInfo{
+			infoList = append(infoList, messages.PlayerInfo{
 				ID:                  p.Id,
 				Name:                p.Name,
 				Score:               p.Score,
@@ -81,7 +86,7 @@ const (
 // sendGameInfo sends the initial game state to a player
 func (g *Game) sendGameInfo(player *Player) {
 	state := g.GameState
-	payload := GameInfoPayload{
+	payload := messages.GameInfoPayload{
 		GamePhase:    g.GameHandler.Phase().String(),
 		YourID:       player.Id,
 		Players:      state.getPlayerInfoList(),
@@ -98,7 +103,7 @@ func (g *Game) sendGameInfo(player *Player) {
 		}
 	}
 	log.Printf("GameState: Sending game info to player %s (%s). Active: %t, Host: %s", player.Id, player.Name, payload.IsGameActive, state.HostId)
-	go player.SendMessage(GameInfoResponse, payload)
+	go player.SendMessage(messages.GameInfoResponse, payload)
 }
 
 func (g *GameState) HandleStartGame(sender *Player) {
@@ -141,7 +146,7 @@ func (g *GameState) checkAllGuessed() bool {
 }
 
 func (g *GameState) BroadcastChatMessage(senderName, message string) {
-	payload := ChatPayload{SenderName: senderName, Message: message, IsSystem: false}
-	msg := Message{Type: ChatResponse, Payload: json.RawMessage(MustMarshal(payload))}
-	go g.Room.Broadcast(msg)
+	payload := messages.ChatPayload{SenderName: senderName, Message: message, IsSystem: false}
+	msg := messages.Message{Type: messages.ChatResponse, Payload: json.RawMessage(messages.MustMarshal(payload))}
+	go g.Broadcaster.Broadcast(msg)
 }

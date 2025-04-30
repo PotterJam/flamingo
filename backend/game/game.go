@@ -1,6 +1,8 @@
 package game
 
 import (
+	"backend/game/phase"
+	"backend/messages"
 	"log"
 	"slices"
 	"time"
@@ -8,11 +10,11 @@ import (
 
 type GameMessage struct {
 	player *Player
-	msg    Message
+	msg    messages.Message
 }
 
 type Game struct {
-	GameHandler GamePhaseHandler
+	GameHandler phase.GamePhaseHandler
 	GameState   *GameState
 	Messages    chan GameMessage
 }
@@ -26,7 +28,7 @@ func (g *Game) HandleEvents() {
 		}
 		g.GameState.mu.Unlock()
 
-		var newHandler GamePhaseHandler
+		var newHandler phase.GamePhaseHandler
 		select {
 		case msg := <-g.Messages:
 			g.GameState.mu.Lock()
@@ -49,7 +51,7 @@ func (g *Game) HandleEvents() {
 	}
 }
 
-func (g *Game) updateHandler(newHandler GamePhaseHandler) {
+func (g *Game) updateHandler(newHandler phase.GamePhaseHandler) {
 	if newHandler.Phase() == g.GameHandler.Phase() {
 		return
 	}
@@ -63,8 +65,8 @@ func (g *Game) updateHandler(newHandler GamePhaseHandler) {
 	g.GameHandler.StartPhase(g.GameState)
 }
 
-func NewGame(room *Room) *Game {
-	handler := GamePhaseHandler(&WaitingInLobbyHandler{})
+func NewGame(b Broadcaster) *Game {
+	handler := phase.GamePhaseHandler(&phase.WaitingInLobbyHandler{})
 
 	return &Game{
 		GameState: &GameState{
@@ -72,7 +74,7 @@ func NewGame(room *Room) *Game {
 			HostId:            "", // No host initially
 			CurrentDrawerIdx:  -1,
 			CorrectGuessTimes: make(map[string]time.Time),
-			Room:              room,
+			Room:              b,
 			IsActive:          false,
 			timerForTimeout:   nil,
 		},
@@ -162,7 +164,7 @@ func (g *Game) RemovePlayer(player *Player) {
 
 	wasDrawer := state.IsActive && state.CurrentDrawerIdx == playerIndex
 	if len(state.Players) < minPlayersToStart {
-		g.updateHandler(GamePhaseHandler(&GameOverHandler{}))
+		g.updateHandler(phase.GamePhaseHandler(&phase.GameOverHandler{}))
 	} else {
 		if playerIndex < state.CurrentDrawerIdx {
 			state.CurrentDrawerIdx--
@@ -175,7 +177,7 @@ func (g *Game) RemovePlayer(player *Player) {
 
 		if wasDrawer || allGuessed {
 			log.Printf("GameState: Ending turn early due to player %s leaving (was drawer: %t, all guessed now: %t).", player.Name, wasDrawer, allGuessed)
-			g.updateHandler(GamePhaseHandler(&RoundFinishedHandler{}))
+			g.updateHandler(phase.GamePhaseHandler(&phase.RoundFinishedHandler{}))
 		}
 	}
 }
