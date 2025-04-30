@@ -7,6 +7,8 @@ import (
 	"time"
 )
 
+var words = []string{"apple", "banana", "cloud", "house", "tree", "computer", "go", "svelte", "network", "game", "player", "draw", "timer", "guess", "score", "host", "lobby", "react"}
+
 var turnDuration = 59 * time.Second
 
 const (
@@ -106,7 +108,7 @@ func (p *RoundSetupHandler) StartPhase(gs *GameState) {
 	go newDrawer.SendMessage(TurnSetupResponse, drawerPayload)
 
 	guesserPayload := turnPayloadBase
-	msgBytes := MustMarshal(Message{Type: TurnSetupResponse, Payload: json.RawMessage(MustMarshal(guesserPayload))})
+	msg := Message{Type: TurnSetupResponse, Payload: json.RawMessage(MustMarshal(guesserPayload))}
 	playersToSendTo := make([]*Player, 0, len(gs.Players)-1)
 	for i, p := range gs.Players {
 		if i != gs.CurrentDrawerIdx {
@@ -114,7 +116,7 @@ func (p *RoundSetupHandler) StartPhase(gs *GameState) {
 		}
 	}
 	log.Printf("GameState: Sending TurnSetup (no word choices) to %d guessers", len(playersToSendTo))
-	go gs.Room.BroadcastToPlayers(msgBytes, playersToSendTo)
+	go gs.Room.BroadcastToPlayers(msg, playersToSendTo)
 
 	gs.BroadcastSystemMessage(newDrawer.Name + " is choosing a word.")
 	return
@@ -182,7 +184,7 @@ func (p *RoundInProgressHandler) StartPhase(gs *GameState) {
 	go drawer.SendMessage(TurnStartResponse, drawerPayload)
 
 	guesserPayload := turnPayloadBase
-	msgBytes := MustMarshal(Message{Type: TurnStartResponse, Payload: json.RawMessage(MustMarshal(guesserPayload))})
+	msg := Message{Type: TurnStartResponse, Payload: json.RawMessage(MustMarshal(guesserPayload))}
 	playersToSendTo := make([]*Player, 0, len(gs.Players)-1)
 	for i, p := range gs.Players {
 		if i != gs.CurrentDrawerIdx {
@@ -190,7 +192,7 @@ func (p *RoundInProgressHandler) StartPhase(gs *GameState) {
 		}
 	}
 	log.Printf("GameState: Sending TurnStart (no word) to %d guessers", len(playersToSendTo))
-	go gs.Room.BroadcastToPlayers(msgBytes, playersToSendTo)
+	go gs.Room.BroadcastToPlayers(msg, playersToSendTo)
 
 	gs.BroadcastSystemMessage(drawer.Name + " is drawing!")
 	return
@@ -221,7 +223,7 @@ func (p *RoundInProgressHandler) HandleMessage(gs *GameState, player *Player, ms
 			gs.BroadcastChatMessage(player.Name, guessPayload.Guess)
 		}
 	} else if msg.Type == ClientDrawEvent && gs.isDrawer(player) {
-		drawMsgBytes := MustMarshal(Message{Type: DrawEventBroadcastResponse, Payload: msg.Payload})
+		drawMsg := Message{Type: DrawEventBroadcastResponse, Payload: msg.Payload}
 		playersToSendTo := make([]*Player, 0, len(gs.Players)-1)
 		for _, p := range gs.Players {
 			if p != nil && p.Id != player.Id {
@@ -229,7 +231,7 @@ func (p *RoundInProgressHandler) HandleMessage(gs *GameState, player *Player, ms
 			}
 		}
 
-		go gs.Room.BroadcastToPlayers(drawMsgBytes, playersToSendTo)
+		go gs.Room.BroadcastToPlayers(drawMsg, playersToSendTo)
 	}
 	return p
 }
@@ -264,8 +266,8 @@ func (p *RoundFinishedHandler) StartPhase(gs *GameState) {
 		Players:     gs.getPlayerInfoList(),
 		RoundScores: playerRoundScores,
 	}
-	turnEndMsgBytes := MustMarshal(Message{Type: TurnEndResponse, Payload: json.RawMessage(MustMarshal(turnEndPayload))})
-	go gs.Room.Broadcast(turnEndMsgBytes)
+	turnEndMsg := Message{Type: TurnEndResponse, Payload: json.RawMessage(MustMarshal(turnEndPayload))}
+	go gs.Room.Broadcast(turnEndMsg)
 }
 
 func (p *RoundFinishedHandler) HandleMessage(gs *GameState, player *Player, msg Message) GamePhaseHandler {
@@ -390,6 +392,6 @@ func (g *GameState) checkAllGuessed() bool {
 
 func (g *GameState) BroadcastChatMessage(senderName, message string) {
 	payload := ChatPayload{SenderName: senderName, Message: message, IsSystem: false}
-	msgBytes := MustMarshal(Message{Type: ChatResponse, Payload: json.RawMessage(MustMarshal(payload))})
-	go g.Room.Broadcast(msgBytes)
+	msg := Message{Type: ChatResponse, Payload: json.RawMessage(MustMarshal(payload))}
+	go g.Room.Broadcast(msg)
 }
