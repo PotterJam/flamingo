@@ -125,10 +125,10 @@ func (r *Room) Broadcast(message []byte) {
 	}
 }
 
-func (r *Room) BroadcastToPlayers(message []byte, players []*Player) {
+func (r *Room) BroadcastToPlayers(message Message, players []*Player) {
 	for _, p := range players {
 		go func() {
-			p.Send <- message
+			p.Send <- MustMarshal(message)
 		}()
 	}
 }
