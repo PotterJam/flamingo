@@ -86,8 +86,10 @@ func (p *RoundSetupHandler) StartPhase(gs *GameState) {
 	newDrawer := gs.Players[gs.CurrentDrawerIdx]
 
 	wordChoices := make([]string, 3)
-	for i := range wordChoices {
-		// TODO create word choices
+
+	perms := rand.Perm(len(words))
+	for i, r := range perms[:len(wordChoices)] {
+		wordChoices[i] = words[r]
 	}
 
 	turnPayloadBase := TurnSetupPayload{
