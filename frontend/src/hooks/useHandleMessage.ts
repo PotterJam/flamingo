@@ -7,9 +7,6 @@ export const useHandleMessage = (message: ReceivedMsg | null) => {
     const handleTurnSetup = useAppStore((s) => s.handleTurnSetup);
 
     const handlePlayerUpdate = useAppStore((s) => s.handlePlayerUpdate);
-    const handlePlayerGuessedCorrectly = useAppStore(
-        (s) => s.handlePlayerGuessedCorrectly
-    );
     const handleTurnEnd = useAppStore((s) => s.handleTurnEnd);
     const handleDraw = useAppStore((s) => s.handleDraw);
     const addChatMessage = useAppStore((s) => s.addChatMessage);
@@ -31,10 +28,6 @@ export const useHandleMessage = (message: ReceivedMsg | null) => {
                 break;
             case 'turnStart': {
                 handleTurnStart(message);
-                break;
-            }
-            case 'playerGuessedCorrectly': {
-                handlePlayerGuessedCorrectly(message);
                 break;
             }
             case 'chat': {

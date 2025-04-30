@@ -1,15 +1,14 @@
 package main // Ensure this is package main
 
 const (
-	TypeErrorResponse              = "error"
-	GameInfoResponse               = "gameInfo"
-	PlayerUpdateResponse           = "playerUpdate"
-	TurnStartResponse              = "turnStart"
-	PlayerGuessedCorrectlyResponse = "playerGuessedCorrectly"
-	ChatResponse                   = "chat"
-	DrawEventBroadcastResponse     = "drawEvent" // <<< Using "drawEvent" to match frontend expectation
-	TurnSetupResponse              = "turnSetup"
-	TurnEndResponse                = "turnEnd"
+	TypeErrorResponse          = "error"
+	GameInfoResponse           = "gameInfo"
+	PlayerUpdateResponse       = "playerUpdate"
+	TurnStartResponse          = "turnStart"
+	ChatResponse               = "chat"
+	DrawEventBroadcastResponse = "drawEvent" // <<< Using "drawEvent" to match frontend expectation
+	TurnSetupResponse          = "turnSetup"
+	TurnEndResponse            = "turnEnd"
 )
 
 type ErrorPayload struct {
@@ -19,6 +18,7 @@ type ErrorPayload struct {
 type PlayerInfo struct {
 	ID                  string `json:"id"`
 	Name                string `json:"name"`
+	Score               int    `json:"score"`
 	IsHost              bool   `json:"isHost,omitempty"`
 	HasGuessedCorrectly bool   `json:"hasGuessedCorrectly,omitempty"`
 }
@@ -58,10 +58,6 @@ type TurnStartPayload struct {
 
 // TODO: TurnHelpPayload that gives help for people that haven#t guessed the word
 
-type PlayerGuessedCorrectlyPayload struct {
-	PlayerID string `json:"playerId"`
-}
-
 type ChatPayload struct {
 	SenderName string `json:"senderName"`
 	Message    string `json:"message"`
@@ -69,7 +65,9 @@ type ChatPayload struct {
 }
 
 type TurnEndPayload struct {
-	CorrectWord string `json:"correctWord"`
+	CorrectWord string         `json:"correctWord"`
+	Players     []PlayerInfo   `json:"players"`
+	RoundScores map[string]int `json:"roundScores"`
 }
 
 // WaitingPayload: No payload needed for MsgTypeWaiting

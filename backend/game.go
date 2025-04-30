@@ -68,13 +68,13 @@ func NewGame(room *Room) *Game {
 
 	return &Game{
 		GameState: &GameState{
-			Players:          make([]*Player, 0, 10),
-			HostId:           "", // No host initially
-			CurrentDrawerIdx: -1,
-			GuessedCorrectly: make(map[string]bool),
-			Room:             room,
-			IsActive:         false,
-			timerForTimeout:  nil,
+			Players:           make([]*Player, 0, 10),
+			HostId:            "", // No host initially
+			CurrentDrawerIdx:  -1,
+			CorrectGuessTimes: make(map[string]time.Time),
+			Room:              room,
+			IsActive:          false,
+			timerForTimeout:   nil,
 		},
 		GameHandler: handler,
 		Messages:    make(chan GameMessage, 5),
@@ -90,7 +90,7 @@ func (g *GameState) resetGameState(reason string) {
 	g.IsActive = false
 	g.CurrentDrawerIdx = -1
 	g.Word = ""
-	g.GuessedCorrectly = make(map[string]bool)
+	g.CorrectGuessTimes = make(map[string]time.Time)
 	g.BroadcastSystemMessage("GameState Over: " + reason)
 }
 
@@ -145,7 +145,7 @@ func (g *Game) RemovePlayer(player *Player) {
 	state.Players = slices.Delete(state.Players, playerIndex, playerIndex+1)
 	log.Printf("GameState: Player %s (%s) removed. Remaining players: %d", player.Id, player.Name, len(state.Players))
 
-	delete(state.GuessedCorrectly, player.Id)
+	delete(g.GameState.CorrectGuessTimes, player.Id)
 
 	wasHost := state.HostId == player.Id
 

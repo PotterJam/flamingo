@@ -1,6 +1,7 @@
 export interface Player {
     id: string;
     name: string;
+    score: number;
     isHost?: boolean;
     hasGuessedCorrectly?: boolean;
 }
@@ -69,13 +70,8 @@ export interface TurnEndMsg {
     type: 'turnEnd';
     payload: {
         correctWord: string;
-    };
-}
-
-export interface PlayerGuessedCorrectlyMsg {
-    type: 'playerGuessedCorrectly';
-    payload: {
-        playerId: string;
+        players: Player[];
+        roundScores: { [playerId: string]: number };
     };
 }
 
@@ -117,7 +113,6 @@ export type ReceivedMsg =
     | TurnSetupMsg
     | TurnStartMsg
     | TurnEndMsg
-    | PlayerGuessedCorrectlyMsg
     | DrawEventMsg
     | ErrorMsg;
 
