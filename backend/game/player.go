@@ -1,19 +1,22 @@
-package main
+package game
 
 import (
+	"backend/messages"
 	"encoding/json"
-	"github.com/gorilla/websocket"
 	"log"
+
+	"github.com/gorilla/websocket"
 )
 
 // Player represents a single connected client.
 type Player struct {
-	Id    string
-	Name  string
-	Score int
-	Conn  *websocket.Conn
-	Room  *Room
-	Send  chan []byte // Buffered channel for outbound messages
+	Id         string
+	Name       string
+	Score      int
+	Conn       *websocket.Conn
+	Room       *room.Room
+	Unregister chan *Player
+	Send       chan []byte // Buffered channel for outbound messages
 }
 
 // readPump pumps messages from the WebSocket connection to the hub.
@@ -36,7 +39,7 @@ func (p *Player) readPump() {
 			break
 		}
 
-		var msg Message
+		var msg messages.Message
 		if err := json.Unmarshal(messageBytes, &msg); err != nil {
 			log.Printf("Player %s (%s): Error unmarshalling message: %v", p.Id, p.Name, err)
 			p.SendError("Invalid message format")
@@ -87,9 +90,9 @@ func (p *Player) SendError(errMsg string) {
 	if p == nil {
 		return
 	}
-	payload := ErrorPayload{Message: errMsg}
+	payload := messages.ErrorPayload{Message: errMsg}
 
-	msgBytes, _ := json.Marshal(Message{Type: TypeErrorResponse, Payload: json.RawMessage(MustMarshal(payload))})
+	msgBytes, _ := json.Marshal(messages.Message{Type: messages.TypeErrorResponse, Payload: json.RawMessage(messages.MustMarshal(payload))})
 	// Use a non-blocking send
 	select {
 	case p.Send <- msgBytes:
@@ -114,7 +117,7 @@ func (p *Player) SendMessage(msgType string, payload any) {
 		}
 	}
 
-	msg := Message{Type: msgType, Payload: json.RawMessage(payloadBytes)}
+	msg := messages.Message{Type: msgType, Payload: json.RawMessage(payloadBytes)}
 	msgBytes, err := json.Marshal(msg)
 	if err != nil {
 		log.Printf("Player %s (%s): Error marshalling message for type %s: %v", p.Id, p.Name, msgType, err)

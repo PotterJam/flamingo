@@ -1,4 +1,4 @@
-package main // Ensure this is package main
+package messages
 
 const (
 	TypeErrorResponse          = "error"
