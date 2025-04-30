@@ -114,6 +114,7 @@ export type ReceivedMsg =
     | GameInfoMsg
     | PlayerUpdateMsg
     | ChatMsg
+    | TurnSetupMsg
     | TurnStartMsg
     | TurnEndMsg
     | PlayerGuessedCorrectlyMsg

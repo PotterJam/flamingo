@@ -9,7 +9,7 @@ import {
     PlayerUpdateMsg,
     ReceivedMsg,
     SendMsg,
-    TurnEndMsg,
+    TurnEndMsg, TurnSetupMsg,
     TurnStartMsg,
 } from './messages';
 import { immer } from 'zustand/middleware/immer';
@@ -83,6 +83,7 @@ export type AppActions = {
 
 export type MessageHandlers = {
     handleGameInfo: (msg: GameInfoMsg) => void;
+    handleTurnSetup: (msg: TurnSetupMsg) => void;
     handleTurnStart: (msg: TurnStartMsg) => void;
     handlePlayerUpdate: (msg: PlayerUpdateMsg) => void;
     handlePlayerGuessedCorrectly: (msg: PlayerGuessedCorrectlyMsg) => void;
@@ -158,6 +159,15 @@ export const useAppStore = create<AppState & AppActions & MessageHandlers>()(
                 } else {
                     s.appState = 'waiting';
                 }
+            }),
+        handleTurnSetup: ({ payload }) =>
+            set((s) => {
+                s.gameState.currentDrawerId = payload.currentDrawerId;
+                s.gameState.wordChoices = payload.wordChoices ?? null;
+                s.gameState.players = payload.players;
+                s.gameState.turnEndTime = payload.turnEndTime;
+
+                s.appState = 'active';
             }),
         handleTurnStart: ({ payload }) =>
             set((s) => {
