@@ -5,7 +5,6 @@ import {
     DrawEventMsg,
     GameInfoMsg,
     Player,
-    PlayerGuessedCorrectlyMsg,
     PlayerUpdateMsg,
     ReceivedMsg,
     SendMsg,
@@ -77,7 +76,6 @@ export type AppActions = {
 
     resetGameState: () => void;
 
-    resetPlayerGuesses: () => void;
     addChatMessage: (message: ChatMessage) => void;
 };
 
@@ -86,7 +84,6 @@ export type MessageHandlers = {
     handleTurnSetup: (msg: TurnSetupMsg) => void;
     handleTurnStart: (msg: TurnStartMsg) => void;
     handlePlayerUpdate: (msg: PlayerUpdateMsg) => void;
-    handlePlayerGuessedCorrectly: (msg: PlayerGuessedCorrectlyMsg) => void;
     handleTurnEnd: (msg: TurnEndMsg) => void;
     handleDraw: (msg: DrawEventMsg) => void;
 };
@@ -130,13 +127,6 @@ export const useAppStore = create<AppState & AppActions & MessageHandlers>()(
         resetGameState: () =>
             set((s) => {
                 s.gameState = initialGameState;
-            }),
-        resetPlayerGuesses: () =>
-            set((s) => {
-                s.gameState.players = s.gameState.players.map((p) => ({
-                    ...p,
-                    hasGuessedCorrectly: false,
-                }));
             }),
         addChatMessage: (message) =>
             set((s) => {
@@ -196,31 +186,14 @@ export const useAppStore = create<AppState & AppActions & MessageHandlers>()(
                     s.appState = 'waiting';
                 }
             }),
-        handlePlayerGuessedCorrectly: ({ payload }) =>
+        handleTurnEnd: ({ payload }) =>
             set((s) => {
-                s.gameState.players = s.gameState.players.map((p) =>
-                    p.id === payload.playerId
-                        ? { ...p, hasGuessedCorrectly: true }
-                        : p
-                );
-                const guesser = s.gameState.players.find(
-                    (p) => p.id === payload.playerId
-                );
-                if (guesser) {
-                    s.addChatMessage({
-                        senderName: 'System',
-                        message: `${guesser?.name ?? 'Unknown'} guessed the word!`,
-                        isSystem: true,
-                    });
-                }
-            }),
-        handleTurnEnd: (_msg) =>
-            set((s) => {
+                s.gameState.players = payload.players;
                 s.gameState.turnEndTime = null;
-                s.resetPlayerGuesses();
                 s.gameState.word = null;
                 s.gameState.wordLength = null;
                 s.gameState.wordChoices = null;
+                s.gameState.currentDrawerId = null;
             }),
         handleDraw: ({ payload }) =>
             set((s) => {

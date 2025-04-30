@@ -9,7 +9,9 @@ import (
 
 var turnDuration = 59 * time.Second
 
-const minPlayersToStart = 2
+const (
+	minPlayersToStart = 2
+)
 
 type GamePhase int
 
@@ -152,7 +154,7 @@ func (p *RoundInProgressHandler) Phase() GamePhase {
 }
 
 func (p *RoundInProgressHandler) StartPhase(gs *GameState) {
-	gs.GuessedCorrectly = make(map[string]bool)
+	gs.CorrectGuessTimes = make(map[string]time.Time)
 
 	if gs.CurrentDrawerIdx < -1 || gs.CurrentDrawerIdx >= len(gs.Players) {
 		log.Printf("GameState: Resetting invalid CurrentDrawerIdx (%d) before next turn.", gs.CurrentDrawerIdx)
@@ -162,7 +164,9 @@ func (p *RoundInProgressHandler) StartPhase(gs *GameState) {
 	drawer := gs.Players[gs.CurrentDrawerIdx]
 
 	gs.Word = p.Word
-	gs.turnEndTime = time.Now().Add(turnDuration)
+	now := time.Now()
+	gs.TurnStartTime = now
+	gs.turnEndTime = now.Add(turnDuration)
 	gs.timerForTimeout = time.NewTimer(turnDuration)
 
 	turnPayloadBase := TurnStartPayload{
@@ -194,8 +198,7 @@ func (p *RoundInProgressHandler) StartPhase(gs *GameState) {
 
 func (p *RoundInProgressHandler) HandleMessage(gs *GameState, player *Player, msg Message) GamePhaseHandler {
 	if msg.Type == ClientGuess && !gs.isDrawer(player) {
-		if gs.GuessedCorrectly[player.Id] {
-			player.SendError("You already guessed the word correctly this turn.")
+		if _, alreadyGuessed := gs.CorrectGuessTimes[player.Id]; alreadyGuessed {
 			return p
 		}
 
@@ -208,11 +211,8 @@ func (p *RoundInProgressHandler) HandleMessage(gs *GameState, player *Player, ms
 		correct := guessPayload.Guess == gs.Word
 
 		if correct {
-			gs.GuessedCorrectly[player.Id] = true
-
-			correctPayload := PlayerGuessedCorrectlyPayload{PlayerID: player.Id}
-			msgBytes := MustMarshal(Message{Type: PlayerGuessedCorrectlyResponse, Payload: MustMarshal(correctPayload)})
-			go gs.Room.Broadcast(msgBytes)
+			gs.CorrectGuessTimes[player.Id] = time.Now()
+			gs.BroadcastSystemMessage(player.Name + " guessed the word!")
 
 			if gs.checkAllGuessed() {
 				return GamePhaseHandler(&RoundFinishedHandler{})
@@ -245,12 +245,25 @@ func (p *RoundFinishedHandler) Phase() GamePhase {
 }
 
 func (p *RoundFinishedHandler) StartPhase(gs *GameState) {
-	turnDuration := 3 * time.Second
-	gs.timerForTimeout = time.NewTimer(turnDuration)
-	gs.turnEndTime = time.Now().Add(turnDuration)
+	playerRoundScores := calculateRoundScores(gs)
+
+	// Apply score deltas
+	for _, player := range gs.Players {
+		if delta, ok := playerRoundScores[player.Id]; ok {
+			player.Score += delta
+		}
+	}
+
+	finishDelay := 5 * time.Second
+	gs.timerForTimeout = time.NewTimer(finishDelay)
+	gs.turnEndTime = time.Now().Add(finishDelay)
 
 	gs.BroadcastSystemMessage("Turn over! The word was: " + gs.Word)
-	turnEndPayload := TurnEndPayload{CorrectWord: gs.Word}
+	turnEndPayload := TurnEndPayload{
+		CorrectWord: gs.Word,
+		Players:     gs.getPlayerInfoList(),
+		RoundScores: playerRoundScores,
+	}
 	turnEndMsgBytes := MustMarshal(Message{Type: TurnEndResponse, Payload: json.RawMessage(MustMarshal(turnEndPayload))})
 	go gs.Room.Broadcast(turnEndMsgBytes)
 }
@@ -261,8 +274,11 @@ func (p *RoundFinishedHandler) HandleMessage(gs *GameState, player *Player, msg 
 
 func (p *RoundFinishedHandler) HandleTimeOut(gs *GameState) GamePhaseHandler {
 	log.Println("GameState: Delay finished, attempting to start next turn.")
+
+	gs.CorrectGuessTimes = make(map[string]time.Time)
+	gs.Word = ""
+
 	if gs.IsActive {
-		// TODO: change to round setup handler when in use
 		return GamePhaseHandler(&RoundSetupHandler{WordToPickFrom: nil})
 	} else {
 		log.Println("GameState: GameState became inactive during turn delay, not starting next turn.")
@@ -361,8 +377,10 @@ func (g *GameState) checkAllGuessed() bool {
 	}
 	correctCount := 0
 	for i, p := range g.Players {
-		if i != g.CurrentDrawerIdx && g.GuessedCorrectly[p.Id] {
-			correctCount++
+		if i != g.CurrentDrawerIdx {
+			if _, guessed := g.CorrectGuessTimes[p.Id]; guessed {
+				correctCount++
+			}
 		}
 	}
 

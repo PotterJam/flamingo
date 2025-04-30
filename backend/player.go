@@ -8,11 +8,12 @@ import (
 
 // Player represents a single connected client.
 type Player struct {
-	Id   string
-	Name string // Player's chosen name
-	Conn *websocket.Conn
-	Room *Room
-	Send chan []byte // Buffered channel for outbound messages
+	Id    string
+	Name  string
+	Score int
+	Conn  *websocket.Conn
+	Room  *Room
+	Send  chan []byte // Buffered channel for outbound messages
 }
 
 // readPump pumps messages from the WebSocket connection to the hub.
