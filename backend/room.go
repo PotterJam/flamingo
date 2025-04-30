@@ -83,7 +83,7 @@ func (r *Room) Run() {
 			var playerToRemove *Player
 			if existingPlayer, ok := r.Players[player.Id]; ok {
 				delete(r.Players, player.Id)
-					close(existingPlayer.Send)
+				close(existingPlayer.Send)
 				log.Printf("{%s} Player %s (%s) connection unregistered. Total tracked: %d", r.Id, player.Id, existingPlayer.Name, len(r.Players))
 				playerToRemove = existingPlayer
 			} else {
@@ -105,6 +105,8 @@ func (r *Room) Run() {
 
 func (r *Room) Broadcast(message []byte) {
 	r.mu.Lock()
+	// copy first to minimise time lock is held
+	// I'm not convinced this is needed since spawning a go routine is very fast
 	playersToSend := make([]*Player, 0, len(r.Players))
 	for _, player := range r.Players {
 		if player != nil {
@@ -118,11 +120,7 @@ func (r *Room) Broadcast(message []byte) {
 			if p == nil {
 				return
 			}
-			select {
-			case p.Send <- message:
-			default:
-				log.Printf("{%s} Room Broadcast Warn: Player %s (%s) send buffer full/closed.", r.Id, p.Id, p.Name)
-			}
+			p.Send <- message
 		}()
 	}
 }
@@ -130,11 +128,7 @@ func (r *Room) Broadcast(message []byte) {
 func (r *Room) BroadcastToPlayers(message []byte, players []*Player) {
 	for _, p := range players {
 		go func() {
-			select {
-			case p.Send <- message:
-			default:
-				log.Printf("{%s} Room BroadcastToPlayers Warn: Player %s (%s) send buffer full/closed.", r.Id, p.Id, p.Name)
-			}
+			p.Send <- message
 		}()
 	}
 }
