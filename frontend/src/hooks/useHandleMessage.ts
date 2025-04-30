@@ -4,6 +4,8 @@ import { useAppStore } from '../store';
 export const useHandleMessage = (message: ReceivedMsg | null) => {
     const handleGameInfo = useAppStore((s) => s.handleGameInfo);
     const handleTurnStart = useAppStore((s) => s.handleTurnStart);
+    const handleTurnSetup = useAppStore((s) => s.handleTurnSetup);
+
     const handlePlayerUpdate = useAppStore((s) => s.handlePlayerUpdate);
     const handlePlayerGuessedCorrectly = useAppStore(
         (s) => s.handlePlayerGuessedCorrectly
@@ -24,6 +26,9 @@ export const useHandleMessage = (message: ReceivedMsg | null) => {
                 handlePlayerUpdate(message);
                 break;
             }
+            case 'turnSetup':
+                handleTurnSetup(message);
+                break;
             case 'turnStart': {
                 handleTurnStart(message);
                 break;

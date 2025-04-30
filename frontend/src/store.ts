@@ -9,7 +9,7 @@ import {
     PlayerUpdateMsg,
     ReceivedMsg,
     SendMsg,
-    TurnEndMsg,
+    TurnEndMsg, TurnSetupMsg,
     TurnStartMsg,
 } from './messages';
 import { immer } from 'zustand/middleware/immer';
@@ -21,6 +21,8 @@ export interface GameState {
     hostId: string | null;
     localPlayerId: string | null;
     word: string | null;
+    wordLength: number | null ;
+    wordChoices: string[] | null;
     messages: ChatMessage[];
     turnEndTime: number | null;
     lastDrawEvent: DrawEvent | null;
@@ -36,6 +38,8 @@ const initialGameState: GameState = {
     hostId: null,
     localPlayerId: null,
     word: null,
+    wordChoices: null,
+    wordLength: null,
     messages: [],
     turnEndTime: null,
     lastDrawEvent: null,
@@ -79,6 +83,7 @@ export type AppActions = {
 
 export type MessageHandlers = {
     handleGameInfo: (msg: GameInfoMsg) => void;
+    handleTurnSetup: (msg: TurnSetupMsg) => void;
     handleTurnStart: (msg: TurnStartMsg) => void;
     handlePlayerUpdate: (msg: PlayerUpdateMsg) => void;
     handlePlayerGuessedCorrectly: (msg: PlayerGuessedCorrectlyMsg) => void;
@@ -155,10 +160,22 @@ export const useAppStore = create<AppState & AppActions & MessageHandlers>()(
                     s.appState = 'waiting';
                 }
             }),
-        handleTurnStart: ({ payload }) =>
+        handleTurnSetup: ({ payload }) =>
             set((s) => {
                 s.gameState.currentDrawerId = payload.currentDrawerId;
+                s.gameState.wordChoices = payload.wordChoices ?? null;
+                s.gameState.players = payload.players;
+                s.gameState.turnEndTime = payload.turnEndTime;
+
+                s.appState = 'active';
+            }),
+        handleTurnStart: ({ payload }) =>
+            set((s) => {
+                s.gameState.wordChoices = null; // The word has been chosen
+
+                s.gameState.currentDrawerId = payload.currentDrawerId;
                 s.gameState.word = payload.word ?? null;
+                s.gameState.wordLength = payload.wordLength ?? null;
                 s.gameState.players = payload.players;
                 s.gameState.turnEndTime = payload.turnEndTime;
 
@@ -201,6 +218,9 @@ export const useAppStore = create<AppState & AppActions & MessageHandlers>()(
             set((s) => {
                 s.gameState.turnEndTime = null;
                 s.resetPlayerGuesses();
+                s.gameState.word = null;
+                s.gameState.wordLength = null;
+                s.gameState.wordChoices = null;
             }),
         handleDraw: ({ payload }) =>
             set((s) => {

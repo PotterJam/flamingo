@@ -43,6 +43,17 @@ export interface ChatMsg {
     payload: ChatMessage;
 }
 
+export interface TurnSetupMsg {
+    type: 'turnSetup';
+    payload: {
+        currentDrawerId: string;
+        players: Player[];
+        turnEndTime: number;
+        wordChoices?: string[]; // undefined for guessing players
+    };
+}
+
+
 export interface TurnStartMsg {
     type: 'turnStart';
     payload: {
@@ -103,6 +114,7 @@ export type ReceivedMsg =
     | GameInfoMsg
     | PlayerUpdateMsg
     | ChatMsg
+    | TurnSetupMsg
     | TurnStartMsg
     | TurnEndMsg
     | PlayerGuessedCorrectlyMsg
@@ -113,6 +125,13 @@ export interface SetNameMsg {
     type: 'setName';
     payload: {
         name: string;
+    };
+}
+
+export interface SelectRoundWordMsg {
+    type: 'selectRoundWord';
+    payload: {
+        word: string;
     };
 }
 
@@ -128,4 +147,4 @@ export interface StartGameMsg {
     payload: null;
 }
 
-export type SendMsg = SetNameMsg | DrawEventMsg | GuessMsg | StartGameMsg;
+export type SendMsg = SetNameMsg | DrawEventMsg | GuessMsg | SelectRoundWordMsg | StartGameMsg;

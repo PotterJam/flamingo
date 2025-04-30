@@ -1,13 +1,14 @@
-import { FC, useCallback } from 'react';
-import { useAppStore } from '../store';
+import {FC, useCallback} from 'react';
+import {useAppStore} from '../store';
 import PlayerList from './PlayerList';
 import ChatBox from './ChatBox';
 import WordDisplay from './WordDisplay';
 import TimerDisplay from './TimerDisplay';
 import Whiteboard from './Whiteboard';
 import GuessInput from './GuessInput';
-import { PrimaryButton } from './buttons/PrimaryButton';
-import { OutlineButton } from './buttons/OutlineButton';
+import {PrimaryButton} from './buttons/PrimaryButton';
+import {OutlineButton} from './buttons/OutlineButton';
+import {WordChoiceModal} from "./WordChoiceModal.tsx";
 
 const CANVAS_WIDTH = 800;
 const CANVAS_HEIGHT = 600;
@@ -27,6 +28,8 @@ export const Game: FC = () => {
         hostId,
         localPlayerId,
         word,
+        wordLength,
+        wordChoices,
         turnEndTime,
     } = gameState;
 
@@ -46,9 +49,20 @@ export const Game: FC = () => {
     const canLocalPlayerGuess =
         !isLocalPlayerDrawer && !localPlayer.hasGuessedCorrectly;
 
-    const wordBlanks = Array(word?.length || '')
-        .fill('_')
-        .join(' ');
+    const showWordChoiceModal =
+        appState === 'active' &&
+        isLocalPlayerDrawer &&
+        !!wordChoices &&
+        wordChoices.length > 0 &&
+        !word; // Only show if 'word' is not yet set for the turn
+
+    const handleWordChosen = useCallback(
+        (chosenWord: string) => {
+            sendMessage({ type: 'selectRoundWord', payload: { word: chosenWord } });
+
+        },
+        [sendMessage]
+    );
 
     const handleStartGame = useCallback(() => {
         console.log('Start Game button clicked by host.');
@@ -138,8 +152,8 @@ export const Game: FC = () => {
                                 <WordDisplay word={word ?? ''} />
                             ) : appState === 'active' && currentDrawerId ? (
                                 <WordDisplay
-                                    blanks={wordBlanks}
-                                    length={word?.length ?? 0}
+                                    blanks={Array(wordLength || '').fill('_').join(' ')}
+                                    length={wordLength ?? 0}
                                 />
                             ) : (
                                 <div className="h-8 md:h-10"></div>
@@ -174,6 +188,14 @@ export const Game: FC = () => {
                     )}
                 </section>
             </div>
+            {wordChoices && turnEndTime && (
+                <WordChoiceModal
+                    isOpen={showWordChoiceModal}
+                    wordChoices={wordChoices}
+                    turnEndTime={turnEndTime}
+                    onWordChosen={handleWordChosen}
+                />
+            )}
         </div>
     );
 };

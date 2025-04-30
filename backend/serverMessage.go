@@ -8,6 +8,7 @@ const (
 	PlayerGuessedCorrectlyResponse = "playerGuessedCorrectly"
 	ChatResponse                   = "chat"
 	DrawEventBroadcastResponse     = "drawEvent" // <<< Using "drawEvent" to match frontend expectation
+	TurnSetupResponse              = "turnSetup"
 	TurnEndResponse                = "turnEnd"
 )
 
@@ -39,13 +40,23 @@ type PlayerUpdatePayload struct {
 	HostID  string       `json:"hostId,omitempty"`
 }
 
-type TurnStartPayload struct {
+type TurnSetupPayload struct {
 	CurrentDrawerID string       `json:"currentDrawerId"`
-	Word            string       `json:"word,omitempty"`
-	WordLength      int          `json:"wordLength"`
+	WordChoices     []string     `json:"wordChoices,omitempty"`
 	Players         []PlayerInfo `json:"players"`
 	TurnEndTime     int64        `json:"turnEndTime"`
 }
+
+type TurnStartPayload struct {
+	CurrentDrawerID string `json:"currentDrawerId"`
+	Word            string `json:"word,omitempty"`
+	WordLength      int    `json:"wordLength"`
+	// TODO: word constants like hyphens and spaces in an array of tuples with their location
+	Players     []PlayerInfo `json:"players"`
+	TurnEndTime int64        `json:"turnEndTime"`
+}
+
+// TODO: TurnHelpPayload that gives help for people that haven#t guessed the word
 
 type PlayerGuessedCorrectlyPayload struct {
 	PlayerID string `json:"playerId"`
