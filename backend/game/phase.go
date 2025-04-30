@@ -1,4 +1,6 @@
-package phase
+package game
+
+import "backend/messages"
 
 type GamePhase int
 
@@ -27,6 +29,6 @@ func (ss GamePhase) String() string {
 type GamePhaseHandler interface {
 	Phase() GamePhase
 	StartPhase(gs *GameState)
-	HandleMessage(gs *GameState, playerID *Player, msg Message) GamePhaseHandler
+	HandleMessage(gs *GameState, playerID *Player, msg messages.Message) GamePhaseHandler
 	HandleTimeOut(gs *GameState) GamePhaseHandler // Some phases have timeouts, this is good enough for now but can be improved
 }

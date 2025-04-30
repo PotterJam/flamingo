@@ -1,4 +1,6 @@
-package phase
+package game
+
+import "backend/messages"
 
 type ErrorHandler struct{}
 
@@ -11,7 +13,7 @@ func (p *ErrorHandler) StartPhase(gs *GameState) {
 	return
 }
 
-func (p *ErrorHandler) HandleMessage(gs *GameState, player *Player, msg Message) GamePhaseHandler {
+func (p *ErrorHandler) HandleMessage(gs *GameState, player *Player, msg messages.Message) GamePhaseHandler {
 	// todo
 	return p
 }

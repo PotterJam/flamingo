@@ -10,6 +10,7 @@ import (
 
 type Broadcaster interface {
 	Broadcast(m messages.Message)
+	BroadcastToPlayers(message messages.Message, players []*Player)
 }
 
 // GameState represents the single, shared game session.

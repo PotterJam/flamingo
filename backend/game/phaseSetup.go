@@ -1,6 +1,9 @@
-package phase
+package game
 
 import (
+	"backend/messages"
+	"encoding/json"
+	"log"
 	"math/rand"
 	"time"
 )
@@ -28,7 +31,7 @@ func (p *RoundSetupHandler) StartPhase(gs *GameState) {
 	}
 	p.WordToPickFrom = &wordChoices
 
-	turnPayloadBase := TurnSetupPayload{
+	turnPayloadBase := messages.TurnSetupPayload{
 		CurrentDrawerID: newDrawer.Id,
 		Players:         gs.getPlayerInfoList(), // Assumes lock held
 		TurnEndTime:     gs.turnEndTime.UnixMilli(),
@@ -37,10 +40,10 @@ func (p *RoundSetupHandler) StartPhase(gs *GameState) {
 	drawerPayload := turnPayloadBase
 	drawerPayload.WordChoices = *p.WordToPickFrom
 	log.Printf("GameState: Sending TurnSetup (with word choices) to drawer %s", newDrawer.Name)
-	go newDrawer.SendMessage(TurnSetupResponse, drawerPayload)
+	go newDrawer.SendMessage(messages.TurnSetupResponse, drawerPayload)
 
 	guesserPayload := turnPayloadBase
-	msg := Message{Type: TurnSetupResponse, Payload: json.RawMessage(MustMarshal(guesserPayload))}
+	msg := messages.Message{Type: messages.TurnSetupResponse, Payload: json.RawMessage(messages.MustMarshal(guesserPayload))}
 	playersToSendTo := make([]*Player, 0, len(gs.Players)-1)
 	for i, p := range gs.Players {
 		if i != gs.CurrentDrawerIdx {
@@ -48,14 +51,14 @@ func (p *RoundSetupHandler) StartPhase(gs *GameState) {
 		}
 	}
 	log.Printf("GameState: Sending TurnSetup (no word choices) to %d guessers", len(playersToSendTo))
-	go gs.Room.BroadcastToPlayers(msg, playersToSendTo)
+	go gs.Broadcaster.BroadcastToPlayers(msg, playersToSendTo)
 
 	gs.BroadcastSystemMessage(newDrawer.Name + " is choosing a word.")
 	return
 }
 
-func (p *RoundSetupHandler) HandleMessage(gs *GameState, player *Player, msg Message) GamePhaseHandler {
-	if msg.Type != ClientSelectRoundWord || !gs.isDrawer(player) {
+func (p *RoundSetupHandler) HandleMessage(gs *GameState, player *Player, msg messages.Message) GamePhaseHandler {
+	if msg.Type != messages.ClientSelectRoundWord || !gs.isDrawer(player) {
 		return p
 	}
 
@@ -64,7 +67,7 @@ func (p *RoundSetupHandler) HandleMessage(gs *GameState, player *Player, msg Mes
 		return GamePhaseHandler(&GameOverHandler{})
 	}
 
-	var roundWordPayload SelectRoundWordPayload
+	var roundWordPayload messages.SelectRoundWordPayload
 	if err := json.Unmarshal(msg.Payload, &roundWordPayload); err != nil {
 		player.SendError("Invalid guess format.")
 		return p

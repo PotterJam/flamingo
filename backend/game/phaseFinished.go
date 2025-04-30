@@ -1,4 +1,11 @@
-package phase
+package game
+
+import (
+	"backend/messages"
+	"encoding/json"
+	"log"
+	"time"
+)
 
 type RoundFinishedHandler struct{}
 
@@ -21,16 +28,16 @@ func (p *RoundFinishedHandler) StartPhase(gs *GameState) {
 	gs.turnEndTime = time.Now().Add(finishDelay)
 
 	gs.BroadcastSystemMessage("Turn over! The word was: " + gs.Word)
-	turnEndPayload := TurnEndPayload{
+	turnEndPayload := messages.TurnEndPayload{
 		CorrectWord: gs.Word,
 		Players:     gs.getPlayerInfoList(),
 		RoundScores: playerRoundScores,
 	}
-	turnEndMsg := Message{Type: TurnEndResponse, Payload: json.RawMessage(MustMarshal(turnEndPayload))}
-	go gs.Room.Broadcast(turnEndMsg)
+	turnEndMsg := messages.Message{Type: messages.TurnEndResponse, Payload: json.RawMessage(messages.MustMarshal(turnEndPayload))}
+	go gs.Broadcaster.Broadcast(turnEndMsg)
 }
 
-func (p *RoundFinishedHandler) HandleMessage(gs *GameState, player *Player, msg Message) GamePhaseHandler {
+func (p *RoundFinishedHandler) HandleMessage(gs *GameState, player *Player, msg messages.Message) GamePhaseHandler {
 	return p
 }
 

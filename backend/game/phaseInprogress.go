@@ -1,6 +1,11 @@
-package phase
+package game
 
-import "time"
+import (
+	"backend/messages"
+	"encoding/json"
+	"log"
+	"time"
+)
 
 type RoundInProgressHandler struct {
 	Word string
@@ -26,7 +31,7 @@ func (p *RoundInProgressHandler) StartPhase(gs *GameState) {
 	gs.turnEndTime = now.Add(turnDuration)
 	gs.timerForTimeout = time.NewTimer(turnDuration)
 
-	turnPayloadBase := TurnStartPayload{
+	turnPayloadBase := messages.TurnStartPayload{
 		CurrentDrawerID: drawer.Id,
 		WordLength:      len(gs.Word),
 		Players:         gs.getPlayerInfoList(), // Assumes lock held
@@ -36,10 +41,10 @@ func (p *RoundInProgressHandler) StartPhase(gs *GameState) {
 	drawerPayload := turnPayloadBase
 	drawerPayload.Word = gs.Word
 	log.Printf("GameState: Sending TurnStart (with word) to drawer %s", drawer.Name)
-	go drawer.SendMessage(TurnStartResponse, drawerPayload)
+	go drawer.SendMessage(messages.TurnStartResponse, drawerPayload)
 
 	guesserPayload := turnPayloadBase
-	msg := Message{Type: TurnStartResponse, Payload: json.RawMessage(MustMarshal(guesserPayload))}
+	msg := messages.Message{Type: messages.TurnStartResponse, Payload: json.RawMessage(messages.MustMarshal(guesserPayload))}
 	playersToSendTo := make([]*Player, 0, len(gs.Players)-1)
 	for i, p := range gs.Players {
 		if i != gs.CurrentDrawerIdx {
@@ -47,19 +52,19 @@ func (p *RoundInProgressHandler) StartPhase(gs *GameState) {
 		}
 	}
 	log.Printf("GameState: Sending TurnStart (no word) to %d guessers", len(playersToSendTo))
-	go gs.Room.BroadcastToPlayers(msg, playersToSendTo)
+	go gs.Broadcaster.BroadcastToPlayers(msg, playersToSendTo)
 
 	gs.BroadcastSystemMessage(drawer.Name + " is drawing!")
 	return
 }
 
-func (p *RoundInProgressHandler) HandleMessage(gs *GameState, player *Player, msg Message) GamePhaseHandler {
-	if msg.Type == ClientGuess && !gs.isDrawer(player) {
+func (p *RoundInProgressHandler) HandleMessage(gs *GameState, player *Player, msg messages.Message) GamePhaseHandler {
+	if msg.Type == messages.ClientGuess && !gs.isDrawer(player) {
 		if _, alreadyGuessed := gs.CorrectGuessTimes[player.Id]; alreadyGuessed {
 			return p
 		}
 
-		var guessPayload GuessPayload
+		var guessPayload messages.GuessPayload
 		if err := json.Unmarshal(msg.Payload, &guessPayload); err != nil {
 			player.SendError("Invalid guess format.")
 			return p
@@ -77,8 +82,8 @@ func (p *RoundInProgressHandler) HandleMessage(gs *GameState, player *Player, ms
 		} else {
 			gs.BroadcastChatMessage(player.Name, guessPayload.Guess)
 		}
-	} else if msg.Type == ClientDrawEvent && gs.isDrawer(player) {
-		drawMsg := Message{Type: DrawEventBroadcastResponse, Payload: msg.Payload}
+	} else if msg.Type == messages.ClientDrawEvent && gs.isDrawer(player) {
+		drawMsg := messages.Message{Type: messages.DrawEventBroadcastResponse, Payload: msg.Payload}
 		playersToSendTo := make([]*Player, 0, len(gs.Players)-1)
 		for _, p := range gs.Players {
 			if p != nil && p.Id != player.Id {
@@ -86,7 +91,7 @@ func (p *RoundInProgressHandler) HandleMessage(gs *GameState, player *Player, ms
 			}
 		}
 
-		go gs.Room.BroadcastToPlayers(drawMsg, playersToSendTo)
+		go gs.Broadcaster.BroadcastToPlayers(drawMsg, playersToSendTo)
 	}
 	return p
 }

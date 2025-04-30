@@ -1,4 +1,6 @@
-package phase
+package game
+
+import "backend/messages"
 
 type WaitingInLobbyHandler struct{}
 
@@ -10,8 +12,8 @@ func (p *WaitingInLobbyHandler) StartPhase(gs *GameState) {
 	return
 }
 
-func (p *WaitingInLobbyHandler) HandleMessage(gs *GameState, player *Player, msg Message) GamePhaseHandler {
-	if msg.Type == ClientStartGame && player.Id == gs.HostId {
+func (p *WaitingInLobbyHandler) HandleMessage(gs *GameState, player *Player, msg messages.Message) GamePhaseHandler {
+	if msg.Type == messages.ClientStartGame && player.Id == gs.HostId {
 		if len(gs.Players) < minPlayersToStart {
 			gs.BroadcastSystemMessage("Game start aborted, not enough players.")
 		} else if !gs.IsActive {
