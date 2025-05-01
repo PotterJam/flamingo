@@ -23,6 +23,8 @@ func (p *RoundFinishedHandler) StartPhase(gs *GameState) {
 		}
 	}
 
+	gs.PlayersWhoHaveDrawnThisRound = append(gs.PlayersWhoHaveDrawnThisRound, gs.Players[gs.CurrentDrawerIdx].Id)
+
 	finishDelay := 5 * time.Second
 	gs.timerForTimeout = time.NewTimer(finishDelay)
 	gs.turnEndTime = time.Now().Add(finishDelay)
@@ -46,6 +48,19 @@ func (p *RoundFinishedHandler) HandleTimeOut(gs *GameState) GamePhaseHandler {
 
 	gs.CorrectGuessTimes = make(map[string]time.Time)
 	gs.Word = ""
+
+	// Check if game should end due to rounds
+	numPlayers := len(gs.Players)
+	if numPlayers > 0 && len(gs.PlayersWhoHaveDrawnThisRound) >= numPlayers {
+		gs.CurrentRound++
+		gs.PlayersWhoHaveDrawnThisRound = make([]string, 0)
+		log.Printf("GameState: Round %d completed.", gs.CurrentRound)
+	}
+
+	if gs.CurrentRound >= gs.TotalRounds {
+		log.Printf("GameState: Final round (%d/%d) finished. Game Over.", gs.CurrentRound, gs.TotalRounds)
+		return GamePhaseHandler(&GameOverHandler{})
+	}
 
 	if gs.IsActive {
 		return GamePhaseHandler(&RoundSetupHandler{WordToPickFrom: nil})
