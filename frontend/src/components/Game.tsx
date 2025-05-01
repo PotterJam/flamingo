@@ -21,10 +21,6 @@ export const Game: FC = () => {
     const appState = useAppStore((s) => s.appState);
     const gameState = useAppStore((s) => s.gameState);
 
-    if (appState === 'finished') {
-        return <GameEndScreen players={gameState?.players ?? []} />;
-    }
-
     if (gameState === null) {
         return <div>sad</div>;
     }
@@ -101,7 +97,7 @@ export const Game: FC = () => {
         navigator.clipboard.writeText(roomId);
     };
 
-    return (
+    return appState === 'finished' ? <GameEndScreen players={gameState?.players ?? []} /> :
         <div className="flex w-full flex-grow justify-center">
             <div
                 className="flex flex-col gap-4 lg:flex-row"
@@ -202,6 +198,5 @@ export const Game: FC = () => {
                     onWordChosen={handleWordChosen}
                 />
             )}
-        </div>
-    );
+        </div>;
 };
