@@ -82,19 +82,6 @@ func NewGame(b Broadcaster) *Game {
 	}
 }
 
-// resetGameState resets the game state (e.g., not enough players)
-func (g *GameState) resetGameState(reason string) {
-	if g.timerForTimeout != nil {
-		g.timerForTimeout = nil
-	}
-
-	g.IsActive = false
-	g.CurrentDrawerIdx = -1
-	g.Word = ""
-	g.CorrectGuessTimes = make(map[string]time.Time)
-	g.BroadcastSystemMessage("GameState Over: " + reason)
-}
-
 func (g *Game) AddPlayer(player *Player) {
 	state := g.GameState
 
