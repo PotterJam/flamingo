@@ -20,7 +20,7 @@ type Player struct {
 }
 
 // readPump pumps messages from the WebSocket connection to the hub.
-func (p *Player) readPump() {
+func (p *Player) ReadPump() {
 	defer func() {
 		p.Unregister <- p
 		_ = p.Conn.Close()
@@ -51,7 +51,7 @@ func (p *Player) readPump() {
 }
 
 // writePump pumps messages from the player's Send channel to the WebSocket connection.
-func (p *Player) writePump() {
+func (p *Player) WritePump() {
 	defer func() {
 		p.Conn.Close()
 		log.Printf("Player %s (%s) writePump stopped.", p.Id, p.Name)
