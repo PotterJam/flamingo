@@ -5,3 +5,6 @@ backend/public/
 
 # server produced by py script
 scriblio_server
+
+# air creates a tmp file while its running
+backend/tmp
