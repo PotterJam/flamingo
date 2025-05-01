@@ -10,6 +10,7 @@ import {
     SendMsg,
     TurnEndMsg, TurnSetupMsg,
     TurnStartMsg,
+    GameFinishedMsg,
 } from './messages';
 import { immer } from 'zustand/middleware/immer';
 import { MIN_PLAYERS } from './App';
@@ -48,7 +49,8 @@ export type CurrentAppState =
     | 'active'
     | 'waiting'
     | 'connecting'
-    | 'joining';
+    | 'joining'
+    | 'finished';
 
 export type AppState = {
     sendMessage: (message: SendMsg) => void;
@@ -86,6 +88,7 @@ export type MessageHandlers = {
     handlePlayerUpdate: (msg: PlayerUpdateMsg) => void;
     handleTurnEnd: (msg: TurnEndMsg) => void;
     handleDraw: (msg: DrawEventMsg) => void;
+    handleGameFinished: (msg: GameFinishedMsg) => void;
 };
 
 export const useAppStore = create<AppState & AppActions & MessageHandlers>()(
@@ -198,6 +201,16 @@ export const useAppStore = create<AppState & AppActions & MessageHandlers>()(
         handleDraw: ({ payload }) =>
             set((s) => {
                 s.gameState.lastDrawEvent = payload;
+            }),
+        handleGameFinished: ({ payload }) =>
+            set((s) => {
+                s.appState = 'finished';
+                s.gameState.players = payload.players;
+                s.gameState.currentDrawerId = null;
+                s.gameState.word = null;
+                s.gameState.wordLength = null;
+                s.gameState.wordChoices = null;
+                s.gameState.turnEndTime = null;
             }),
     }))
 );
