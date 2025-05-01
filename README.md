@@ -69,7 +69,7 @@ The easiest way to run both the frontend and backend with hot reloading is using
 ### Development Features
 
 * **Frontend Hot Reloading:** Any changes to frontend code will be immediately reflected in the browser
-* **Backend Hot Reloading:** Any changes to backend code will automatically restart the server
+* **Backend Hot Reloading:** Any changes to backend code will automatically restart the server. You will need to restart your browser tabs manually.
 * **WebSocket Support:** The development server properly handles WebSocket connections
 * **API Proxying:** Frontend API requests are automatically proxied to the backend server
     * The Vite dev server runs on port 5173
