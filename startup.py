@@ -65,17 +65,15 @@ def start_backend():
     global backend_process
     print("\n--- Starting Backend with Air ---")
     try:
+        # Let Air handle all output formatting
         backend_process = subprocess.Popen(
             ["air"],
             cwd=backend_path,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            text=True,
-            bufsize=1,
-            universal_newlines=True
+            stdout=None,  # Let Air output directly to terminal
+            stderr=None,  # Let Air output directly to terminal
+            text=True
         )
         print("Backend server started with hot reloading")
-        threading.Thread(target=print_output, args=(backend_process, "Backend"), daemon=True).start()
         return True
     except Exception as e:
         print(f"!!! ERROR starting backend server: {e} !!!")
