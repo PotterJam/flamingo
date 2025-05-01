@@ -28,6 +28,10 @@ type GameState struct {
 
 	timerForTimeout *time.Timer
 	turnEndTime     time.Time
+	
+	TotalRounds                  int
+	CurrentRound                 int
+	PlayersWhoHaveDrawnThisRound []string
 }
 
 func (g *GameState) broadcastPlayerUpdate() {
@@ -125,6 +129,9 @@ func (g *GameState) HandleStartGame(sender *Player) {
 		sender.SendError("Not enough players to start the game (minimum " + string(minPlayersToStart+'0') + ").")
 		return
 	}
+
+	g.CurrentRound = 0
+	g.PlayersWhoHaveDrawnThisRound = make([]string, 0)
 }
 
 func (g *GameState) checkAllGuessed() bool {
