@@ -1,0 +1,56 @@
+package game
+
+import (
+	"backend/messages"
+	"encoding/json"
+	"log"
+	"time"
+)
+
+type RoundFinishedHandler struct{}
+
+func (p *RoundFinishedHandler) Phase() GamePhase {
+	return GamePhaseRoundFinished
+}
+
+func (p *RoundFinishedHandler) StartPhase(gs *GameState) {
+	playerRoundScores := calculateRoundScores(gs)
+
+	// Apply score deltas
+	for _, player := range gs.Players {
+		if delta, ok := playerRoundScores[player.Id]; ok {
+			player.Score += delta
+		}
+	}
+
+	finishDelay := 5 * time.Second
+	gs.timerForTimeout = time.NewTimer(finishDelay)
+	gs.turnEndTime = time.Now().Add(finishDelay)
+
+	gs.BroadcastSystemMessage("Turn over! The word was: " + gs.Word)
+	turnEndPayload := messages.TurnEndPayload{
+		CorrectWord: gs.Word,
+		Players:     gs.getPlayerInfoList(),
+		RoundScores: playerRoundScores,
+	}
+	turnEndMsg := messages.Message{Type: messages.TurnEndResponse, Payload: json.RawMessage(messages.MustMarshal(turnEndPayload))}
+	go gs.Broadcaster.Broadcast(turnEndMsg)
+}
+
+func (p *RoundFinishedHandler) HandleMessage(gs *GameState, player *Player, msg messages.Message) GamePhaseHandler {
+	return p
+}
+
+func (p *RoundFinishedHandler) HandleTimeOut(gs *GameState) GamePhaseHandler {
+	log.Println("GameState: Delay finished, attempting to start next turn.")
+
+	gs.CorrectGuessTimes = make(map[string]time.Time)
+	gs.Word = ""
+
+	if gs.IsActive {
+		return GamePhaseHandler(&RoundSetupHandler{WordToPickFrom: nil})
+	} else {
+		log.Println("GameState: GameState became inactive during turn delay, not starting next turn.")
+		return GamePhaseHandler(&WaitingInLobbyHandler{})
+	}
+}

@@ -1,25 +1,28 @@
-package main
+package game
 
 import (
+	"backend/messages"
 	"encoding/json"
-	"github.com/gorilla/websocket"
 	"log"
+
+	"github.com/gorilla/websocket"
 )
 
 // Player represents a single connected client.
 type Player struct {
-	Id    string
-	Name  string
-	Score int
-	Conn  *websocket.Conn
-	Room  *Room
-	Send  chan []byte // Buffered channel for outbound messages
+	Id           string
+	Name         string
+	Score        int
+	Conn         *websocket.Conn
+	Unregister   chan *Player
+	GameMessages chan GameMessage
+	Send         chan []byte
 }
 
 // readPump pumps messages from the WebSocket connection to the hub.
-func (p *Player) readPump() {
+func (p *Player) ReadPump() {
 	defer func() {
-		p.Room.Unregister <- p
+		p.Unregister <- p
 		_ = p.Conn.Close()
 
 		log.Printf("Player %s (%s) disconnected and readPump cleaned up", p.Id, p.Name)
@@ -36,19 +39,19 @@ func (p *Player) readPump() {
 			break
 		}
 
-		var msg Message
+		var msg messages.Message
 		if err := json.Unmarshal(messageBytes, &msg); err != nil {
 			log.Printf("Player %s (%s): Error unmarshalling message: %v", p.Id, p.Name, err)
 			p.SendError("Invalid message format")
 			continue
 		}
 
-		p.Room.Game.Messages <- GameMessage{p, msg}
+		p.GameMessages <- GameMessage{p, msg}
 	}
 }
 
 // writePump pumps messages from the player's Send channel to the WebSocket connection.
-func (p *Player) writePump() {
+func (p *Player) WritePump() {
 	defer func() {
 		p.Conn.Close()
 		log.Printf("Player %s (%s) writePump stopped.", p.Id, p.Name)
@@ -87,12 +90,12 @@ func (p *Player) SendError(errMsg string) {
 	if p == nil {
 		return
 	}
-	payload := ErrorPayload{Message: errMsg}
+	payload := messages.ErrorPayload{Message: errMsg}
 
-	msgBytes, _ := json.Marshal(Message{Type: TypeErrorResponse, Payload: json.RawMessage(MustMarshal(payload))})
+	msg := messages.MustMarshal(messages.Message{Type: messages.TypeErrorResponse, Payload: json.RawMessage(messages.MustMarshal(payload))})
 	// Use a non-blocking send
 	select {
-	case p.Send <- msgBytes:
+	case p.Send <- msg:
 	default:
 		log.Printf("Player %s (%s): Failed to send error message '%s', Send channel likely closed.", p.Id, p.Name, errMsg)
 	}
@@ -104,26 +107,11 @@ func (p *Player) SendMessage(msgType string, payload any) {
 		return
 	}
 
-	var payloadBytes []byte
-	var err error
-	if payload != nil {
-		payloadBytes, err = json.Marshal(payload)
-		if err != nil {
-			log.Printf("Player %s (%s): Error marshalling payload for type %s: %v", p.Id, p.Name, msgType, err)
-			return
-		}
-	}
-
-	msg := Message{Type: msgType, Payload: json.RawMessage(payloadBytes)}
-	msgBytes, err := json.Marshal(msg)
-	if err != nil {
-		log.Printf("Player %s (%s): Error marshalling message for type %s: %v", p.Id, p.Name, msgType, err)
-		return
-	}
+	msg := messages.MustMarshal(messages.Message{Type: msgType, Payload: messages.MustMarshal(payload)})
 
 	// Use non-blocking send to avoid deadlocks if writePump is stuck or channel closed
 	select {
-	case p.Send <- msgBytes:
+	case p.Send <- msg:
 	default:
 		log.Printf("Player %s (%s): Send channel full/closed for message type %s.", p.Id, p.Name, msgType)
 	}

@@ -1,6 +1,8 @@
-package main
+package api
 
 import (
+	"backend/game"
+	"backend/room"
 	"encoding/json"
 	"log"
 	"net/http"
@@ -19,7 +21,7 @@ var upgrader = websocket.Upgrader{
 	},
 }
 
-func ServeWS(rm *RoomManager, w http.ResponseWriter, r *http.Request) {
+func ServeWS(rm *room.RoomManager, w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
 	roomId, ok := vars["roomId"]
 	if !ok {
@@ -48,27 +50,28 @@ func ServeWS(rm *RoomManager, w http.ResponseWriter, r *http.Request) {
 	}
 	log.Println("Client connected via WebSocket from:", conn.RemoteAddr())
 
-	player := &Player{
-		Id:   uuid.NewString(),
-		Name: playerName,
-		Conn: conn,
-		Room: room,
-		Send: make(chan []byte, 256),
+	player := &game.Player{
+		Id:           uuid.NewString(),
+		Name:         playerName,
+		Conn:         conn,
+		Unregister:   room.Unregister,
+		Send:         make(chan []byte, 256),
+		GameMessages: room.Game.Messages,
 	}
 
 	log.Printf("Registering new player connection to room %s: %s", roomId, player.Id)
 	room.Register <- player
 	room.PlayerReady <- player
 
-	go player.writePump()
-	go player.readPump()
+	go player.WritePump()
+	go player.ReadPump()
 }
 
 type CreateRoomResponse struct {
 	RoomId string `json:"roomId"`
 }
 
-func HandleCreateRoom(rm *RoomManager, w http.ResponseWriter, r *http.Request) {
+func HandleCreateRoom(rm *room.RoomManager, w http.ResponseWriter, r *http.Request) {
 	room := rm.CreateRoom()
 
 	res := CreateRoomResponse{
@@ -82,7 +85,7 @@ func HandleCreateRoom(rm *RoomManager, w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func HandleGetRoom(rm *RoomManager, w http.ResponseWriter, r *http.Request) {
+func HandleGetRoom(rm *room.RoomManager, w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
 	roomId, ok := vars["roomId"]
 	if !ok {

@@ -1,6 +1,8 @@
-package main
+package room
 
 import (
+	"backend/game"
+	"backend/messages"
 	"log"
 	"sync"
 )
@@ -45,23 +47,23 @@ func (rm *RoomManager) CreateRoom() *Room {
 // Room maintains the set of players playing the same game
 type Room struct {
 	Id          string
-	Players     map[string]*Player // Registered players (Player Id -> Player) - Connection tracking
-	Game        *Game
-	Register    chan *Player
-	Unregister  chan *Player
-	PlayerReady chan *Player
+	Players     map[string]*game.Player // Registered players (Player Id -> Player) - Connection tracking
+	Game        *game.Game
+	Register    chan *game.Player
+	Unregister  chan *game.Player
+	PlayerReady chan *game.Player
 	mu          sync.Mutex
 }
 
 func NewRoom() *Room {
 	r := &Room{
 		Id:          GenerateSlug(),
-		Players:     make(map[string]*Player),
-		Register:    make(chan *Player),
-		Unregister:  make(chan *Player),
-		PlayerReady: make(chan *Player),
+		Players:     make(map[string]*game.Player),
+		Register:    make(chan *game.Player),
+		Unregister:  make(chan *game.Player),
+		PlayerReady: make(chan *game.Player),
 	}
-	r.Game = NewGame(r)
+	r.Game = game.NewGame(r)
 	log.Printf("{%s} Room created", r.Id)
 	return r
 }
@@ -80,7 +82,7 @@ func (r *Room) Run() {
 
 		case player := <-r.Unregister:
 			r.mu.Lock()
-			var playerToRemove *Player
+			var playerToRemove *game.Player
 			if existingPlayer, ok := r.Players[player.Id]; ok {
 				delete(r.Players, player.Id)
 				close(existingPlayer.Send)
@@ -103,11 +105,11 @@ func (r *Room) Run() {
 	}
 }
 
-func (r *Room) Broadcast(m Message) {
+func (r *Room) Broadcast(m messages.Message) {
 	r.mu.Lock()
 	// copy first to minimise time lock is held
 	// I'm not convinced this is needed since spawning a go routine is very fast
-	playersToSend := make([]*Player, 0, len(r.Players))
+	playersToSend := make([]*game.Player, 0, len(r.Players))
 	for _, player := range r.Players {
 		if player != nil {
 			playersToSend = append(playersToSend, player)
@@ -120,15 +122,15 @@ func (r *Room) Broadcast(m Message) {
 			if p == nil {
 				return
 			}
-			p.Send <- MustMarshal(m)
+			p.Send <- messages.MustMarshal(m)
 		}()
 	}
 }
 
-func (r *Room) BroadcastToPlayers(message Message, players []*Player) {
+func (r *Room) BroadcastToPlayers(message messages.Message, players []*game.Player) {
 	for _, p := range players {
 		go func() {
-			p.Send <- MustMarshal(message)
+			p.Send <- messages.MustMarshal(message)
 		}()
 	}
 }

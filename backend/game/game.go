@@ -1,6 +1,7 @@
-package main
+package game
 
 import (
+	"backend/messages"
 	"log"
 	"slices"
 	"time"
@@ -8,7 +9,7 @@ import (
 
 type GameMessage struct {
 	player *Player
-	msg    Message
+	msg    messages.Message
 }
 
 type Game struct {
@@ -63,7 +64,7 @@ func (g *Game) updateHandler(newHandler GamePhaseHandler) {
 	g.GameHandler.StartPhase(g.GameState)
 }
 
-func NewGame(room *Room) *Game {
+func NewGame(b Broadcaster) *Game {
 	handler := GamePhaseHandler(&WaitingInLobbyHandler{})
 
 	return &Game{
@@ -72,26 +73,13 @@ func NewGame(room *Room) *Game {
 			HostId:            "", // No host initially
 			CurrentDrawerIdx:  -1,
 			CorrectGuessTimes: make(map[string]time.Time),
-			Room:              room,
+			Broadcaster:       b,
 			IsActive:          false,
 			timerForTimeout:   nil,
 		},
 		GameHandler: handler,
 		Messages:    make(chan GameMessage, 5),
 	}
-}
-
-// resetGameState resets the game state (e.g., not enough players)
-func (g *GameState) resetGameState(reason string) {
-	if g.timerForTimeout != nil {
-		g.timerForTimeout = nil
-	}
-
-	g.IsActive = false
-	g.CurrentDrawerIdx = -1
-	g.Word = ""
-	g.CorrectGuessTimes = make(map[string]time.Time)
-	g.BroadcastSystemMessage("GameState Over: " + reason)
 }
 
 func (g *Game) AddPlayer(player *Player) {
