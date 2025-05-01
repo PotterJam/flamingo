@@ -8,6 +8,7 @@ export const useHandleMessage = (message: ReceivedMsg | null) => {
 
     const handlePlayerUpdate = useAppStore((s) => s.handlePlayerUpdate);
     const handleTurnEnd = useAppStore((s) => s.handleTurnEnd);
+    const handleGameFinished = useAppStore((s) => s.handleGameFinished);
     const handleDraw = useAppStore((s) => s.handleDraw);
     const addChatMessage = useAppStore((s) => s.addChatMessage);
 
@@ -40,6 +41,10 @@ export const useHandleMessage = (message: ReceivedMsg | null) => {
             }
             case 'turnEnd': {
                 handleTurnEnd(message);
+                break;
+            }
+            case 'gameFinished': {
+                handleGameFinished(message);
                 break;
             }
             case 'error': {
