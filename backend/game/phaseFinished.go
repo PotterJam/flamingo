@@ -16,10 +16,9 @@ func (p *RoundFinishedHandler) Phase() GamePhase {
 func (p *RoundFinishedHandler) StartPhase(gs *GameState) {
 	playerRoundScores := calculateRoundScores(gs)
 
-	// Apply score deltas
 	for _, player := range gs.Players {
-		if delta, ok := playerRoundScores[player.Id]; ok {
-			player.Score += delta
+		if roundScore, ok := playerRoundScores[player.Id]; ok {
+			player.Score += roundScore
 		}
 	}
 
