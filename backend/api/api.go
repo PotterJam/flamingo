@@ -50,13 +50,13 @@ func ServeWS(rm *room.RoomManager, w http.ResponseWriter, r *http.Request) {
 	}
 	log.Println("Client connected via WebSocket from:", conn.RemoteAddr())
 
-	// FOR ME TOMORROW: THIS PLAYER SHOULD PROBABLY GET CREATED BY THE ROOM SINCE IT WILL NEED BROADCASTER NOW INSTEAD
 	player := &game.Player{
-		Id:         uuid.NewString(),
-		Name:       playerName,
-		Conn:       conn,
-		Unregister: room.Unregister,
-		Send:       make(chan []byte, 256),
+		Id:           uuid.NewString(),
+		Name:         playerName,
+		Conn:         conn,
+		Unregister:   room.Unregister,
+		Send:         make(chan []byte, 256),
+		GameMessages: room.Game.Messages,
 	}
 
 	log.Printf("Registering new player connection to room %s: %s", roomId, player.Id)

@@ -16,7 +16,7 @@ type Player struct {
 	Conn         *websocket.Conn
 	Unregister   chan *Player
 	GameMessages chan GameMessage
-	Send         chan []byte // Buffered channel for outbound messages
+	Send         chan []byte
 }
 
 // readPump pumps messages from the WebSocket connection to the hub.
@@ -92,10 +92,10 @@ func (p *Player) SendError(errMsg string) {
 	}
 	payload := messages.ErrorPayload{Message: errMsg}
 
-	msgBytes, _ := json.Marshal(messages.Message{Type: messages.TypeErrorResponse, Payload: json.RawMessage(messages.MustMarshal(payload))})
+	msg := messages.MustMarshal(messages.Message{Type: messages.TypeErrorResponse, Payload: json.RawMessage(messages.MustMarshal(payload))})
 	// Use a non-blocking send
 	select {
-	case p.Send <- msgBytes:
+	case p.Send <- msg:
 	default:
 		log.Printf("Player %s (%s): Failed to send error message '%s', Send channel likely closed.", p.Id, p.Name, errMsg)
 	}
@@ -107,26 +107,11 @@ func (p *Player) SendMessage(msgType string, payload any) {
 		return
 	}
 
-	var payloadBytes []byte
-	var err error
-	if payload != nil {
-		payloadBytes, err = json.Marshal(payload)
-		if err != nil {
-			log.Printf("Player %s (%s): Error marshalling payload for type %s: %v", p.Id, p.Name, msgType, err)
-			return
-		}
-	}
-
-	msg := messages.Message{Type: msgType, Payload: json.RawMessage(payloadBytes)}
-	msgBytes, err := json.Marshal(msg)
-	if err != nil {
-		log.Printf("Player %s (%s): Error marshalling message for type %s: %v", p.Id, p.Name, msgType, err)
-		return
-	}
+	msg := messages.MustMarshal(messages.Message{Type: msgType, Payload: messages.MustMarshal(payload)})
 
 	// Use non-blocking send to avoid deadlocks if writePump is stuck or channel closed
 	select {
-	case p.Send <- msgBytes:
+	case p.Send <- msg:
 	default:
 		log.Printf("Player %s (%s): Send channel full/closed for message type %s.", p.Id, p.Name, msgType)
 	}
