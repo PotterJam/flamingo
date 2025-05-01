@@ -60,21 +60,18 @@ The easiest way to run both the frontend and backend with hot reloading is using
     python startup.py
     ```
 3. The script will:
-    * Start two Vite dev server instances for frontend hot reloading:
-        * First instance on port 5173
-        * Second instance on port 5174
+    * Start the Vite dev server for frontend hot reloading (port 5173)
     * Start the Go backend with Air for backend hot reloading (port 8080)
-    * Attempt to open two browser tabs, one to each frontend instance
+    * Attempt to open two browser tabs to `http://localhost:5173`
 4. **Enter Names:** Enter a unique name in each browser tab when prompted.
 5. **Start Game:** The first player (Host) will see a "Start Game" button once at least two players have joined. Click it to begin the first round.
 
 ### Development Features
 
-* **Independent Frontend Instances:** Two separate Vite dev servers run to support multiple players
-* **Frontend Hot Reloading:** Any changes to frontend code will be immediately reflected in both browser instances
+* **Frontend Hot Reloading:** Any changes to frontend code will be immediately reflected in the browser
 * **Backend Hot Reloading:** Any changes to backend code will automatically restart the server
-* **WebSocket Support:** Each frontend instance maintains its own WebSocket connection
+* **WebSocket Support:** The development server properly handles WebSocket connections
 * **API Proxying:** Frontend API requests are automatically proxied to the backend server
-    * Frontend instances run on ports 5173 and 5174
+    * The Vite dev server runs on port 5173
     * The Go backend runs on port 8080
-    * All API and WebSocket requests are automatically proxied from both frontends to the backend
+    * All API and WebSocket requests are automatically proxied from the frontend to the backend

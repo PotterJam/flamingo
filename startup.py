@@ -9,8 +9,7 @@ import signal
 # --- Configuration ---
 FRONTEND_DIR = "frontend"
 BACKEND_DIR = "backend"
-VITE_PORT_1 = 5173  # First Vite instance port
-VITE_PORT_2 = 5174  # Second Vite instance port
+VITE_PORT = 5173  # Vite dev server port
 BACKEND_PORT = 8080
 # --- End Configuration ---
 
@@ -19,81 +18,46 @@ SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 frontend_path = os.path.join(SCRIPT_DIR, FRONTEND_DIR)
 backend_path = os.path.join(SCRIPT_DIR, BACKEND_DIR)
 
-frontend_process_1 = None
-frontend_process_2 = None
+frontend_process = None
 backend_process = None
 stop_event = threading.Event()
 
-def run_command(cmd, cwd, step_name):
-    """Runs a command in a subprocess and checks for errors."""
-    print(f"\n--- Running Step: {step_name} ---")
-    print(f"Executing: {' '.join(cmd)} in {cwd}")
-    try:
-        use_shell = sys.platform == "win32"
-        result = subprocess.run(cmd, cwd=cwd, check=True, capture_output=True, text=True, shell=use_shell, encoding='utf-8', errors='replace')
-        if len(result.stdout) < 2000:
-            print(result.stdout)
-        else:
-            print(f"(stdout too long, truncated)")
-        if result.stderr:
-            print("--- STDERR ---")
-            print(result.stderr)
-        print(f"--- {step_name} Successful ---")
-        return True
-    except subprocess.CalledProcessError as e:
-        print(f"!!! ERROR during {step_name} !!!")
-        print(f"Command: {' '.join(e.cmd)}")
-        print(f"Return Code: {e.returncode}")
-        print("--- STDOUT ---")
-        print(e.stdout)
-        print("--- STDERR ---")
-        print(e.stderr)
-        return False
-    except FileNotFoundError:
-        print(f"!!! ERROR during {step_name} !!!")
-        print(f"Command not found: {cmd[0]}. Is it installed and in your PATH?")
-        return False
-    except Exception as e:
-        print(f"!!! UNEXPECTED ERROR during {step_name}: {e} !!!")
-        return False
+def print_output(process, prefix):
+    """Print output from a process in real-time."""
+    while not stop_event.is_set():
+        if process.poll() is not None:
+            break
+        try:
+            # Read from stdout
+            line = process.stdout.readline()
+            if line:
+                print(f"[{prefix}] {line.rstrip()}")
+            # Read from stderr
+            line = process.stderr.readline()
+            if line:
+                print(f"[{prefix} ERROR] {line.rstrip()}", file=sys.stderr)
+        except Exception:
+            break
 
 def start_frontend():
-    """Starts two Vite dev server instances."""
-    global frontend_process_1, frontend_process_2
-    print("\n--- Starting Frontend Dev Servers ---")
+    """Starts the Vite dev server."""
+    global frontend_process
+    print("\n--- Starting Frontend Dev Server ---")
     try:
-        # Start first Vite instance
-        env_1 = os.environ.copy()
-        env_1['PORT'] = str(VITE_PORT_1)
-        frontend_process_1 = subprocess.Popen(
+        frontend_process = subprocess.Popen(
             ["npm", "run", "dev"],
             cwd=frontend_path,
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
             text=True,
             bufsize=1,
-            universal_newlines=True,
-            env=env_1
+            universal_newlines=True
         )
-        print(f"First frontend dev server started on port {VITE_PORT_1}")
-
-        # Start second Vite instance
-        env_2 = os.environ.copy()
-        env_2['PORT'] = str(VITE_PORT_2)
-        frontend_process_2 = subprocess.Popen(
-            ["npm", "run", "dev"],
-            cwd=frontend_path,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            text=True,
-            bufsize=1,
-            universal_newlines=True,
-            env=env_2
-        )
-        print(f"Second frontend dev server started on port {VITE_PORT_2}")
+        print(f"Frontend dev server started on port {VITE_PORT}")
+        threading.Thread(target=print_output, args=(frontend_process, "Frontend"), daemon=True).start()
         return True
     except Exception as e:
-        print(f"!!! ERROR starting frontend dev servers: {e} !!!")
+        print(f"!!! ERROR starting frontend dev server: {e} !!!")
         return False
 
 def start_backend():
@@ -111,6 +75,7 @@ def start_backend():
             universal_newlines=True
         )
         print("Backend server started with hot reloading")
+        threading.Thread(target=print_output, args=(backend_process, "Backend"), daemon=True).start()
         return True
     except Exception as e:
         print(f"!!! ERROR starting backend server: {e} !!!")
@@ -118,17 +83,12 @@ def start_backend():
 
 def stop_processes():
     """Stops all processes."""
-    global frontend_process_1, frontend_process_2, backend_process
-    if frontend_process_1:
-        print("\n--- Stopping First Frontend Dev Server ---")
-        frontend_process_1.terminate()
-        frontend_process_1.wait()
-        frontend_process_1 = None
-    if frontend_process_2:
-        print("\n--- Stopping Second Frontend Dev Server ---")
-        frontend_process_2.terminate()
-        frontend_process_2.wait()
-        frontend_process_2 = None
+    global frontend_process, backend_process
+    if frontend_process:
+        print("\n--- Stopping Frontend Dev Server ---")
+        frontend_process.terminate()
+        frontend_process.wait()
+        frontend_process = None
     if backend_process:
         print("\n--- Stopping Backend Server ---")
         backend_process.terminate()
@@ -149,7 +109,7 @@ def main():
 
     # Start both servers
     if not start_frontend():
-        print("Failed to start frontend servers. Exiting.")
+        print("Failed to start frontend server. Exiting.")
         sys.exit(1)
     
     if not start_backend():
@@ -160,18 +120,17 @@ def main():
     # Give servers a moment to start up
     time.sleep(2)
 
-    # Open browser tabs to each Vite instance
+    # Open browser tabs to the Vite instance
     try:
-        print(f"\nOpening browser tabs to http://localhost:{VITE_PORT_1} and http://localhost:{VITE_PORT_2}...")
-        webbrowser.open_new_tab(f"http://localhost:{VITE_PORT_1}")
+        print(f"\nOpening browser tabs to http://localhost:{VITE_PORT}...")
+        webbrowser.open_new_tab(f"http://localhost:{VITE_PORT}")
         time.sleep(0.5)
-        webbrowser.open_new_tab(f"http://localhost:{VITE_PORT_2}")
+        webbrowser.open_new_tab(f"http://localhost:{VITE_PORT}")
     except Exception as e:
         print(f"Warning: Could not open browser tabs automatically: {e}")
 
     print("\n--- Development servers running ---")
-    print(f"Frontend 1: http://localhost:{VITE_PORT_1}")
-    print(f"Frontend 2: http://localhost:{VITE_PORT_2}")
+    print(f"Frontend: http://localhost:{VITE_PORT}")
     print(f"Backend: http://localhost:{BACKEND_PORT}")
     print("Press Ctrl+C to stop all servers")
     

@@ -11,11 +11,7 @@ export function useWebSocket(url: string) {
     const ws = useRef<WebSocket>(null);
 
     const connect = useCallback(() => {
-        if (
-            ws.current &&
-            (ws.current.readyState === WebSocket.OPEN ||
-                ws.current.readyState === WebSocket.CONNECTING)
-        ) {
+        if (ws.current) {
             console.log('[useWebSocket] Already connected or connecting.');
             return;
         }
