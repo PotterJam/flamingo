@@ -1,14 +1,24 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { ReceivedMsg, SendMsg } from '../messages';
 
-export const WS_ROOT = 'ws://localhost:8080/ws';
+export const WS_ROOT = '/ws';
 
 export function useWebSocket(url: string) {
     const [isConnected, setIsConnected] = useState(false);
-    const [receivedMessage, setReceivedMessage] = useState<ReceivedMsg | null>(
-        null
-    );
-    const ws = useRef<WebSocket>(null);
+    const [receivedMessage, setReceivedMessage] = useState<ReceivedMsg | null>(null);
+    const ws = useRef<WebSocket | null>(null);
+
+    // Initialize from HMR data if available
+    if (import.meta.hot) {
+        const wsData = import.meta.hot.data;
+        if (wsData) {
+            if (!ws.current && wsData.ws) {
+                ws.current = wsData.ws;
+                setIsConnected(wsData.isConnected ?? false);
+                setReceivedMessage(wsData.receivedMessage ?? null);
+            }
+        }
+    }
 
     const connect = useCallback(() => {
         if (ws.current) {
@@ -19,10 +29,16 @@ export function useWebSocket(url: string) {
         console.log('[useWebSocket] Attempting to connect to:', url);
         try {
             ws.current = new WebSocket(url);
+            if (import.meta.hot) {
+                import.meta.hot.data.ws = ws.current;
+            }
 
             ws.current.onopen = () => {
                 console.log('[useWebSocket] WebSocket connection established.');
                 setIsConnected(true);
+                if (import.meta.hot) {
+                    import.meta.hot.data.isConnected = true;
+                }
             };
 
             ws.current.onmessage = (event) => {
@@ -30,6 +46,9 @@ export function useWebSocket(url: string) {
                     const message = JSON.parse(event.data);
                     console.log('[useWebSocket] Message received:', message);
                     setReceivedMessage(message);
+                    if (import.meta.hot) {
+                        import.meta.hot.data.receivedMessage = message;
+                    }
                 } catch (error) {
                     console.error(
                         '[useWebSocket] Error parsing message:',
@@ -52,6 +71,10 @@ export function useWebSocket(url: string) {
                     event.wasClean
                 );
                 setIsConnected(false);
+                if (import.meta.hot) {
+                    import.meta.hot.data.isConnected = false;
+                    import.meta.hot.data.ws = null;
+                }
                 ws.current = null;
             };
         } catch (error) {
@@ -60,9 +83,13 @@ export function useWebSocket(url: string) {
                 error
             );
             setIsConnected(false);
+            if (import.meta.hot) {
+                import.meta.hot.data.isConnected = false;
+                import.meta.hot.data.ws = null;
+            }
             ws.current = null;
         }
-    }, []);
+    }, [url]);
 
     const disconnect = useCallback(() => {
         if (ws.current && ws.current.readyState === WebSocket.OPEN) {
@@ -70,6 +97,10 @@ export function useWebSocket(url: string) {
             ws.current.close();
         }
         setIsConnected(false);
+        if (import.meta.hot) {
+            import.meta.hot.data.isConnected = false;
+            import.meta.hot.data.ws = null;
+        }
         ws.current = null;
     }, []);
 
@@ -94,9 +125,15 @@ export function useWebSocket(url: string) {
     }, []);
 
     useEffect(() => {
-        connect();
+        // Only connect if we don't already have a connection
+        if (!ws.current) {
+            connect();
+        }
         return () => {
-            disconnect();
+            // Only disconnect if this is a full unmount, not an HMR
+            if (!import.meta.hot) {
+                disconnect();
+            }
         };
     }, [connect, disconnect]);
 
