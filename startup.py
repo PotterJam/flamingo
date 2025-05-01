@@ -122,7 +122,7 @@ def main():
     try:
         print(f"\nOpening browser tabs to http://localhost:{VITE_PORT}...")
         webbrowser.open_new_tab(f"http://localhost:{VITE_PORT}")
-        time.sleep(0.5)
+        time.sleep(0.2)
         webbrowser.open_new_tab(f"http://localhost:{VITE_PORT}")
     except Exception as e:
         print(f"Warning: Could not open browser tabs automatically: {e}")
