@@ -8,12 +8,14 @@ import {
     PlayerUpdateMsg,
     ReceivedMsg,
     SendMsg,
-    TurnEndMsg, TurnSetupMsg,
+    TurnEndMsg,
+    TurnSetupMsg,
     TurnStartMsg,
     GameFinishedMsg,
 } from './messages';
 import { immer } from 'zustand/middleware/immer';
 import { MIN_PLAYERS } from './App';
+import { createJSONStorage, persist } from 'zustand/middleware';
 
 export interface GameState {
     players: Player[];
@@ -21,7 +23,7 @@ export interface GameState {
     hostId: string | null;
     localPlayerId: string | null;
     word: string | null;
-    wordLength: number | null ;
+    wordLength: number | null;
     wordChoices: string[] | null;
     messages: ChatMessage[];
     turnEndTime: number | null;
@@ -92,125 +94,133 @@ export type MessageHandlers = {
 };
 
 export const useAppStore = create<AppState & AppActions & MessageHandlers>()(
-    immer((set) => ({
-        gameState: initialGameState,
-        roomId: null,
-        appState: 'connecting',
-        selfName: '',
-        selfId: '',
-        launchAsHost: false,
-        lastMessage: null,
+    persist(
+        immer((set) => ({
+            gameState: initialGameState,
+            roomId: null,
+            appState: 'connecting',
+            selfName: '',
+            selfId: '',
+            launchAsHost: false,
+            lastMessage: null,
 
-        sendMessage: () => {
-            throw new Error('sending message without sender configured');
-        },
-        assignSendMessage: (func) =>
-            set((s) => {
-                s.sendMessage = func;
-            }),
-        setLastMessage: (message) =>
-            set((s) => {
-                s.lastMessage = message;
-            }),
-        setState: (newState) => set((_) => ({ appState: newState })),
-        nameChosen: (name) =>
-            set((s) => {
-                s.selfName = name;
-            }),
-        roomCreated: (room) =>
-            set((s) => {
-                s.roomId = room;
-                s.launchAsHost = true;
-            }),
-        joinRoom: (roomId) =>
-            set((s) => {
-                s.roomId = roomId;
-                s.launchAsHost = false;
-            }),
-        resetGameState: () =>
-            set((s) => {
-                s.gameState = initialGameState;
-            }),
-        addChatMessage: (message) =>
-            set((s) => {
-                s.gameState.messages.push(message);
-            }),
+            sendMessage: () => {
+                throw new Error('sending message without sender configured');
+            },
+            assignSendMessage: (func) =>
+                set((s) => {
+                    s.sendMessage = func;
+                }),
+            setLastMessage: (message) =>
+                set((s) => {
+                    s.lastMessage = message;
+                }),
+            setState: (newState) => set((_) => ({ appState: newState })),
+            nameChosen: (name) =>
+                set((s) => {
+                    s.selfName = name;
+                }),
+            roomCreated: (room) =>
+                set((s) => {
+                    s.roomId = room;
+                    s.launchAsHost = true;
+                }),
+            joinRoom: (roomId) =>
+                set((s) => {
+                    s.roomId = roomId;
+                    s.launchAsHost = false;
+                }),
+            resetGameState: () =>
+                set((s) => {
+                    s.gameState = initialGameState;
+                }),
+            addChatMessage: (message) =>
+                set((s) => {
+                    s.gameState.messages.push(message);
+                }),
 
-        // Message receivers
-        handleGameInfo: ({ payload }) =>
-            set((s) => {
-                s.gameState.localPlayerId = payload.yourId;
-                s.gameState.players = payload.players;
-                s.gameState.hostId = payload.hostId;
-                if (payload.currentDrawerId)
+            // Message receivers
+            handleGameInfo: ({ payload }) =>
+                set((s) => {
+                    s.gameState.localPlayerId = payload.yourId;
+                    s.gameState.players = payload.players;
+                    s.gameState.hostId = payload.hostId;
+                    if (payload.currentDrawerId)
+                        s.gameState.currentDrawerId = payload.currentDrawerId;
+                    if (payload.turnEndTime)
+                        s.gameState.turnEndTime = payload.turnEndTime;
+
+                    if (payload.isGameActive) {
+                        s.appState = 'active';
+                    } else {
+                        s.appState = 'waiting';
+                    }
+                }),
+            handleTurnSetup: ({ payload }) =>
+                set((s) => {
                     s.gameState.currentDrawerId = payload.currentDrawerId;
-                if (payload.turnEndTime)
+                    s.gameState.wordChoices = payload.wordChoices ?? null;
+                    s.gameState.players = payload.players;
                     s.gameState.turnEndTime = payload.turnEndTime;
 
-                if (payload.isGameActive) {
                     s.appState = 'active';
-                } else {
-                    s.appState = 'waiting';
-                }
-            }),
-        handleTurnSetup: ({ payload }) =>
-            set((s) => {
-                s.gameState.currentDrawerId = payload.currentDrawerId;
-                s.gameState.wordChoices = payload.wordChoices ?? null;
-                s.gameState.players = payload.players;
-                s.gameState.turnEndTime = payload.turnEndTime;
+                }),
+            handleTurnStart: ({ payload }) =>
+                set((s) => {
+                    s.gameState.wordChoices = null; // The word has been chosen
 
-                s.appState = 'active';
-            }),
-        handleTurnStart: ({ payload }) =>
-            set((s) => {
-                s.gameState.wordChoices = null; // The word has been chosen
+                    s.gameState.currentDrawerId = payload.currentDrawerId;
+                    s.gameState.word = payload.word ?? null;
+                    s.gameState.wordLength = payload.wordLength ?? null;
+                    s.gameState.players = payload.players;
+                    s.gameState.turnEndTime = payload.turnEndTime;
 
-                s.gameState.currentDrawerId = payload.currentDrawerId;
-                s.gameState.word = payload.word ?? null;
-                s.gameState.wordLength = payload.wordLength ?? null;
-                s.gameState.players = payload.players;
-                s.gameState.turnEndTime = payload.turnEndTime;
+                    s.appState = 'active';
+                }),
+            handlePlayerUpdate: ({ payload }) =>
+                set((s) => {
+                    s.gameState.players = payload.players;
+                    s.gameState.hostId = payload.hostId;
 
-                s.appState = 'active';
-            }),
-        handlePlayerUpdate: ({ payload }) =>
-            set((s) => {
-                s.gameState.players = payload.players;
-                s.gameState.hostId = payload.hostId;
-
-                if (
-                    s.appState === 'active' &&
-                    payload.players.length < MIN_PLAYERS
-                ) {
-                    console.log(
-                        'Player count too small, going back to waiting'
-                    );
-                    s.appState = 'waiting';
-                }
-            }),
-        handleTurnEnd: ({ payload }) =>
-            set((s) => {
-                s.gameState.players = payload.players;
-                s.gameState.turnEndTime = null;
-                s.gameState.word = null;
-                s.gameState.wordLength = null;
-                s.gameState.wordChoices = null;
-                s.gameState.currentDrawerId = null;
-            }),
-        handleDraw: ({ payload }) =>
-            set((s) => {
-                s.gameState.lastDrawEvent = payload;
-            }),
-        handleGameFinished: ({ payload }) =>
-            set((s) => {
-                s.appState = 'finished';
-                s.gameState.players = payload.players;
-                s.gameState.currentDrawerId = null;
-                s.gameState.word = null;
-                s.gameState.wordLength = null;
-                s.gameState.wordChoices = null;
-                s.gameState.turnEndTime = null;
-            }),
-    }))
+                    if (
+                        s.appState === 'active' &&
+                        payload.players.length < MIN_PLAYERS
+                    ) {
+                        console.log(
+                            'Player count too small, going back to waiting'
+                        );
+                        s.appState = 'waiting';
+                    }
+                }),
+            handleTurnEnd: ({ payload }) =>
+                set((s) => {
+                    s.gameState.players = payload.players;
+                    s.gameState.turnEndTime = null;
+                    s.gameState.word = null;
+                    s.gameState.wordLength = null;
+                    s.gameState.wordChoices = null;
+                    s.gameState.currentDrawerId = null;
+                }),
+            handleDraw: ({ payload }) =>
+                set((s) => {
+                    s.gameState.lastDrawEvent = payload;
+                }),
+            handleGameFinished: ({ payload }) =>
+                set((s) => {
+                    s.appState = 'finished';
+                    s.gameState.players = payload.players;
+                    s.gameState.currentDrawerId = null;
+                    s.gameState.word = null;
+                    s.gameState.wordLength = null;
+                    s.gameState.wordChoices = null;
+                    s.gameState.turnEndTime = null;
+                }),
+        })),
+        {
+            name: 'flamingo-store',
+            // session storage is used so that different tabs and sessions have separate state
+            // this helps with dev time especially because different tabs can persist different stores
+            storage: createJSONStorage(() => sessionStorage),
+        }
+    )
 );
