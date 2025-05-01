@@ -9,6 +9,7 @@ import GuessInput from './GuessInput';
 import {PrimaryButton} from './buttons/PrimaryButton';
 import {OutlineButton} from './buttons/OutlineButton';
 import {WordChoiceModal} from "./WordChoiceModal.tsx";
+import { GameEndScreen } from './GameEndScreen';
 
 const CANVAS_WIDTH = 800;
 const CANVAS_HEIGHT = 600;
@@ -19,6 +20,7 @@ export const Game: FC = () => {
     const sendMessage = useAppStore((s) => s.sendMessage);
     const appState = useAppStore((s) => s.appState);
     const gameState = useAppStore((s) => s.gameState);
+
     if (gameState === null) {
         return <div>sad</div>;
     }
@@ -95,7 +97,7 @@ export const Game: FC = () => {
         navigator.clipboard.writeText(roomId);
     };
 
-    return (
+    return appState === 'finished' ? <GameEndScreen players={gameState?.players ?? []} /> :
         <div className="flex w-full flex-grow justify-center">
             <div
                 className="flex flex-col gap-4 lg:flex-row"
@@ -196,6 +198,5 @@ export const Game: FC = () => {
                     onWordChosen={handleWordChosen}
                 />
             )}
-        </div>
-    );
+        </div>;
 };

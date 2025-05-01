@@ -69,13 +69,16 @@ func NewGame(b Broadcaster) *Game {
 
 	return &Game{
 		GameState: &GameState{
-			Players:           make([]*Player, 0, 10),
-			HostId:            "", // No host initially
-			CurrentDrawerIdx:  -1,
-			CorrectGuessTimes: make(map[string]time.Time),
-			Broadcaster:       b,
-			IsActive:          false,
-			timerForTimeout:   nil,
+			Players:                      make([]*Player, 0, 10),
+			HostId:                       "", // No host initially
+			CurrentDrawerIdx:             -1,
+			CorrectGuessTimes:            make(map[string]time.Time),
+			Broadcaster:                  b,
+			IsActive:                     false,
+			timerForTimeout:              nil,
+			TotalRounds:                  1, // Default to 1 round (each player draws once)
+			CurrentRound:                 0,
+			PlayersWhoHaveDrawnThisRound: make([]string, 0),
 		},
 		GameHandler: handler,
 		Messages:    make(chan GameMessage, 5),

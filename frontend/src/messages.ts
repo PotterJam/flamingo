@@ -54,7 +54,6 @@ export interface TurnSetupMsg {
     };
 }
 
-
 export interface TurnStartMsg {
     type: 'turnStart';
     payload: {
@@ -106,6 +105,13 @@ export interface ErrorMsg {
     };
 }
 
+export interface GameFinishedMsg {
+    type: 'gameFinished';
+    payload: {
+        players: Player[];
+    };
+}
+
 export type ReceivedMsg =
     | GameInfoMsg
     | PlayerUpdateMsg
@@ -114,7 +120,8 @@ export type ReceivedMsg =
     | TurnStartMsg
     | TurnEndMsg
     | DrawEventMsg
-    | ErrorMsg;
+    | ErrorMsg
+    | GameFinishedMsg;
 
 export interface SetNameMsg {
     type: 'setName';

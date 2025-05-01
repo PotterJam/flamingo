@@ -9,6 +9,7 @@ const (
 	DrawEventBroadcastResponse = "drawEvent" // <<< Using "drawEvent" to match frontend expectation
 	TurnSetupResponse          = "turnSetup"
 	TurnEndResponse            = "turnEnd"
+	GameFinishedResponse       = "gameFinished"
 )
 
 type ErrorPayload struct {
@@ -70,4 +71,6 @@ type TurnEndPayload struct {
 	RoundScores map[string]int `json:"roundScores"`
 }
 
-// WaitingPayload: No payload needed for MsgTypeWaiting
+type GameFinishedPayload struct {
+	Players []PlayerInfo `json:"players"`
+}
