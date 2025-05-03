@@ -81,7 +81,7 @@ export const RoomConnection: FC = () => {
                     </OutlineButton>
                 </div>
                 <h3 className="p-2 text-gray-500 italic">or</h3>
-                <PrimaryButton disabled={!name.trim()} onClick={createRoom}>
+                <PrimaryButton disabled={!name.trim() || !!roomName.trim()} onClick={createRoom}>
                     Create room
                 </PrimaryButton>
             </div>
