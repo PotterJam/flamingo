@@ -49,7 +49,7 @@ func initialModel(processes []Process) model {
 type TickMsg time.Time
 
 func doTick() tea.Cmd {
-	return tea.Tick(time.Second, func(t time.Time) tea.Msg {
+	return tea.Tick(time.Millisecond * 100, func(t time.Time) tea.Msg {
 		return TickMsg(t)
 	})
 }
