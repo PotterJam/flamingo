@@ -1,8 +1,8 @@
 package main
 
 import (
-	"bufio"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"strings"
@@ -24,9 +24,14 @@ type model struct {
 }
 
 func initialModel() model {
+	vp := viewport.New(0, 0)
+	vp.Style = lipgloss.NewStyle().
+		BorderStyle(lipgloss.NormalBorder()).
+		BorderForeground(lipgloss.Color("62"))
 	return model{
-		tabs:    []string{"npm run dev", "npm run build"},
-		outputs: make([]string, 2),
+		tabs:     []string{"npm run dev", "npm run build"},
+		outputs:  make([]string, 2),
+		viewport: vp,
 	}
 }
 
@@ -56,7 +61,8 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case tea.WindowSizeMsg:
 		if !m.ready {
-			m.viewport = viewport.New(msg.Width, msg.Height-4)
+			m.viewport.Width = msg.Width
+			m.viewport.Height = msg.Height - 4
 			m.ready = true
 		} else {
 			m.viewport.Width = msg.Width
@@ -100,6 +106,25 @@ func (m model) View() string {
 	)
 }
 
+func readStream(reader io.ReadCloser, outputIndex int, m *model) {
+	buf := make([]byte, 1024)
+	for {
+		n, err := reader.Read(buf)
+		if n > 0 {
+			m.mu.Lock()
+			m.outputs[outputIndex] += string(buf[:n])
+			m.mu.Unlock()
+		}
+		if err != nil {
+			if err != io.EOF {
+				fmt.Printf("Error reading from stream: %v\n", err)
+			}
+			break
+		}
+	}
+	reader.Close()
+}
+
 func captureOutput(cmd *exec.Cmd, outputIndex int, m *model) {
 	stdout, err := cmd.StdoutPipe()
 	if err != nil {
@@ -113,32 +138,17 @@ func captureOutput(cmd *exec.Cmd, outputIndex int, m *model) {
 		return
 	}
 
+	// Processes spawned won't use terminal colour, so force them do so
+	cmd.Env = append(os.Environ(), "FORCE_COLOR=1")
+
 	if err := cmd.Start(); err != nil {
 		fmt.Printf("Error starting process: %v\n", err)
 		return
 	}
 
-	// Read stdout
-	go func() {
-		scanner := bufio.NewScanner(stdout)
-		for scanner.Scan() {
-			line := scanner.Text()
-			m.mu.Lock()
-			m.outputs[outputIndex] += line + "\n"
-			m.mu.Unlock()
-		}
-	}()
-
-	// Read stderr
-	go func() {
-		scanner := bufio.NewScanner(stderr)
-		for scanner.Scan() {
-			line := scanner.Text()
-			m.mu.Lock()
-			m.outputs[outputIndex] += line + "\n"
-			m.mu.Unlock()
-		}
-	}()
+	// Read stdout and stderr
+	go readStream(stdout, outputIndex, m)
+	go readStream(stderr, outputIndex, m)
 }
 
 func main() {
@@ -157,7 +167,7 @@ func main() {
 	m.processes = append(m.processes, buildCmd)
 	go captureOutput(buildCmd, 1, &m)
 
-	p := tea.NewProgram(m, tea.WithAltScreen())
+	p := tea.NewProgram(m, tea.WithAltScreen(), tea.WithMouseCellMotion())
 	if _, err := p.Run(); err != nil {
 		fmt.Printf("Error running program: %v", err)
 		os.Exit(1)
