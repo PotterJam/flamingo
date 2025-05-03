@@ -28,6 +28,8 @@ type model struct {
 	tabs      []string
 	outputs   []string
 	ready     bool
+	// If the viewport should be stuck to the bottom tracking new logs
+	sticky    bool
 	viewport  viewport.Model
 	processes []Process
 }
@@ -41,6 +43,7 @@ func initialModel(processes []Process) model {
 		activeTab: 0,
 		tabs:      []string{"npm run dev", "npm run build"},
 		outputs:   make([]string, 2),
+		sticky:    true,
 		viewport:  vp,
 		processes: processes,
 	}
@@ -49,7 +52,7 @@ func initialModel(processes []Process) model {
 type TickMsg time.Time
 
 func doTick() tea.Cmd {
-	return tea.Tick(time.Millisecond * 100, func(t time.Time) tea.Msg {
+	return tea.Tick(time.Millisecond*100, func(t time.Time) tea.Msg {
 		return TickMsg(t)
 	})
 }
@@ -78,7 +81,15 @@ func (m model) Init() tea.Cmd {
 }
 
 func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
-	var cmd tea.Cmd
+	var (
+		cmd  tea.Cmd
+		cmds []tea.Cmd
+	)
+
+	// Allows scrolling to the bottom to reattach to most recent messages
+	if m.viewport.AtBottom() {
+		m.sticky = true
+	}
 
 	switch msg := msg.(type) {
 	case tea.KeyMsg:
@@ -93,8 +104,13 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, tea.Quit
 		case "tab":
 			m.activeTab = (m.activeTab + 1) % len(m.tabs)
+			m.sticky = true
 		case "shift+tab":
 			m.activeTab = (m.activeTab - 1 + len(m.tabs)) % len(m.tabs)
+		case "up":
+			m.sticky = false
+		case "s":
+			m.sticky = true
 		}
 
 	case tea.WindowSizeMsg:
@@ -114,8 +130,16 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.outputs[msg.i] += msg.buf
 	}
 
+	content := m.outputs[m.activeTab]
+	m.viewport.SetContent(content)
+	if m.sticky {
+		m.viewport.GotoBottom()
+	}
+
 	m.viewport, cmd = m.viewport.Update(msg)
-	return m, cmd
+
+	cmds = append(cmds, cmd)
+	return m, tea.Batch(cmds...)
 }
 
 func (m model) View() string {
@@ -134,9 +158,6 @@ func (m model) View() string {
 		tabs = append(tabs, style.Render(tab))
 	}
 	tabRow := lipgloss.JoinHorizontal(lipgloss.Top, tabs...)
-
-	content := m.outputs[m.activeTab]
-	m.viewport.SetContent(content)
 
 	return fmt.Sprintf(
 		"%s\n%s\n%s",
@@ -191,12 +212,13 @@ func captureOutput(p *Process) {
 func main() {
 	var processes []Process
 
-	devCmd := exec.Command("ping", "-i", "0.5", "google.com")
+	devCmd := exec.Command("npx", "vite")
+	devCmd.Dir = "../frontend"
 	p := Process{make(chan string), devCmd, 0}
 	processes = append(processes, p)
 	go captureOutput(&p)
 
-	devCmd2 := exec.Command("ping", "-i", "0.5", "bing.com")
+	devCmd2 := exec.Command("ping", "-i", "0.1", "bing.com")
 	p2 := Process{make(chan string), devCmd2, 1}
 	processes = append(processes, p2)
 	go captureOutput(&p2)
