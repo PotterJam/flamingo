@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/json"
 	"fmt"
 	"io"
 	"os"
@@ -14,8 +15,19 @@ import (
 	"github.com/charmbracelet/lipgloss"
 )
 
+type ProcessCfg struct {
+	Name    string     `json:"name"`
+	Process CommandCfg `json:"process"`
+}
+
+type CommandCfg struct {
+	Command string   `json:"command"`
+	Args    []string `json:"args"`
+}
+
 // Represents a single process running in the background
 type Process struct {
+	name string
 	// The channel where reader goroutine will pass read output
 	buf chan string
 	// The cmd that is running, so cleanup can be performed
@@ -35,18 +47,24 @@ type model struct {
 	processes []Process
 }
 
-func initialModel(processes []Process) model {
+func initialModel(procs []Process) model {
 	vp := viewport.New(0, 0)
 	vp.Style = lipgloss.NewStyle().
 		BorderStyle(lipgloss.NormalBorder()).
 		BorderForeground(lipgloss.Color("62"))
+
+	tabs := make([]string, len(procs))
+	for i, p := range procs {
+		tabs[i] = p.name
+	}
+
 	return model{
 		activeTab: 0,
-		tabs:      []string{"npm run dev", "npm run build"},
+		tabs:      tabs,
 		outputs:   make([]string, 2),
 		sticky:    true,
 		viewport:  vp,
-		processes: processes,
+		processes: procs,
 	}
 }
 
@@ -222,20 +240,31 @@ func cleanupProcesses(processes []Process) {
 }
 
 func main() {
+	data, err := os.ReadFile("compound.json")
+	if err != nil {
+		fmt.Printf("Failed to read compound.json fail, make sure it exists.\r\n%v\r\n", err)
+		os.Exit(1)
+	}
+
+	var procConfigs []ProcessCfg
+	err = json.Unmarshal(data, &procConfigs)
+	if err != nil {
+		fmt.Printf("Failed to parse proceses in compound.json. Check the format is correct.\r\n%v\r\n", err)
+		os.Exit(1)
+	}
+
 	var processes []Process
-
-	devCmd := exec.Command("npx", "vite")
-	devCmd.Dir = "../frontend"
-	devCmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
-	p := Process{make(chan string), devCmd, 0}
-	processes = append(processes, p)
-	go captureOutput(&p)
-
-	devCmd2 := exec.Command("ping", "-i", "0.1", "bing.com")
-	devCmd2.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
-	p2 := Process{make(chan string), devCmd2, 1}
-	processes = append(processes, p2)
-	go captureOutput(&p2)
+	for i, pc := range procConfigs {
+		cmd := exec.Command(pc.Process.Command, pc.Process.Args...)
+		process := Process{
+			pc.Name,
+			make(chan string),
+			cmd,
+			i,
+		}
+		processes = append(processes, process)
+		go captureOutput(&process)
+	}
 
 	// Extra cleanup should something fail so processes aren't dangling
 	defer cleanupProcesses(processes)
