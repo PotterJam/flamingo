@@ -6,7 +6,7 @@ import (
 	"os"
 	"os/exec"
 	"strings"
-	"sync"
+	"time"
 
 	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
@@ -20,7 +20,7 @@ type model struct {
 	processes []*exec.Cmd
 	ready     bool
 	viewport  viewport.Model
-	mu        sync.Mutex
+	process   chan string
 }
 
 func initialModel() model {
@@ -29,14 +29,37 @@ func initialModel() model {
 		BorderStyle(lipgloss.NormalBorder()).
 		BorderForeground(lipgloss.Color("62"))
 	return model{
-		tabs:     []string{"npm run dev", "npm run build"},
-		outputs:  make([]string, 2),
-		viewport: vp,
+		activeTab: 0,
+		tabs:      []string{"npm run dev", "npm run build"},
+		outputs:   make([]string, 2),
+		viewport:  vp,
+		process:   make(chan string),
+	}
+}
+
+type TickMsg time.Time
+
+func doTick() tea.Cmd {
+	return tea.Tick(time.Second, func(t time.Time) tea.Msg {
+		return TickMsg(t)
+	})
+}
+
+type ProcessMsg struct {
+	buf string
+}
+
+func checkOutput(m *model) tea.Cmd {
+	select {
+	case buf := <-m.process:
+		return func() tea.Msg { return ProcessMsg{buf} }
+	default:
+		return func() tea.Msg { return ProcessMsg{""} }
 	}
 }
 
 func (m model) Init() tea.Cmd {
-	return nil
+	return doTick()
 }
 
 func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
@@ -68,6 +91,12 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.viewport.Width = msg.Width
 			m.viewport.Height = msg.Height - 4
 		}
+
+	case TickMsg:
+		return m, tea.Batch(doTick(), checkOutput(&m))
+
+	case ProcessMsg:
+		m.outputs[0] += msg.buf
 	}
 
 	m.viewport, cmd = m.viewport.Update(msg)
@@ -79,7 +108,6 @@ func (m model) View() string {
 		return "\n  Initializing..."
 	}
 
-	// Render tabs
 	var tabs []string
 	for i, tab := range m.tabs {
 		style := lipgloss.NewStyle().Padding(0, 1)
@@ -92,10 +120,7 @@ func (m model) View() string {
 	}
 	tabRow := lipgloss.JoinHorizontal(lipgloss.Top, tabs...)
 
-	// Render content
-	m.mu.Lock()
 	content := m.outputs[m.activeTab]
-	m.mu.Unlock()
 	m.viewport.SetContent(content)
 
 	return fmt.Sprintf(
@@ -111,9 +136,8 @@ func readStream(reader io.ReadCloser, outputIndex int, m *model) {
 	for {
 		n, err := reader.Read(buf)
 		if n > 0 {
-			m.mu.Lock()
-			m.outputs[outputIndex] += string(buf[:n])
-			m.mu.Unlock()
+			m.process <- string(buf[:n])
+			// m.outputs[outputIndex] += string(buf[:n])
 		}
 		if err != nil {
 			if err != io.EOF {
@@ -154,18 +178,13 @@ func captureOutput(cmd *exec.Cmd, outputIndex int, m *model) {
 func main() {
 	m := initialModel()
 
-	// Start the npm processes
-	// npm run dev
-	devCmd := exec.Command("npm", "run", "dev")
-	devCmd.Dir = "../frontend"
+	devCmd := exec.Command("ping", "-i", "0.5", "google.com")
 	m.processes = append(m.processes, devCmd)
 	go captureOutput(devCmd, 0, &m)
 
-	// npm run build
-	buildCmd := exec.Command("npm", "run", "build")
-	buildCmd.Dir = "../frontend"
-	m.processes = append(m.processes, buildCmd)
-	go captureOutput(buildCmd, 1, &m)
+	// buildCmd := exec.Command("ping", "-i", "0.5", "bing.com")
+	// m.processes = append(m.processes, buildCmd)
+	// go captureOutput(buildCmd, 1, &m)
 
 	p := tea.NewProgram(m, tea.WithAltScreen(), tea.WithMouseCellMotion())
 	if _, err := p.Run(); err != nil {
