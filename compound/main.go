@@ -19,13 +19,14 @@ type Process struct {
 	buf chan string
 	// The cmd that is running, so cleanup can be performed
 	cmd *exec.Cmd
+	// Index of the running process
+	i int
 }
 
 type model struct {
 	activeTab int
 	tabs      []string
 	outputs   []string
-	// processes []*exec.Cmd
 	ready     bool
 	viewport  viewport.Model
 	processes []Process
@@ -55,6 +56,7 @@ func doTick() tea.Cmd {
 
 type ProcessMsg struct {
 	buf string
+	i   int
 }
 
 func checkOutputs(m *model) tea.Cmd {
@@ -62,9 +64,9 @@ func checkOutputs(m *model) tea.Cmd {
 	for _, p := range m.processes {
 		select {
 		case buf := <-p.buf:
-			batch = append(batch, func() tea.Msg { return ProcessMsg{buf} })
+			batch = append(batch, func() tea.Msg { return ProcessMsg{buf, p.i} })
 		default:
-			batch = append(batch, func() tea.Msg { return ProcessMsg{""} })
+			batch = append(batch, func() tea.Msg { return ProcessMsg{"", p.i} })
 		}
 	}
 
@@ -109,7 +111,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, tea.Batch(doTick(), checkOutputs(&m))
 
 	case ProcessMsg:
-		m.outputs[0] += msg.buf
+		m.outputs[msg.i] += msg.buf
 	}
 
 	m.viewport, cmd = m.viewport.Update(msg)
@@ -190,19 +192,16 @@ func main() {
 	var processes []Process
 
 	devCmd := exec.Command("ping", "-i", "0.5", "google.com")
-	p := Process{make(chan string), devCmd}
+	p := Process{make(chan string), devCmd, 0}
 	processes = append(processes, p)
 	go captureOutput(&p)
 
+	devCmd2 := exec.Command("ping", "-i", "0.5", "bing.com")
+	p2 := Process{make(chan string), devCmd2, 1}
+	processes = append(processes, p2)
+	go captureOutput(&p2)
+
 	m := initialModel(processes)
-
-	// devCmd := exec.Command("ping", "-i", "0.5", "google.com")
-	// m.processes = append(m.processes, devCmd)
-	// go captureOutput(devCmd, 0, &m)
-
-	// buildCmd := exec.Command("ping", "-i", "0.5", "bing.com")
-	// m.processes = append(m.processes, buildCmd)
-	// go captureOutput(buildCmd, 1, &m)
 
 	prog := tea.NewProgram(m, tea.WithAltScreen(), tea.WithMouseCellMotion())
 	if _, err := prog.Run(); err != nil {
