@@ -108,6 +108,9 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.sticky = false
 		case "s":
 			m.sticky = true
+		case "t":
+			m.sticky = false
+			m.viewport.GotoTop()
 		}
 
 	case tea.WindowSizeMsg:
