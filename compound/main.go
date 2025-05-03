@@ -13,17 +13,25 @@ import (
 	"github.com/charmbracelet/lipgloss"
 )
 
+// Represents a single process running in the background
+type Process struct {
+	// The channel where reader goroutine will pass read output
+	buf chan string
+	// The cmd that is running, so cleanup can be performed
+	cmd *exec.Cmd
+}
+
 type model struct {
 	activeTab int
 	tabs      []string
 	outputs   []string
-	processes []*exec.Cmd
+	// processes []*exec.Cmd
 	ready     bool
 	viewport  viewport.Model
-	process   chan string
+	processes []Process
 }
 
-func initialModel() model {
+func initialModel(processes []Process) model {
 	vp := viewport.New(0, 0)
 	vp.Style = lipgloss.NewStyle().
 		BorderStyle(lipgloss.NormalBorder()).
@@ -33,7 +41,7 @@ func initialModel() model {
 		tabs:      []string{"npm run dev", "npm run build"},
 		outputs:   make([]string, 2),
 		viewport:  vp,
-		process:   make(chan string),
+		processes: processes,
 	}
 }
 
@@ -49,13 +57,18 @@ type ProcessMsg struct {
 	buf string
 }
 
-func checkOutput(m *model) tea.Cmd {
-	select {
-	case buf := <-m.process:
-		return func() tea.Msg { return ProcessMsg{buf} }
-	default:
-		return func() tea.Msg { return ProcessMsg{""} }
+func checkOutputs(m *model) tea.Cmd {
+	var batch []tea.Cmd
+	for _, p := range m.processes {
+		select {
+		case buf := <-p.buf:
+			batch = append(batch, func() tea.Msg { return ProcessMsg{buf} })
+		default:
+			batch = append(batch, func() tea.Msg { return ProcessMsg{""} })
+		}
 	}
+
+	return tea.Batch(batch...)
 }
 
 func (m model) Init() tea.Cmd {
@@ -71,8 +84,8 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case "ctrl+c", "q":
 			// Clean up processes before exiting
 			for _, p := range m.processes {
-				if p != nil && p.Process != nil {
-					p.Process.Kill()
+				if p.cmd != nil && p.cmd.Process != nil {
+					p.cmd.Process.Kill()
 				}
 			}
 			return m, tea.Quit
@@ -93,7 +106,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 
 	case TickMsg:
-		return m, tea.Batch(doTick(), checkOutput(&m))
+		return m, tea.Batch(doTick(), checkOutputs(&m))
 
 	case ProcessMsg:
 		m.outputs[0] += msg.buf
@@ -131,13 +144,12 @@ func (m model) View() string {
 	)
 }
 
-func readStream(reader io.ReadCloser, outputIndex int, m *model) {
+func readStream(reader io.ReadCloser, p *Process) {
 	buf := make([]byte, 1024)
 	for {
 		n, err := reader.Read(buf)
 		if n > 0 {
-			m.process <- string(buf[:n])
-			// m.outputs[outputIndex] += string(buf[:n])
+			p.buf <- string(buf[:n])
 		}
 		if err != nil {
 			if err != io.EOF {
@@ -149,45 +161,51 @@ func readStream(reader io.ReadCloser, outputIndex int, m *model) {
 	reader.Close()
 }
 
-func captureOutput(cmd *exec.Cmd, outputIndex int, m *model) {
-	stdout, err := cmd.StdoutPipe()
+func captureOutput(p *Process) {
+	stdout, err := p.cmd.StdoutPipe()
 	if err != nil {
 		fmt.Printf("Error creating stdout pipe: %v\n", err)
 		return
 	}
 
-	stderr, err := cmd.StderrPipe()
+	stderr, err := p.cmd.StderrPipe()
 	if err != nil {
 		fmt.Printf("Error creating stderr pipe: %v\n", err)
 		return
 	}
 
 	// Processes spawned won't use terminal colour, so force them do so
-	cmd.Env = append(os.Environ(), "FORCE_COLOR=1")
+	p.cmd.Env = append(os.Environ(), "FORCE_COLOR=1")
 
-	if err := cmd.Start(); err != nil {
+	if err := p.cmd.Start(); err != nil {
 		fmt.Printf("Error starting process: %v\n", err)
 		return
 	}
 
-	// Read stdout and stderr
-	go readStream(stdout, outputIndex, m)
-	go readStream(stderr, outputIndex, m)
+	go readStream(stdout, p)
+	go readStream(stderr, p)
 }
 
 func main() {
-	m := initialModel()
+	var processes []Process
 
 	devCmd := exec.Command("ping", "-i", "0.5", "google.com")
-	m.processes = append(m.processes, devCmd)
-	go captureOutput(devCmd, 0, &m)
+	p := Process{make(chan string), devCmd}
+	processes = append(processes, p)
+	go captureOutput(&p)
+
+	m := initialModel(processes)
+
+	// devCmd := exec.Command("ping", "-i", "0.5", "google.com")
+	// m.processes = append(m.processes, devCmd)
+	// go captureOutput(devCmd, 0, &m)
 
 	// buildCmd := exec.Command("ping", "-i", "0.5", "bing.com")
 	// m.processes = append(m.processes, buildCmd)
 	// go captureOutput(buildCmd, 1, &m)
 
-	p := tea.NewProgram(m, tea.WithAltScreen(), tea.WithMouseCellMotion())
-	if _, err := p.Run(); err != nil {
+	prog := tea.NewProgram(m, tea.WithAltScreen(), tea.WithMouseCellMotion())
+	if _, err := prog.Run(); err != nil {
 		fmt.Printf("Error running program: %v", err)
 		os.Exit(1)
 	}
