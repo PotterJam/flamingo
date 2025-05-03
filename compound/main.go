@@ -6,6 +6,7 @@ import (
 	"os"
 	"os/exec"
 	"strings"
+	"syscall"
 	"time"
 
 	"github.com/charmbracelet/bubbles/viewport"
@@ -96,11 +97,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		switch msg.String() {
 		case "ctrl+c", "q":
 			// Clean up processes before exiting
-			for _, p := range m.processes {
-				if p.cmd != nil && p.cmd.Process != nil {
-					p.cmd.Process.Kill()
-				}
-			}
+			cleanupProcesses(m.processes)
 			return m, tea.Quit
 		case "tab":
 			m.activeTab = (m.activeTab + 1) % len(m.tabs)
@@ -209,19 +206,36 @@ func captureOutput(p *Process) {
 	go readStream(stderr, p)
 }
 
+func cleanupProcesses(processes []Process) {
+	for _, p := range processes {
+		if p.cmd != nil && p.cmd.Process != nil {
+			if p.cmd.Process.Pid > 0 {
+				syscall.Kill(-p.cmd.Process.Pid, syscall.SIGKILL)
+			}
+			p.cmd.Process.Kill()
+			p.cmd.Wait()
+		}
+	}
+}
+
 func main() {
 	var processes []Process
 
 	devCmd := exec.Command("npx", "vite")
 	devCmd.Dir = "../frontend"
+	devCmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
 	p := Process{make(chan string), devCmd, 0}
 	processes = append(processes, p)
 	go captureOutput(&p)
 
 	devCmd2 := exec.Command("ping", "-i", "0.1", "bing.com")
+	devCmd2.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
 	p2 := Process{make(chan string), devCmd2, 1}
 	processes = append(processes, p2)
 	go captureOutput(&p2)
+
+	// Extra cleanup should something fail so processes aren't dangling
+	defer cleanupProcesses(processes)
 
 	m := initialModel(processes)
 
