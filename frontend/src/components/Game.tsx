@@ -127,7 +127,7 @@ export const Game: FC = () => {
                     )}
 
                     <h2 className="flex-shrink-0 border-b pb-2 text-xl font-semibold">
-                        Players ({players.length})
+                        Players ({players.length}) COOL
                     </h2>
                     <div className="mb-4 min-h-0 flex-shrink overflow-y-auto">
                         <PlayerList
