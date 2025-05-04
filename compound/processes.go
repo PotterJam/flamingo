@@ -18,6 +18,7 @@ type ProcessCfg struct {
 type CommandCfg struct {
 	Command string   `json:"command"`
 	Args    []string `json:"args"`
+	Cwd     string   `json:"cwd"`
 }
 
 // Represents a single process running in the background

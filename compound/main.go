@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"syscall"
 
 	tea "github.com/charmbracelet/bubbletea"
 )
@@ -26,6 +27,10 @@ func main() {
 	var processes []Process
 	for i, pc := range procConfigs {
 		cmd := exec.Command(pc.Process.Command, pc.Process.Args...)
+		cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
+		if pc.Process.Cwd != "" {
+			cmd.Dir = pc.Process.Cwd
+		}
 		process := Process{
 			pc.Name,
 			make(chan string),
