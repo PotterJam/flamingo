@@ -52,19 +52,9 @@
 
 ## Running the Application
 
-The easiest way to run both the frontend and backend with hot reloading is using the provided Python script.
+The easiest way to run the application is to use `compound`, the compound process manager we created to help with this project.
 
-1. **Navigate** to the root directory of the project
-2. **Run the script:**
-    ```bash
-    python startup.py
-    ```
-3. The script will:
-    * Start the Vite dev server for frontend hot reloading (port 5173)
-    * Start the Go backend with Air for backend hot reloading (port 8080)
-    * Attempt to open two browser tabs to `http://localhost:5173`
-4. **Enter Names:** Enter a unique name in each browser tab when prompted.
-5. **Start Game:** The first player (Host) will see a "Start Game" button once at least two players have joined. Click it to begin the first round.
+Simply navitate to the root of the project and run `./compund/compound`.
 
 ### Development Features
 
