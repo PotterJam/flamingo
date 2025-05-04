@@ -97,10 +97,8 @@ func cleanupProcesses(processes []Process) {
 	for _, p := range processes {
 		if p.cmd != nil && p.cmd.Process != nil {
 			if p.cmd.Process.Pid > 0 {
-				syscall.Kill(-p.cmd.Process.Pid, syscall.SIGKILL)
+				syscall.Kill(-p.cmd.Process.Pid, syscall.SIGINT)
 			}
-			p.cmd.Process.Kill()
-			p.cmd.Wait()
 		}
 	}
 }
