@@ -10,6 +10,8 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/charmbracelet/bubbles/help"
+	"github.com/charmbracelet/bubbles/key"
 	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
@@ -36,6 +38,29 @@ type Process struct {
 	i int
 }
 
+type keyMap struct {
+	StickToBottom key.Binding
+	GoToTop       key.Binding
+	NextTab       key.Binding
+	PrevTab       key.Binding
+}
+
+func (k keyMap) ShortHelp() []key.Binding {
+	return []key.Binding{
+		k.StickToBottom,
+		k.GoToTop,
+		k.NextTab,
+		k.PrevTab,
+	}
+}
+
+func (k keyMap) FullHelp() [][]key.Binding {
+	return [][]key.Binding{
+		{k.StickToBottom, k.GoToTop},
+		{k.NextTab, k.PrevTab},
+	}
+}
+
 type model struct {
 	activeTab int
 	tabs      []string
@@ -45,6 +70,8 @@ type model struct {
 	sticky    bool
 	viewport  viewport.Model
 	processes []Process
+	help      help.Model
+	keys      keyMap
 }
 
 func initialModel(procs []Process) model {
@@ -58,6 +85,25 @@ func initialModel(procs []Process) model {
 		tabs[i] = p.name
 	}
 
+	keys := keyMap{
+		StickToBottom: key.NewBinding(
+			key.WithKeys("s"),
+			key.WithHelp("s", "stick to bottom"),
+		),
+		GoToTop: key.NewBinding(
+			key.WithKeys("t"),
+			key.WithHelp("t", "go to top"),
+		),
+		NextTab: key.NewBinding(
+			key.WithKeys("tab"),
+			key.WithHelp("tab", "next tab"),
+		),
+		PrevTab: key.NewBinding(
+			key.WithKeys("shift+tab"),
+			key.WithHelp("shift+tab", "prev tab"),
+		),
+	}
+
 	return model{
 		activeTab: 0,
 		tabs:      tabs,
@@ -65,6 +111,8 @@ func initialModel(procs []Process) model {
 		sticky:    true,
 		viewport:  vp,
 		processes: procs,
+		help:      help.New(),
+		keys:      keys,
 	}
 }
 
@@ -177,11 +225,14 @@ func (m model) View() string {
 	}
 	tabRow := lipgloss.JoinHorizontal(lipgloss.Top, tabs...)
 
+	helpView := m.help.View(m.keys)
+
 	return fmt.Sprintf(
-		"%s\n%s\n%s",
+		"%s\n%s\n%s\n%s",
 		tabRow,
 		strings.Repeat("─", m.viewport.Width),
 		m.viewport.View(),
+		helpView,
 	)
 }
 
