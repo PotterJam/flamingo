@@ -12,11 +12,46 @@ import (
 	"github.com/charmbracelet/lipgloss"
 )
 
+var (
+	activeTabBorder = lipgloss.Border{
+		Top:         "─",
+		Bottom:      " ",
+		Left:        "│",
+		Right:       "│",
+		TopLeft:     "╭",
+		TopRight:    "╮",
+		BottomLeft:  "┘",
+		BottomRight: "└",
+	}
+
+	tabBorder = lipgloss.Border{
+		Top:         "─",
+		Bottom:      "─",
+		Left:        "│",
+		Right:       "│",
+		TopLeft:     "╭",
+		TopRight:    "╮",
+		BottomLeft:  "┴",
+		BottomRight: "┴",
+	}
+
+	tabStyle = lipgloss.NewStyle().
+			Border(tabBorder, true).
+			BorderForeground(lipgloss.Color("62")).
+			Padding(0, 1)
+
+	tabGap = tabStyle.
+		BorderTop(false).
+		BorderLeft(false).
+		BorderRight(false)
+)
+
 type keyMap struct {
 	StickToBottom key.Binding
 	GoToTop       key.Binding
 	NextTab       key.Binding
 	PrevTab       key.Binding
+	Exit          key.Binding
 }
 
 func (k keyMap) ShortHelp() []key.Binding {
@@ -25,13 +60,14 @@ func (k keyMap) ShortHelp() []key.Binding {
 		k.GoToTop,
 		k.NextTab,
 		k.PrevTab,
+		k.Exit,
 	}
 }
 
 func (k keyMap) FullHelp() [][]key.Binding {
 	return [][]key.Binding{
 		{k.StickToBottom, k.GoToTop},
-		{k.NextTab, k.PrevTab},
+		{k.NextTab, k.PrevTab, k.Exit},
 	}
 }
 
@@ -46,13 +82,12 @@ type Model struct {
 	processes []Process
 	help      help.Model
 	keys      keyMap
+	width     int
+	height    int
 }
 
 func InitialModel(procs []Process) Model {
 	vp := viewport.New(0, 0)
-	vp.Style = lipgloss.NewStyle().
-		BorderStyle(lipgloss.NormalBorder()).
-		BorderForeground(lipgloss.Color("62"))
 
 	tabs := make([]string, len(procs))
 	for i, p := range procs {
@@ -75,6 +110,10 @@ func InitialModel(procs []Process) Model {
 		PrevTab: key.NewBinding(
 			key.WithKeys("shift+tab"),
 			key.WithHelp("shift+tab", "prev tab"),
+		),
+		Exit: key.NewBinding(
+			key.WithKeys("q"),
+			key.WithHelp("q", "quit"),
 		),
 	}
 
@@ -148,6 +187,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.viewport.Width = msg.Width
 			m.viewport.Height = msg.Height - 4
 		}
+		m.width = msg.Width
+		m.height = msg.Height
 
 	case TickMsg:
 		return m, tea.Batch(doTick(), checkOutputs(&m))
@@ -175,22 +216,27 @@ func (m Model) View() string {
 
 	var tabs []string
 	for i, tab := range m.tabs {
-		style := lipgloss.NewStyle().Padding(0, 1)
+		style := tabStyle
 		if i == m.activeTab {
-			style = style.Background(lipgloss.Color("62")).Foreground(lipgloss.Color("230"))
-		} else {
-			style = style.Background(lipgloss.Color("236")).Foreground(lipgloss.Color("242"))
+			style = style.Border(activeTabBorder, true)
 		}
 		tabs = append(tabs, style.Render(tab))
 	}
-	tabRow := lipgloss.JoinHorizontal(lipgloss.Top, tabs...)
+	joinedTabs := lipgloss.JoinHorizontal(lipgloss.Top, tabs...)
+	gap := tabGap.Render(strings.Repeat(" ", max(0, m.width-lipgloss.Width(joinedTabs)-2)))
+	tabRow := lipgloss.JoinHorizontal(lipgloss.Bottom, joinedTabs, gap)
 
-	helpView := m.help.View(m.keys)
+	m.viewport.Style = lipgloss.NewStyle().
+		BorderTop(false).
+		BorderBottom(false)
+
+	helpView := lipgloss.NewStyle().
+		Padding(0, 1).
+		Render(m.help.View(m.keys))
 
 	return fmt.Sprintf(
-		"%s\n%s\n%s\n%s",
+		"%s\n%s\n%s",
 		tabRow,
-		strings.Repeat("─", m.viewport.Width),
 		m.viewport.View(),
 		helpView,
 	)
