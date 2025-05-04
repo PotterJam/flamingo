@@ -77,7 +77,12 @@ func captureOutput(p *Process) {
 	}
 
 	// Processes spawned won't use terminal colour, so force them do so
-	p.cmd.Env = append(os.Environ(), "FORCE_COLOR=1")
+	p.cmd.Env = append(os.Environ(),
+		"FORCE_COLOR=1",
+		"CLICOLOR_FORCE=1",
+		"CLICOLOR=1",
+		"TERM=xterm-256color",
+	)
 
 	if err := p.cmd.Start(); err != nil {
 		fmt.Printf("Error starting process: %v\n", err)
