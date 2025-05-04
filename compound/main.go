@@ -41,7 +41,7 @@ func main() {
 
 	m := InitialModel(processes)
 
-	prog := tea.NewProgram(m, tea.WithAltScreen(), tea.WithMouseCellMotion())
+	prog := tea.NewProgram(m, tea.WithAltScreen())
 	if _, err := prog.Run(); err != nil {
 		fmt.Printf("Error running program: %v", err)
 		os.Exit(1)
