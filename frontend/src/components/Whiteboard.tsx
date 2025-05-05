@@ -31,26 +31,12 @@ function Whiteboard({
         const canvas = canvasRef.current;
         if (!canvas) return null;
         const rect = canvas.getBoundingClientRect();
-        let clientX, clientY;
-
-        if (evt.touches && evt.touches.length > 0) {
-            clientX = evt.touches[0].clientX;
-            clientY = evt.touches[0].clientY;
-        } else if (evt.changedTouches && evt.changedTouches.length > 0) {
-            clientX = evt.changedTouches[0].clientX;
-            clientY = evt.changedTouches[0].clientY;
-        } else if (evt.clientX !== undefined && evt.clientY !== undefined) {
-            clientX = evt.clientX;
-            clientY = evt.clientY;
-        } else {
-            return null;
-        }
 
         const scaleX = canvas.width / rect.width;
         const scaleY = canvas.height / rect.height;
         return {
-            x: (clientX - rect.left) * scaleX,
-            y: (clientY - rect.top) * scaleY,
+            x: (evt.clientX - rect.left) * scaleX,
+            y: (evt.clientY - rect.top) * scaleY,
         };
     }, []);
 
@@ -79,7 +65,7 @@ function Whiteboard({
     );
 
     const startDrawing = useCallback(
-        (e: any) => {
+        (e: React.MouseEvent<HTMLCanvasElement>) => {
             if (!isDrawer) return;
             const pos = getEventPos(e);
             if (!pos) return;
@@ -98,7 +84,7 @@ function Whiteboard({
     );
 
     const draw = useCallback(
-        (e: any) => {
+        (e: React.MouseEvent<HTMLCanvasElement>) => {
             if (!isDrawer || !isDrawing) return;
             const pos = getEventPos(e);
             if (!pos) return;
