@@ -205,10 +205,6 @@ function Whiteboard({
             onMouseMove={draw}
             onMouseUp={stopDrawing}
             onMouseLeave={stopDrawing}
-            onTouchStart={startDrawing}
-            onTouchMove={draw}
-            onTouchEnd={stopDrawing}
-            onTouchCancel={stopDrawing}
         >
             Your browser does not support the HTML canvas element.
         </canvas>
