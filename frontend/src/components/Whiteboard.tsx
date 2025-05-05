@@ -1,5 +1,6 @@
 import { useRef, useEffect, useState, useCallback } from 'react';
 import { useAppStore } from '../store';
+import { DrawEvent } from '../messages';
 
 function Whiteboard({
     isDrawer,
@@ -8,7 +9,7 @@ function Whiteboard({
     height,
 }: {
     isDrawer: boolean;
-    onDraw: any;
+    onDraw: (payload: DrawEvent) => void;
     width: number;
     height: number;
 }) {

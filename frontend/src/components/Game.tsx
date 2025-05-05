@@ -10,6 +10,7 @@ import { PrimaryButton } from './buttons/PrimaryButton';
 import { OutlineButton } from './buttons/OutlineButton';
 import { WordChoiceModal } from './WordChoiceModal.tsx';
 import { GameEndScreen } from './GameEndScreen';
+import { DrawEvent } from '../messages.ts';
 
 const CANVAS_WIDTH = 800;
 const CANVAS_HEIGHT = 600;
@@ -78,7 +79,7 @@ export const Game: FC = () => {
     }, [canHostStartGame, sendMessage]);
 
     const handleDraw = useCallback(
-        (drawData: any) => {
+        (drawData: DrawEvent) => {
             if (isLocalPlayerDrawer && appState === 'active') {
                 sendMessage({ type: 'drawEvent', payload: drawData });
             }
