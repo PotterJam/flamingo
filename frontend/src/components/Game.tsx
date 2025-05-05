@@ -175,9 +175,8 @@ export const Game: FC = () => {
                         }}
                     >
                         <Whiteboard
-                            isDrawer={!!isLocalPlayerDrawer}
+                            isDrawer={isLocalPlayerDrawer}
                             onDraw={handleDraw}
-                            localPlayerIsDrawer={!!isLocalPlayerDrawer}
                             width={CANVAS_WIDTH}
                             height={CANVAS_HEIGHT}
                         />

@@ -4,13 +4,11 @@ import { useAppStore } from '../store';
 function Whiteboard({
     isDrawer,
     onDraw,
-    localPlayerIsDrawer,
     width,
     height,
 }: {
     isDrawer: boolean;
     onDraw: any;
-    localPlayerIsDrawer: boolean;
     width: number;
     height: number;
 }) {
@@ -154,7 +152,7 @@ function Whiteboard({
     useEffect(() => {
         // I guess we treat the drawing players canvas as the source of truth
         // makes sense cos they only send draw events never receive them
-        if (localPlayerIsDrawer || !lastDrawEvent || !ctxRef.current) return;
+        if (isDrawer || !lastDrawEvent || !ctxRef.current) return;
 
         if (lastDrawEvent.eventType === 'start') {
             const { x, y } = lastDrawEvent;
@@ -177,7 +175,7 @@ function Whiteboard({
             );
             remoteLastPosRef.current = { x, y };
         }
-    }, [lastDrawEvent, localPlayerIsDrawer, remoteIsDrawing, drawLine]);
+    }, [lastDrawEvent, isDrawer, remoteIsDrawing, drawLine]);
 
     return (
         <canvas
