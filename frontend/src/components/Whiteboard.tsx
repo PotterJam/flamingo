@@ -145,16 +145,10 @@ const Whiteboard: FC<WhiteboardProps> = ({
             ctx.strokeStyle = strokeColor;
         }
 
-        clearCanvas();
         console.log(
             `[Whiteboard] Initialized with fixed size: ${width}x${height}`
         );
-    }, [width, height, clearCanvas]);
-
-    useEffect(() => {
-        console.log('[Whiteboard] Key changed, clearing canvas.');
-        clearCanvas();
-    }, [clearCanvas]);
+    }, [width, height]);
 
     useEffect(() => {
         // I guess we treat the drawing players canvas as the source of truth
