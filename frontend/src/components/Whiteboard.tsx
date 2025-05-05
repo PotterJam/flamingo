@@ -13,7 +13,7 @@ const Whiteboard: FC<WhiteboardProps> = ({
     isDrawer,
     onDraw,
     width,
-    height
+    height,
 }) => {
     const canvasRef = useRef<HTMLCanvasElement | null>(null);
     const ctxRef = useRef<CanvasRenderingContext2D | null>(null);
@@ -28,7 +28,7 @@ const Whiteboard: FC<WhiteboardProps> = ({
     const strokeColor = '#000000';
     const lineWidth = 3;
 
-    const getEventPos = useCallback((evt: any) => {
+    const getEventPos = (evt: any) => {
         const canvas = canvasRef.current;
         if (!canvas) return null;
         const rect = canvas.getBoundingClientRect();
@@ -39,31 +39,28 @@ const Whiteboard: FC<WhiteboardProps> = ({
             x: (evt.clientX - rect.left) * scaleX,
             y: (evt.clientY - rect.top) * scaleY,
         };
-    }, []);
+    };
 
-    const drawLine = useCallback(
-        (
-            x1: number,
-            y1: number,
-            x2: number,
-            y2: number,
-            color: string,
-            width: number
-        ) => {
-            const ctx = ctxRef.current;
-            if (!ctx) return;
-            ctx.beginPath();
-            ctx.strokeStyle = color;
-            ctx.lineWidth = width;
-            ctx.lineCap = 'round';
-            ctx.lineJoin = 'round';
-            ctx.moveTo(x1, y1);
-            ctx.lineTo(x2, y2);
-            ctx.stroke();
-            ctx.closePath();
-        },
-        []
-    );
+    const drawLine = (
+        x1: number,
+        y1: number,
+        x2: number,
+        y2: number,
+        color: string,
+        width: number
+    ) => {
+        const ctx = ctxRef.current;
+        if (!ctx) return;
+        ctx.beginPath();
+        ctx.strokeStyle = color;
+        ctx.lineWidth = width;
+        ctx.lineCap = 'round';
+        ctx.lineJoin = 'round';
+        ctx.moveTo(x1, y1);
+        ctx.lineTo(x2, y2);
+        ctx.stroke();
+        ctx.closePath();
+    };
 
     const startDrawing = useCallback(
         (e: React.MouseEvent<HTMLCanvasElement>) => {
@@ -116,14 +113,14 @@ const Whiteboard: FC<WhiteboardProps> = ({
         onDraw({ eventType: 'end' });
     }, [isDrawer, isDrawing, onDraw]);
 
-    const clearCanvasLocal = useCallback(() => {
+    const clearCanvasLocal = () => {
         const ctx = ctxRef.current;
         const canvas = canvasRef.current;
         if (ctx && canvas) {
             ctx.fillStyle = '#FFFFFF';
             ctx.fillRect(0, 0, canvas.width, canvas.height);
         }
-    }, []);
+    };
 
     useEffect(() => {
         const canvas = canvasRef.current;
@@ -196,6 +193,6 @@ const Whiteboard: FC<WhiteboardProps> = ({
             Your browser does not support the HTML canvas element.
         </canvas>
     );
-}
+};
 
 export default Whiteboard;
