@@ -1,14 +1,14 @@
-import {FC, useCallback} from 'react';
-import {useAppStore} from '../store';
+import { FC, useCallback } from 'react';
+import { useAppStore } from '../store';
 import PlayerList from './PlayerList';
 import ChatBox from './ChatBox';
 import WordDisplay from './WordDisplay';
 import TimerDisplay from './TimerDisplay';
 import Whiteboard from './Whiteboard';
 import GuessInput from './GuessInput';
-import {PrimaryButton} from './buttons/PrimaryButton';
-import {OutlineButton} from './buttons/OutlineButton';
-import {WordChoiceModal} from "./WordChoiceModal.tsx";
+import { PrimaryButton } from './buttons/PrimaryButton';
+import { OutlineButton } from './buttons/OutlineButton';
+import { WordChoiceModal } from './WordChoiceModal.tsx';
 import { GameEndScreen } from './GameEndScreen';
 
 const CANVAS_WIDTH = 800;
@@ -60,8 +60,10 @@ export const Game: FC = () => {
 
     const handleWordChosen = useCallback(
         (chosenWord: string) => {
-            sendMessage({ type: 'selectRoundWord', payload: { word: chosenWord } });
-
+            sendMessage({
+                type: 'selectRoundWord',
+                payload: { word: chosenWord },
+            });
         },
         [sendMessage]
     );
@@ -97,7 +99,9 @@ export const Game: FC = () => {
         navigator.clipboard.writeText(roomId);
     };
 
-    return appState === 'finished' ? <GameEndScreen players={gameState?.players ?? []} /> :
+    return appState === 'finished' ? (
+        <GameEndScreen players={gameState?.players ?? []} />
+    ) : (
         <div className="flex w-full flex-grow justify-center">
             <div
                 className="flex flex-col gap-4 lg:flex-row"
@@ -154,7 +158,9 @@ export const Game: FC = () => {
                                 <WordDisplay word={word ?? ''} />
                             ) : appState === 'active' && currentDrawerId ? (
                                 <WordDisplay
-                                    blanks={Array(wordLength || '').fill('_').join(' ')}
+                                    blanks={Array(wordLength || '')
+                                        .fill('_')
+                                        .join(' ')}
                                     length={wordLength ?? 0}
                                 />
                             ) : (
@@ -197,5 +203,6 @@ export const Game: FC = () => {
                     onWordChosen={handleWordChosen}
                 />
             )}
-        </div>;
+        </div>
+    );
 };
