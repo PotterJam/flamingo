@@ -21,6 +21,7 @@ const Whiteboard: FC<WhiteboardProps> = ({
     const lastPosRef = useRef({ x: 0, y: 0 });
 
     const lastDrawEvent = useAppStore((s) => s.gameState.lastDrawEvent);
+    const setClearCanvas = useAppStore((s) => s.setClearCanvas);
 
     const remoteLastPosRef = useRef({ x: 0, y: 0 });
     const [remoteIsDrawing, setRemoteIsDrawing] = useState(false);
@@ -113,14 +114,20 @@ const Whiteboard: FC<WhiteboardProps> = ({
         onDraw({ eventType: 'end' });
     }, [isDrawer, isDrawing, onDraw]);
 
-    const clearCanvasLocal = () => {
+    // This one does need to be a useCallback
+    const clearCanvas = useCallback(() => {
         const ctx = ctxRef.current;
         const canvas = canvasRef.current;
         if (ctx && canvas) {
             ctx.fillStyle = '#FFFFFF';
             ctx.fillRect(0, 0, canvas.width, canvas.height);
         }
-    };
+    }, []);
+
+    useEffect(() => {
+        setClearCanvas(clearCanvas);
+        return () => setClearCanvas(null);
+    }, [clearCanvas, setClearCanvas]);
 
     useEffect(() => {
         const canvas = canvasRef.current;
@@ -138,16 +145,16 @@ const Whiteboard: FC<WhiteboardProps> = ({
             ctx.strokeStyle = strokeColor;
         }
 
-        clearCanvasLocal();
+        clearCanvas();
         console.log(
             `[Whiteboard] Initialized with fixed size: ${width}x${height}`
         );
-    }, [width, height, clearCanvasLocal]);
+    }, [width, height, clearCanvas]);
 
     useEffect(() => {
         console.log('[Whiteboard] Key changed, clearing canvas.');
-        clearCanvasLocal();
-    }, [clearCanvasLocal]);
+        clearCanvas();
+    }, [clearCanvas]);
 
     useEffect(() => {
         // I guess we treat the drawing players canvas as the source of truth
