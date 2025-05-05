@@ -76,22 +76,22 @@ export interface TurnEndMsg {
 
 export type DrawEvent =
     | {
-          color: string;
-          eventType: 'draw';
-          lineWidth: number;
-          x: number;
-          y: number;
-      }
+        color: string;
+        eventType: 'draw';
+        lineWidth: number;
+        x: number;
+        y: number;
+    }
     | {
-          eventType: 'end';
-      }
+        eventType: 'end';
+    }
     | {
-          eventType: 'start';
-          x: number;
-          y: number;
-          color: string;
-          lineWidth: number;
-      };
+        eventType: 'start';
+        x: number;
+        y: number;
+        color: string;
+        lineWidth: number;
+    };
 
 export interface DrawEventMsg {
     type: 'drawEvent';
