@@ -100,9 +100,11 @@ export const Game: FC = () => {
         navigator.clipboard.writeText(roomId);
     };
 
-    return appState === 'finished' ? (
-        <GameEndScreen players={gameState?.players ?? []} />
-    ) : (
+    if (appState === 'finished') {
+        return <GameEndScreen players={gameState?.players ?? []} />;
+    }
+
+    return (
         <div className="flex w-full flex-grow justify-center">
             <div
                 className="flex flex-col gap-4 lg:flex-row"
