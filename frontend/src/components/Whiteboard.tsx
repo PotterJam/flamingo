@@ -1,18 +1,20 @@
-import { useRef, useEffect, useState, useCallback } from 'react';
+import { useRef, useEffect, useState, useCallback, FC } from 'react';
 import { useAppStore } from '../store';
 import { DrawEvent } from '../messages';
 
-function Whiteboard({
-    isDrawer,
-    onDraw,
-    width,
-    height,
-}: {
+interface WhiteboardProps {
     isDrawer: boolean;
     onDraw: (payload: DrawEvent) => void;
     width: number;
     height: number;
-}) {
+}
+
+const Whiteboard: FC<WhiteboardProps> = ({
+    isDrawer,
+    onDraw,
+    width,
+    height
+}) => {
     const canvasRef = useRef<HTMLCanvasElement | null>(null);
     const ctxRef = useRef<CanvasRenderingContext2D | null>(null);
     const [isDrawing, setIsDrawing] = useState(false);
