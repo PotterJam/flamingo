@@ -50,16 +50,13 @@ const Whiteboard: FC<WhiteboardProps> = ({
 
     const [selectedColour, setSelectedColour] =
         useState<keyof typeof PALETTE>('black');
-    const [selectedThickness, setSelectedThickness] = useState(2);
+    const [selectedThickness, setSelectedThickness] = useState(3);
 
     const lastDrawEvent = useAppStore((s) => s.gameState.lastDrawEvent);
     const setClearCanvas = useAppStore((s) => s.setClearCanvas);
 
     const remoteLastPosRef = useRef({ x: 0, y: 0 });
     const [remoteIsDrawing, setRemoteIsDrawing] = useState(false);
-
-    const strokeColor = '#000000';
-    const lineWidth = 3;
 
     const getEventPos = (evt: any) => {
         const canvas = canvasRef.current;
@@ -106,8 +103,8 @@ const Whiteboard: FC<WhiteboardProps> = ({
                 eventType: 'start',
                 x: pos.x,
                 y: pos.y,
-                color: strokeColor,
-                lineWidth,
+                color: PALETTE[selectedColour],
+                lineWidth: selectedThickness,
             });
             if (e.cancelable) e.preventDefault();
         },
@@ -124,15 +121,15 @@ const Whiteboard: FC<WhiteboardProps> = ({
                 lastPosRef.current.y,
                 pos.x,
                 pos.y,
-                strokeColor,
-                lineWidth
+                PALETTE[selectedColour],
+                selectedThickness
             );
             onDraw({
                 eventType: 'draw',
                 x: pos.x,
                 y: pos.y,
-                color: strokeColor,
-                lineWidth,
+                color: PALETTE[selectedColour],
+                lineWidth: selectedThickness,
             });
             lastPosRef.current = pos;
             if (e.cancelable) e.preventDefault();
@@ -173,8 +170,8 @@ const Whiteboard: FC<WhiteboardProps> = ({
         if (ctx) {
             ctx.lineCap = 'round';
             ctx.lineJoin = 'round';
-            ctx.lineWidth = lineWidth;
-            ctx.strokeStyle = strokeColor;
+            ctx.lineWidth = selectedThickness;
+            ctx.strokeStyle = PALETTE[selectedColour];
         }
 
         console.log(
@@ -246,7 +243,7 @@ const Whiteboard: FC<WhiteboardProps> = ({
                     ))}
                 </div>
                 <div className="mt-4 flex flex-col items-center space-y-2">
-                    {[2, 5, 10].map((thickness) => (
+                    {[3, 6, 9].map((thickness) => (
                         <div
                             key={thickness}
                             className={classNames(
