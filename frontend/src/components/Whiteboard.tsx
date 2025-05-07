@@ -238,7 +238,7 @@ const Whiteboard: FC<WhiteboardProps> = ({
                         <div
                             key={colour}
                             className={
-                                'h-7 w-7 cursor-pointer border-gray-700 hover:ring-2 hover:ring-blue-500'
+                                'h-7 w-7 cursor-pointer border-gray-700 transition-transform duration-150 ease-in-out hover:scale-130'
                             }
                             style={{ backgroundColor: hex }}
                             onClick={() => setSelectedColour(colour)}
