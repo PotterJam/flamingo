@@ -48,8 +48,9 @@ const Whiteboard: FC<WhiteboardProps> = ({
     const [isDrawing, setIsDrawing] = useState(false);
     const lastPosRef = useRef({ x: 0, y: 0 });
 
-    const [selectedColor, setSelectedColour] =
+    const [selectedColour, setSelectedColour] =
         useState<keyof typeof PALETTE>('black');
+    const [selectedThickness, setSelectedThickness] = useState(2);
 
     const lastDrawEvent = useAppStore((s) => s.gameState.lastDrawEvent);
     const setClearCanvas = useAppStore((s) => s.setClearCanvas);
@@ -230,7 +231,7 @@ const Whiteboard: FC<WhiteboardProps> = ({
             <div className="flex flex-col gap-2 rounded-r-lg border-t-2 border-r-2 border-b-2 border-gray-700 bg-gray-100 p-2 align-middle">
                 <div
                     className="mx-auto my-2 h-12 w-12 rounded-full border-gray-700 border-1"
-                    style={{ backgroundColor: PALETTE[selectedColor] }}
+                    style={{ backgroundColor: PALETTE[selectedColour] }}
                 />
                 <div className="grid w-16 grid-cols-2 items-center justify-center gap-2 gap-x-2">
                     {Object.entries(PALETTE).map(([colour, hex], _) => (
@@ -244,15 +245,27 @@ const Whiteboard: FC<WhiteboardProps> = ({
                         />
                     ))}
                 </div>
-                <div className="flex flex-col space-y-1">
+                <div className="mt-4 flex flex-col items-center space-y-2">
                     {[2, 5, 10].map((thickness) => (
-                        <button
+                        <div
                             key={thickness}
-                            className="rounded border border-gray-300 p-1 text-xs hover:bg-gray-200 focus:ring-2 focus:ring-blue-500 focus:outline-none"
-                            // onClick={() => handleThicknessChange(thickness)} // TODO: Implement
+                            className={classNames(
+                                'flex h-8 w-8 cursor-pointer items-center justify-center rounded-full border border-gray-400 bg-white hover:ring-2 hover:ring-blue-500',
+                                {
+                                    'ring-2 ring-blue-500 ring-offset-1':
+                                        selectedThickness === thickness,
+                                }
+                            )}
+                            onClick={() => setSelectedThickness(thickness)}
                         >
-                            {thickness}px
-                        </button>
+                            <div
+                                className="rounded-full bg-black"
+                                style={{
+                                    width: `${thickness * 2}px`,
+                                    height: `${thickness * 2}px`,
+                                }}
+                            />
+                        </div>
                     ))}
                 </div>
             </div>
