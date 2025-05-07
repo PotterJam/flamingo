@@ -1,15 +1,16 @@
-import {FC, useCallback} from 'react';
-import {useAppStore} from '../store';
+import { FC, useCallback } from 'react';
+import { useAppStore } from '../store';
 import PlayerList from './PlayerList';
 import ChatBox from './ChatBox';
 import WordDisplay from './WordDisplay';
 import TimerDisplay from './TimerDisplay';
 import Whiteboard from './Whiteboard';
 import GuessInput from './GuessInput';
-import {PrimaryButton} from './buttons/PrimaryButton';
-import {OutlineButton} from './buttons/OutlineButton';
-import {WordChoiceModal} from "./WordChoiceModal.tsx";
+import { PrimaryButton } from './buttons/PrimaryButton';
+import { OutlineButton } from './buttons/OutlineButton';
+import { WordChoiceModal } from './WordChoiceModal.tsx';
 import { GameEndScreen } from './GameEndScreen';
+import { DrawEvent } from '../messages.ts';
 
 const CANVAS_WIDTH = 800;
 const CANVAS_HEIGHT = 600;
@@ -60,8 +61,10 @@ export const Game: FC = () => {
 
     const handleWordChosen = useCallback(
         (chosenWord: string) => {
-            sendMessage({ type: 'selectRoundWord', payload: { word: chosenWord } });
-
+            sendMessage({
+                type: 'selectRoundWord',
+                payload: { word: chosenWord },
+            });
         },
         [sendMessage]
     );
@@ -76,7 +79,7 @@ export const Game: FC = () => {
     }, [canHostStartGame, sendMessage]);
 
     const handleDraw = useCallback(
-        (drawData: any) => {
+        (drawData: DrawEvent) => {
             if (isLocalPlayerDrawer && appState === 'active') {
                 sendMessage({ type: 'drawEvent', payload: drawData });
             }
@@ -97,7 +100,11 @@ export const Game: FC = () => {
         navigator.clipboard.writeText(roomId);
     };
 
-    return appState === 'finished' ? <GameEndScreen players={gameState?.players ?? []} /> :
+    if (appState === 'finished') {
+        return <GameEndScreen players={gameState?.players ?? []} />;
+    }
+
+    return (
         <div className="flex w-full flex-grow justify-center">
             <div
                 className="flex flex-col gap-4 lg:flex-row"
@@ -154,7 +161,9 @@ export const Game: FC = () => {
                                 <WordDisplay word={word ?? ''} />
                             ) : appState === 'active' && currentDrawerId ? (
                                 <WordDisplay
-                                    blanks={Array(wordLength || '').fill('_').join(' ')}
+                                    blanks={Array(wordLength || '')
+                                        .fill('_')
+                                        .join(' ')}
                                     length={wordLength ?? 0}
                                 />
                             ) : (
@@ -175,9 +184,8 @@ export const Game: FC = () => {
                         }}
                     >
                         <Whiteboard
-                            isDrawer={!!isLocalPlayerDrawer}
+                            isDrawer={isLocalPlayerDrawer}
                             onDraw={handleDraw}
-                            localPlayerIsDrawer={!!isLocalPlayerDrawer}
                             width={CANVAS_WIDTH}
                             height={CANVAS_HEIGHT}
                         />
@@ -198,5 +206,6 @@ export const Game: FC = () => {
                     onWordChosen={handleWordChosen}
                 />
             )}
-        </div>;
+        </div>
+    );
 };

@@ -65,6 +65,8 @@ export type AppState = {
     appState: CurrentAppState;
     gameState: GameState;
     roomId: string | null;
+
+    clearCanvas: (() => void) | null;
 };
 
 export type AppActions = {
@@ -81,6 +83,7 @@ export type AppActions = {
     resetGameState: () => void;
 
     addChatMessage: (message: ChatMessage) => void;
+    setClearCanvas: (callback: (() => void) | null) => void;
 };
 
 export type MessageHandlers = {
@@ -103,6 +106,7 @@ export const useAppStore = create<AppState & AppActions & MessageHandlers>()(
             selfId: '',
             launchAsHost: false,
             lastMessage: null,
+            clearCanvas: null,
 
             sendMessage: () => {
                 throw new Error('sending message without sender configured');
@@ -137,6 +141,10 @@ export const useAppStore = create<AppState & AppActions & MessageHandlers>()(
             addChatMessage: (message) =>
                 set((s) => {
                     s.gameState.messages.push(message);
+                }),
+            setClearCanvas: (callback) =>
+                set((s) => {
+                    s.clearCanvas = callback;
                 }),
 
             // Message receivers
@@ -174,6 +182,8 @@ export const useAppStore = create<AppState & AppActions & MessageHandlers>()(
                     s.gameState.wordLength = payload.wordLength ?? null;
                     s.gameState.players = payload.players;
                     s.gameState.turnEndTime = payload.turnEndTime;
+
+                    s.clearCanvas && s.clearCanvas();
 
                     s.appState = 'active';
                 }),

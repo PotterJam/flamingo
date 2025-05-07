@@ -1,25 +1,27 @@
-import { useRef, useEffect, useState, useCallback } from 'react';
+import { useRef, useEffect, useState, useCallback, FC } from 'react';
 import { useAppStore } from '../store';
+import { DrawEvent } from '../messages';
 
-function Whiteboard({
-    isDrawer,
-    onDraw,
-    localPlayerIsDrawer,
-    width,
-    height,
-}: {
+interface WhiteboardProps {
     isDrawer: boolean;
-    onDraw: any;
-    localPlayerIsDrawer: boolean;
+    onDraw: (payload: DrawEvent) => void;
     width: number;
     height: number;
-}) {
+}
+
+const Whiteboard: FC<WhiteboardProps> = ({
+    isDrawer,
+    onDraw,
+    width,
+    height,
+}) => {
     const canvasRef = useRef<HTMLCanvasElement | null>(null);
     const ctxRef = useRef<CanvasRenderingContext2D | null>(null);
     const [isDrawing, setIsDrawing] = useState(false);
     const lastPosRef = useRef({ x: 0, y: 0 });
 
     const lastDrawEvent = useAppStore((s) => s.gameState.lastDrawEvent);
+    const setClearCanvas = useAppStore((s) => s.setClearCanvas);
 
     const remoteLastPosRef = useRef({ x: 0, y: 0 });
     const [remoteIsDrawing, setRemoteIsDrawing] = useState(false);
@@ -27,59 +29,42 @@ function Whiteboard({
     const strokeColor = '#000000';
     const lineWidth = 3;
 
-    const getEventPos = useCallback((evt: any) => {
+    const getEventPos = (evt: any) => {
         const canvas = canvasRef.current;
         if (!canvas) return null;
         const rect = canvas.getBoundingClientRect();
-        let clientX, clientY;
-
-        if (evt.touches && evt.touches.length > 0) {
-            clientX = evt.touches[0].clientX;
-            clientY = evt.touches[0].clientY;
-        } else if (evt.changedTouches && evt.changedTouches.length > 0) {
-            clientX = evt.changedTouches[0].clientX;
-            clientY = evt.changedTouches[0].clientY;
-        } else if (evt.clientX !== undefined && evt.clientY !== undefined) {
-            clientX = evt.clientX;
-            clientY = evt.clientY;
-        } else {
-            return null;
-        }
 
         const scaleX = canvas.width / rect.width;
         const scaleY = canvas.height / rect.height;
         return {
-            x: (clientX - rect.left) * scaleX,
-            y: (clientY - rect.top) * scaleY,
+            x: (evt.clientX - rect.left) * scaleX,
+            y: (evt.clientY - rect.top) * scaleY,
         };
-    }, []);
+    };
 
-    const drawLine = useCallback(
-        (
-            x1: number,
-            y1: number,
-            x2: number,
-            y2: number,
-            color: string,
-            width: number
-        ) => {
-            const ctx = ctxRef.current;
-            if (!ctx) return;
-            ctx.beginPath();
-            ctx.strokeStyle = color;
-            ctx.lineWidth = width;
-            ctx.lineCap = 'round';
-            ctx.lineJoin = 'round';
-            ctx.moveTo(x1, y1);
-            ctx.lineTo(x2, y2);
-            ctx.stroke();
-            ctx.closePath();
-        },
-        []
-    );
+    const drawLine = (
+        x1: number,
+        y1: number,
+        x2: number,
+        y2: number,
+        color: string,
+        width: number
+    ) => {
+        const ctx = ctxRef.current;
+        if (!ctx) return;
+        ctx.beginPath();
+        ctx.strokeStyle = color;
+        ctx.lineWidth = width;
+        ctx.lineCap = 'round';
+        ctx.lineJoin = 'round';
+        ctx.moveTo(x1, y1);
+        ctx.lineTo(x2, y2);
+        ctx.stroke();
+        ctx.closePath();
+    };
 
     const startDrawing = useCallback(
-        (e: any) => {
+        (e: React.MouseEvent<HTMLCanvasElement>) => {
             if (!isDrawer) return;
             const pos = getEventPos(e);
             if (!pos) return;
@@ -98,7 +83,7 @@ function Whiteboard({
     );
 
     const draw = useCallback(
-        (e: any) => {
+        (e: React.MouseEvent<HTMLCanvasElement>) => {
             if (!isDrawer || !isDrawing) return;
             const pos = getEventPos(e);
             if (!pos) return;
@@ -129,7 +114,8 @@ function Whiteboard({
         onDraw({ eventType: 'end' });
     }, [isDrawer, isDrawing, onDraw]);
 
-    const clearCanvasLocal = useCallback(() => {
+    // This one does need to be a useCallback
+    const clearCanvas = useCallback(() => {
         const ctx = ctxRef.current;
         const canvas = canvasRef.current;
         if (ctx && canvas) {
@@ -137,6 +123,11 @@ function Whiteboard({
             ctx.fillRect(0, 0, canvas.width, canvas.height);
         }
     }, []);
+
+    useEffect(() => {
+        setClearCanvas(clearCanvas);
+        return () => setClearCanvas(null);
+    }, [clearCanvas, setClearCanvas]);
 
     useEffect(() => {
         const canvas = canvasRef.current;
@@ -154,21 +145,15 @@ function Whiteboard({
             ctx.strokeStyle = strokeColor;
         }
 
-        clearCanvasLocal();
         console.log(
             `[Whiteboard] Initialized with fixed size: ${width}x${height}`
         );
-    }, [width, height, clearCanvasLocal]);
-
-    useEffect(() => {
-        console.log('[Whiteboard] Key changed, clearing canvas.');
-        clearCanvasLocal();
-    }, [clearCanvasLocal]);
+    }, [width, height]);
 
     useEffect(() => {
         // I guess we treat the drawing players canvas as the source of truth
         // makes sense cos they only send draw events never receive them
-        if (localPlayerIsDrawer || !lastDrawEvent || !ctxRef.current) return;
+        if (isDrawer || !lastDrawEvent || !ctxRef.current) return;
 
         if (lastDrawEvent.eventType === 'start') {
             const { x, y } = lastDrawEvent;
@@ -191,7 +176,7 @@ function Whiteboard({
             );
             remoteLastPosRef.current = { x, y };
         }
-    }, [lastDrawEvent, localPlayerIsDrawer, remoteIsDrawing, drawLine]);
+    }, [lastDrawEvent, isDrawer, remoteIsDrawing, drawLine]);
 
     return (
         <canvas
@@ -205,14 +190,10 @@ function Whiteboard({
             onMouseMove={draw}
             onMouseUp={stopDrawing}
             onMouseLeave={stopDrawing}
-            onTouchStart={startDrawing}
-            onTouchMove={draw}
-            onTouchEnd={stopDrawing}
-            onTouchCancel={stopDrawing}
         >
             Your browser does not support the HTML canvas element.
         </canvas>
     );
-}
+};
 
 export default Whiteboard;

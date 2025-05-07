@@ -149,4 +149,9 @@ export interface StartGameMsg {
     payload: null;
 }
 
-export type SendMsg = SetNameMsg | DrawEventMsg | GuessMsg | SelectRoundWordMsg | StartGameMsg;
+export type SendMsg =
+    | SetNameMsg
+    | DrawEventMsg
+    | GuessMsg
+    | SelectRoundWordMsg
+    | StartGameMsg;
