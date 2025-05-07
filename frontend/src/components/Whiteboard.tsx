@@ -230,15 +230,15 @@ const Whiteboard: FC<WhiteboardProps> = ({
             </canvas>
             <div className="flex flex-col gap-2 rounded-r-lg border-t-2 border-r-2 border-b-2 border-gray-700 bg-gray-100 p-2 align-middle">
                 <div
-                    className="mx-auto my-2 h-12 w-12 rounded-full border-gray-700 border-1"
+                    className="mx-auto my-2 h-12 w-12 rounded-full border-1 border-gray-700"
                     style={{ backgroundColor: PALETTE[selectedColour] }}
                 />
-                <div className="grid w-16 grid-cols-2 items-center justify-center gap-2 gap-x-2">
+                <div className="grid w-14 grid-cols-2 items-center justify-center">
                     {Object.entries(PALETTE).map(([colour, hex], _) => (
                         <div
                             key={colour}
                             className={
-                                'h-6 w-6 cursor-pointer rounded-full border-1 border-gray-700 hover:ring-2 hover:ring-blue-500'
+                                'h-7 w-7 cursor-pointer border-gray-700 hover:ring-2 hover:ring-blue-500'
                             }
                             style={{ backgroundColor: hex }}
                             onClick={() => setSelectedColour(colour)}
