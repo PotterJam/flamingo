@@ -1,6 +1,7 @@
 import { useRef, useEffect, useState, useCallback, FC } from 'react';
 import { useAppStore } from '../store';
 import { DrawEvent } from '../messages';
+import classNames from 'classnames';
 
 const PALETTE: Record<string, string> = {
     black: '#000000',
@@ -46,6 +47,9 @@ const Whiteboard: FC<WhiteboardProps> = ({
     const ctxRef = useRef<CanvasRenderingContext2D | null>(null);
     const [isDrawing, setIsDrawing] = useState(false);
     const lastPosRef = useRef({ x: 0, y: 0 });
+
+    const [selectedColor, setSelectedColour] =
+        useState<keyof typeof PALETTE>('black');
 
     const lastDrawEvent = useAppStore((s) => s.gameState.lastDrawEvent);
     const setClearCanvas = useAppStore((s) => s.setClearCanvas);
@@ -209,7 +213,7 @@ const Whiteboard: FC<WhiteboardProps> = ({
         <div className="flex flex-row">
             <canvas
                 ref={canvasRef}
-                className="block rounded border-2 border-black bg-white"
+                className="block rounded-l border-t-2 border-b-2 border-l-2 border-gray-700 bg-white"
                 style={{
                     cursor: isDrawer ? 'crosshair' : 'default',
                     touchAction: 'none',
@@ -223,14 +227,20 @@ const Whiteboard: FC<WhiteboardProps> = ({
             >
                 Your browser does not support the HTML canvas element.
             </canvas>
-            <div className="ml-2 flex flex-col gap-2 rounded-lg p-2 align-middle">
-                <div className="items-center gap-2 grid gap-x-2 w-16 grid-cols-2 justify-center">
-                    {Object.entries(PALETTE).map(([k, v], _) => (
+            <div className="flex flex-col gap-2 rounded-r-lg border-t-2 border-r-2 border-b-2 border-gray-700 bg-gray-100 p-2 align-middle">
+                <div
+                    className="mx-auto my-2 h-12 w-12 rounded-full border-gray-700 border-1"
+                    style={{ backgroundColor: PALETTE[selectedColor] }}
+                />
+                <div className="grid w-16 grid-cols-2 items-center justify-center gap-2 gap-x-2">
+                    {Object.entries(PALETTE).map(([colour, hex], _) => (
                         <div
-                            key={k}
-                            className="h-6 w-6 cursor-pointer rounded-full border-gray-700 border-1 hover:ring-2 hover:ring-blue-500"
-                            style={{ backgroundColor: v }}
-                            // onClick={() => handleColorChange(color)} // TODO: Implement
+                            key={colour}
+                            className={
+                                'h-6 w-6 cursor-pointer rounded-full border-1 border-gray-700 hover:ring-2 hover:ring-blue-500'
+                            }
+                            style={{ backgroundColor: hex }}
+                            onClick={() => setSelectedColour(colour)}
                         />
                     ))}
                 </div>
