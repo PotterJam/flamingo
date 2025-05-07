@@ -179,20 +179,56 @@ const Whiteboard: FC<WhiteboardProps> = ({
     }, [lastDrawEvent, isDrawer, remoteIsDrawing, drawLine]);
 
     return (
-        <canvas
-            ref={canvasRef}
-            className="block bg-white"
-            style={{
-                cursor: isDrawer ? 'crosshair' : 'default',
-                touchAction: 'none',
-            }}
-            onMouseDown={startDrawing}
-            onMouseMove={draw}
-            onMouseUp={stopDrawing}
-            onMouseLeave={stopDrawing}
-        >
-            Your browser does not support the HTML canvas element.
-        </canvas>
+        <div className="flex flex-row">
+            <canvas
+                ref={canvasRef}
+                className="block rounded border-2 border-black bg-white"
+                style={{
+                    cursor: isDrawer ? 'crosshair' : 'default',
+                    touchAction: 'none',
+                    width: width,
+                    height: height,
+                }}
+                onMouseDown={startDrawing}
+                onMouseMove={draw}
+                onMouseUp={stopDrawing}
+                onMouseLeave={stopDrawing}
+            >
+                Your browser does not support the HTML canvas element.
+            </canvas>
+            <div className="ml-2 flex flex-col gap-2 rounded-lg p-2 align-middle ">
+                <div className="flex flex-col gap-2 items-center">
+                    {[
+                        '#000000',
+                        '#FF0000',
+                        '#00FF00',
+                        '#0000FF',
+                        '#FFFF00',
+                        '#FF00FF',
+                        '#00FFFF',
+                        '#FFA500',
+                    ].map((color) => (
+                        <div
+                            key={color}
+                            className="h-6 w-6 cursor-pointer rounded-full border hover:ring-2 hover:ring-blue-500"
+                            style={{ backgroundColor: color }}
+                            // onClick={() => handleColorChange(color)} // TODO: Implement
+                        />
+                    ))}
+                </div>
+                <div className="flex flex-col space-y-1">
+                    {[2, 5, 10].map((thickness) => (
+                        <button
+                            key={thickness}
+                            className="rounded border border-gray-300 p-1 text-xs hover:bg-gray-200 focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                            // onClick={() => handleThicknessChange(thickness)} // TODO: Implement
+                        >
+                            {thickness}px
+                        </button>
+                    ))}
+                </div>
+            </div>
+        </div>
     );
 };
 
