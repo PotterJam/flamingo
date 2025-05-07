@@ -18,7 +18,7 @@ export const GameEndScreen: FC<GameEndScreenProps> = ({ players }) => {
     const sortedPlayers = [...players].sort((a, b) => b.score - a.score);
 
     return (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-75">
+        <div className="fixed inset-0 z-50 flex items-center justify-center">
             <div className="w-full max-w-md rounded-lg bg-white p-8 text-center shadow-xl">
                 <h1 className="mb-6 text-4xl font-bold text-gray-800">Game Over!</h1>
                 <h2 className="mb-4 text-2xl font-semibold text-gray-700">Final Scores:</h2>
