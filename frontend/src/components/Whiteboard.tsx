@@ -2,34 +2,32 @@ import { useRef, useEffect, useState, useCallback, FC } from 'react';
 import { useAppStore } from '../store';
 import { DrawEvent } from '../messages';
 
-const PALETTE = [
-    {
-        black: '#000000',
-        white: '#FFFFFF',
-        grey: '#C1C1C1',
-        'dark-grey': '#505050',
-        red: '#EF120B',
-        'dark-red': '#740A08',
-        orange: '#FF7700',
-        'dark-orange': '#C23900',
-        yellow: '#FFE404',
-        'dark-yellow': '#E8A202',
-        green: '#08C202',
-        'dark-green': '#00461A',
-        cyan: '#00FF91',
-        'dark-cyan': '#02569E',
-        blue: '#2220D3',
-        'dark-blue': '#0E0865',
-        purple: '#A302BA',
-        'dark-purple': '#550069',
-        pink: '#DF69A7',
-        'dark-pink': '#883454',
-        peach: '#FFAC8A',
-        'dark-peach': '#CC7C4D',
-        brown: '#A0522D',
-        'dark-brown': '#63300D',
-    },
-] as const;
+const PALETTE: Record<string, string> = {
+    black: '#000000',
+    white: '#FFFFFF',
+    grey: '#C1C1C1',
+    'dark-grey': '#505050',
+    red: '#EF120B',
+    'dark-red': '#740A08',
+    orange: '#FF7700',
+    'dark-orange': '#C23900',
+    yellow: '#FFE404',
+    'dark-yellow': '#E8A202',
+    green: '#08C202',
+    'dark-green': '#00461A',
+    cyan: '#00FF91',
+    'dark-cyan': '#02569E',
+    blue: '#2220D3',
+    'dark-blue': '#0E0865',
+    purple: '#A302BA',
+    'dark-purple': '#550069',
+    pink: '#DF69A7',
+    'dark-pink': '#883454',
+    peach: '#FFAC8A',
+    'dark-peach': '#CC7C4D',
+    brown: '#A0522D',
+    'dark-brown': '#63300D',
+};
 
 interface WhiteboardProps {
     isDrawer: boolean;
@@ -226,12 +224,12 @@ const Whiteboard: FC<WhiteboardProps> = ({
                 Your browser does not support the HTML canvas element.
             </canvas>
             <div className="ml-2 flex flex-col gap-2 rounded-lg p-2 align-middle">
-                <div className="flex flex-col items-center gap-2">
-                    {Object.keys(PALETTE).map((color) => (
+                <div className="items-center gap-2 grid gap-x-2 w-16 grid-cols-2 justify-center">
+                    {Object.entries(PALETTE).map(([k, v], _) => (
                         <div
-                            key={color}
-                            className="h-6 w-6 cursor-pointer rounded-full border hover:ring-2 hover:ring-blue-500"
-                            style={{ backgroundColor: color }}
+                            key={k}
+                            className="h-6 w-6 cursor-pointer rounded-full border-gray-700 border-1 hover:ring-2 hover:ring-blue-500"
+                            style={{ backgroundColor: v }}
                             // onClick={() => handleColorChange(color)} // TODO: Implement
                         />
                     ))}
