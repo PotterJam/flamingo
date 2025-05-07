@@ -1,6 +1,34 @@
 import { useRef, useEffect, useState, useCallback, FC } from 'react';
 import { useAppStore } from '../store';
 import { DrawEvent } from '../messages';
+import classNames from 'classnames';
+
+const PALETTE = {
+    black: '#000000',
+    white: '#FFFFFF',
+    grey: '#C1C1C1',
+    'dark-grey': '#505050',
+    red: '#EF120B',
+    'dark-red': '#740A08',
+    orange: '#FF7700',
+    'dark-orange': '#C23900',
+    yellow: '#FFE404',
+    'dark-yellow': '#E8A202',
+    green: '#08C202',
+    'dark-green': '#00461A',
+    cyan: '#00FF91',
+    'dark-cyan': '#02569E',
+    blue: '#2220D3',
+    'dark-blue': '#0E0865',
+    purple: '#A302BA',
+    'dark-purple': '#550069',
+    pink: '#DF69A7',
+    'dark-pink': '#883454',
+    peach: '#FFAC8A',
+    'dark-peach': '#CC7C4D',
+    brown: '#A0522D',
+    'dark-brown': '#63300D',
+} as const;
 
 interface WhiteboardProps {
     isDrawer: boolean;
@@ -20,14 +48,15 @@ const Whiteboard: FC<WhiteboardProps> = ({
     const [isDrawing, setIsDrawing] = useState(false);
     const lastPosRef = useRef({ x: 0, y: 0 });
 
+    const [selectedColour, setSelectedColour] =
+        useState<keyof typeof PALETTE>('black');
+    const [selectedThickness, setSelectedThickness] = useState(3);
+
     const lastDrawEvent = useAppStore((s) => s.gameState.lastDrawEvent);
     const setClearCanvas = useAppStore((s) => s.setClearCanvas);
 
     const remoteLastPosRef = useRef({ x: 0, y: 0 });
     const [remoteIsDrawing, setRemoteIsDrawing] = useState(false);
-
-    const strokeColor = '#000000';
-    const lineWidth = 3;
 
     const getEventPos = (evt: any) => {
         const canvas = canvasRef.current;
@@ -74,8 +103,8 @@ const Whiteboard: FC<WhiteboardProps> = ({
                 eventType: 'start',
                 x: pos.x,
                 y: pos.y,
-                color: strokeColor,
-                lineWidth,
+                color: PALETTE[selectedColour],
+                lineWidth: selectedThickness,
             });
             if (e.cancelable) e.preventDefault();
         },
@@ -92,15 +121,15 @@ const Whiteboard: FC<WhiteboardProps> = ({
                 lastPosRef.current.y,
                 pos.x,
                 pos.y,
-                strokeColor,
-                lineWidth
+                PALETTE[selectedColour],
+                selectedThickness
             );
             onDraw({
                 eventType: 'draw',
                 x: pos.x,
                 y: pos.y,
-                color: strokeColor,
-                lineWidth,
+                color: PALETTE[selectedColour],
+                lineWidth: selectedThickness,
             });
             lastPosRef.current = pos;
             if (e.cancelable) e.preventDefault();
@@ -141,8 +170,8 @@ const Whiteboard: FC<WhiteboardProps> = ({
         if (ctx) {
             ctx.lineCap = 'round';
             ctx.lineJoin = 'round';
-            ctx.lineWidth = lineWidth;
-            ctx.strokeStyle = strokeColor;
+            ctx.lineWidth = selectedThickness;
+            ctx.strokeStyle = PALETTE[selectedColour];
         }
 
         console.log(
@@ -179,20 +208,69 @@ const Whiteboard: FC<WhiteboardProps> = ({
     }, [lastDrawEvent, isDrawer, remoteIsDrawing, drawLine]);
 
     return (
-        <canvas
-            ref={canvasRef}
-            className="block bg-white"
-            style={{
-                cursor: isDrawer ? 'crosshair' : 'default',
-                touchAction: 'none',
-            }}
-            onMouseDown={startDrawing}
-            onMouseMove={draw}
-            onMouseUp={stopDrawing}
-            onMouseLeave={stopDrawing}
-        >
-            Your browser does not support the HTML canvas element.
-        </canvas>
+        <div className="flex flex-row">
+            <canvas
+                ref={canvasRef}
+                className="block rounded-l border-t-2 border-b-2 border-l-2 border-gray-700 bg-white"
+                style={{
+                    cursor: isDrawer ? 'crosshair' : 'default',
+                    touchAction: 'none',
+                    width: width,
+                    height: height,
+                }}
+                onMouseDown={startDrawing}
+                onMouseMove={draw}
+                onMouseUp={stopDrawing}
+                onMouseLeave={stopDrawing}
+            >
+                Your browser does not support the HTML canvas element.
+            </canvas>
+            <div className="flex flex-col gap-2 rounded-r-lg border-t-2 border-r-2 border-b-2 border-gray-700 bg-gray-100 p-2 align-middle">
+                <div
+                    className="mx-auto my-2 h-12 w-12 rounded-full border-1 border-gray-700"
+                    style={{ backgroundColor: PALETTE[selectedColour] }}
+                />
+                <div className="grid w-14 grid-cols-2 items-center justify-center">
+                    {Object.entries(PALETTE).map(([colour, hex], _) => (
+                        <div
+                            key={colour}
+                            className={
+                                'h-7 w-7 cursor-pointer border-gray-700 transition-transform duration-150 ease-in-out hover:scale-130'
+                            }
+                            style={{ backgroundColor: hex }}
+                            onClick={() =>
+                                setSelectedColour(
+                                    colour as keyof typeof PALETTE
+                                )
+                            }
+                        />
+                    ))}
+                </div>
+                <div className="mt-4 flex flex-col items-center space-y-2">
+                    {[3, 6, 9].map((thickness) => (
+                        <div
+                            key={thickness}
+                            className={classNames(
+                                'flex h-8 w-8 cursor-pointer items-center justify-center rounded-full border border-gray-400 bg-white hover:ring-2 hover:ring-blue-500',
+                                {
+                                    'ring-2 ring-blue-500 ring-offset-1':
+                                        selectedThickness === thickness,
+                                }
+                            )}
+                            onClick={() => setSelectedThickness(thickness)}
+                        >
+                            <div
+                                className="rounded-full bg-black"
+                                style={{
+                                    width: `${thickness * 2}px`,
+                                    height: `${thickness * 2}px`,
+                                }}
+                            />
+                        </div>
+                    ))}
+                </div>
+            </div>
+        </div>
     );
 };
 

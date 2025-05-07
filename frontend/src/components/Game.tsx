@@ -176,13 +176,7 @@ export const Game: FC = () => {
                             )}
                         </div>
                     </div>
-                    <div
-                        className="relative mb-4 overflow-hidden rounded border-2 border-black bg-white"
-                        style={{
-                            width: `${CANVAS_WIDTH}px`,
-                            height: `${CANVAS_HEIGHT}px`,
-                        }}
-                    >
+                    <div className="relative mb-4 overflow-hidden bg-white">
                         <Whiteboard
                             isDrawer={isLocalPlayerDrawer}
                             onDraw={handleDraw}
