@@ -3,7 +3,7 @@ import { useAppStore } from '../store';
 import { DrawEvent } from '../messages';
 import classNames from 'classnames';
 
-const PALETTE: Record<string, string> = {
+const PALETTE = {
     black: '#000000',
     white: '#FFFFFF',
     grey: '#C1C1C1',
@@ -28,7 +28,7 @@ const PALETTE: Record<string, string> = {
     'dark-peach': '#CC7C4D',
     brown: '#A0522D',
     'dark-brown': '#63300D',
-};
+} as const;
 
 interface WhiteboardProps {
     isDrawer: boolean;
@@ -238,7 +238,11 @@ const Whiteboard: FC<WhiteboardProps> = ({
                                 'h-7 w-7 cursor-pointer border-gray-700 transition-transform duration-150 ease-in-out hover:scale-130'
                             }
                             style={{ backgroundColor: hex }}
-                            onClick={() => setSelectedColour(colour)}
+                            onClick={() =>
+                                setSelectedColour(
+                                    colour as keyof typeof PALETTE
+                                )
+                            }
                         />
                     ))}
                 </div>
