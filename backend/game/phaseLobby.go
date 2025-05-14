@@ -22,7 +22,7 @@ func (p *WaitingInLobbyHandler) HandleMessage(gs *GameState, player *Player, msg
 		}
 	}
 
-	return GamePhaseHandler(p)
+	return p
 }
 
 func (p *WaitingInLobbyHandler) HandleTimeOut(gs *GameState) GamePhaseHandler {
