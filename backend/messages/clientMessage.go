@@ -6,6 +6,7 @@ const (
 	ClientDrawEvent       = "drawEvent"
 	ClientStartGame       = "startGame"
 	ClientSelectRoundWord = "selectRoundWord"
+	ClientPhaseChangeAck  = "phaseChangeAck"
 )
 
 type SetNamePayload struct {
@@ -26,6 +27,10 @@ type DrawEventPayload struct {
 	Y         float64 `json:"y"`
 	Color     string  `json:"color,omitempty"`
 	LineWidth float64 `json:"lineWidth,omitempty"`
+}
+
+type ClientPhaseChangeAckPayload struct {
+	NewPhase string `json:"newPhase"`
 }
 
 // StartGamePayload: No payload needed
