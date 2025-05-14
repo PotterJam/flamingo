@@ -28,7 +28,7 @@ func (p *PhaseChangeHandler) StartPhase(gs *GameState) {
 
 func (p *PhaseChangeHandler) HandleMessage(gs *GameState, player *Player, msg messages.Message) GamePhaseHandler {
 	if msg.Type == messages.ClientPhaseChangeAck && !slices.Contains(p.AckedPlayers, player.Id) {
-		var payload messages.ClientPhaseChangeAckPayload
+		var payload messages.PhaseChangeAckPayload
 		if err := json.Unmarshal(msg.Payload, &payload); err != nil {
 			player.SendError("Invalid phase change ack payload.")
 		} else if payload.NewPhase != p.HandlerToChangeTo.Phase().String() {

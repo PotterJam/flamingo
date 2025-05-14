@@ -112,13 +112,6 @@ export interface GameFinishedMsg {
     };
 }
 
-export interface PhaseChangeAckResponse {
-    type: 'phaseChangeAckResponse';
-    payload: {
-        newPhase: string;
-    };
-}
-
 export type ReceivedMsg =
     | GameInfoMsg
     | PlayerUpdateMsg
@@ -129,7 +122,7 @@ export type ReceivedMsg =
     | DrawEventMsg
     | ErrorMsg
     | GameFinishedMsg
-    | PhaseChangeAckResponse;
+    | PhaseChangeAckMsg;
 
 export interface SetNameMsg {
     type: 'setName';

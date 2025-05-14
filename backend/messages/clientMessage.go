@@ -29,8 +29,4 @@ type DrawEventPayload struct {
 	LineWidth float64 `json:"lineWidth,omitempty"`
 }
 
-type ClientPhaseChangeAckPayload struct {
-	NewPhase string `json:"newPhase"`
-}
-
 // StartGamePayload: No payload needed

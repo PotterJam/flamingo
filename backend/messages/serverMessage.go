@@ -10,7 +10,7 @@ const (
 	TurnSetupResponse          = "turnSetup"
 	TurnEndResponse            = "turnEnd"
 	GameFinishedResponse       = "gameFinished"
-	PhaseChangeAckResponse     = "phaseChangeAckResponse"
+	PhaseChangeAckResponse     = "phaseChangeAck"
 )
 
 type ErrorPayload struct {
