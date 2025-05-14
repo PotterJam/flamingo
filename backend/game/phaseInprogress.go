@@ -77,7 +77,7 @@ func (p *RoundInProgressHandler) HandleMessage(gs *GameState, player *Player, ms
 			gs.BroadcastSystemMessage(player.Name + " guessed the word!")
 
 			if gs.checkAllGuessed() {
-				return GamePhaseHandler(&RoundFinishedHandler{})
+				return ackPhaseTransitionTo(&RoundFinishedHandler{})
 			}
 		} else {
 			gs.BroadcastChatMessage(player.Name, guessPayload.Guess)

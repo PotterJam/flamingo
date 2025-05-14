@@ -64,7 +64,7 @@ func (p *RoundSetupHandler) HandleMessage(gs *GameState, player *Player, msg mes
 
 	if len(gs.Players) < minPlayersToStart {
 		log.Println("GameState: Cannot start next turn, less than minimum players.")
-		return GamePhaseHandler(&GameOverHandler{})
+		return ackPhaseTransitionTo(&GameOverHandler{})
 	}
 
 	var roundWordPayload messages.SelectRoundWordPayload
@@ -74,10 +74,10 @@ func (p *RoundSetupHandler) HandleMessage(gs *GameState, player *Player, msg mes
 	}
 
 	// TODO: check that player hasn't picked a random word, make sure it's in the list of p.WordToPickFrom
-	return GamePhaseHandler(&RoundInProgressHandler{Word: roundWordPayload.Word})
+	return ackPhaseTransitionTo(&RoundInProgressHandler{Word: roundWordPayload.Word})
 }
 
 func (p *RoundSetupHandler) HandleTimeOut(gs *GameState) GamePhaseHandler {
 	word := (*p.WordToPickFrom)[rand.Intn(len(*p.WordToPickFrom))]
-	return GamePhaseHandler(&RoundInProgressHandler{Word: word})
+	return ackPhaseTransitionTo(&RoundInProgressHandler{Word: word})
 }

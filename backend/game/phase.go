@@ -11,6 +11,7 @@ const (
 	GamePhaseRoundFinished
 	GamePhaseGameOver
 	GamePhaseError
+	GamePhaseChangeAck
 )
 
 var stateName = map[GamePhase]string{
@@ -20,6 +21,7 @@ var stateName = map[GamePhase]string{
 	GamePhaseRoundFinished:   "RoundFinished",
 	GamePhaseGameOver:        "GameOver",
 	GamePhaseError:           "Error",
+	GamePhaseChangeAck:       "PhaseChangeAck",
 }
 
 func (ss GamePhase) String() string {

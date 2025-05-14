@@ -18,7 +18,7 @@ func (p *WaitingInLobbyHandler) HandleMessage(gs *GameState, player *Player, msg
 			gs.BroadcastSystemMessage("Game start aborted, not enough players.")
 		} else if !gs.IsActive {
 			gs.IsActive = true
-			return GamePhaseHandler(&RoundSetupHandler{WordToPickFrom: nil})
+			return ackPhaseTransitionTo(&RoundSetupHandler{WordToPickFrom: nil})
 		}
 	}
 
