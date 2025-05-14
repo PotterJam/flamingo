@@ -112,6 +112,13 @@ export interface GameFinishedMsg {
     };
 }
 
+export interface PhaseChangeAckResponse {
+    type: 'phaseChangeAckResponse';
+    payload: {
+        newPhase: string;
+    };
+}
+
 export type ReceivedMsg =
     | GameInfoMsg
     | PlayerUpdateMsg
@@ -121,7 +128,8 @@ export type ReceivedMsg =
     | TurnEndMsg
     | DrawEventMsg
     | ErrorMsg
-    | GameFinishedMsg;
+    | GameFinishedMsg
+    | PhaseChangeAckResponse;
 
 export interface SetNameMsg {
     type: 'setName';
@@ -134,6 +142,13 @@ export interface SelectRoundWordMsg {
     type: 'selectRoundWord';
     payload: {
         word: string;
+    };
+}
+
+export interface PhaseChangeAckMsg {
+    type: 'phaseChangeAck';
+    payload: {
+        newPhase: string;
     };
 }
 
@@ -154,4 +169,5 @@ export type SendMsg =
     | DrawEventMsg
     | GuessMsg
     | SelectRoundWordMsg
-    | StartGameMsg;
+    | StartGameMsg
+    | PhaseChangeAckMsg;
