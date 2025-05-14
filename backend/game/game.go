@@ -45,7 +45,6 @@ func (g *Game) HandleEvents() {
 		}
 
 		g.updateHandler(newHandler)
-
 		g.GameState.mu.Unlock()
 	}
 }
@@ -61,7 +60,9 @@ func (g *Game) updateHandler(newHandler GamePhaseHandler) {
 	}
 
 	g.GameHandler = newHandler
-	g.GameHandler.StartPhase(g.GameState)
+
+	// Don't block on start phase, as we still want to process stuff while it's starting
+	go g.GameHandler.StartPhase(g.GameState)
 }
 
 func NewGame(b Broadcaster) *Game {
