@@ -121,7 +121,8 @@ export type ReceivedMsg =
     | TurnEndMsg
     | DrawEventMsg
     | ErrorMsg
-    | GameFinishedMsg;
+    | GameFinishedMsg
+    | PhaseChangeAckMsg;
 
 export interface SetNameMsg {
     type: 'setName';
@@ -134,6 +135,13 @@ export interface SelectRoundWordMsg {
     type: 'selectRoundWord';
     payload: {
         word: string;
+    };
+}
+
+export interface PhaseChangeAckMsg {
+    type: 'phaseChangeAck';
+    payload: {
+        newPhase: string;
     };
 }
 
@@ -154,4 +162,5 @@ export type SendMsg =
     | DrawEventMsg
     | GuessMsg
     | SelectRoundWordMsg
-    | StartGameMsg;
+    | StartGameMsg
+    | PhaseChangeAckMsg;

@@ -1,6 +1,6 @@
-import { ReceivedMsg } from '../messages';
-import { useAppStore } from '../store';
-import { useEffect } from 'react';
+import { ReceivedMsg} from '../messages';
+import {useAppStore} from '../store';
+import {useEffect} from 'react';
 
 export const useHandleMessage = (message: ReceivedMsg | null) => {
     const handleGameInfo = useAppStore((s) => s.handleGameInfo);
@@ -11,6 +11,7 @@ export const useHandleMessage = (message: ReceivedMsg | null) => {
     const handleGameFinished = useAppStore((s) => s.handleGameFinished);
     const handleDraw = useAppStore((s) => s.handleDraw);
     const addChatMessage = useAppStore((s) => s.addChatMessage);
+    const handlePhaseChangeAck = useAppStore((s) => s.sendMessage);
 
     useEffect(() => {
         if (message) {
@@ -48,6 +49,10 @@ export const useHandleMessage = (message: ReceivedMsg | null) => {
                     handleGameFinished(message);
                     break;
                 }
+                case 'phaseChangeAck': {
+                    handlePhaseChangeAck(message);
+                    break;
+                }
                 case 'error': {
                     const payload = message.payload;
                     if (!payload) {
@@ -65,5 +70,5 @@ export const useHandleMessage = (message: ReceivedMsg | null) => {
                     console.warn('Received unknown message: ', message);
             }
         }
-    }, [message, handleGameInfo, handleTurnStart, handleTurnSetup, handlePlayerUpdate, handleTurnEnd, handleGameFinished, handleDraw, addChatMessage]);
+    }, [message, handleGameInfo, handleTurnStart, handleTurnSetup, handlePlayerUpdate, handleTurnEnd, handleGameFinished, handleDraw, handlePhaseChangeAck, addChatMessage]);
 };

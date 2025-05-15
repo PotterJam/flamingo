@@ -45,7 +45,6 @@ func (g *Game) HandleEvents() {
 		}
 
 		g.updateHandler(newHandler)
-
 		g.GameState.mu.Unlock()
 	}
 }
@@ -153,7 +152,7 @@ func (g *Game) RemovePlayer(player *Player) {
 
 	wasDrawer := state.IsActive && state.CurrentDrawerIdx == playerIndex
 	if len(state.Players) < minPlayersToStart {
-		g.updateHandler(GamePhaseHandler(&GameOverHandler{}))
+		g.updateHandler(ackPhaseTransitionTo(&GameOverHandler{}))
 	} else {
 		if playerIndex < state.CurrentDrawerIdx {
 			state.CurrentDrawerIdx--
@@ -166,7 +165,7 @@ func (g *Game) RemovePlayer(player *Player) {
 
 		if wasDrawer || allGuessed {
 			log.Printf("GameState: Ending turn early due to player %s leaving (was drawer: %t, all guessed now: %t).", player.Name, wasDrawer, allGuessed)
-			g.updateHandler(GamePhaseHandler(&RoundFinishedHandler{}))
+			g.updateHandler(ackPhaseTransitionTo(&RoundFinishedHandler{}))
 		}
 	}
 }

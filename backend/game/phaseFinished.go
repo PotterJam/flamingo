@@ -58,13 +58,13 @@ func (p *RoundFinishedHandler) HandleTimeOut(gs *GameState) GamePhaseHandler {
 
 	if gs.CurrentRound >= gs.TotalRounds {
 		log.Printf("GameState: Final round (%d/%d) finished. Game Over.", gs.CurrentRound, gs.TotalRounds)
-		return GamePhaseHandler(&GameOverHandler{})
+		return ackPhaseTransitionTo(&GameOverHandler{})
 	}
 
 	if gs.IsActive {
-		return GamePhaseHandler(&RoundSetupHandler{WordToPickFrom: nil})
+		return ackPhaseTransitionTo(&RoundSetupHandler{WordToPickFrom: nil})
 	} else {
 		log.Println("GameState: GameState became inactive during turn delay, not starting next turn.")
-		return GamePhaseHandler(&WaitingInLobbyHandler{})
+		return ackPhaseTransitionTo(&WaitingInLobbyHandler{})
 	}
 }

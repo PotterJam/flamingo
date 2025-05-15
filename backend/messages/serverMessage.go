@@ -10,6 +10,7 @@ const (
 	TurnSetupResponse          = "turnSetup"
 	TurnEndResponse            = "turnEnd"
 	GameFinishedResponse       = "gameFinished"
+	PhaseChangeAckResponse     = "phaseChangeAck"
 )
 
 type ErrorPayload struct {
@@ -55,6 +56,10 @@ type TurnStartPayload struct {
 	// TODO: word constants like hyphens and spaces in an array of tuples with their location
 	Players     []PlayerInfo `json:"players"`
 	TurnEndTime int64        `json:"turnEndTime"`
+}
+
+type PhaseChangeAckPayload struct {
+	NewPhase string `json:"newPhase"`
 }
 
 // TODO: TurnHelpPayload that gives help for people that haven#t guessed the word

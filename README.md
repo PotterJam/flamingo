@@ -45,6 +45,10 @@
     ```bash
     go install github.com/air-verse/air@latest
     ```
+2.1 **If you haven't, make sure your go bin is on the $PATH**
+    ```bash
+    export PATH=$PATH:$(go env GOPATH)/bin
+    ```
 3. **Frontend Dependencies:** Navigate to the frontend directory and install Node modules.
     ```bash
     npm install

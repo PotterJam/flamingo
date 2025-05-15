@@ -6,6 +6,7 @@ const (
 	ClientDrawEvent       = "drawEvent"
 	ClientStartGame       = "startGame"
 	ClientSelectRoundWord = "selectRoundWord"
+	ClientPhaseChangeAck  = "phaseChangeAck"
 )
 
 type SetNamePayload struct {
