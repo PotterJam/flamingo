@@ -70,5 +70,5 @@ export const useHandleMessage = (message: ReceivedMsg | null) => {
                     console.warn('Received unknown message: ', message);
             }
         }
-    }, [message, handleGameInfo, handleTurnStart, handleTurnSetup, handlePlayerUpdate, handleTurnEnd, handleGameFinished, handleDraw, addChatMessage]);
+    }, [message, handleGameInfo, handleTurnStart, handleTurnSetup, handlePlayerUpdate, handleTurnEnd, handleGameFinished, handleDraw, handlePhaseChangeAck, addChatMessage]);
 };
