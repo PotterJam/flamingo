@@ -1,7 +1,7 @@
 package game
 
 func ackPhaseTransitionTo(handler GamePhaseHandler) GamePhaseHandler {
-	return ackPhaseTransitionTo(&PhaseChangeHandler{
+	return GamePhaseHandler(&PhaseChangeHandler{
 		HandlerToChangeTo: handler,
 		AckedPlayers:      make([]string, 0),
 	})
