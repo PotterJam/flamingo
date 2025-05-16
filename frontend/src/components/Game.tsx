@@ -1,4 +1,4 @@
-import { FC, useCallback } from 'react';
+import { FC } from 'react';
 import { useAppStore } from '../store';
 import PlayerList from './PlayerList';
 import ChatBox from './ChatBox';
@@ -20,11 +20,6 @@ export const Game: FC = () => {
     const roomId = useAppStore((s) => s.roomId) ?? '';
     const sendMessage = useAppStore((s) => s.sendMessage);
     const appState = useAppStore((s) => s.gameState.gamePhase);
-    const gameState = useAppStore((s) => s.gameState);
-
-    if (gameState === null) {
-        return <div>sad</div>;
-    }
     const {
         players,
         currentDrawerId,
@@ -34,16 +29,13 @@ export const Game: FC = () => {
         wordLength,
         wordChoices,
         turnEndTime,
-    } = gameState;
-
-    console.log(
-        `players: ${players}, currentDrawerId: ${currentDrawerId}, hostId: ${hostId}, localId: ${localPlayerId}, word: ${word}, turnEnd: ${turnEndTime}`
-    );
+    } = useAppStore((s) => s.gameState);
 
     const localPlayer = players.find((p) => p.id === localPlayerId);
     if (!localPlayer) {
         throw new Error('no local player found');
     }
+
     const isHost = localPlayerId === hostId;
     const isLocalPlayerDrawer = localPlayerId === currentDrawerId;
     const canHostStartGame =
@@ -52,52 +44,41 @@ export const Game: FC = () => {
     const canLocalPlayerGuess =
         !isLocalPlayerDrawer && !localPlayer.hasGuessedCorrectly;
 
-    const showWordChoiceModal =
-        isLocalPlayerDrawer && !!wordChoices && wordChoices.length > 0 && !word; // Only show if 'word' is not yet set for the turn
+    const showWordChoiceModal = isLocalPlayerDrawer && wordChoices && !word;
 
-    const handleWordChosen = useCallback(
-        (chosenWord: string) => {
-            sendMessage({
-                type: 'selectRoundWord',
-                payload: { word: chosenWord },
-            });
-        },
-        [sendMessage]
-    );
+    const handleWordChosen = (chosenWord: string) => {
+        sendMessage({
+            type: 'selectRoundWord',
+            payload: { word: chosenWord },
+        });
+    };
 
-    const handleStartGame = useCallback(() => {
-        console.log('Start Game button clicked by host.');
+    const handleStartGame = () => {
         if (canHostStartGame) {
             sendMessage({ type: 'startGame', payload: null });
         } else {
             console.warn('Start game attempted but conditions not met.');
         }
-    }, [canHostStartGame, sendMessage]);
+    };
 
-    const handleDraw = useCallback(
-        (drawData: DrawEvent) => {
-            if (isLocalPlayerDrawer && appState === 'Guessing') {
-                sendMessage({ type: 'drawEvent', payload: drawData });
-            }
-        },
-        [isLocalPlayerDrawer, appState, sendMessage]
-    );
+    const handleDraw = (drawData: DrawEvent) => {
+        if (isLocalPlayerDrawer && appState === 'Guessing') {
+            sendMessage({ type: 'drawEvent', payload: drawData });
+        }
+    };
 
-    const handleGuess = useCallback(
-        (guess: string) => {
-            if (canLocalPlayerGuess) {
-                sendMessage({ type: 'guess', payload: { guess: guess } });
-            }
-        },
-        [canLocalPlayerGuess, sendMessage]
-    );
+    const handleGuess = (guess: string) => {
+        if (canLocalPlayerGuess) {
+            sendMessage({ type: 'guess', payload: { guess: guess } });
+        }
+    };
 
     const copyRoomName = () => {
         navigator.clipboard.writeText(roomId);
     };
 
     if (appState === 'GameEnd') {
-        return <GameEndScreen players={gameState?.players ?? []} />;
+        return <GameEndScreen players={players ?? []} />;
     }
 
     return (
