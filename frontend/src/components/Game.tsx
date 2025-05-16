@@ -19,7 +19,7 @@ const MIN_PLAYERS = 2;
 export const Game: FC = () => {
     const roomId = useAppStore((s) => s.roomId) ?? '';
     const sendMessage = useAppStore((s) => s.sendMessage);
-    const appState = useAppStore((s) => s.appState);
+    const appState = useAppStore((s) => s.gamePhase);
     const gameState = useAppStore((s) => s.gameState);
 
     if (gameState === null) {

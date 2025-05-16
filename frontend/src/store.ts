@@ -16,6 +16,7 @@ import {
 import { immer } from 'zustand/middleware/immer';
 import { MIN_PLAYERS } from './App';
 import { createJSONStorage, persist } from 'zustand/middleware';
+import { GamePhase } from './model';
 
 export interface GameState {
     players: Player[];
@@ -47,13 +48,6 @@ const initialGameState: GameState = {
     lastDrawEvent: null,
 };
 
-export type CurrentAppState =
-    | 'active'
-    | 'waiting'
-    | 'connecting'
-    | 'joining'
-    | 'finished';
-
 export type AppState = {
     sendMessage: (message: SendMsg) => void;
     lastMessage: ReceivedMsg | null;
@@ -62,7 +56,7 @@ export type AppState = {
     selfId: string;
     launchAsHost: boolean;
 
-    appState: CurrentAppState;
+    gamePhase: GamePhase;
     gameState: GameState;
     roomId: string | null;
 
@@ -101,7 +95,7 @@ export const useAppStore = create<AppState & AppActions & MessageHandlers>()(
         immer((set) => ({
             gameState: initialGameState,
             roomId: null,
-            appState: 'connecting',
+            gamePhase: 'connecting',
             selfName: '',
             selfId: '',
             launchAsHost: false,
@@ -159,9 +153,9 @@ export const useAppStore = create<AppState & AppActions & MessageHandlers>()(
                         s.gameState.turnEndTime = payload.turnEndTime;
 
                     if (payload.isGameActive) {
-                        s.appState = 'active';
+                        s.gamePhase = 'active';
                     } else {
-                        s.appState = 'waiting';
+                        s.gamePhase = 'waiting';
                     }
                 }),
             handleTurnSetup: ({ payload }) =>
@@ -171,7 +165,7 @@ export const useAppStore = create<AppState & AppActions & MessageHandlers>()(
                     s.gameState.players = payload.players;
                     s.gameState.turnEndTime = payload.turnEndTime;
 
-                    s.appState = 'active';
+                    s.gamePhase = 'active';
                 }),
             handleTurnStart: ({ payload }) =>
                 set((s) => {
@@ -185,7 +179,7 @@ export const useAppStore = create<AppState & AppActions & MessageHandlers>()(
 
                     s.clearCanvas && s.clearCanvas();
 
-                    s.appState = 'active';
+                    s.gamePhase = 'active';
                 }),
             handlePlayerUpdate: ({ payload }) =>
                 set((s) => {
@@ -193,13 +187,13 @@ export const useAppStore = create<AppState & AppActions & MessageHandlers>()(
                     s.gameState.hostId = payload.hostId;
 
                     if (
-                        s.appState === 'active' &&
+                        s.gamePhase === 'active' &&
                         payload.players.length < MIN_PLAYERS
                     ) {
                         console.log(
                             'Player count too small, going back to waiting'
                         );
-                        s.appState = 'waiting';
+                        s.gamePhase = 'waiting';
                     }
                 }),
             handleTurnEnd: ({ payload }) =>
@@ -217,7 +211,7 @@ export const useAppStore = create<AppState & AppActions & MessageHandlers>()(
                 }),
             handleGameFinished: ({ payload }) =>
                 set((s) => {
-                    s.appState = 'finished';
+                    s.gamePhase = 'finished';
                     s.gameState.players = payload.players;
                     s.gameState.currentDrawerId = null;
                     s.gameState.word = null;
