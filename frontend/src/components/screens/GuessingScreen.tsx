@@ -1,27 +1,16 @@
 import { FC } from 'react';
-import TimerDisplay from './TimerDisplay';
-import { useAppStore } from '../store';
-import PlayerList from './PlayerList';
-import ChatBox from './ChatBox';
-import WordDisplay from './WordDisplay';
-import Whiteboard from './Whiteboard';
-import GuessInput from './GuessInput';
-import { PrimaryButton } from './buttons/PrimaryButton';
-import { OutlineButton } from './buttons/OutlineButton';
-import { WordChoiceModal } from './WordChoiceModal.tsx';
-import { GameEndScreen } from './GameEndScreen';
-import { DrawEvent } from '../messages.ts';
-import { LobbyScreen } from './screens/LobbyScreen.tsx';
-import { GuessingScreen } from './screens/GuessingScreen.tsx';
+import { useAppStore } from '../../store';
+import { CANVAS_HEIGHT, CANVAS_WIDTH } from '../Game';
+import PlayerList from '../PlayerList';
+import ChatBox from '../ChatBox';
+import WordDisplay from '../WordDisplay';
+import TimerDisplay from '../TimerDisplay';
+import Whiteboard from '../Whiteboard';
+import GuessInput from '../GuessInput';
+import { DrawEvent } from '../../messages';
 
-export const CANVAS_WIDTH = 800;
-export const CANVAS_HEIGHT = 600;
-export const MIN_PLAYERS = 2;
-
-export const Game: FC = () => {
-    const roomId = useAppStore((s) => s.roomId) ?? '';
+export const GuessingScreen: FC = () => {
     const sendMessage = useAppStore((s) => s.sendMessage);
-    const appState = useAppStore((s) => s.gameState.gamePhase);
     const {
         players,
         currentDrawerId,
@@ -29,7 +18,6 @@ export const Game: FC = () => {
         localPlayerId,
         word,
         wordLength,
-        wordChoices,
         turnEndTime,
     } = useAppStore((s) => s.gameState);
 
@@ -38,25 +26,12 @@ export const Game: FC = () => {
         throw new Error('no local player found');
     }
 
-    const isHost = localPlayerId === hostId;
     const isLocalPlayerDrawer = localPlayerId === currentDrawerId;
-    const canHostStartGame =
-        isHost && appState === 'Lobby' && players.length >= MIN_PLAYERS;
-
     const canLocalPlayerGuess =
         !isLocalPlayerDrawer && !localPlayer.hasGuessedCorrectly;
 
-    const showWordChoiceModal = isLocalPlayerDrawer && wordChoices && !word;
-
-    const handleWordChosen = (chosenWord: string) => {
-        sendMessage({
-            type: 'selectRoundWord',
-            payload: { word: chosenWord },
-        });
-    };
-
     const handleDraw = (drawData: DrawEvent) => {
-        if (isLocalPlayerDrawer && appState === 'Guessing') {
+        if (isLocalPlayerDrawer) {
             sendMessage({ type: 'drawEvent', payload: drawData });
         }
     };
@@ -66,26 +41,6 @@ export const Game: FC = () => {
             sendMessage({ type: 'guess', payload: { guess: guess } });
         }
     };
-
-    if (appState === 'Lobby') {
-        return <LobbyScreen />;
-    }
-
-    if (appState === 'WordChoice') {
-        return null;
-    }
-
-    if (appState === 'Guessing') {
-        return <GuessingScreen />;
-    }
-
-    if (appState === 'Break') {
-        return null;
-    }
-
-    if (appState === 'GameEnd') {
-        return <GameEndScreen players={players} />;
-    }
 
     return (
         <div className="flex w-full flex-grow justify-center">
@@ -109,7 +64,7 @@ export const Game: FC = () => {
                     </div>
 
                     <h2
-                        className={`flex-shrink-0 border-b pb-2 text-xl font-semibold ${!canHostStartGame ? 'mt-auto' : ''}`}
+                        className={`flex-shrink-0 border-b pb-2 text-xl font-semibold`}
                     >
                         Chat
                     </h2>
@@ -123,7 +78,7 @@ export const Game: FC = () => {
                         <div className="min-w-0 flex-1 text-center">
                             {isLocalPlayerDrawer ? (
                                 <WordDisplay word={word ?? ''} />
-                            ) : appState === 'Guessing' && currentDrawerId ? (
+                            ) : currentDrawerId ? (
                                 <WordDisplay
                                     blanks={Array(wordLength || '')
                                         .fill('_')
@@ -135,7 +90,7 @@ export const Game: FC = () => {
                             )}
                         </div>
                         <div className="w-20 flex-shrink-0 text-right">
-                            {appState === 'Guessing' && turnEndTime && (
+                            {turnEndTime && (
                                 <TimerDisplay endTime={turnEndTime} />
                             )}
                         </div>
@@ -156,13 +111,6 @@ export const Game: FC = () => {
                     )}
                 </section>
             </div>
-            {showWordChoiceModal && wordChoices && turnEndTime && (
-                <WordChoiceModal
-                    wordChoices={wordChoices}
-                    turnEndTime={turnEndTime}
-                    chooseWord={handleWordChosen}
-                />
-            )}
         </div>
     );
 };
