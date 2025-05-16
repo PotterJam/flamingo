@@ -19,7 +19,7 @@ const MIN_PLAYERS = 2;
 export const Game: FC = () => {
     const roomId = useAppStore((s) => s.roomId) ?? '';
     const sendMessage = useAppStore((s) => s.sendMessage);
-    const appState = useAppStore((s) => s.gamePhase);
+    const appState = useAppStore((s) => s.gameState.gamePhase);
     const gameState = useAppStore((s) => s.gameState);
 
     if (gameState === null) {
@@ -47,7 +47,7 @@ export const Game: FC = () => {
     const isHost = localPlayerId === hostId;
     const isLocalPlayerDrawer = localPlayerId === currentDrawerId;
     const canHostStartGame =
-        isHost && appState === 'waiting' && players.length >= MIN_PLAYERS;
+        isHost && appState === 'Lobby' && players.length >= MIN_PLAYERS;
 
     const canLocalPlayerGuess =
         !isLocalPlayerDrawer && !localPlayer.hasGuessedCorrectly;
@@ -76,7 +76,7 @@ export const Game: FC = () => {
 
     const handleDraw = useCallback(
         (drawData: DrawEvent) => {
-            if (isLocalPlayerDrawer && appState === 'active') {
+            if (isLocalPlayerDrawer && appState === 'Guessing') {
                 sendMessage({ type: 'drawEvent', payload: drawData });
             }
         },
@@ -96,7 +96,7 @@ export const Game: FC = () => {
         navigator.clipboard.writeText(roomId);
     };
 
-    if (appState === 'finished') {
+    if (appState === 'GameEnd') {
         return <GameEndScreen players={gameState?.players ?? []} />;
     }
 
@@ -110,7 +110,7 @@ export const Game: FC = () => {
                     className="flex w-full flex-shrink-0 flex-col gap-4 rounded-lg bg-white p-4 shadow-lg lg:order-1 lg:w-[250px]"
                     style={{ maxHeight: `${CANVAS_HEIGHT + 100}px` }}
                 >
-                    {isHost && appState === 'waiting' && (
+                    {isHost && appState === 'Lobby' && (
                         <div className="flex flex-row items-center justify-between">
                             <p className="text-l font-bold text-blue-400">
                                 {roomId}
@@ -155,7 +155,7 @@ export const Game: FC = () => {
                         <div className="min-w-0 flex-1 text-center">
                             {isLocalPlayerDrawer ? (
                                 <WordDisplay word={word ?? ''} />
-                            ) : appState === 'active' && currentDrawerId ? (
+                            ) : appState === 'Guessing' && currentDrawerId ? (
                                 <WordDisplay
                                     blanks={Array(wordLength || '')
                                         .fill('_')
@@ -167,7 +167,7 @@ export const Game: FC = () => {
                             )}
                         </div>
                         <div className="w-20 flex-shrink-0 text-right">
-                            {appState === 'active' && turnEndTime && (
+                            {appState === 'Guessing' && turnEndTime && (
                                 <TimerDisplay endTime={turnEndTime} />
                             )}
                         </div>

@@ -14,11 +14,11 @@ import {
     GameFinishedMsg,
 } from './messages';
 import { immer } from 'zustand/middleware/immer';
-import { MIN_PLAYERS } from './App';
 import { createJSONStorage, persist } from 'zustand/middleware';
 import { GamePhase } from './model';
 
 export interface GameState {
+    gamePhase: GamePhase;
     players: Player[];
     currentDrawerId: string | null;
     hostId: string | null;
@@ -36,6 +36,7 @@ export interface Room {
 }
 
 const initialGameState: GameState = {
+    gamePhase: 'Lobby',
     players: [],
     currentDrawerId: null,
     hostId: null,
@@ -56,7 +57,6 @@ export type AppState = {
     selfId: string;
     launchAsHost: boolean;
 
-    gamePhase: GamePhase;
     gameState: GameState;
     roomId: string | null;
 
@@ -67,7 +67,7 @@ export type AppActions = {
     assignSendMessage: (func: (message: SendMsg) => void) => void;
     setLastMessage: (message: ReceivedMsg) => void;
 
-    setState: (newState: CurrentAppState) => void;
+    setState: (newState: GamePhase) => void;
 
     nameChosen: (name: string) => void;
 
@@ -152,11 +152,12 @@ export const useAppStore = create<AppState & AppActions & MessageHandlers>()(
                     if (payload.turnEndTime)
                         s.gameState.turnEndTime = payload.turnEndTime;
 
-                    if (payload.isGameActive) {
-                        s.gamePhase = 'active';
-                    } else {
-                        s.gamePhase = 'waiting';
-                    }
+                    // TODO:
+                    // if (payload.isGameActive) {
+                    //     s.gameState.gamePhase = 'active';
+                    // } else {
+                    //     s.gameState.gamePhase = 'waiting';
+                    // }
                 }),
             handleTurnSetup: ({ payload }) =>
                 set((s) => {
@@ -165,7 +166,7 @@ export const useAppStore = create<AppState & AppActions & MessageHandlers>()(
                     s.gameState.players = payload.players;
                     s.gameState.turnEndTime = payload.turnEndTime;
 
-                    s.gamePhase = 'active';
+                    s.gameState.gamePhase = 'WordChoice';
                 }),
             handleTurnStart: ({ payload }) =>
                 set((s) => {
@@ -179,22 +180,23 @@ export const useAppStore = create<AppState & AppActions & MessageHandlers>()(
 
                     s.clearCanvas && s.clearCanvas();
 
-                    s.gamePhase = 'active';
+                    s.gameState.gamePhase = 'Guessing';
                 }),
             handlePlayerUpdate: ({ payload }) =>
                 set((s) => {
                     s.gameState.players = payload.players;
                     s.gameState.hostId = payload.hostId;
 
-                    if (
-                        s.gamePhase === 'active' &&
-                        payload.players.length < MIN_PLAYERS
-                    ) {
-                        console.log(
-                            'Player count too small, going back to waiting'
-                        );
-                        s.gamePhase = 'waiting';
-                    }
+                    // TODO: might not need this at all anymore
+                    // if (
+                    //     s.gameState.gamePhase === 'active' &&
+                    //     payload.players.length < MIN_PLAYERS
+                    // ) {
+                    //     console.log(
+                    //         'Player count too small, going back to waiting'
+                    //     );
+                    //     s.gamePhase = 'waiting';
+                    // }
                 }),
             handleTurnEnd: ({ payload }) =>
                 set((s) => {
@@ -211,7 +213,7 @@ export const useAppStore = create<AppState & AppActions & MessageHandlers>()(
                 }),
             handleGameFinished: ({ payload }) =>
                 set((s) => {
-                    s.gamePhase = 'finished';
+                    s.gameState.gamePhase = 'GameEnd';
                     s.gameState.players = payload.players;
                     s.gameState.currentDrawerId = null;
                     s.gameState.word = null;
