@@ -151,13 +151,6 @@ export const useAppStore = create<AppState & AppActions & MessageHandlers>()(
                         s.gameState.currentDrawerId = payload.currentDrawerId;
                     if (payload.turnEndTime)
                         s.gameState.turnEndTime = payload.turnEndTime;
-
-                    // TODO:
-                    // if (payload.isGameActive) {
-                    //     s.gameState.gamePhase = 'active';
-                    // } else {
-                    //     s.gameState.gamePhase = 'waiting';
-                    // }
                 }),
             handleTurnSetup: ({ payload }) =>
                 set((s) => {
@@ -186,17 +179,6 @@ export const useAppStore = create<AppState & AppActions & MessageHandlers>()(
                 set((s) => {
                     s.gameState.players = payload.players;
                     s.gameState.hostId = payload.hostId;
-
-                    // TODO: might not need this at all anymore
-                    // if (
-                    //     s.gameState.gamePhase === 'active' &&
-                    //     payload.players.length < MIN_PLAYERS
-                    // ) {
-                    //     console.log(
-                    //         'Player count too small, going back to waiting'
-                    //     );
-                    //     s.gamePhase = 'waiting';
-                    // }
                 }),
             handleTurnEnd: ({ payload }) =>
                 set((s) => {
