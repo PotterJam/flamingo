@@ -13,6 +13,7 @@ import { GameEndScreen } from './GameEndScreen';
 import { DrawEvent } from '../messages.ts';
 import { LobbyScreen } from './screens/LobbyScreen.tsx';
 import { GuessingScreen } from './screens/GuessingScreen.tsx';
+import { WordChoiceScreen } from './screens/WordChoiceScreen.tsx';
 
 export const CANVAS_WIDTH = 800;
 export const CANVAS_HEIGHT = 600;
@@ -72,13 +73,14 @@ export const Game: FC = () => {
     }
 
     if (appState === 'WordChoice') {
-        return null;
+        return <WordChoiceScreen />;
     }
 
     if (appState === 'Guessing') {
         return <GuessingScreen />;
     }
 
+    // doesn't exist yet
     if (appState === 'Break') {
         return null;
     }
