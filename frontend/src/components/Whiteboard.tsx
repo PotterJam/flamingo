@@ -1,4 +1,4 @@
-import { useRef, useEffect, useState, useCallback, FC } from 'react';
+import { useRef, useEffect, useState, FC } from 'react';
 import { useAppStore } from '../store';
 import { DrawEvent } from '../messages';
 import classNames from 'classnames';
@@ -92,66 +92,59 @@ const Whiteboard: FC<WhiteboardProps> = ({
         ctx.closePath();
     };
 
-    const startDrawing = useCallback(
-        (e: React.MouseEvent<HTMLCanvasElement>) => {
-            if (!isDrawer) return;
-            const pos = getEventPos(e);
-            if (!pos) return;
-            setIsDrawing(true);
-            lastPosRef.current = pos;
-            onDraw({
-                eventType: 'start',
-                x: pos.x,
-                y: pos.y,
-                color: PALETTE[selectedColour],
-                lineWidth: selectedThickness,
-            });
-            if (e.cancelable) e.preventDefault();
-        },
-        [isDrawer, getEventPos, onDraw]
-    );
+    const startDrawing = (e: React.MouseEvent<HTMLCanvasElement>) => {
+        if (!isDrawer) return;
+        const pos = getEventPos(e);
+        if (!pos) return;
+        setIsDrawing(true);
+        lastPosRef.current = pos;
+        onDraw({
+            eventType: 'start',
+            x: pos.x,
+            y: pos.y,
+            color: PALETTE[selectedColour],
+            lineWidth: selectedThickness,
+        });
+        if (e.cancelable) e.preventDefault();
+    };
 
-    const draw = useCallback(
-        (e: React.MouseEvent<HTMLCanvasElement>) => {
-            if (!isDrawer || !isDrawing) return;
-            const pos = getEventPos(e);
-            if (!pos) return;
-            drawLine(
-                lastPosRef.current.x,
-                lastPosRef.current.y,
-                pos.x,
-                pos.y,
-                PALETTE[selectedColour],
-                selectedThickness
-            );
-            onDraw({
-                eventType: 'draw',
-                x: pos.x,
-                y: pos.y,
-                color: PALETTE[selectedColour],
-                lineWidth: selectedThickness,
-            });
-            lastPosRef.current = pos;
-            if (e.cancelable) e.preventDefault();
-        },
-        [isDrawer, isDrawing, getEventPos, drawLine, onDraw]
-    );
+    const draw = (e: React.MouseEvent<HTMLCanvasElement>) => {
+        if (!isDrawer || !isDrawing) return;
+        const pos = getEventPos(e);
+        if (!pos) return;
+        drawLine(
+            lastPosRef.current.x,
+            lastPosRef.current.y,
+            pos.x,
+            pos.y,
+            PALETTE[selectedColour],
+            selectedThickness
+        );
+        onDraw({
+            eventType: 'draw',
+            x: pos.x,
+            y: pos.y,
+            color: PALETTE[selectedColour],
+            lineWidth: selectedThickness,
+        });
+        lastPosRef.current = pos;
+        if (e.cancelable) e.preventDefault();
+    };
 
-    const stopDrawing = useCallback(() => {
+    const stopDrawing = () => {
         if (!isDrawer || !isDrawing) return;
         setIsDrawing(false);
         onDraw({ eventType: 'end' });
-    }, [isDrawer, isDrawing, onDraw]);
+    };
 
-    // This one does need to be a useCallback
-    const clearCanvas = useCallback(() => {
+    const clearCanvas = () => {
         const ctx = ctxRef.current;
         const canvas = canvasRef.current;
         if (ctx && canvas) {
             ctx.fillStyle = '#FFFFFF';
             ctx.fillRect(0, 0, canvas.width, canvas.height);
         }
-    }, []);
+    };
 
     useEffect(() => {
         setClearCanvas(clearCanvas);

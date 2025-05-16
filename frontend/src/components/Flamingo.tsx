@@ -17,7 +17,7 @@ export const Flamingo: FC<FlamingoProps> = ({ wsUrl }) => {
         assignSendMessage(sendMessage);
     }, [sendMessage]);
 
-    const appState = useAppStore((state) => state.appState);
+    const appState = useAppStore((state) => state.gamePhase);
     const localPlayerId = useAppStore((s) => s.gameState.localPlayerId);
     const setAppState = useAppStore((state) => state.setState);
     const resetGameState = useAppStore((s) => s.resetGameState);
