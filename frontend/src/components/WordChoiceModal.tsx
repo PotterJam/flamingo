@@ -5,20 +5,14 @@ import TimerDisplay from './TimerDisplay';
 interface WordChoiceModalProps {
     wordChoices: string[];
     turnEndTime: number;
-    onWordChosen: (word: string) => void;
-    isOpen: boolean;
+    chooseWord: (word: string) => void;
 }
 
 export const WordChoiceModal: FC<WordChoiceModalProps> = ({
     wordChoices,
     turnEndTime,
-    onWordChosen,
-    isOpen,
+    chooseWord,
 }) => {
-    if (!isOpen || !wordChoices || wordChoices.length === 0) {
-        return null;
-    }
-
     return (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 backdrop-blur-sm">
             <div className="w-full max-w-md rounded-lg bg-white p-6 shadow-xl transition-all duration-300 ease-in-out">
@@ -37,7 +31,7 @@ export const WordChoiceModal: FC<WordChoiceModalProps> = ({
                     {wordChoices.map((word) => (
                         <PrimaryButton
                             key={word}
-                            onClick={() => onWordChosen(word)}
+                            onClick={() => chooseWord(word)}
                             className="w-full sm:w-auto"
                         >
                             {word}

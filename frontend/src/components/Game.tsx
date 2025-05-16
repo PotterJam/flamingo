@@ -53,11 +53,7 @@ export const Game: FC = () => {
         !isLocalPlayerDrawer && !localPlayer.hasGuessedCorrectly;
 
     const showWordChoiceModal =
-        appState === 'active' &&
-        isLocalPlayerDrawer &&
-        !!wordChoices &&
-        wordChoices.length > 0 &&
-        !word; // Only show if 'word' is not yet set for the turn
+        isLocalPlayerDrawer && !!wordChoices && wordChoices.length > 0 && !word; // Only show if 'word' is not yet set for the turn
 
     const handleWordChosen = useCallback(
         (chosenWord: string) => {
@@ -192,12 +188,11 @@ export const Game: FC = () => {
                     )}
                 </section>
             </div>
-            {wordChoices && turnEndTime && (
+            {showWordChoiceModal && wordChoices && turnEndTime && (
                 <WordChoiceModal
-                    isOpen={showWordChoiceModal}
                     wordChoices={wordChoices}
                     turnEndTime={turnEndTime}
-                    onWordChosen={handleWordChosen}
+                    chooseWord={handleWordChosen}
                 />
             )}
         </div>
