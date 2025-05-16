@@ -1,6 +1,6 @@
 export type GamePhase =
-    | 'active'
-    | 'waiting'
-    | 'connecting'
-    | 'joining'
-    | 'finished';
+    | 'Lobby'
+    | 'WordChoice'
+    | 'Guessing'
+    | 'Break'
+    | 'GameEnd';
