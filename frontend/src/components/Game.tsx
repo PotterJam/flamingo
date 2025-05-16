@@ -1,9 +1,9 @@
 import { FC } from 'react';
+import TimerDisplay from './TimerDisplay';
 import { useAppStore } from '../store';
 import PlayerList from './PlayerList';
 import ChatBox from './ChatBox';
 import WordDisplay from './WordDisplay';
-import TimerDisplay from './TimerDisplay';
 import Whiteboard from './Whiteboard';
 import GuessInput from './GuessInput';
 import { PrimaryButton } from './buttons/PrimaryButton';
@@ -11,10 +11,11 @@ import { OutlineButton } from './buttons/OutlineButton';
 import { WordChoiceModal } from './WordChoiceModal.tsx';
 import { GameEndScreen } from './GameEndScreen';
 import { DrawEvent } from '../messages.ts';
+import { LobbyScreen } from './screens/LobbyScreen.tsx';
 
-const CANVAS_WIDTH = 800;
-const CANVAS_HEIGHT = 600;
-const MIN_PLAYERS = 2;
+export const CANVAS_WIDTH = 800;
+export const CANVAS_HEIGHT = 600;
+export const MIN_PLAYERS = 2;
 
 export const Game: FC = () => {
     const roomId = useAppStore((s) => s.roomId) ?? '';
@@ -53,14 +54,6 @@ export const Game: FC = () => {
         });
     };
 
-    const handleStartGame = () => {
-        if (canHostStartGame) {
-            sendMessage({ type: 'startGame', payload: null });
-        } else {
-            console.warn('Start game attempted but conditions not met.');
-        }
-    };
-
     const handleDraw = (drawData: DrawEvent) => {
         if (isLocalPlayerDrawer && appState === 'Guessing') {
             sendMessage({ type: 'drawEvent', payload: drawData });
@@ -73,12 +66,24 @@ export const Game: FC = () => {
         }
     };
 
-    const copyRoomName = () => {
-        navigator.clipboard.writeText(roomId);
-    };
+    if (appState === 'Lobby') {
+        return <LobbyScreen />;
+    }
 
     if (appState === 'GameEnd') {
         return <GameEndScreen players={players ?? []} />;
+    }
+
+    if (appState === 'WordChoice') {
+        return null;
+    }
+
+    if (appState === 'Guessing') {
+        return null;
+    }
+
+    if (appState === 'Break') {
+        return null;
     }
 
     return (
