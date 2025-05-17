@@ -129,10 +129,11 @@ export interface GameFinishedMsg {
 }
 
 export interface CorrectGuessMsg {
-    type: 'guess';
+    type: 'correctGuess';
     payload: {
         playerId: string;
         playerScoreDelta: number;
+        word?: string; // null for everyone but the person who's guessed correctly
     };
 }
 

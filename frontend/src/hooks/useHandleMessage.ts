@@ -12,6 +12,8 @@ export const useHandleMessage = (message: ReceivedMsg | null) => {
     const handleDraw = useAppStore((s) => s.handleDraw);
     const addChatMessage = useAppStore((s) => s.addChatMessage);
     const handlePhaseChangeAck = useAppStore((s) => s.sendMessage);
+    const handleCorrectGuess = useAppStore((s) => s.handleCorrectGuess);
+    const handleGuessHelper = useAppStore((s) => s.handleGuessHelper);
 
     useEffect(() => {
         if (message) {
@@ -51,6 +53,14 @@ export const useHandleMessage = (message: ReceivedMsg | null) => {
                 }
                 case 'phaseChangeAck': {
                     handlePhaseChangeAck(message);
+                    break;
+                }
+                case 'correctGuess': {
+                    handleCorrectGuess(message);
+                    break;
+                }
+                case 'guessHelper': {
+                    handleGuessHelper(message);
                     break;
                 }
                 case 'error': {

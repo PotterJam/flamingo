@@ -11,7 +11,7 @@ import {
     TurnEndMsg,
     TurnSetupMsg,
     TurnStartMsg,
-    GameFinishedMsg,
+    GameFinishedMsg, CorrectGuessMsg, GuessHelperMsg,
 } from './messages';
 import { immer } from 'zustand/middleware/immer';
 import { createJSONStorage, persist } from 'zustand/middleware';
@@ -88,6 +88,8 @@ export type MessageHandlers = {
     handleTurnEnd: (msg: TurnEndMsg) => void;
     handleDraw: (msg: DrawEventMsg) => void;
     handleGameFinished: (msg: GameFinishedMsg) => void;
+    handleCorrectGuess: (msg: CorrectGuessMsg) => void;
+    handleGuessHelper: (msg: GuessHelperMsg) => void;
 };
 
 export const useAppStore = create<AppState & AppActions & MessageHandlers>()(
