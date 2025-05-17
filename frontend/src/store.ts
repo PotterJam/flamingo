@@ -23,6 +23,7 @@ interface CorrectPlayerGuess {
 }
 
 export interface GameState {
+    guessHelp: { index: number; letter: string }[];
     guesses: CorrectPlayerGuess[];
     gamePhase: GamePhase;
     players: Player[];
@@ -53,7 +54,8 @@ const initialGameState: GameState = {
     messages: [],
     turnEndTime: null,
     lastDrawEvent: null,
-    guesses: []
+    guesses: [],
+    guessHelp: [],
 };
 
 export type AppState = {
@@ -172,6 +174,7 @@ export const useAppStore = create<AppState & AppActions & MessageHandlers>()(
                 }),
             handleTurnStart: ({ payload: { currentDrawerId, players, turnEndTime, word, wordLength} }) =>
                 set((s) => {
+                    s.gameState.guessHelp = [];
                     s.gameState.wordChoices = null; // The word has been chosen
                     s.gameState.guesses = [];
 
@@ -199,6 +202,7 @@ export const useAppStore = create<AppState & AppActions & MessageHandlers>()(
                     s.gameState.wordChoices = null;
                     s.gameState.currentDrawerId = null;
                     s.gameState.guesses = [];
+                    s.gameState.guessHelp = [];
                 }),
             handleDraw: ({ payload }) =>
                 set((s) => {
@@ -214,6 +218,7 @@ export const useAppStore = create<AppState & AppActions & MessageHandlers>()(
                     s.gameState.wordChoices = null;
                     s.gameState.turnEndTime = null;
                     s.gameState.guesses = [];
+                    s.gameState.guessHelp = [];
                 }),
             handleCorrectGuess: ({ payload: { playerId, playerScoreDelta, word } }) =>
                 set((s) => {
@@ -229,7 +234,7 @@ export const useAppStore = create<AppState & AppActions & MessageHandlers>()(
                 }),
             handleGuessHelper: ({ payload: {index, letter} }) =>
                 set((s) => {
-                    // TODO
+                    s.gameState.guessHelp.push({index, letter})
                 }),
         })),
         {
