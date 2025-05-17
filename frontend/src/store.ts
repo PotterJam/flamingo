@@ -17,7 +17,13 @@ import { immer } from 'zustand/middleware/immer';
 import { createJSONStorage, persist } from 'zustand/middleware';
 import { GamePhase } from './model';
 
+interface CorrectPlayerGuess {
+    playerId: string;
+    playerScoreDelta: number;
+}
+
 export interface GameState {
+    guesses: CorrectPlayerGuess[];
     gamePhase: GamePhase;
     players: Player[];
     currentDrawerId: string | null;
@@ -47,6 +53,7 @@ const initialGameState: GameState = {
     messages: [],
     turnEndTime: null,
     lastDrawEvent: null,
+    guesses: []
 };
 
 export type AppState = {
@@ -144,66 +151,85 @@ export const useAppStore = create<AppState & AppActions & MessageHandlers>()(
                 }),
 
             // Message receivers
-            handleGameInfo: ({ payload }) =>
+            handleGameInfo: ({ payload: { currentDrawerId, hostId, players, turnEndTime, yourId } }) =>
                 set((s) => {
-                    s.gameState.localPlayerId = payload.yourId;
-                    s.gameState.players = payload.players;
-                    s.gameState.hostId = payload.hostId;
-                    if (payload.currentDrawerId)
-                        s.gameState.currentDrawerId = payload.currentDrawerId;
-                    if (payload.turnEndTime)
-                        s.gameState.turnEndTime = payload.turnEndTime;
+                    s.gameState.localPlayerId = yourId;
+                    s.gameState.players = players;
+                    s.gameState.hostId = hostId;
+                    if (currentDrawerId)
+                        s.gameState.currentDrawerId = currentDrawerId;
+                    if (turnEndTime)
+                        s.gameState.turnEndTime = turnEndTime;
                 }),
-            handleTurnSetup: ({ payload }) =>
+            handleTurnSetup: ({ payload: { currentDrawerId, players, turnEndTime, wordChoices } }) =>
                 set((s) => {
-                    s.gameState.currentDrawerId = payload.currentDrawerId;
-                    s.gameState.wordChoices = payload.wordChoices ?? null;
-                    s.gameState.players = payload.players;
-                    s.gameState.turnEndTime = payload.turnEndTime;
+                    s.gameState.currentDrawerId = currentDrawerId;
+                    s.gameState.wordChoices = wordChoices ?? null;
+                    s.gameState.players = players;
+                    s.gameState.turnEndTime = turnEndTime;
 
                     s.gameState.gamePhase = 'WordChoice';
                 }),
-            handleTurnStart: ({ payload }) =>
+            handleTurnStart: ({ payload: { currentDrawerId, players, turnEndTime, word, wordLength} }) =>
                 set((s) => {
                     s.gameState.wordChoices = null; // The word has been chosen
+                    s.gameState.guesses = [];
 
-                    s.gameState.currentDrawerId = payload.currentDrawerId;
-                    s.gameState.word = payload.word ?? null;
-                    s.gameState.wordLength = payload.wordLength ?? null;
-                    s.gameState.players = payload.players;
-                    s.gameState.turnEndTime = payload.turnEndTime;
+                    s.gameState.currentDrawerId = currentDrawerId;
+                    s.gameState.word = word ?? null;
+                    s.gameState.wordLength = wordLength ?? null;
+                    s.gameState.players = players;
+                    s.gameState.turnEndTime = turnEndTime;
 
                     s.clearCanvas && s.clearCanvas();
 
                     s.gameState.gamePhase = 'Guessing';
                 }),
-            handlePlayerUpdate: ({ payload }) =>
+            handlePlayerUpdate: ({ payload: { hostId, players } }) =>
                 set((s) => {
-                    s.gameState.players = payload.players;
-                    s.gameState.hostId = payload.hostId;
+                    s.gameState.players = players;
+                    s.gameState.hostId = hostId;
                 }),
-            handleTurnEnd: ({ payload }) =>
+            handleTurnEnd: ({ payload: { players } }) =>
                 set((s) => {
-                    s.gameState.players = payload.players;
+                    s.gameState.players = players;
                     s.gameState.turnEndTime = null;
                     s.gameState.word = null;
                     s.gameState.wordLength = null;
                     s.gameState.wordChoices = null;
                     s.gameState.currentDrawerId = null;
+                    s.gameState.guesses = [];
                 }),
             handleDraw: ({ payload }) =>
                 set((s) => {
                     s.gameState.lastDrawEvent = payload;
                 }),
-            handleGameFinished: ({ payload }) =>
+            handleGameFinished: ({ payload: { players } }) =>
                 set((s) => {
                     s.gameState.gamePhase = 'GameEnd';
-                    s.gameState.players = payload.players;
+                    s.gameState.players = players;
                     s.gameState.currentDrawerId = null;
                     s.gameState.word = null;
                     s.gameState.wordLength = null;
                     s.gameState.wordChoices = null;
                     s.gameState.turnEndTime = null;
+                    s.gameState.guesses = [];
+                }),
+            handleCorrectGuess: ({ payload: { playerId, playerScoreDelta, word } }) =>
+                set((s) => {
+                    if (s.gameState.guesses.some(g => g.playerId === playerId)) {
+                        return;
+                    }
+
+                    if (word) {
+                        s.gameState.word = word;
+                    }
+
+                    s.gameState.guesses.push({ playerId: playerId, playerScoreDelta: playerScoreDelta });
+                }),
+            handleGuessHelper: ({ payload: {index, letter} }) =>
+                set((s) => {
+                    // TODO
                 }),
         })),
         {
