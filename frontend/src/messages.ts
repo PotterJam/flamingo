@@ -44,6 +44,16 @@ export interface ChatMsg {
     payload: ChatMessage;
 }
 
+export interface GuessMsg {
+    type: 'guess';
+    payload: {
+        currentDrawerId: string;
+        players: Player[];
+        turnEndTime: number;
+        wordChoices?: string[]; // undefined for guessing players
+    };
+}
+
 export interface TurnSetupMsg {
     type: 'turnSetup';
     payload: {
@@ -54,6 +64,11 @@ export interface TurnSetupMsg {
     };
 }
 
+export interface GuessLetter {
+    index: number;
+    letter: string;
+}
+
 export interface TurnStartMsg {
     type: 'turnStart';
     payload: {
@@ -62,6 +77,7 @@ export interface TurnStartMsg {
         turnEndTime: number;
         word?: string; // undefined for guessing players
         wordLength: number;
+        preFilledLetters: GuessLetter[];
     };
 }
 
@@ -112,6 +128,19 @@ export interface GameFinishedMsg {
     };
 }
 
+export interface CorrectGuessMsg {
+    type: 'guess';
+    payload: {
+        playerId: string;
+        playerScoreDelta: number;
+    };
+}
+
+export interface GuessHelperMsg {
+    type: 'guessHelper';
+    payload: GuessLetter;
+}
+
 export type ReceivedMsg =
     | GameInfoMsg
     | PlayerUpdateMsg
@@ -122,7 +151,9 @@ export type ReceivedMsg =
     | DrawEventMsg
     | ErrorMsg
     | GameFinishedMsg
-    | PhaseChangeAckMsg;
+    | PhaseChangeAckMsg
+    | CorrectGuessMsg
+    | GuessHelperMsg;
 
 export interface SetNameMsg {
     type: 'setName';
@@ -142,13 +173,6 @@ export interface PhaseChangeAckMsg {
     type: 'phaseChangeAck';
     payload: {
         newPhase: string;
-    };
-}
-
-export interface GuessMsg {
-    type: 'guess';
-    payload: {
-        guess: string;
     };
 }
 
