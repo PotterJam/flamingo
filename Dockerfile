@@ -19,4 +19,5 @@ WORKDIR /app
 COPY --from=backend-builder /app/main .
 COPY --from=frontend-builder /app/frontend/dist ./public
 EXPOSE 8080
+ENV ALLOWED_ORIGINS="https://flamingo.fly.dev"
 CMD ["./main"]
