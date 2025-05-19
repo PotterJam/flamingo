@@ -17,23 +17,21 @@ export const Flamingo: FC<FlamingoProps> = ({ wsUrl }) => {
         assignSendMessage(sendMessage);
     }, [sendMessage]);
 
-    const appState = useAppStore((state) => state.gamePhase);
+    const appState = useAppStore((state) => state.gameState.gamePhase);
     const localPlayerId = useAppStore((s) => s.gameState.localPlayerId);
-    const setAppState = useAppStore((state) => state.setState);
     const resetGameState = useAppStore((s) => s.resetGameState);
 
     useEffect(() => {
-        if (appState !== 'connecting' && !isConnected) {
+        if (!isConnected) {
             console.log('WebSocket disconnected.');
             resetGameState();
-            setAppState('connecting');
         }
     }, [isConnected, appState]);
     if (!isConnected) {
         return <div className="mt-10 text-center">Loading...</div>;
     }
 
-    if (appState === 'joining' || !localPlayerId) {
+    if (!localPlayerId) {
         return (
             <div className="mt-10 text-center">
                 <p className="mt-2 animate-pulse text-gray-500">

@@ -4,7 +4,7 @@ function TimerDisplay({ endTime }: { endTime: number }) {
     const [remainingSeconds, setRemainingSeconds] = useState(0);
 
     useEffect(() => {
-        let intervalId: number | null = null;
+        let intervalId: NodeJS.Timeout | null = null;
 
         function updateRemaining() {
             if (typeof endTime !== 'number' || endTime <= 0) {

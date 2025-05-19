@@ -1,0 +1,48 @@
+# flyctl launch added from .gitignore
+**/node_modules
+**/dist
+**/build
+**/backend/public
+
+# server produced by py script
+**/scriblio_server
+
+# air creates a tmp file while its running
+**/backend/tmp
+
+# flyctl launch added from backend/.idea/.gitignore
+# Default ignored files
+backend/.idea/shelf
+backend/.idea/workspace.xml
+# Editor-based HTTP Client requests
+backend/.idea/httpRequests
+# Datasource local storage ignored files
+backend/.idea/dataSources
+backend/.idea/dataSources.local.xml
+
+# flyctl launch added from frontend/.gitignore
+# Logs
+frontend/**/logs
+frontend/**/*.log
+frontend/**/npm-debug.log*
+frontend/**/yarn-debug.log*
+frontend/**/yarn-error.log*
+frontend/**/pnpm-debug.log*
+frontend/**/lerna-debug.log*
+
+frontend/**/node_modules
+frontend/**/dist
+frontend/**/dist-ssr
+frontend/**/*.local
+
+# Editor directories and files
+frontend/**/.vscode/*
+!frontend/**/.vscode/extensions.json
+frontend/**/.idea
+frontend/**/.DS_Store
+frontend/**/*.suo
+frontend/**/*.ntvs*
+frontend/**/*.njsproj
+frontend/**/*.sln
+frontend/**/*.sw?
+fly.toml
