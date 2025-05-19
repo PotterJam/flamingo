@@ -6,6 +6,8 @@ import (
 	"encoding/json"
 	"log"
 	"net/http"
+	"os"
+	"strings"
 
 	"github.com/google/uuid"
 	"github.com/gorilla/mux"
@@ -16,8 +18,21 @@ var upgrader = websocket.Upgrader{
 	ReadBufferSize:  1024,
 	WriteBufferSize: 1024,
 	CheckOrigin: func(r *http.Request) bool {
-		log.Printf("WebSocket CheckOrigin request from: %s", r.Header.Get("Origin"))
-		return true // TODO: needs to be localhost or the registered domain
+		origin := r.Header.Get("Origin")
+		log.Printf("WebSocket CheckOrigin request from: %s", origin)
+
+		allowedOrigins := os.Getenv("ALLOWED_ORIGINS")
+		if allowedOrigins == "" {
+			return strings.HasPrefix(origin, "http://localhost:") || strings.HasPrefix(origin, "https://localhost:")
+		}
+
+		origins := strings.Split(allowedOrigins, ",")
+		for _, allowed := range origins {
+			if strings.TrimSpace(allowed) == origin {
+				return true
+			}
+		}
+		return false
 	},
 }
 
