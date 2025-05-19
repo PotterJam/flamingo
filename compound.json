@@ -10,10 +10,15 @@
     {
         "name": "frontend",
         "process": {
-            "command": "npm",
+            "command": "sh",
             "args": [
+                "-c",
+                "npm",
                 "run",
-                "dev-hmr"
+                "typecheck",
+                "&&",
+                "npx",
+                "vite"
             ],
             "cwd": "frontend"
         }
