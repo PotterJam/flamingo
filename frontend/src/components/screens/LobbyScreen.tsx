@@ -34,20 +34,18 @@ export const LobbyScreen: FC = () => {
                 className="flex w-full flex-shrink-0 flex-col items-center justify-center gap-4"
                 style={{ maxHeight: `${CANVAS_HEIGHT + 100}px` }}
             >
-                <div className="flex flex-col gap-4 rounded-lg bg-white p-4 shadow-lg lg:order-1 lg:w-[250px]">
-                    <h2 className="flex-shrink-0 border-b pb-2 text-xl font-semibold">
-                        Players ({players.length})
+                <div className="flex w-64 flex-col gap-4 rounded-lg bg-white p-4 shadow-lg lg:order-1">
+                    <h2 className="flex-shrink-0 text-xl font-semibold">
+                        Lobby
                     </h2>
-                    <div className="mb-4 min-h-0 flex-shrink overflow-y-auto">
-                        <PlayerList
-                            players={players}
-                            currentDrawerId={currentDrawerId}
-                            hostId={hostId}
-                        />
-                    </div>
+                    <PlayerList
+                        showScore={false}
+                        players={players}
+                        currentDrawerId={currentDrawerId}
+                    />
                 </div>
 
-                <div className="flex flex-col gap-4 rounded-lg bg-white p-4 shadow-lg lg:order-1 lg:w-[250px]">
+                <div className="flex w-64 flex-col gap-4 rounded-lg bg-white p-4 shadow-lg lg:order-1">
                     {isHost && (
                         <div className="flex flex-row items-center justify-between">
                             <p className="text-l font-bold text-blue-400">

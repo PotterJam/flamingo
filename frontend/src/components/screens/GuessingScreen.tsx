@@ -57,9 +57,9 @@ export const GuessingScreen: FC = () => {
                     </h2>
                     <div className="mb-4 min-h-0 flex-shrink overflow-y-auto">
                         <PlayerList
+                            showScore
                             players={players}
                             currentDrawerId={currentDrawerId}
-                            hostId={hostId}
                         />
                     </div>
 
