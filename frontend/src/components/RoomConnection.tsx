@@ -4,6 +4,8 @@ import { useAppStore } from '../store';
 import { CreateRoomResponse } from '../api';
 import { Logo } from './Logo';
 import { OutlineButton } from './buttons/OutlineButton';
+import { IconButton } from './buttons/IconButton';
+import { Icon } from './Icon';
 
 export const RoomConnection: FC = () => {
     const [name, setName] = useState('');
@@ -45,16 +47,19 @@ export const RoomConnection: FC = () => {
     return (
         <div className="mx-auto mt-10 flex w-full max-w-sm flex-col gap-6 rounded-lg bg-white p-6 text-center shadow-md">
             <Logo />
-            <input
-                type="text"
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                placeholder="Enter your name"
-                maxLength={20}
-                required
-                className="w-full rounded border border-gray-300 p-2 transition duration-150 ease-in-out focus:ring-2 focus:ring-blue-500 focus:outline-none"
-                aria-label="Enter your name"
-            />
+            <div className="flex flex-row items-center gap-2">
+                <Icon name="clay-avatar" size="s" />
+                <input
+                    type="text"
+                    value={name}
+                    onChange={(e) => setName(e.target.value)}
+                    placeholder="Enter your name"
+                    maxLength={20}
+                    required
+                    className="w-full rounded border border-gray-300 p-2 transition duration-150 ease-in-out focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                    aria-label="Enter your name"
+                />
+            </div>
             <hr className="text-gray-300" />
             <div>
                 {roomNotFound && (
@@ -81,7 +86,10 @@ export const RoomConnection: FC = () => {
                     </OutlineButton>
                 </div>
                 <h3 className="p-2 text-gray-500 italic">or</h3>
-                <PrimaryButton disabled={!name.trim() || !!roomName.trim()} onClick={createRoom}>
+                <PrimaryButton
+                    disabled={!name.trim() || !!roomName.trim()}
+                    onClick={createRoom}
+                >
                     Create room
                 </PrimaryButton>
             </div>
