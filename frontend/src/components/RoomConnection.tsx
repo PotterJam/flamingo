@@ -1,10 +1,9 @@
 import { FC, useState } from 'react';
-import { PrimaryButton } from './buttons/PrimaryButton';
+import { FunPrimaryButton } from './buttons/PrimaryButton';
 import { useAppStore } from '../store';
 import { CreateRoomResponse } from '../api';
 import { Logo } from './Logo';
 import { OutlineButton } from './buttons/OutlineButton';
-import { IconButton } from './buttons/IconButton';
 import { Icon } from './Icon';
 
 export const RoomConnection: FC = () => {
@@ -86,12 +85,12 @@ export const RoomConnection: FC = () => {
                     </OutlineButton>
                 </div>
                 <h3 className="p-2 text-gray-500 italic">or</h3>
-                <PrimaryButton
+                <FunPrimaryButton
                     disabled={!name.trim() || !!roomName.trim()}
                     onClick={createRoom}
                 >
                     Create room
-                </PrimaryButton>
+                </FunPrimaryButton>
             </div>
         </div>
     );

@@ -36,3 +36,20 @@ export const PrimaryButton: FC<PrimaryButtonProps> = ({
         </button>
     );
 };
+
+export const FunPrimaryButton: FC<PrimaryButtonProps> = ({
+    onClick,
+    disabled = false,
+    children,
+    className = '',
+}) => {
+    return (
+        <button
+            disabled={disabled}
+            className={`group relative inline-flex w-full items-center justify-center overflow-hidden rounded-md bg-pink-400 px-4 py-2 font-bold text-white [box-shadow:0px_4px_1px_#be185d] transition-all active:translate-y-[4px] active:shadow-none disabled:cursor-not-allowed disabled:bg-gray-300 disabled:shadow-none disabled:active:translate-y-0 ${className}`}
+            onClick={onClick}
+        >
+            {children}
+        </button>
+    );
+};
