@@ -15,6 +15,7 @@ import clayPencil from '../assets/icons/clay-pencil.png';
 import clayAvatar from '../assets/icons/clay-avatar.png';
 import clayPersonSilhouette from '../assets/icons/clay-person-silhouette.png';
 import clayCog from '../assets/icons/clay-cog.png';
+import clayStar from '../assets/icons/clay-star.png';
 
 export type IconName =
     | 'clay-stopwatch'
@@ -31,7 +32,8 @@ export type IconName =
     | 'clay-pencil'
     | 'clay-avatar'
     | 'clay-person-silhouette'
-    | 'clay-cog';
+    | 'clay-cog'
+    | 'clay-star';
 
 const iconMap: Record<IconName, string> = {
     'clay-stopwatch': clayStopwatch,
@@ -49,6 +51,7 @@ const iconMap: Record<IconName, string> = {
     'clay-avatar': clayAvatar,
     'clay-person-silhouette': clayPersonSilhouette,
     'clay-cog': clayCog,
+    'clay-star': clayStar,
 };
 
 export type IconSize = 'xs' | 's' | 'm' | 'l';
@@ -71,7 +74,7 @@ export const Icon: React.FC<IconProps> = ({
     name,
     size = 'm',
     alt,
-    className = ''
+    className = '',
 }) => {
     const iconSrc = iconMap[name];
 
