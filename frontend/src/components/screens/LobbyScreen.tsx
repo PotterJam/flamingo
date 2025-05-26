@@ -2,9 +2,9 @@ import { FC } from 'react';
 import { useAppStore } from '../../store';
 import { OutlineButton } from '../buttons/OutlineButton';
 import { PrimaryButton } from '../buttons/PrimaryButton';
-import PlayerList from '../PlayerList';
 import { CANVAS_HEIGHT } from '../Game';
 import { MIN_PLAYERS } from '../../App';
+import { PlayerList } from '../PlayerList';
 
 export const LobbyScreen: FC = () => {
     const roomId = useAppStore((s) => s.roomId) ?? '';

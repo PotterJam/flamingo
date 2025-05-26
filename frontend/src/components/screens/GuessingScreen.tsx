@@ -1,13 +1,13 @@
 import { FC } from 'react';
 import { useAppStore } from '../../store';
 import { CANVAS_HEIGHT, CANVAS_WIDTH } from '../Game';
-import PlayerList from '../PlayerList';
 import ChatBox from '../ChatBox';
 import WordDisplay from '../WordDisplay';
 import TimerDisplay from '../TimerDisplay';
 import Whiteboard from '../Whiteboard';
 import GuessInput from '../GuessInput';
 import { DrawEvent } from '../../messages';
+import { PlayerList } from '../PlayerList';
 
 export const GuessingScreen: FC = () => {
     const sendMessage = useAppStore((s) => s.sendMessage);
