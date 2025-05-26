@@ -68,6 +68,7 @@ export interface IconProps {
     size?: IconSize;
     alt?: string;
     className?: string;
+    disabled?: boolean;
 }
 
 export const Icon: React.FC<IconProps> = ({
@@ -75,6 +76,7 @@ export const Icon: React.FC<IconProps> = ({
     size = 'm',
     alt,
     className = '',
+    disabled = false,
 }) => {
     const iconSrc = iconMap[name];
 
@@ -84,7 +86,7 @@ export const Icon: React.FC<IconProps> = ({
             alt={alt || name}
             width={sizeMap[size]}
             height={sizeMap[size]}
-            className={`icon ${className}`}
+            className={`icon ${className} ${disabled && 'grayscale-100'}`}
             style={{
                 display: 'inline-block',
                 verticalAlign: 'middle',

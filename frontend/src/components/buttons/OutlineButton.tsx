@@ -1,5 +1,6 @@
 import { FC } from 'react';
 import { twMerge } from 'tailwind-merge';
+import { Icon } from '../Icon';
 
 interface OutlineButtonProps {
     onClick?: React.MouseEventHandler<HTMLButtonElement>;
@@ -7,6 +8,7 @@ interface OutlineButtonProps {
     children: React.ReactNode;
     type?: any;
     className?: string;
+    arrow?: boolean;
 }
 
 export const OutlineButton: FC<OutlineButtonProps> = ({
@@ -37,20 +39,25 @@ export const OutlineButton: FC<OutlineButtonProps> = ({
     );
 };
 
-
 export const FunOutlineButton: FC<OutlineButtonProps> = ({
     onClick,
     disabled = false,
     children,
     className = '',
+    arrow = false,
 }) => {
     return (
         <button
             disabled={disabled}
-            className={`group relative inline-flex items-center justify-center overflow-hidden rounded-md bg-white px-4 py-2 font-bold text-pink-400 border-2 disabled:border-gray-300 disabled:text-gray-400 border-pink-400 [box-shadow:0px_4px_1px_#f472b6] transition-all active:translate-y-[4px] active:shadow-none disabled:cursor-not-allowed disabled:bg-gray-300 disabled:shadow-none disabled:active:translate-y-0 ${className}`}
+            className={`group relative inline-flex items-center justify-center overflow-hidden rounded-md border-2 border-pink-400 bg-white px-4 py-2 font-bold text-pink-400 [box-shadow:0px_4px_1px_#f472b6] transition-all active:translate-y-[4px] active:shadow-none disabled:cursor-not-allowed disabled:border-gray-300 disabled:bg-gray-300 disabled:text-gray-400 disabled:shadow-none disabled:active:translate-y-0 ${className}`}
             onClick={onClick}
         >
+            <span className="flex flex-row items-center gap-3">
             {children}
+            {arrow && (
+                <Icon name="clay-arrow-pink" size="s" disabled={disabled} />
+            )}
+            </span>
         </button>
     );
 };

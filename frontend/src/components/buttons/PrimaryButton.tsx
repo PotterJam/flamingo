@@ -1,5 +1,6 @@
 import { FC } from 'react';
 import { twMerge } from 'tailwind-merge';
+import { Icon } from '../Icon';
 
 interface PrimaryButtonProps {
     onClick?: React.MouseEventHandler<HTMLButtonElement>;
@@ -7,6 +8,7 @@ interface PrimaryButtonProps {
     children: React.ReactNode;
     type?: any;
     className?: string;
+    arrow?: boolean;
 }
 
 export const PrimaryButton: FC<PrimaryButtonProps> = ({
@@ -42,6 +44,7 @@ export const FunPrimaryButton: FC<PrimaryButtonProps> = ({
     disabled = false,
     children,
     className = '',
+    arrow = false,
 }) => {
     return (
         <button
@@ -49,7 +52,16 @@ export const FunPrimaryButton: FC<PrimaryButtonProps> = ({
             className={`group relative inline-flex w-full items-center justify-center overflow-hidden rounded-md bg-pink-400 px-4 py-2 font-bold text-white [box-shadow:0px_4px_1px_#be185d] transition-all active:translate-y-[4px] active:shadow-none disabled:cursor-not-allowed disabled:bg-gray-300 disabled:shadow-none disabled:active:translate-y-0 ${className}`}
             onClick={onClick}
         >
-            {children}
+            <span className="flex flex-row items-center gap-3">
+                {children}
+                {arrow && (
+                    <Icon
+                        name="clay-arrow-white"
+                        size="s"
+                        disabled={disabled}
+                    />
+                )}
+            </span>
         </button>
     );
 };
