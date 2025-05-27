@@ -5,6 +5,7 @@ import { CreateRoomResponse } from '../api';
 import { Logo } from './Logo';
 import { OutlineButton } from './buttons/OutlineButton';
 import { Icon } from './Icon';
+import { IconButton } from './buttons/IconButton';
 
 export const RoomConnection: FC = () => {
     const [name, setName] = useState('');
@@ -46,6 +47,7 @@ export const RoomConnection: FC = () => {
     return (
         <div className="mx-auto mt-10 flex w-full max-w-sm flex-col gap-6 rounded-lg bg-white p-6 text-center shadow-md">
             <Logo />
+            <IconButton name="clay-tick" onClick={() => {}}/>
             <div className="flex flex-row items-center gap-2">
                 <Icon name="clay-avatar" size="s" />
                 <input
