@@ -23,7 +23,7 @@ export const IconButton: React.FC<IconButtonProps> = ({
             type="button"
             onClick={onClick}
             disabled={disabled}
-            className={`mx-auto scale-100 transform rounded-full border-none bg-transparent p-0 grayscale transition-all duration-300 ease-in-out outline-none hover:scale-120 hover:drop-shadow-lg hover:grayscale-0 active:scale-100 disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:scale-100 disabled:hover:grayscale ${disabled ? '' : 'cursor-pointer'} ${className} `}
+            className={`mx-auto scale-100 transform rounded-full border-none bg-transparent p-0 grayscale transition-all duration-300 ease-in-out outline-none hover:scale-120 hover:drop-shadow-lg hover:grayscale-0 active:scale-100 active:duration-50 disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:scale-100 disabled:hover:grayscale ${disabled ? '' : 'cursor-pointer'} ${className} `}
         >
             <Icon
                 name={name}
