@@ -1,37 +1,24 @@
-import { useState } from 'react';
-import { PrimaryButton } from './buttons/PrimaryButton';
+import { createSignal } from 'solid-js';
 
-function GuessInput({ onGuess }: { onGuess: (guess: string) => void }) {
-    const [currentGuess, setCurrentGuess] = useState('');
-
-    const handleSubmit = (e: any) => {
-        e.preventDefault();
-        const guessToSend = currentGuess.trim();
-        if (guessToSend) {
-            onGuess(guessToSend);
-            setCurrentGuess('');
-        }
-    };
+function GuessInput() {
+    const [guess, setGuess] = createSignal('');
 
     return (
-        <form onSubmit={handleSubmit} className="flex gap-2">
+        <div class="flex gap-2">
             <input
                 type="text"
-                value={currentGuess}
-                onChange={(e) => setCurrentGuess(e.target.value)}
-                placeholder="Enter your guess"
-                maxLength={50}
-                className="flex-1 rounded border border-gray-300 p-2 transition duration-150 ease-in-out focus:ring-2 focus:ring-blue-500 focus:outline-none"
-                aria-label="Enter your guess"
+                value={guess()}
+                onInput={(e) => setGuess(e.target.value)}
+                placeholder="Enter your guess..."
+                class="flex-1 rounded border border-gray-300 p-2"
             />
-            <PrimaryButton
+            <button 
                 type="submit"
-                disabled={!currentGuess.trim()}
-                className="flex-0"
+                class="rounded bg-blue-500 px-4 py-2 text-white hover:bg-blue-600"
             >
                 Guess
-            </PrimaryButton>
-        </form>
+            </button>
+        </div>
     );
 }
 

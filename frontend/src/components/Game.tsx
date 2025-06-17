@@ -1,35 +1,31 @@
-import { FC } from 'react';
+import { Switch, Match } from 'solid-js';
 import { useAppStore } from '../store';
-import { LobbyScreen } from './screens/LobbyScreen.tsx';
-import { GuessingScreen } from './screens/GuessingScreen.tsx';
-import { WordChoiceScreen } from './screens/WordChoiceScreen.tsx';
-import { GameEndScreen } from './screens/GameEndScreen.tsx';
+import { LobbyScreen } from './screens/LobbyScreen';
+import { GuessingScreen } from './screens/GuessingScreen';
+import { WordChoiceScreen } from './screens/WordChoiceScreen';
+import { GameEndScreen } from './screens/GameEndScreen';
 
 export const CANVAS_WIDTH = 800;
 export const CANVAS_HEIGHT = 600;
 export const MIN_PLAYERS = 2;
 
-export const Game: FC = () => {
-    const appState = useAppStore((s) => s.gameState.gamePhase);
+export const Game = () => {
+    const store = useAppStore();
 
-    if (appState === 'Lobby') {
-        return <LobbyScreen />;
-    }
-
-    if (appState === 'WordChoice') {
-        return <WordChoiceScreen />;
-    }
-
-    if (appState === 'Guessing') {
-        return <GuessingScreen />;
-    }
-
-    // doesn't exist yet
-    if (appState === 'Break') {
-        return null;
-    }
-
-    if (appState === 'GameEnd') {
-        return <GameEndScreen />;
-    }
+    return (
+        <Switch>
+            <Match when={store.gameState.gamePhase === 'Lobby'}>
+                <LobbyScreen />
+            </Match>
+            <Match when={store.gameState.gamePhase === 'WordChoice'}>
+                <WordChoiceScreen />
+            </Match>
+            <Match when={store.gameState.gamePhase === 'Guessing'}>
+                <GuessingScreen />
+            </Match>
+            <Match when={store.gameState.gamePhase === 'GameEnd'}>
+                <GameEndScreen />
+            </Match>
+        </Switch>
+    );
 };
