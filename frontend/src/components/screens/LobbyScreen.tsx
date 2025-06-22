@@ -1,5 +1,5 @@
 import { Show } from 'solid-js';
-import { useAppStore, actions } from '../../store';
+import { useAppStore } from '../../store';
 import { OutlineButton } from '../buttons/OutlineButton';
 import { PrimaryButton } from '../buttons/PrimaryButton';
 import PlayerList from '../PlayerList';

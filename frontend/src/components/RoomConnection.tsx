@@ -1,6 +1,6 @@
 import { createSignal } from 'solid-js';
 import { PrimaryButton } from './buttons/PrimaryButton';
-import { useAppStore, actions } from '../store';
+import { actions } from '../store';
 import { CreateRoomResponse } from '../api';
 import { Logo } from './Logo';
 import { OutlineButton } from './buttons/OutlineButton';

@@ -56,7 +56,7 @@ export interface AppState {
 }
 
 const initialAppState: AppState = {
-    sendMessage: () => {
+    sendMessage: (_) => {
         throw new Error('sending message without sender configured');
     },
     lastMessage: null,
@@ -71,7 +71,13 @@ const initialAppState: AppState = {
 const getStoredState = (): Partial<AppState> => {
     try {
         const stored = sessionStorage.getItem('flamingo-store');
-        return stored ? JSON.parse(stored) : {};
+        if (stored) {
+            const parsed = JSON.parse(stored);
+            // Don't restore sendMessage from session storage as it should be assigned dynamically
+            const { sendMessage, ...rest } = parsed;
+            return rest;
+        }
+        return {};
     } catch {
         return {};
     }
@@ -83,7 +89,9 @@ const [store, setStore] = createStore<AppState>({
 });
 
 createEffect(() => {
-    sessionStorage.setItem('flamingo-store', JSON.stringify(store));
+    // Don't save sendMessage to session storage as it should be assigned dynamically
+    const { sendMessage, ...storeWithoutSendMessage } = store;
+    sessionStorage.setItem('flamingo-store', JSON.stringify(storeWithoutSendMessage));
 });
 
 export const useAppStore = () => store;
