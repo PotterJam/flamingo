@@ -1,8 +1,10 @@
 import { createEffect, Accessor } from 'solid-js';
 import { ReceivedMsg } from '../messages';
-import { actions } from '../store';
+import { actions, useAppStore } from '../store';
 
 export const useHandleMessage = (message: Accessor<ReceivedMsg | null>) => {
+    const store = useAppStore();
+
     createEffect(() => {
         const msg = message();
         if (msg) {
@@ -41,6 +43,7 @@ export const useHandleMessage = (message: Accessor<ReceivedMsg | null>) => {
                     break;
                 }
                 case 'phaseChangeAck': {
+                    store.sendMessage(msg);
                     break;
                 }
                 case 'error': {
