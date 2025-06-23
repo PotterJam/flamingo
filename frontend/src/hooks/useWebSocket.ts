@@ -104,11 +104,17 @@ export function useWebSocket(url: string) {
     };
 
     const sendMessage = (message: SendMsg) => {
+        console.log('[useWebSocket] sendMessage called with:', message);
+        console.log('[useWebSocket] WebSocket state:', ws?.readyState);
+        console.log('[useWebSocket] WebSocket OPEN constant:', WebSocket.OPEN);
+        
         if (ws && ws.readyState === WebSocket.OPEN) {
             try {
                 const msg = JSON.stringify(message);
                 console.log('[useWebSocket] Sending message:', message);
+                console.log('[useWebSocket] Stringified message:', msg);
                 ws.send(msg);
+                console.log('[useWebSocket] Message sent successfully');
             } catch (error) {
                 console.error(
                     '[useWebSocket] Error stringifying message:',
