@@ -27,25 +27,39 @@ func (g *Game) HandleEvents() {
 		}
 		g.GameState.mu.Unlock()
 
-		var newHandler GamePhaseHandler
 		select {
+		case operation := <-g.GameState.PlayerOperations:
+			g.GameState.mu.Lock()
+			switch operation.Type {
+			case PlayerOpAdd:
+				g.handleAddPlayer(operation.Player)
+			case PlayerOpRemove:
+				newHandler := g.handleRemovePlayer(operation.Player)
+				g.updateHandler(newHandler)
+			default:
+				log.Printf("GameState: Unknown player operation type: %d", operation.Type)
+			}
+			g.GameState.mu.Unlock()
+
 		case msg := <-g.Messages:
 			g.GameState.mu.Lock()
-			newHandler = g.GameHandler.HandleMessage(g.GameState, msg.player, msg.msg)
+			newHandler := g.GameHandler.HandleMessage(g.GameState, msg.player, msg.msg)
+			g.updateHandler(newHandler)
+			g.GameState.mu.Unlock()
 
 		case <-timerChan:
 			g.GameState.mu.Lock()
 
 			if g.GameState.timerForTimeout == nil {
 				// We've had an update to the store that means we no longer want to respect the timeout, ignore
+				g.GameState.mu.Unlock()
 				continue
 			}
 
-			newHandler = g.GameHandler.HandleTimeOut(g.GameState)
+			newHandler := g.GameHandler.HandleTimeOut(g.GameState)
+			g.updateHandler(newHandler)
+			g.GameState.mu.Unlock()
 		}
-
-		g.updateHandler(newHandler)
-		g.GameState.mu.Unlock()
 	}
 }
 
@@ -78,6 +92,7 @@ func NewGame(b Broadcaster) *Game {
 			TotalRounds:                  1, // Default to 1 round (each player draws once)
 			CurrentRound:                 0,
 			PlayersWhoHaveDrawnThisRound: make([]string, 0),
+			PlayerOperations:             make(chan PlayerOperation, 5),
 		},
 		GameHandler: handler,
 		Messages:    make(chan GameMessage, 5),
@@ -85,10 +100,11 @@ func NewGame(b Broadcaster) *Game {
 }
 
 func (g *Game) AddPlayer(player *Player) {
-	state := g.GameState
+	g.GameState.PlayerOperations <- PlayerOperation{Type: PlayerOpAdd, Player: player}
+}
 
-	state.mu.Lock()
-	defer state.mu.Unlock()
+func (g *Game) handleAddPlayer(player *Player) {
+	state := g.GameState
 
 	// Avoid adding duplicates
 	for _, p := range state.Players {
@@ -113,9 +129,11 @@ func (g *Game) AddPlayer(player *Player) {
 }
 
 func (g *Game) RemovePlayer(player *Player) {
+	g.GameState.PlayerOperations <- PlayerOperation{Type: PlayerOpRemove, Player: player}
+}
+
+func (g *Game) handleRemovePlayer(player *Player) GamePhaseHandler {
 	state := g.GameState
-	state.mu.Lock()
-	defer state.mu.Unlock()
 
 	found := false
 	playerIndex := -1
@@ -129,7 +147,7 @@ func (g *Game) RemovePlayer(player *Player) {
 
 	if !found {
 		log.Printf("GameState: Attempted to remove player %s (%s) who was not found (or not ready).", player.Id, player.Name)
-		return
+		return g.GameHandler
 	}
 
 	state.Players = slices.Delete(state.Players, playerIndex, playerIndex+1)
@@ -152,7 +170,7 @@ func (g *Game) RemovePlayer(player *Player) {
 
 	wasDrawer := state.IsActive && state.CurrentDrawerIdx == playerIndex
 	if len(state.Players) < minPlayersToStart {
-		g.updateHandler(ackPhaseTransitionTo(&GameOverHandler{}))
+		return ackPhaseTransitionTo(&GameOverHandler{})
 	} else {
 		if playerIndex < state.CurrentDrawerIdx {
 			state.CurrentDrawerIdx--
@@ -165,7 +183,8 @@ func (g *Game) RemovePlayer(player *Player) {
 
 		if wasDrawer || allGuessed {
 			log.Printf("GameState: Ending turn early due to player %s leaving (was drawer: %t, all guessed now: %t).", player.Name, wasDrawer, allGuessed)
-			g.updateHandler(ackPhaseTransitionTo(&RoundFinishedHandler{}))
+			return ackPhaseTransitionTo(&RoundFinishedHandler{})
 		}
 	}
+	return g.GameHandler
 }

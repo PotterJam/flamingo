@@ -4,6 +4,7 @@ import (
 	"backend/messages"
 	"encoding/json"
 	"slices"
+	"time"
 )
 
 type PhaseChangeHandler struct {
@@ -16,6 +17,8 @@ func (p *PhaseChangeHandler) Phase() GamePhase {
 }
 
 func (p *PhaseChangeHandler) StartPhase(gs *GameState) {
+	gs.timerForTimeout = time.NewTimer(3 * time.Second)
+
 	ackPayload := messages.PhaseChangeAckPayload{
 		NewPhase: p.HandlerToChangeTo.Phase().String(),
 	}
@@ -47,8 +50,26 @@ func (p *PhaseChangeHandler) HandleMessage(gs *GameState, player *Player, msg me
 }
 
 func (p *PhaseChangeHandler) HandleTimeOut(gs *GameState) GamePhaseHandler {
-	// TODO (JP): if all players don't ack within a limit, remove them from the game and continue
-	return p
+	// Identify and remove players who didn't acknowledge within the time limit
+	playersToRemove := make([]*Player, 0)
+	for _, player := range gs.Players {
+		if !slices.Contains(p.AckedPlayers, player.Id) {
+			playersToRemove = append(playersToRemove, player)
+		}
+	}
+
+	for _, player := range playersToRemove {
+		gs.BroadcastSystemMessage(player.Name + " was removed for not responding to phase change.")
+		player.SendError("Removed from game for not acknowledging phase change in time.")
+
+		go func(p *Player) {
+			gs.PlayerOperations <- PlayerOperation{Type: PlayerOpRemove, Player: p}
+		}(player)
+	}
+
+	// Continue with phase change. The players will be removed from GameState
+	// shortly by the main game loop. The next phase should be resilient to this.
+	return p.HandlerToChangeTo
 }
 
 func (p *PhaseChangeHandler) allCurrentPlayersAcked(gs *GameState) bool {

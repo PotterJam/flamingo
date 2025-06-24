@@ -8,6 +8,25 @@ import (
 	"time"
 )
 
+type PlayerOperationType int
+
+const (
+	PlayerOpAdd PlayerOperationType = iota
+	PlayerOpRemove
+	// Add more operation types here as needed
+	// PlayerOpKick
+	// PlayerOpPromoteToHost
+	// PlayerOpDemoteFromHost
+)
+
+type PlayerOperation struct {
+	Type   PlayerOperationType
+	Player *Player
+	// Additional fields can be added here for more complex operations
+	// Reason string // for kicks, bans, etc.
+	// Data   interface{} // for custom operation data
+}
+
 type Broadcaster interface {
 	Broadcast(m messages.Message)
 	BroadcastToPlayers(message messages.Message, players []*Player)
@@ -28,10 +47,13 @@ type GameState struct {
 
 	timerForTimeout *time.Timer
 	turnEndTime     time.Time
-	
+
 	TotalRounds                  int
 	CurrentRound                 int
 	PlayersWhoHaveDrawnThisRound []string
+
+	// Channel for handlers to request player operations (add, remove, etc.)
+	PlayerOperations chan PlayerOperation
 }
 
 func (g *GameState) broadcastPlayerUpdate() {
