@@ -89,23 +89,7 @@ const Whiteboard: Component<WhiteboardProps> = ({ height, width }) => {
         ctxRef.closePath();
     };
 
-    const startDrawing = (e: MouseEvent) => {
-        if (!isDrawer()) return;
-        const pos = getEventPos(e);
-        if (!pos) return;
-        setIsDrawing(true);
-        lastPosRef = pos;
-        handleDraw({
-            eventType: 'start',
-            x: pos.x,
-            y: pos.y,
-            color: PALETTE[selectedColour()],
-            lineWidth: selectedThickness(),
-        });
-        if (e.cancelable) e.preventDefault();
-    };
-
-    const draw = (e: MouseEvent) => {
+    const globalMouseMove = (e: MouseEvent) => {
         if (!isDrawer() || !isDrawing()) return;
         const pos = getEventPos(e);
         if (!pos) return;
@@ -128,10 +112,42 @@ const Whiteboard: Component<WhiteboardProps> = ({ height, width }) => {
         if (e.cancelable) e.preventDefault();
     };
 
-    const stopDrawing = () => {
+    const globalMouseUp = () => {
         if (!isDrawer() || !isDrawing()) return;
         setIsDrawing(false);
         handleDraw({ eventType: 'end' });
+        // Remove global event listeners
+        document.removeEventListener('mousemove', globalMouseMove);
+        document.removeEventListener('mouseup', globalMouseUp);
+    };
+
+    const startDrawing = (e: MouseEvent) => {
+        if (!isDrawer()) return;
+        const pos = getEventPos(e);
+        if (!pos) return;
+        setIsDrawing(true);
+        lastPosRef = pos;
+        handleDraw({
+            eventType: 'start',
+            x: pos.x,
+            y: pos.y,
+            color: PALETTE[selectedColour()],
+            lineWidth: selectedThickness(),
+        });
+        // Add global event listeners to track mouse outside canvas
+        document.addEventListener('mousemove', globalMouseMove);
+        document.addEventListener('mouseup', globalMouseUp);
+        if (e.cancelable) e.preventDefault();
+    };
+
+    const draw = (e: MouseEvent) => {
+        // This is now handled by globalMouseMove, but keep for consistency
+        globalMouseMove(e);
+    };
+
+    const stopDrawing = () => {
+        // This is now handled by globalMouseUp, but keep for mouse leave events
+        globalMouseUp();
     };
 
     const clearCanvas = () => {
@@ -143,7 +159,12 @@ const Whiteboard: Component<WhiteboardProps> = ({ height, width }) => {
 
     createEffect(() => {
         actions.setClearCanvas(clearCanvas);
-        onCleanup(() => actions.setClearCanvas(null));
+        onCleanup(() => {
+            actions.setClearCanvas(null);
+            // Clean up any remaining global event listeners
+            document.removeEventListener('mousemove', globalMouseMove);
+            document.removeEventListener('mouseup', globalMouseUp);
+        });
     });
 
     createEffect(() => {
