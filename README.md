@@ -16,9 +16,8 @@
     * WebSockets: `gorilla/websocket`
     * Routing: `gorilla/mux`
     * Hot Reloading: `air`
-* **Frontend:** React (using Vite)
+* **Frontend:** SolidJS (using Vite)
     * Styling: `Tailwind CSS`
-    * State Management: `Zustand`
 * **Build/Run Script:** Python 3
 
 ## Prerequisites
@@ -54,7 +53,7 @@
 
 The easiest way to run the application is to use `compound`, the compound process manager we created to help with this project.
 
-Simply navitate to the root of the project and run `./compund/compound`.
+Simply navitate to the root of the project and run `./compound/compound`.
 
 ### Development Features
 
