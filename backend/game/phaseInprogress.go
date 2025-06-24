@@ -97,5 +97,5 @@ func (p *RoundInProgressHandler) HandleMessage(gs *GameState, player *Player, ms
 }
 
 func (p *RoundInProgressHandler) HandleTimeOut(gs *GameState) GamePhaseHandler {
-	return p
+	return ackPhaseTransitionTo(&RoundFinishedHandler{})
 }
