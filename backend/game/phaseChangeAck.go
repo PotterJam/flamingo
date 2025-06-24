@@ -38,15 +38,24 @@ func (p *PhaseChangeHandler) HandleMessage(gs *GameState, player *Player, msg me
 		}
 	}
 
-	// TODO (JP): a bit brittle with disconnecting/reconnecting, use equivalence or use a _not acked_ list instead
-	if len(gs.Players) != len(p.AckedPlayers) {
-		return p
+	// Check if all current players have acknowledged - more robust than length comparison
+	if p.allCurrentPlayersAcked(gs) {
+		return p.HandlerToChangeTo
 	}
 
-	return p.HandlerToChangeTo
+	return p
 }
 
 func (p *PhaseChangeHandler) HandleTimeOut(gs *GameState) GamePhaseHandler {
 	// TODO (JP): if all players don't ack within a limit, remove them from the game and continue
 	return p
+}
+
+func (p *PhaseChangeHandler) allCurrentPlayersAcked(gs *GameState) bool {
+	for _, player := range gs.Players {
+		if !slices.Contains(p.AckedPlayers, player.Id) {
+			return false
+		}
+	}
+	return true
 }
