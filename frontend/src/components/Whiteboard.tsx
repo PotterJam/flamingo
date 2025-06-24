@@ -157,8 +157,6 @@ const Whiteboard: Component<WhiteboardProps> = (props) => {
         if (ctx) {
             ctx.lineCap = 'round';
             ctx.lineJoin = 'round';
-            ctx.lineWidth = selectedThickness();
-            ctx.strokeStyle = PALETTE[selectedColour()];
         }
 
         console.log(
