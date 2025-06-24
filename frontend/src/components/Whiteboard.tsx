@@ -35,7 +35,7 @@ interface WhiteboardProps {
     height: number;
 }
 
-const Whiteboard: Component<WhiteboardProps> = (props) => {
+const Whiteboard: Component<WhiteboardProps> = ({ height, width }) => {
     let canvasRef: HTMLCanvasElement | undefined;
     let ctxRef: CanvasRenderingContext2D | null = null;
     const [isDrawing, setIsDrawing] = createSignal(false);
@@ -151,8 +151,8 @@ const Whiteboard: Component<WhiteboardProps> = (props) => {
         const ctx = canvasRef.getContext('2d');
         ctxRef = ctx;
 
-        canvasRef.width = props.width;
-        canvasRef.height = props.height;
+        canvasRef.width = width;
+        canvasRef.height = height;
 
         if (ctx) {
             ctx.lineCap = 'round';
@@ -160,7 +160,7 @@ const Whiteboard: Component<WhiteboardProps> = (props) => {
         }
 
         console.log(
-            `[Whiteboard] Initialized with fixed size: ${props.width}x${props.height}`
+            `[Whiteboard] Initialized with fixed size: ${width}x${height}`
         );
     });
 
@@ -200,8 +200,8 @@ const Whiteboard: Component<WhiteboardProps> = (props) => {
                 style={{
                     cursor: isDrawer() ? 'crosshair' : 'default',
                     'touch-action': 'none',
-                    width: `${props.width}px`,
-                    height: `${props.height}px`,
+                    width: `${width}px`,
+                    height: `${height}px`,
                 }}
                 onMouseDown={startDrawing}
                 onMouseMove={draw}
