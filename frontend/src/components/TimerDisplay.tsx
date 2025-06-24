@@ -1,20 +1,20 @@
-import { useState, useEffect } from 'react';
+import { createSignal, createEffect, onCleanup } from 'solid-js';
 
-function TimerDisplay({ endTime }: { endTime: number }) {
-    const [remainingSeconds, setRemainingSeconds] = useState(0);
+function TimerDisplay(props: { endTime: number }) {
+    const [remainingSeconds, setRemainingSeconds] = createSignal(0);
 
-    useEffect(() => {
+    createEffect(() => {
         let intervalId: NodeJS.Timeout | null = null;
 
         function updateRemaining() {
-            if (typeof endTime !== 'number' || endTime <= 0) {
+            if (typeof props.endTime !== 'number' || props.endTime <= 0) {
                 setRemainingSeconds(0);
                 if (intervalId) clearInterval(intervalId);
                 intervalId = null;
                 return;
             }
             const now = Date.now();
-            const remaining = Math.max(0, Math.round((endTime - now) / 1000));
+            const remaining = Math.max(0, Math.round((props.endTime - now) / 1000));
             setRemainingSeconds(remaining);
 
             if (remaining === 0 && intervalId) {
@@ -28,29 +28,29 @@ function TimerDisplay({ endTime }: { endTime: number }) {
             intervalId = null;
         }
 
-        if (typeof endTime === 'number' && endTime > Date.now()) {
+        if (typeof props.endTime === 'number' && props.endTime > Date.now()) {
             updateRemaining();
             intervalId = setInterval(updateRemaining, 1000);
         } else {
             setRemainingSeconds(0);
         }
 
-        return () => {
+        onCleanup(() => {
             if (intervalId) {
                 clearInterval(intervalId);
             }
-        };
-    }, [endTime]);
+        });
+    });
 
     return (
         <div
-            className="font-mono text-lg font-semibold text-gray-700"
+            class="font-mono text-lg font-semibold text-gray-700"
             title="Time Remaining"
         >
-            <span role="img" aria-label="Timer" className="mr-1">
+            <span role="img" aria-label="Timer" class="mr-1">
                 ⏱️
             </span>
-            {remainingSeconds}s
+            {remainingSeconds()}s
         </div>
     );
 }

@@ -1,38 +1,32 @@
-import { FC } from 'react';
+import { JSX } from 'solid-js';
 import { twMerge } from 'tailwind-merge';
 
-interface OutlineButtonProps {
-    onClick?: React.MouseEventHandler<HTMLButtonElement>;
+export interface OutlineButtonProps {
+    onClick?: () => void;
     disabled?: boolean;
-    children: React.ReactNode;
-    type?: any;
-    className?: string;
+    children: JSX.Element;
+    type?: string;
+    class?: string;
 }
 
-export const OutlineButton: FC<OutlineButtonProps> = ({
-    onClick,
-    disabled = false,
-    children,
-    type,
-    className = '',
-}) => {
+export const OutlineButton = (props: OutlineButtonProps) => {
     const enabledStyles =
         'w-full rounded border-2 border-pink-400 bg-white px-4 py-2 font-bold text-pink-400 hover:bg-pink-100';
     const disabledStyles =
         'w-full rounded bg-gray-300 border-2 border-gray-300 px-4 py-2 font-bold text-gray-400';
-    const styles = twMerge(
-        disabled ? disabledStyles : enabledStyles,
-        className
+    const styles = () => twMerge(
+        props.disabled ? disabledStyles : enabledStyles,
+        props.class
     );
 
     return (
         <button
-            onClick={onClick}
-            disabled={disabled}
-            className={styles}
-            type={type}
+            onClick={props.onClick}
+            disabled={props.disabled || false}
+            class={styles()}
+            type={props.type}
         >
-            {children}
+            {props.children}
         </button>
     );
 };

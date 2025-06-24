@@ -1,65 +1,58 @@
+import { createEffect, Accessor } from 'solid-js';
 import { ReceivedMsg } from '../messages';
-import { useAppStore } from '../store';
-import { useEffect } from 'react';
+import { actions, useAppStore } from '../store';
 
-export const useHandleMessage = (message: ReceivedMsg | null) => {
-    const handleGameInfo = useAppStore((s) => s.handleGameInfo);
-    const handleTurnStart = useAppStore((s) => s.handleTurnStart);
-    const handleTurnSetup = useAppStore((s) => s.handleTurnSetup);
-    const handlePlayerUpdate = useAppStore((s) => s.handlePlayerUpdate);
-    const handleTurnEnd = useAppStore((s) => s.handleTurnEnd);
-    const handleGameFinished = useAppStore((s) => s.handleGameFinished);
-    const handleDraw = useAppStore((s) => s.handleDraw);
-    const addChatMessage = useAppStore((s) => s.addChatMessage);
-    const handlePhaseChangeAck = useAppStore((s) => s.sendMessage);
+export const useHandleMessage = (message: Accessor<ReceivedMsg | null>) => {
+    const store = useAppStore();
 
-    useEffect(() => {
-        if (message) {
-            console.log('Processing message in useEffect:', message);
+    createEffect(() => {
+        const msg = message();
+        if (msg) {
+            console.log('Processing message in createEffect:', msg);
 
-            switch (message.type) {
+            switch (msg.type) {
                 case 'gameInfo': {
-                    handleGameInfo(message);
+                    actions.handleGameInfo(msg);
                     break;
                 }
                 case 'playerUpdate': {
-                    handlePlayerUpdate(message);
+                    actions.handlePlayerUpdate(msg);
                     break;
                 }
                 case 'turnSetup':
-                    handleTurnSetup(message);
+                    actions.handleTurnSetup(msg);
                     break;
                 case 'turnStart': {
-                    handleTurnStart(message);
+                    actions.handleTurnStart(msg);
                     break;
                 }
                 case 'chat': {
-                    addChatMessage(message.payload);
+                    actions.addChatMessage(msg.payload);
                     break;
                 }
                 case 'drawEvent': {
-                    handleDraw(message);
+                    actions.handleDraw(msg);
                     break;
                 }
                 case 'turnEnd': {
-                    handleTurnEnd(message);
+                    actions.handleTurnEnd(msg);
                     break;
                 }
                 case 'gameFinished': {
-                    handleGameFinished(message);
+                    actions.handleGameFinished(msg);
                     break;
                 }
                 case 'phaseChangeAck': {
-                    handlePhaseChangeAck(message);
+                    store.sendMessage(msg);
                     break;
                 }
                 case 'error': {
-                    const payload = message.payload;
+                    const payload = msg.payload;
                     if (!payload) {
                         console.error('Received error with null payload');
                         break;
                     }
-                    addChatMessage({
+                    actions.addChatMessage({
                         senderName: 'System',
                         message: `Error: ${payload.message || 'Unknown error'}`,
                         isSystem: true,
@@ -67,19 +60,8 @@ export const useHandleMessage = (message: ReceivedMsg | null) => {
                     break;
                 }
                 default:
-                    console.warn('Received unknown message: ', message);
+                    console.warn('Received unknown message: ', msg);
             }
         }
-    }, [
-        message,
-        handleGameInfo,
-        handleTurnStart,
-        handleTurnSetup,
-        handlePlayerUpdate,
-        handleTurnEnd,
-        handleGameFinished,
-        handleDraw,
-        handlePhaseChangeAck,
-        addChatMessage,
-    ]);
+    });
 };

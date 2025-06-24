@@ -8,3 +8,5 @@ scriblio_server
 
 # air creates a tmp file while its running
 backend/tmp
+.idea
+backend/backend

@@ -1,4 +1,5 @@
-import { create } from 'zustand/react';
+import { createStore, produce } from 'solid-js/store';
+import { createEffect } from 'solid-js';
 import {
     ChatMessage,
     DrawEvent,
@@ -13,8 +14,6 @@ import {
     TurnStartMsg,
     GameFinishedMsg,
 } from './messages';
-import { immer } from 'zustand/middleware/immer';
-import { createJSONStorage, persist } from 'zustand/middleware';
 import { GamePhase } from './model';
 
 export interface GameState {
@@ -31,10 +30,6 @@ export interface GameState {
     lastDrawEvent: DrawEvent | null;
 }
 
-export interface Room {
-    roomId: string;
-}
-
 const initialGameState: GameState = {
     gamePhase: 'Lobby',
     players: [],
@@ -49,166 +44,185 @@ const initialGameState: GameState = {
     lastDrawEvent: null,
 };
 
-export type AppState = {
+export interface AppState {
     sendMessage: (message: SendMsg) => void;
     lastMessage: ReceivedMsg | null;
-
     selfName: string;
     selfId: string;
     launchAsHost: boolean;
-
     gameState: GameState;
     roomId: string | null;
-
     clearCanvas: (() => void) | null;
+}
+
+const initialAppState: AppState = {
+    sendMessage: (_) => {
+        throw new Error('sending message without sender configured');
+    },
+    lastMessage: null,
+    selfName: '',
+    selfId: '',
+    launchAsHost: false,
+    gameState: initialGameState,
+    roomId: null,
+    clearCanvas: null,
 };
 
-export type AppActions = {
-    assignSendMessage: (func: (message: SendMsg) => void) => void;
-    setLastMessage: (message: ReceivedMsg) => void;
-
-    setState: (newState: GamePhase) => void;
-
-    nameChosen: (name: string) => void;
-
-    roomCreated: (roomId: string) => void;
-    joinRoom: (roomId: string) => void;
-
-    resetGameState: () => void;
-
-    addChatMessage: (message: ChatMessage) => void;
-    setClearCanvas: (callback: (() => void) | null) => void;
-};
-
-export type MessageHandlers = {
-    handleGameInfo: (msg: GameInfoMsg) => void;
-    handleTurnSetup: (msg: TurnSetupMsg) => void;
-    handleTurnStart: (msg: TurnStartMsg) => void;
-    handlePlayerUpdate: (msg: PlayerUpdateMsg) => void;
-    handleTurnEnd: (msg: TurnEndMsg) => void;
-    handleDraw: (msg: DrawEventMsg) => void;
-    handleGameFinished: (msg: GameFinishedMsg) => void;
-};
-
-export const useAppStore = create<AppState & AppActions & MessageHandlers>()(
-    persist(
-        immer((set) => ({
-            gameState: initialGameState,
-            roomId: null,
-            gamePhase: 'connecting',
-            selfName: '',
-            selfId: '',
-            launchAsHost: false,
-            lastMessage: null,
-            clearCanvas: null,
-
-            sendMessage: () => {
-                throw new Error('sending message without sender configured');
-            },
-            assignSendMessage: (func) =>
-                set((s) => {
-                    s.sendMessage = func;
-                }),
-            setLastMessage: (message) =>
-                set((s) => {
-                    s.lastMessage = message;
-                }),
-            setState: (newState) => set((_) => ({ appState: newState })),
-            nameChosen: (name) =>
-                set((s) => {
-                    s.selfName = name;
-                }),
-            roomCreated: (room) =>
-                set((s) => {
-                    s.roomId = room;
-                    s.launchAsHost = true;
-                }),
-            joinRoom: (roomId) =>
-                set((s) => {
-                    s.roomId = roomId;
-                    s.launchAsHost = false;
-                }),
-            resetGameState: () =>
-                set((s) => {
-                    s.gameState = initialGameState;
-                }),
-            addChatMessage: (message) =>
-                set((s) => {
-                    s.gameState.messages.push(message);
-                }),
-            setClearCanvas: (callback) =>
-                set((s) => {
-                    s.clearCanvas = callback;
-                }),
-
-            // Message receivers
-            handleGameInfo: ({ payload }) =>
-                set((s) => {
-                    s.gameState.localPlayerId = payload.yourId;
-                    s.gameState.players = payload.players;
-                    s.gameState.hostId = payload.hostId;
-                    if (payload.currentDrawerId)
-                        s.gameState.currentDrawerId = payload.currentDrawerId;
-                    if (payload.turnEndTime)
-                        s.gameState.turnEndTime = payload.turnEndTime;
-                }),
-            handleTurnSetup: ({ payload }) =>
-                set((s) => {
-                    s.gameState.currentDrawerId = payload.currentDrawerId;
-                    s.gameState.wordChoices = payload.wordChoices ?? null;
-                    s.gameState.players = payload.players;
-                    s.gameState.turnEndTime = payload.turnEndTime;
-
-                    s.gameState.gamePhase = 'WordChoice';
-                }),
-            handleTurnStart: ({ payload }) =>
-                set((s) => {
-                    s.gameState.wordChoices = null; // The word has been chosen
-
-                    s.gameState.currentDrawerId = payload.currentDrawerId;
-                    s.gameState.word = payload.word ?? null;
-                    s.gameState.wordLength = payload.wordLength ?? null;
-                    s.gameState.players = payload.players;
-                    s.gameState.turnEndTime = payload.turnEndTime;
-
-                    s.clearCanvas && s.clearCanvas();
-
-                    s.gameState.gamePhase = 'Guessing';
-                }),
-            handlePlayerUpdate: ({ payload }) =>
-                set((s) => {
-                    s.gameState.players = payload.players;
-                    s.gameState.hostId = payload.hostId;
-                }),
-            handleTurnEnd: ({ payload }) =>
-                set((s) => {
-                    s.gameState.players = payload.players;
-                    s.gameState.turnEndTime = null;
-                    s.gameState.word = null;
-                    s.gameState.wordLength = null;
-                    s.gameState.wordChoices = null;
-                    s.gameState.currentDrawerId = null;
-                }),
-            handleDraw: ({ payload }) =>
-                set((s) => {
-                    s.gameState.lastDrawEvent = payload;
-                }),
-            handleGameFinished: ({ payload }) =>
-                set((s) => {
-                    s.gameState.gamePhase = 'GameEnd';
-                    s.gameState.players = payload.players;
-                    s.gameState.currentDrawerId = null;
-                    s.gameState.word = null;
-                    s.gameState.wordLength = null;
-                    s.gameState.wordChoices = null;
-                    s.gameState.turnEndTime = null;
-                }),
-        })),
-        {
-            name: 'flamingo-store',
-            // session storage is used so that different tabs and sessions have separate state
-            // this helps with dev time especially because different tabs can persist different stores
-            storage: createJSONStorage(() => sessionStorage),
+const getStoredState = (): Partial<AppState> => {
+    try {
+        const stored = sessionStorage.getItem('flamingo-store');
+        if (stored) {
+            const parsed = JSON.parse(stored);
+            // Don't restore sendMessage from session storage as it should be assigned dynamically
+            const { sendMessage, ...rest } = parsed;
+            return rest;
         }
-    )
-);
+        return {};
+    } catch {
+        return {};
+    }
+};
+
+const [store, setStore] = createStore<AppState>({
+    ...initialAppState,
+    ...getStoredState(),
+});
+
+createEffect(() => {
+    // Don't save sendMessage to session storage as it should be assigned dynamically
+    const { sendMessage, ...storeWithoutSendMessage } = store;
+    sessionStorage.setItem('flamingo-store', JSON.stringify(storeWithoutSendMessage));
+});
+
+export const useAppStore = () => store;
+
+export const actions = {
+    assignSendMessage: (func: (message: SendMsg) => void) => {
+        setStore(produce((state) => {
+            state.sendMessage = func;
+        }));
+    },
+
+    setLastMessage: (message: ReceivedMsg) => {
+        setStore(produce((state) => {
+            state.lastMessage = message;
+        }));
+    },
+
+    setState: (newState: GamePhase) => {
+        setStore(produce((state) => {
+            state.gameState.gamePhase = newState;
+        }));
+    },
+
+    nameChosen: (name: string) => {
+        setStore(produce((state) => {
+            state.selfName = name;
+        }));
+    },
+
+    roomCreated: (room: string) => {
+        setStore(produce((state) => {
+            state.roomId = room;
+            state.launchAsHost = true;
+        }));
+    },
+
+    joinRoom: (roomId: string) => {
+        setStore(produce((state) => {
+            state.roomId = roomId;
+            state.launchAsHost = false;
+        }));
+    },
+
+    resetGameState: () => {
+        setStore(produce((state) => {
+            state.gameState = initialGameState;
+        }));
+    },
+
+    addChatMessage: (message: ChatMessage) => {
+        setStore(produce((state) => {
+            state.gameState.messages.push(message);
+        }));
+    },
+
+    setClearCanvas: (callback: (() => void) | null) => {
+        setStore(produce((state) => {
+            state.clearCanvas = callback;
+        }));
+    },
+
+    handleGameInfo: ({ payload }: GameInfoMsg) => {
+        setStore(produce((state) => {
+            state.gameState.localPlayerId = payload.yourId;
+            state.gameState.players = payload.players;
+            state.gameState.hostId = payload.hostId;
+            if (payload.currentDrawerId) {
+                state.gameState.currentDrawerId = payload.currentDrawerId;
+            }
+            if (payload.turnEndTime) {
+                state.gameState.turnEndTime = payload.turnEndTime;
+            }
+        }));
+    },
+
+    handleTurnSetup: ({ payload }: TurnSetupMsg) => {
+        setStore(produce((state) => {
+            state.gameState.currentDrawerId = payload.currentDrawerId;
+            state.gameState.wordChoices = payload.wordChoices ?? null;
+            state.gameState.players = payload.players;
+            state.gameState.turnEndTime = payload.turnEndTime;
+            state.gameState.gamePhase = 'WordChoice' as GamePhase;
+        }));
+    },
+
+    handleTurnStart: ({ payload }: TurnStartMsg) => {
+        setStore(produce((state) => {
+            state.gameState.wordChoices = null;
+            state.gameState.currentDrawerId = payload.currentDrawerId;
+            state.gameState.word = payload.word ?? null;
+            state.gameState.wordLength = payload.wordLength ?? null;
+            state.gameState.players = payload.players;
+            state.gameState.turnEndTime = payload.turnEndTime;
+            state.gameState.gamePhase = 'Guessing' as GamePhase;
+        }));
+        store.clearCanvas?.();
+    },
+
+    handlePlayerUpdate: ({ payload }: PlayerUpdateMsg) => {
+        setStore(produce((state) => {
+            state.gameState.players = payload.players;
+            state.gameState.hostId = payload.hostId;
+        }));
+    },
+
+    handleTurnEnd: ({ payload }: TurnEndMsg) => {
+        setStore(produce((state) => {
+            state.gameState.players = payload.players;
+            state.gameState.turnEndTime = null;
+            state.gameState.word = null;
+            state.gameState.wordLength = null;
+            state.gameState.wordChoices = null;
+            state.gameState.currentDrawerId = null;
+        }));
+    },
+
+    handleDraw: ({ payload }: DrawEventMsg) => {
+        setStore(produce((state) => {
+            state.gameState.lastDrawEvent = payload;
+        }));
+    },
+
+    handleGameFinished: ({ payload }: GameFinishedMsg) => {
+        setStore(produce((state) => {
+            state.gameState.gamePhase = 'GameEnd' as GamePhase;
+            state.gameState.players = payload.players;
+            state.gameState.currentDrawerId = null;
+            state.gameState.word = null;
+            state.gameState.wordLength = null;
+            state.gameState.wordChoices = null;
+            state.gameState.turnEndTime = null;
+        }));
+    },
+};

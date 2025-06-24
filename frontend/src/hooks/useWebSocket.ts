@@ -1,39 +1,38 @@
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { createSignal, createEffect, onCleanup } from 'solid-js';
 import { ReceivedMsg, SendMsg } from '../messages';
 
 export const WS_ROOT = '/ws';
 
 export function useWebSocket(url: string) {
-    const [isConnected, setIsConnected] = useState(false);
-    const [receivedMessage, setReceivedMessage] = useState<ReceivedMsg | null>(null);
-    const ws = useRef<WebSocket | null>(null);
+    const [isConnected, setIsConnected] = createSignal(false);
+    const [receivedMessage, setReceivedMessage] = createSignal<ReceivedMsg | null>(null);
+    let ws: WebSocket | null = null;
 
-    // Initialize from HMR data if available
     if (import.meta.hot) {
         const wsData = import.meta.hot.data;
         if (wsData) {
-            if (!ws.current && wsData.ws) {
-                ws.current = wsData.ws;
+            if (!ws && wsData.ws) {
+                ws = wsData.ws;
                 setIsConnected(wsData.isConnected ?? false);
                 setReceivedMessage(wsData.receivedMessage ?? null);
             }
         }
     }
 
-    const connect = useCallback(() => {
-        if (ws.current) {
+    const connect = () => {
+        if (ws) {
             console.log('[useWebSocket] Already connected or connecting.');
             return;
         }
 
         console.log('[useWebSocket] Attempting to connect to:', url);
         try {
-            ws.current = new WebSocket(url);
+            ws = new WebSocket(url);
             if (import.meta.hot) {
-                import.meta.hot.data.ws = ws.current;
+                import.meta.hot.data.ws = ws;
             }
 
-            ws.current.onopen = () => {
+            ws.onopen = () => {
                 console.log('[useWebSocket] WebSocket connection established.');
                 setIsConnected(true);
                 if (import.meta.hot) {
@@ -41,7 +40,7 @@ export function useWebSocket(url: string) {
                 }
             };
 
-            ws.current.onmessage = (event) => {
+            ws.onmessage = (event) => {
                 try {
                     const message = JSON.parse(event.data);
                     console.log('[useWebSocket] Message received:', message);
@@ -58,11 +57,11 @@ export function useWebSocket(url: string) {
                 }
             };
 
-            ws.current.onerror = (error) => {
+            ws.onerror = (error) => {
                 console.error('[useWebSocket] WebSocket error:', error);
             };
 
-            ws.current.onclose = (event) => {
+            ws.onclose = (event) => {
                 console.log(
                     '[useWebSocket] WebSocket connection closed:',
                     event.code,
@@ -75,7 +74,7 @@ export function useWebSocket(url: string) {
                     import.meta.hot.data.isConnected = false;
                     import.meta.hot.data.ws = null;
                 }
-                ws.current = null;
+                ws = null;
             };
         } catch (error) {
             console.error(
@@ -87,29 +86,35 @@ export function useWebSocket(url: string) {
                 import.meta.hot.data.isConnected = false;
                 import.meta.hot.data.ws = null;
             }
-            ws.current = null;
+            ws = null;
         }
-    }, [url]);
+    };
 
-    const disconnect = useCallback(() => {
-        if (ws.current && ws.current.readyState === WebSocket.OPEN) {
+    const disconnect = () => {
+        if (ws && ws.readyState === WebSocket.OPEN) {
             console.log('[useWebSocket] Closing WebSocket connection.');
-            ws.current.close();
+            ws.close();
         }
         setIsConnected(false);
         if (import.meta.hot) {
             import.meta.hot.data.isConnected = false;
             import.meta.hot.data.ws = null;
         }
-        ws.current = null;
-    }, []);
+        ws = null;
+    };
 
-    const sendMessage = useCallback((message: SendMsg) => {
-        if (ws.current && ws.current.readyState === WebSocket.OPEN) {
+    const sendMessage = (message: SendMsg) => {
+        console.log('[useWebSocket] sendMessage called with:', message);
+        console.log('[useWebSocket] WebSocket state:', ws?.readyState);
+        console.log('[useWebSocket] WebSocket OPEN constant:', WebSocket.OPEN);
+        
+        if (ws && ws.readyState === WebSocket.OPEN) {
             try {
                 const msg = JSON.stringify(message);
                 console.log('[useWebSocket] Sending message:', message);
-                ws.current.send(msg);
+                console.log('[useWebSocket] Stringified message:', msg);
+                ws.send(msg);
+                console.log('[useWebSocket] Message sent successfully');
             } catch (error) {
                 console.error(
                     '[useWebSocket] Error stringifying message:',
@@ -119,23 +124,22 @@ export function useWebSocket(url: string) {
         } else {
             console.error(
                 '[useWebSocket] WebSocket not connected. Cannot send. ReadyState:',
-                ws.current?.readyState
+                ws?.readyState
             );
         }
-    }, []);
+    };
 
-    useEffect(() => {
-        // Only connect if we don't already have a connection
-        if (!ws.current) {
+    createEffect(() => {
+        if (!ws) {
             connect();
         }
-        return () => {
-            // Only disconnect if this is a full unmount, not an HMR
-            if (!import.meta.hot) {
-                disconnect();
-            }
-        };
-    }, [connect, disconnect]);
+    });
+
+    onCleanup(() => {
+        if (!import.meta.hot) {
+            disconnect();
+        }
+    });
 
     return { isConnected, sendMessage, receivedMessage };
 }

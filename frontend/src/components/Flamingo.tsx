@@ -1,5 +1,5 @@
-import { FC, useEffect } from 'react';
-import { useAppStore } from '../store';
+import { createEffect, Show } from 'solid-js';
+import { useAppStore, actions } from '../store';
 import { Game } from './Game';
 import { useHandleMessage } from '../hooks/useHandleMessage';
 import { useWebSocket } from '../hooks/useWebSocket';
@@ -8,38 +8,39 @@ interface FlamingoProps {
     wsUrl: string;
 }
 
-export const Flamingo: FC<FlamingoProps> = ({ wsUrl }) => {
-    const { isConnected, receivedMessage, sendMessage } = useWebSocket(wsUrl);
+export const Flamingo = (props: FlamingoProps) => {
+    const { isConnected, receivedMessage, sendMessage } = useWebSocket(props.wsUrl);
     useHandleMessage(receivedMessage);
+    const store = useAppStore();
 
-    const assignSendMessage = useAppStore((s) => s.assignSendMessage);
-    useEffect(() => {
-        assignSendMessage(sendMessage);
-    }, [sendMessage]);
+    createEffect(() => {
+        actions.assignSendMessage(sendMessage);
+    });
 
-    const appState = useAppStore((state) => state.gameState.gamePhase);
-    const localPlayerId = useAppStore((s) => s.gameState.localPlayerId);
-    const resetGameState = useAppStore((s) => s.resetGameState);
-
-    useEffect(() => {
-        if (!isConnected) {
+    createEffect(() => {
+        if (!isConnected()) {
             console.log('WebSocket disconnected.');
-            resetGameState();
+            actions.resetGameState();
         }
-    }, [isConnected, appState]);
-    if (!isConnected) {
-        return <div className="mt-10 text-center">Loading...</div>;
-    }
+    });
 
-    if (!localPlayerId) {
-        return (
-            <div className="mt-10 text-center">
-                <p className="mt-2 animate-pulse text-gray-500">
-                    Waiting for server info...
-                </p>
-            </div>
-        );
-    }
-
-    return <Game />;
+    return (
+        <Show
+            when={isConnected()}
+            fallback={<div class="mt-10 text-center">Loading...</div>}
+        >
+            <Show
+                when={store.gameState.localPlayerId}
+                fallback={
+                    <div class="mt-10 text-center">
+                        <p class="mt-2 animate-pulse text-gray-500">
+                            Waiting for server info...
+                        </p>
+                    </div>
+                }
+            >
+                <Game />
+            </Show>
+        </Show>
+    );
 };
