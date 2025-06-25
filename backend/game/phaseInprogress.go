@@ -34,7 +34,7 @@ func (p *RoundInProgressHandler) StartPhase(gs *GameState) {
 	turnPayloadBase := messages.TurnStartPayload{
 		GamePhase:       p.Phase().String(),
 		CurrentDrawerID: gs.Players[gs.CurrentDrawerIdx].Id,
-		WordLength:      len(gs.Word),
+		WordOutline:     generateWordOutline(gs.Word),
 		Players:         gs.getPlayerInfoList(),
 		TurnEndTime:     gs.turnEndTime.UnixMilli(),
 	}

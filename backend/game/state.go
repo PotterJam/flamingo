@@ -100,7 +100,19 @@ func (g *GameState) isDrawer(p *Player) bool {
 	return g.Players[g.CurrentDrawerIdx].Id == p.Id
 }
 
-var words = []string{"apple", "banana", "cloud", "house", "tree", "computer", "go", "svelte", "network", "game", "player", "draw", "timer", "guess", "score", "host", "lobby", "react"}
+func generateWordOutline(word string) []string {
+	outline := make([]string, len(word))
+	for i, char := range word {
+		if (char >= 'A' && char <= 'Z') || (char >= 'a' && char <= 'z') {
+			outline[i] = ""
+		} else {
+			outline[i] = string(char)
+		}
+	}
+	return outline
+}
+
+var words = []string{"apple", "banana", "cloud", "house", "tree", "computer", "go", "svelte", "network", "game", "player", "draw", "timer", "guess", "score", "host", "lobby", "react", "hello world", "ice cream", "New York", "rock & roll", "mother-in-law"}
 
 var turnDuration = 59 * time.Second
 
@@ -122,7 +134,7 @@ func (g *Game) sendGameInfo(player *Player) {
 	if state.IsActive && state.CurrentDrawerIdx >= 0 && state.CurrentDrawerIdx < len(state.Players) {
 		drawer := state.Players[state.CurrentDrawerIdx]
 		payload.CurrentDrawerID = drawer.Id
-		payload.WordLength = len(state.Word)
+		payload.WordOutline = generateWordOutline(state.Word)
 		payload.TurnEndTime = state.turnEndTime.UnixMilli()
 	}
 

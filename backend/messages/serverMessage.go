@@ -32,7 +32,7 @@ type GameInfoPayload struct {
 	HostID          string       `json:"hostId,omitempty"`
 	IsGameActive    bool         `json:"isGameActive"`
 	CurrentDrawerID string       `json:"currentDrawerId,omitempty"`
-	WordLength      int          `json:"wordLength,omitempty"`
+	WordOutline     []string     `json:"wordOutline,omitempty"`
 	Word            string       `json:"word,omitempty"` // For drawer
 	TurnEndTime     int64        `json:"turnEndTime,omitempty"`
 }
@@ -51,10 +51,10 @@ type TurnSetupPayload struct {
 }
 
 type TurnStartPayload struct {
-	GamePhase       string `json:"gamePhase"`
-	CurrentDrawerID string `json:"currentDrawerId"`
-	Word            string `json:"word,omitempty"`
-	WordLength      int    `json:"wordLength"`
+	GamePhase       string   `json:"gamePhase"`
+	CurrentDrawerID string   `json:"currentDrawerId"`
+	Word            string   `json:"word,omitempty"`
+	WordOutline     []string `json:"wordOutline"`
 	// TODO: word constants like hyphens and spaces in an array of tuples with their location
 	Players     []PlayerInfo `json:"players"`
 	TurnEndTime int64        `json:"turnEndTime"`
