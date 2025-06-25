@@ -124,6 +124,7 @@ func (g *Game) sendGameInfo(player *Player) {
 	if state.IsActive && state.CurrentDrawerIdx >= 0 && state.CurrentDrawerIdx < len(state.Players) {
 		drawer := state.Players[state.CurrentDrawerIdx]
 		payload.CurrentDrawerID = drawer.Id
+		payload.WordLength = len(state.Word)
 		payload.TurnEndTime = state.turnEndTime.UnixMilli()
 	}
 
