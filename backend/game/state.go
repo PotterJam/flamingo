@@ -2,7 +2,6 @@ package game
 
 import (
 	"backend/messages"
-	"encoding/json"
 	"log"
 	"sync"
 	"time"
@@ -28,8 +27,8 @@ type PlayerOperation struct {
 }
 
 type Broadcaster interface {
-	Broadcast(m messages.Message)
-	BroadcastToPlayers(message messages.Message, players []*Player)
+	Broadcast(msgType string, payload any)
+	BroadcastToPlayers(msgType string, payload any, players []*Player)
 }
 
 // GameState represents the single, shared game session.
@@ -61,14 +60,13 @@ func (g *GameState) broadcastPlayerUpdate() {
 		Players: g.getPlayerInfoList(), // Assumes lock held
 		HostID:  g.HostId,
 	}
-	msg := messages.Message{Type: messages.PlayerUpdateResponse, Payload: json.RawMessage(messages.MustMarshal(payload))}
-	go g.Broadcaster.Broadcast(msg)
+
+	go g.Broadcaster.Broadcast(messages.PlayerUpdateResponse, payload)
 }
 
 func (g *GameState) BroadcastSystemMessage(message string) {
 	payload := messages.ChatPayload{SenderName: "System", Message: message, IsSystem: true}
-	msg := messages.Message{Type: messages.ChatResponse, Payload: json.RawMessage(messages.MustMarshal(payload))}
-	go g.Broadcaster.Broadcast(msg)
+	go g.Broadcaster.Broadcast(messages.ChatResponse, payload)
 }
 
 func (g *GameState) getPlayerInfoList() []messages.PlayerInfo {
@@ -176,6 +174,5 @@ func (g *GameState) checkAllGuessed() bool {
 
 func (g *GameState) BroadcastChatMessage(senderName, message string) {
 	payload := messages.ChatPayload{SenderName: senderName, Message: message, IsSystem: false}
-	msg := messages.Message{Type: messages.ChatResponse, Payload: json.RawMessage(messages.MustMarshal(payload))}
-	go g.Broadcaster.Broadcast(msg)
+	go g.Broadcaster.Broadcast(messages.ChatResponse, payload)
 }

@@ -105,7 +105,9 @@ func (r *Room) Run() {
 	}
 }
 
-func (r *Room) Broadcast(m messages.Message) {
+func (r *Room) Broadcast(msgType string, payload any) {
+	m := messages.Message{Type: msgType, Payload: messages.MustMarshal(payload)}
+
 	r.mu.Lock()
 	// copy first to minimise time lock is held
 	// I'm not convinced this is needed since spawning a go routine is very fast
@@ -127,10 +129,12 @@ func (r *Room) Broadcast(m messages.Message) {
 	}
 }
 
-func (r *Room) BroadcastToPlayers(message messages.Message, players []*game.Player) {
+func (r *Room) BroadcastToPlayers(msgType string, payload any, players []*game.Player) {
+	m := messages.Message{Type: msgType, Payload: messages.MustMarshal(payload)}
+
 	for _, p := range players {
 		go func() {
-			p.Send <- messages.MustMarshal(message)
+			p.Send <- messages.MustMarshal(m)
 		}()
 	}
 }

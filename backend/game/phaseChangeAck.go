@@ -23,8 +23,7 @@ func (p *PhaseChangeHandler) StartPhase(gs *GameState) {
 		NewPhase: p.HandlerToChangeTo.Phase().String(),
 	}
 
-	turnEndMsg := messages.Message{Type: messages.PhaseChangeAckResponse, Payload: json.RawMessage(messages.MustMarshal(ackPayload))}
-	go gs.Broadcaster.Broadcast(turnEndMsg)
+	go gs.Broadcaster.Broadcast(messages.PhaseChangeAckResponse, ackPayload)
 
 	return
 }

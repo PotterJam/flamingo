@@ -44,7 +44,6 @@ func (p *RoundSetupHandler) StartPhase(gs *GameState) {
 	go newDrawer.SendMessage(messages.TurnSetupResponse, drawerPayload)
 
 	guesserPayload := turnPayloadBase
-	msg := messages.Message{Type: messages.TurnSetupResponse, Payload: json.RawMessage(messages.MustMarshal(guesserPayload))}
 	playersToSendTo := make([]*Player, 0, len(gs.Players)-1)
 	for i, p := range gs.Players {
 		if i != gs.CurrentDrawerIdx {
@@ -52,7 +51,7 @@ func (p *RoundSetupHandler) StartPhase(gs *GameState) {
 		}
 	}
 	log.Printf("GameState: Sending TurnSetup (no word choices) to %d guessers", len(playersToSendTo))
-	go gs.Broadcaster.BroadcastToPlayers(msg, playersToSendTo)
+	go gs.Broadcaster.BroadcastToPlayers(messages.TurnSetupResponse, guesserPayload, playersToSendTo)
 
 	gs.BroadcastSystemMessage(newDrawer.Name + " is choosing a word.")
 	return

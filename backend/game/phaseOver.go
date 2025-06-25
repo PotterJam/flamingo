@@ -2,7 +2,6 @@ package game
 
 import (
 	"backend/messages"
-	"encoding/json"
 	"log"
 )
 
@@ -21,13 +20,8 @@ func (p *GameOverHandler) StartPhase(gs *GameState) {
 		Players:   gs.getPlayerInfoList(),
 	}
 
-	gameOverMsg := messages.Message{
-		Type:    messages.GameFinishedResponse,
-		Payload: json.RawMessage(messages.MustMarshal(finalScoresPayload)),
-	}
-
 	log.Printf("GameState: Broadcasting GameFinished message with %d players.", len(finalScoresPayload.Players))
-	go gs.Broadcaster.Broadcast(gameOverMsg)
+	go gs.Broadcaster.Broadcast(messages.GameFinishedResponse, finalScoresPayload)
 }
 
 func (p *GameOverHandler) HandleMessage(gs *GameState, player *Player, msg messages.Message) GamePhaseHandler {
