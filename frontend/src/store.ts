@@ -72,6 +72,7 @@ export interface AppState {
     gameState: GameState;
     roomId: string | null;
     clearCanvas: (() => void) | null;
+    roundCount: number;
 }
 
 const initialAppState: AppState = {
@@ -85,6 +86,7 @@ const initialAppState: AppState = {
     gameState: initialGameState,
     roomId: null,
     clearCanvas: null,
+    roundCount: 3,
 };
 
 const getStoredState = (): Partial<AppState> => {
@@ -169,6 +171,12 @@ export const actions = {
     setClearCanvas: (callback: (() => void) | null) => {
         setStore(produce((state) => {
             state.clearCanvas = callback;
+        }));
+    },
+
+    setRoundCount: (count: number) => {
+        setStore(produce((state) => {
+            state.roundCount = count;
         }));
     },
 

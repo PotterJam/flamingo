@@ -1,5 +1,5 @@
 import { Show } from 'solid-js';
-import { useAppStore } from '../../store';
+import { useAppStore, actions } from '../../store';
 import { OutlineButton } from '../buttons/OutlineButton';
 import { PrimaryButton } from '../buttons/PrimaryButton';
 import PlayerList from '../PlayerList';
@@ -18,7 +18,10 @@ export const LobbyScreen = () => {
 
     const handleStartGame = () => {
         if (canHostStartGame()) {
-            store.sendMessage({ type: 'startGame', payload: null });
+            store.sendMessage({ 
+                type: 'startGame', 
+                payload: { roundCount: store.roundCount } 
+            });
         } else {
             console.warn('Start game attempted but conditions not met.');
         }
@@ -57,6 +60,32 @@ export const LobbyScreen = () => {
                             </OutlineButton>
                         </div>
                     </Show>
+                    
+                    <Show when={isHost()}>
+                        <div class="flex flex-col gap-2">
+                            <label class="text-sm font-medium text-gray-700">
+                                Rounds: {store.roundCount}
+                            </label>
+                            <div class="relative">
+                                <input
+                                    type="range"
+                                    min="1"
+                                    max="5"
+                                    value={store.roundCount}
+                                    onInput={(e) => actions.setRoundCount(parseInt(e.currentTarget.value))}
+                                    class="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer slider"
+                                />
+                                <div class="flex justify-between text-xs text-gray-500 mt-1">
+                                    <span>1</span>
+                                    <span>2</span>
+                                    <span>3</span>
+                                    <span>4</span>
+                                    <span>5</span>
+                                </div>
+                            </div>
+                        </div>
+                    </Show>
+                    
                     <PrimaryButton
                         onClick={handleStartGame}
                         disabled={!canHostStartGame()}

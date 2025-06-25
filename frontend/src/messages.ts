@@ -159,7 +159,9 @@ export interface GuessMsg {
 
 export interface StartGameMsg {
     type: 'startGame';
-    payload: null;
+    payload: {
+        roundCount: number;
+    };
 }
 
 export type SendMsg =
