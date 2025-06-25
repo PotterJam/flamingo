@@ -17,7 +17,8 @@ func (p *GameOverHandler) StartPhase(gs *GameState) {
 	gs.IsActive = false
 
 	finalScoresPayload := messages.GameFinishedPayload{
-		Players: gs.getPlayerInfoList(),
+		GamePhase: p.Phase().String(),
+		Players:   gs.getPlayerInfoList(),
 	}
 
 	gameOverMsg := messages.Message{

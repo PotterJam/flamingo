@@ -16,6 +16,25 @@ import {
 } from './messages';
 import { GamePhase } from './model';
 
+// Map backend phase names to frontend phase names
+const mapBackendPhaseToFrontend = (backendPhase: string): GamePhase => {
+    switch (backendPhase) {
+        case 'WaitingInLobby':
+            return 'Lobby';
+        case 'RoundSetup':
+            return 'WordChoice';
+        case 'RoundInProgress':
+            return 'Guessing';
+        case 'RoundFinished':
+            return 'Guessing'; // Keep showing guessing screen during the brief results phase
+        case 'GameOver':
+            return 'GameEnd';
+        default:
+            console.warn(`Unknown backend phase: ${backendPhase}, defaulting to Lobby`);
+            return 'Lobby';
+    }
+};
+
 export interface GameState {
     gamePhase: GamePhase;
     players: Player[];
@@ -155,6 +174,7 @@ export const actions = {
 
     handleGameInfo: ({ payload }: GameInfoMsg) => {
         setStore(produce((state) => {
+            state.gameState.gamePhase = mapBackendPhaseToFrontend(payload.gamePhase);
             state.gameState.localPlayerId = payload.yourId;
             state.gameState.players = payload.players;
             state.gameState.hostId = payload.hostId;
@@ -164,28 +184,31 @@ export const actions = {
             if (payload.turnEndTime) {
                 state.gameState.turnEndTime = payload.turnEndTime;
             }
+            state.gameState.currentDrawerId = payload.currentDrawerId ?? null;
+            state.gameState.wordLength = payload.wordLength ?? null;
+            state.gameState.turnEndTime = payload.turnEndTime ?? null;
         }));
     },
 
     handleTurnSetup: ({ payload }: TurnSetupMsg) => {
         setStore(produce((state) => {
+            state.gameState.gamePhase = mapBackendPhaseToFrontend(payload.gamePhase);
             state.gameState.currentDrawerId = payload.currentDrawerId;
             state.gameState.wordChoices = payload.wordChoices ?? null;
             state.gameState.players = payload.players;
             state.gameState.turnEndTime = payload.turnEndTime;
-            state.gameState.gamePhase = 'WordChoice' as GamePhase;
         }));
     },
 
     handleTurnStart: ({ payload }: TurnStartMsg) => {
         setStore(produce((state) => {
+            state.gameState.gamePhase = mapBackendPhaseToFrontend(payload.gamePhase);
             state.gameState.wordChoices = null;
             state.gameState.currentDrawerId = payload.currentDrawerId;
             state.gameState.word = payload.word ?? null;
             state.gameState.wordLength = payload.wordLength ?? null;
             state.gameState.players = payload.players;
             state.gameState.turnEndTime = payload.turnEndTime;
-            state.gameState.gamePhase = 'Guessing' as GamePhase;
         }));
         store.clearCanvas?.();
     },
@@ -199,6 +222,7 @@ export const actions = {
 
     handleTurnEnd: ({ payload }: TurnEndMsg) => {
         setStore(produce((state) => {
+            state.gameState.gamePhase = mapBackendPhaseToFrontend(payload.gamePhase);
             state.gameState.players = payload.players;
             state.gameState.turnEndTime = null;
             state.gameState.word = null;
@@ -216,7 +240,7 @@ export const actions = {
 
     handleGameFinished: ({ payload }: GameFinishedMsg) => {
         setStore(produce((state) => {
-            state.gameState.gamePhase = 'GameEnd' as GamePhase;
+            state.gameState.gamePhase = mapBackendPhaseToFrontend(payload.gamePhase);
             state.gameState.players = payload.players;
             state.gameState.currentDrawerId = null;
             state.gameState.word = null;

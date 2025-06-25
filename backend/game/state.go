@@ -110,7 +110,6 @@ const (
 	minPlayersToStart = 2
 )
 
-// sendGameInfo sends the initial game state to a player
 func (g *Game) sendGameInfo(player *Player) {
 	state := g.GameState
 	payload := messages.GameInfoPayload{
@@ -121,15 +120,14 @@ func (g *Game) sendGameInfo(player *Player) {
 		IsGameActive: state.IsActive,
 	}
 
+	// Populate all available game state information
 	if state.IsActive && state.CurrentDrawerIdx >= 0 && state.CurrentDrawerIdx < len(state.Players) {
-		payload.CurrentDrawerID = state.Players[state.CurrentDrawerIdx].Id
-		payload.WordLength = len(state.Word)
+		drawer := state.Players[state.CurrentDrawerIdx]
+		payload.CurrentDrawerID = drawer.Id
 		payload.TurnEndTime = state.turnEndTime.UnixMilli()
-		if player.Id == payload.CurrentDrawerID {
-			payload.Word = state.Word
-		}
 	}
-	log.Printf("GameState: Sending game info to player %s (%s). Active: %t, Host: %s", player.Id, player.Name, payload.IsGameActive, state.HostId)
+
+	log.Printf("GameState: Sending game info to player %s (%s). Active: %t, Phase: %s", player.Id, player.Name, payload.IsGameActive, payload.GamePhase)
 	go player.SendMessage(messages.GameInfoResponse, payload)
 }
 

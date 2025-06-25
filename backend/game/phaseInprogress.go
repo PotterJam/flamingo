@@ -32,9 +32,10 @@ func (p *RoundInProgressHandler) StartPhase(gs *GameState) {
 	gs.timerForTimeout = time.NewTimer(turnDuration)
 
 	turnPayloadBase := messages.TurnStartPayload{
-		CurrentDrawerID: drawer.Id,
+		GamePhase:       p.Phase().String(),
+		CurrentDrawerID: gs.Players[gs.CurrentDrawerIdx].Id,
 		WordLength:      len(gs.Word),
-		Players:         gs.getPlayerInfoList(), // Assumes lock held
+		Players:         gs.getPlayerInfoList(),
 		TurnEndTime:     gs.turnEndTime.UnixMilli(),
 	}
 
