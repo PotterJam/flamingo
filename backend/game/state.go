@@ -2,7 +2,6 @@ package game
 
 import (
 	"backend/messages"
-	"encoding/json"
 	"log"
 	"sync"
 	"time"
@@ -28,8 +27,8 @@ type PlayerOperation struct {
 }
 
 type Broadcaster interface {
-	Broadcast(m messages.Message)
-	BroadcastToPlayers(message messages.Message, players []*Player)
+	Broadcast(msgType string, payload any)
+	BroadcastToPlayers(msgType string, payload any, players []*Player)
 }
 
 // GameState represents the single, shared game session.
@@ -61,14 +60,13 @@ func (g *GameState) broadcastPlayerUpdate() {
 		Players: g.getPlayerInfoList(), // Assumes lock held
 		HostID:  g.HostId,
 	}
-	msg := messages.Message{Type: messages.PlayerUpdateResponse, Payload: json.RawMessage(messages.MustMarshal(payload))}
-	go g.Broadcaster.Broadcast(msg)
+
+	go g.Broadcaster.Broadcast(messages.PlayerUpdateResponse, payload)
 }
 
 func (g *GameState) BroadcastSystemMessage(message string) {
 	payload := messages.ChatPayload{SenderName: "System", Message: message, IsSystem: true}
-	msg := messages.Message{Type: messages.ChatResponse, Payload: json.RawMessage(messages.MustMarshal(payload))}
-	go g.Broadcaster.Broadcast(msg)
+	go g.Broadcaster.Broadcast(messages.ChatResponse, payload)
 }
 
 func (g *GameState) getPlayerInfoList() []messages.PlayerInfo {
@@ -102,7 +100,19 @@ func (g *GameState) isDrawer(p *Player) bool {
 	return g.Players[g.CurrentDrawerIdx].Id == p.Id
 }
 
-var words = []string{"apple", "banana", "cloud", "house", "tree", "computer", "go", "svelte", "network", "game", "player", "draw", "timer", "guess", "score", "host", "lobby", "react"}
+func generateWordOutline(word string) []string {
+	outline := make([]string, len(word))
+	for i, char := range word {
+		if (char >= 'A' && char <= 'Z') || (char >= 'a' && char <= 'z') {
+			outline[i] = ""
+		} else {
+			outline[i] = string(char)
+		}
+	}
+	return outline
+}
+
+var words = []string{"apple", "banana", "cloud", "house", "tree", "computer", "go", "svelte", "network", "game", "player", "draw", "timer", "guess", "score", "host", "lobby", "react", "hello world", "ice cream", "New York", "rock & roll", "mother-in-law"}
 
 var turnDuration = 59 * time.Second
 
@@ -124,7 +134,7 @@ func (g *Game) sendGameInfo(player *Player) {
 	if state.IsActive && state.CurrentDrawerIdx >= 0 && state.CurrentDrawerIdx < len(state.Players) {
 		drawer := state.Players[state.CurrentDrawerIdx]
 		payload.CurrentDrawerID = drawer.Id
-		payload.WordLength = len(state.Word)
+		payload.WordOutline = generateWordOutline(state.Word)
 		payload.TurnEndTime = state.turnEndTime.UnixMilli()
 	}
 
@@ -176,6 +186,5 @@ func (g *GameState) checkAllGuessed() bool {
 
 func (g *GameState) BroadcastChatMessage(senderName, message string) {
 	payload := messages.ChatPayload{SenderName: senderName, Message: message, IsSystem: false}
-	msg := messages.Message{Type: messages.ChatResponse, Payload: json.RawMessage(messages.MustMarshal(payload))}
-	go g.Broadcaster.Broadcast(msg)
+	go g.Broadcaster.Broadcast(messages.ChatResponse, payload)
 }

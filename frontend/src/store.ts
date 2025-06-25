@@ -42,7 +42,7 @@ export interface GameState {
     hostId: string | null;
     localPlayerId: string | null;
     word: string | null;
-    wordLength: number | null;
+    wordOutline: string[] | null;
     wordChoices: string[] | null;
     messages: ChatMessage[];
     turnEndTime: number | null;
@@ -57,7 +57,7 @@ const initialGameState: GameState = {
     localPlayerId: null,
     word: null,
     wordChoices: null,
-    wordLength: null,
+    wordOutline: null,
     messages: [],
     turnEndTime: null,
     lastDrawEvent: null,
@@ -193,7 +193,7 @@ export const actions = {
                 state.gameState.turnEndTime = payload.turnEndTime;
             }
             state.gameState.currentDrawerId = payload.currentDrawerId ?? null;
-            state.gameState.wordLength = payload.wordLength ?? null;
+            state.gameState.wordOutline = payload.wordOutline ?? null;
             state.gameState.turnEndTime = payload.turnEndTime ?? null;
         }));
     },
@@ -214,7 +214,7 @@ export const actions = {
             state.gameState.wordChoices = null;
             state.gameState.currentDrawerId = payload.currentDrawerId;
             state.gameState.word = payload.word ?? null;
-            state.gameState.wordLength = payload.wordLength ?? null;
+            state.gameState.wordOutline = payload.wordOutline ?? null;
             state.gameState.players = payload.players;
             state.gameState.turnEndTime = payload.turnEndTime;
         }));
@@ -234,7 +234,7 @@ export const actions = {
             state.gameState.players = payload.players;
             state.gameState.turnEndTime = null;
             state.gameState.word = null;
-            state.gameState.wordLength = null;
+            state.gameState.wordOutline = null;
             state.gameState.wordChoices = null;
             state.gameState.currentDrawerId = null;
         }));
@@ -252,7 +252,7 @@ export const actions = {
             state.gameState.players = payload.players;
             state.gameState.currentDrawerId = null;
             state.gameState.word = null;
-            state.gameState.wordLength = null;
+            state.gameState.wordOutline = null;
             state.gameState.wordChoices = null;
             state.gameState.turnEndTime = null;
         }));

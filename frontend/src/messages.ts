@@ -20,7 +20,7 @@ export interface GameInfoMsg {
         players: Player[];
         yourId: string;
         currentDrawerId?: string;
-        wordLength?: number;
+        wordOutline?: string[];
         word?: string;
         turnEndTime?: number;
     };
@@ -64,7 +64,7 @@ export interface TurnStartMsg {
         players: Player[];
         turnEndTime: number;
         word?: string; // undefined for guessing players
-        wordLength: number;
+        wordOutline: string[];
     };
 }
 

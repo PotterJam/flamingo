@@ -34,7 +34,7 @@ func (p *RoundInProgressHandler) StartPhase(gs *GameState) {
 	turnPayloadBase := messages.TurnStartPayload{
 		GamePhase:       p.Phase().String(),
 		CurrentDrawerID: gs.Players[gs.CurrentDrawerIdx].Id,
-		WordLength:      len(gs.Word),
+		WordOutline:     generateWordOutline(gs.Word),
 		Players:         gs.getPlayerInfoList(),
 		TurnEndTime:     gs.turnEndTime.UnixMilli(),
 	}
@@ -45,7 +45,6 @@ func (p *RoundInProgressHandler) StartPhase(gs *GameState) {
 	go drawer.SendMessage(messages.TurnStartResponse, drawerPayload)
 
 	guesserPayload := turnPayloadBase
-	msg := messages.Message{Type: messages.TurnStartResponse, Payload: json.RawMessage(messages.MustMarshal(guesserPayload))}
 	playersToSendTo := make([]*Player, 0, len(gs.Players)-1)
 	for i, p := range gs.Players {
 		if i != gs.CurrentDrawerIdx {
@@ -53,7 +52,7 @@ func (p *RoundInProgressHandler) StartPhase(gs *GameState) {
 		}
 	}
 	log.Printf("GameState: Sending TurnStart (no word) to %d guessers", len(playersToSendTo))
-	go gs.Broadcaster.BroadcastToPlayers(msg, playersToSendTo)
+	go gs.Broadcaster.BroadcastToPlayers(messages.TurnStartResponse, guesserPayload, playersToSendTo)
 
 	gs.BroadcastSystemMessage(drawer.Name + " is drawing!")
 	return
@@ -84,7 +83,6 @@ func (p *RoundInProgressHandler) HandleMessage(gs *GameState, player *Player, ms
 			gs.BroadcastChatMessage(player.Name, guessPayload.Guess)
 		}
 	} else if msg.Type == messages.ClientDrawEvent && gs.isDrawer(player) {
-		drawMsg := messages.Message{Type: messages.DrawEventBroadcastResponse, Payload: msg.Payload}
 		playersToSendTo := make([]*Player, 0, len(gs.Players)-1)
 		for _, p := range gs.Players {
 			if p != nil && p.Id != player.Id {
@@ -92,7 +90,7 @@ func (p *RoundInProgressHandler) HandleMessage(gs *GameState, player *Player, ms
 			}
 		}
 
-		go gs.Broadcaster.BroadcastToPlayers(drawMsg, playersToSendTo)
+		go gs.Broadcaster.BroadcastToPlayers(messages.DrawEventBroadcastResponse, msg.Payload, playersToSendTo)
 	}
 	return p
 }

@@ -2,7 +2,6 @@ package game
 
 import (
 	"backend/messages"
-	"encoding/json"
 	"log"
 	"time"
 )
@@ -35,8 +34,8 @@ func (p *RoundFinishedHandler) StartPhase(gs *GameState) {
 		Players:     gs.getPlayerInfoList(),
 		RoundScores: playerRoundScores,
 	}
-	turnEndMsg := messages.Message{Type: messages.TurnEndResponse, Payload: json.RawMessage(messages.MustMarshal(turnEndPayload))}
-	go gs.Broadcaster.Broadcast(turnEndMsg)
+	
+	go gs.Broadcaster.Broadcast(messages.TurnEndResponse, turnEndPayload)
 }
 
 func (p *RoundFinishedHandler) HandleMessage(gs *GameState, player *Player, msg messages.Message) GamePhaseHandler {

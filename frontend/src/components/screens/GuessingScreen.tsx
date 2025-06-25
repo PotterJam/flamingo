@@ -17,7 +17,7 @@ export const GuessingScreen: Component = () => {
     const hostId = () => store.gameState.hostId;
     const localPlayerId = () => store.gameState.localPlayerId;
     const word = () => store.gameState.word;
-    const wordLength = () => store.gameState.wordLength;
+    const wordOutline = () => store.gameState.wordOutline;
     const turnEndTime = () => store.gameState.turnEndTime;
 
     const localPlayer = () => players().find((p) => p.id === localPlayerId());
@@ -65,12 +65,7 @@ export const GuessingScreen: Component = () => {
                             {isLocalPlayerDrawer() ? (
                                 <WordDisplay word={word() ?? ''} />
                             ) : currentDrawerId() ? (
-                                <WordDisplay
-                                    blanks={Array(wordLength() || 0)
-                                        .fill('_')
-                                        .join(' ')}
-                                    length={wordLength() ?? 0}
-                                />
+                                <WordDisplay wordOutline={wordOutline() ?? []} />
                             ) : (
                                 <div class="h-8 md:h-10"></div>
                             )}
