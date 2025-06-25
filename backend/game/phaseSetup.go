@@ -32,8 +32,9 @@ func (p *RoundSetupHandler) StartPhase(gs *GameState) {
 	p.WordToPickFrom = &wordChoices
 
 	turnPayloadBase := messages.TurnSetupPayload{
-		CurrentDrawerID: newDrawer.Id,
-		Players:         gs.getPlayerInfoList(), // Assumes lock held
+		GamePhase:       p.Phase().String(),
+		CurrentDrawerID: gs.Players[gs.CurrentDrawerIdx].Id,
+		Players:         gs.getPlayerInfoList(),
 		TurnEndTime:     gs.turnEndTime.UnixMilli(),
 	}
 

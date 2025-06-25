@@ -14,6 +14,7 @@ export interface LoginMsg {
 export interface GameInfoMsg {
     type: 'gameInfo';
     payload: {
+        gamePhase: string;
         hostId: string;
         isGameActive: boolean;
         players: Player[];
@@ -47,6 +48,7 @@ export interface ChatMsg {
 export interface TurnSetupMsg {
     type: 'turnSetup';
     payload: {
+        gamePhase: string;
         currentDrawerId: string;
         players: Player[];
         turnEndTime: number;
@@ -57,6 +59,7 @@ export interface TurnSetupMsg {
 export interface TurnStartMsg {
     type: 'turnStart';
     payload: {
+        gamePhase: string;
         currentDrawerId: string;
         players: Player[];
         turnEndTime: number;
@@ -68,6 +71,7 @@ export interface TurnStartMsg {
 export interface TurnEndMsg {
     type: 'turnEnd';
     payload: {
+        gamePhase: string;
         correctWord: string;
         players: Player[];
         roundScores: { [playerId: string]: number };
@@ -108,6 +112,7 @@ export interface ErrorMsg {
 export interface GameFinishedMsg {
     type: 'gameFinished';
     payload: {
+        gamePhase: string;
         players: Player[];
     };
 }

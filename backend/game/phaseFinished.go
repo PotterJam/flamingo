@@ -30,6 +30,7 @@ func (p *RoundFinishedHandler) StartPhase(gs *GameState) {
 
 	gs.BroadcastSystemMessage("Turn over! The word was: " + gs.Word)
 	turnEndPayload := messages.TurnEndPayload{
+		GamePhase:   p.Phase().String(),
 		CorrectWord: gs.Word,
 		Players:     gs.getPlayerInfoList(),
 		RoundScores: playerRoundScores,

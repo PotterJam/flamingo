@@ -33,7 +33,7 @@ type GameInfoPayload struct {
 	IsGameActive    bool         `json:"isGameActive"`
 	CurrentDrawerID string       `json:"currentDrawerId,omitempty"`
 	WordLength      int          `json:"wordLength,omitempty"`
-	Word            string       `json:"word,omitempty"` // For drawer on join/rejoin
+	Word            string       `json:"word,omitempty"` // For drawer
 	TurnEndTime     int64        `json:"turnEndTime,omitempty"`
 }
 
@@ -43,6 +43,7 @@ type PlayerUpdatePayload struct {
 }
 
 type TurnSetupPayload struct {
+	GamePhase       string       `json:"gamePhase"`
 	CurrentDrawerID string       `json:"currentDrawerId"`
 	WordChoices     []string     `json:"wordChoices,omitempty"`
 	Players         []PlayerInfo `json:"players"`
@@ -50,6 +51,7 @@ type TurnSetupPayload struct {
 }
 
 type TurnStartPayload struct {
+	GamePhase       string `json:"gamePhase"`
 	CurrentDrawerID string `json:"currentDrawerId"`
 	Word            string `json:"word,omitempty"`
 	WordLength      int    `json:"wordLength"`
@@ -71,11 +73,13 @@ type ChatPayload struct {
 }
 
 type TurnEndPayload struct {
+	GamePhase   string         `json:"gamePhase"`
 	CorrectWord string         `json:"correctWord"`
 	Players     []PlayerInfo   `json:"players"`
 	RoundScores map[string]int `json:"roundScores"`
 }
 
 type GameFinishedPayload struct {
-	Players []PlayerInfo `json:"players"`
+	GamePhase string       `json:"gamePhase"`
+	Players   []PlayerInfo `json:"players"`
 }
