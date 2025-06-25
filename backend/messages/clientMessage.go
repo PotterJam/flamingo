@@ -29,4 +29,6 @@ type DrawEventPayload struct {
 	LineWidth float64 `json:"lineWidth,omitempty"`
 }
 
-// StartGamePayload: No payload needed
+type StartGamePayload struct {
+	RoundCount int `json:"roundCount"`
+}

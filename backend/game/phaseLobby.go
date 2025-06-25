@@ -1,6 +1,10 @@
 package game
 
-import "backend/messages"
+import (
+	"backend/messages"
+	"encoding/json"
+	"log"
+)
 
 type WaitingInLobbyHandler struct{}
 
@@ -13,16 +17,30 @@ func (p *WaitingInLobbyHandler) StartPhase(gs *GameState) {
 }
 
 func (p *WaitingInLobbyHandler) HandleMessage(gs *GameState, player *Player, msg messages.Message) GamePhaseHandler {
-	if msg.Type == messages.ClientStartGame && player.Id == gs.HostId {
-		if len(gs.Players) < minPlayersToStart {
-			gs.BroadcastSystemMessage("Game start aborted, not enough players.")
-		} else if !gs.IsActive {
-			gs.IsActive = true
-			return ackPhaseTransitionTo(&RoundSetupHandler{WordToPickFrom: nil})
-		}
+	if msg.Type != messages.ClientStartGame || player.Id != gs.HostId || gs.IsActive {
+		return p
 	}
 
-	return p
+	if len(gs.Players) < minPlayersToStart {
+		gs.BroadcastSystemMessage("Game start aborted, not enough players.")
+		return p
+	}
+
+	var startGamePayload messages.StartGamePayload
+	if err := json.Unmarshal(msg.Payload, &startGamePayload); err != nil {
+		log.Printf("Error parsing startGame payload: %v", err)
+		return p
+	}
+
+	// Validate round count is within acceptable range
+	if startGamePayload.RoundCount < 1 || startGamePayload.RoundCount > 5 {
+		startGamePayload.RoundCount = 3
+	}
+
+	gs.TotalRounds = startGamePayload.RoundCount
+	gs.IsActive = true
+	log.Printf("GameState: Starting game with %d rounds", gs.TotalRounds)
+	return ackPhaseTransitionTo(&RoundSetupHandler{WordToPickFrom: nil})
 }
 
 func (p *WaitingInLobbyHandler) HandleTimeOut(gs *GameState) GamePhaseHandler {
