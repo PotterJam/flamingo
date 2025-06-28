@@ -77,7 +77,7 @@ func (p *RoundInProgressHandler) HandleMessage(gs *GameState, player *Player, ms
 			gs.BroadcastSystemMessage(player.Name + " guessed the word!")
 
 			if gs.checkAllGuessed() {
-				return ackPhaseTransitionTo(&RoundFinishedHandler{})
+				return ackPhaseTransitionTo(&RoundScoreDisplayHandler{})
 			}
 		} else {
 			gs.BroadcastChatMessage(player.Name, guessPayload.Guess)
@@ -96,5 +96,5 @@ func (p *RoundInProgressHandler) HandleMessage(gs *GameState, player *Player, ms
 }
 
 func (p *RoundInProgressHandler) HandleTimeOut(gs *GameState) GamePhaseHandler {
-	return ackPhaseTransitionTo(&RoundFinishedHandler{})
+	return ackPhaseTransitionTo(&RoundScoreDisplayHandler{})
 }

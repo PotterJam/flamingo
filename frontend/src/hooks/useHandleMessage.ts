@@ -38,6 +38,10 @@ export const useHandleMessage = (message: Accessor<ReceivedMsg | null>) => {
                     actions.handleTurnEnd(msg);
                     break;
                 }
+                case 'roundScoreDisplay': {
+                    actions.handleRoundScoreDisplay(msg);
+                    break;
+                }
                 case 'gameFinished': {
                     actions.handleGameFinished(msg);
                     break;

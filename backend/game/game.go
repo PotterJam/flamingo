@@ -183,7 +183,7 @@ func (g *Game) handleRemovePlayer(player *Player) GamePhaseHandler {
 
 		if wasDrawer || allGuessed {
 			log.Printf("GameState: Ending turn early due to player %s leaving (was drawer: %t, all guessed now: %t).", player.Name, wasDrawer, allGuessed)
-			return ackPhaseTransitionTo(&RoundFinishedHandler{})
+			return ackPhaseTransitionTo(&RoundScoreDisplayHandler{})
 		}
 	}
 	return g.GameHandler

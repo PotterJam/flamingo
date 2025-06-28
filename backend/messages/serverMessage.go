@@ -9,6 +9,7 @@ const (
 	DrawEventBroadcastResponse = "drawEvent" // <<< Using "drawEvent" to match frontend expectation
 	TurnSetupResponse          = "turnSetup"
 	TurnEndResponse            = "turnEnd"
+	RoundScoreDisplayResponse  = "roundScoreDisplay"
 	GameFinishedResponse       = "gameFinished"
 	PhaseChangeAckResponse     = "phaseChangeAck"
 )
@@ -77,6 +78,19 @@ type TurnEndPayload struct {
 	CorrectWord string         `json:"correctWord"`
 	Players     []PlayerInfo   `json:"players"`
 	RoundScores map[string]int `json:"roundScores"`
+}
+
+type PlayerScoreGain struct {
+	PlayerID   string `json:"playerId"`
+	PlayerName string `json:"playerName"`
+	ScoreGain  int    `json:"scoreGain"`
+}
+
+type RoundScoreDisplayPayload struct {
+	GamePhase   string            `json:"gamePhase"`
+	CorrectWord string            `json:"correctWord"`
+	ScoreGains  []PlayerScoreGain `json:"scoreGains"`
+	Players     []PlayerInfo      `json:"players"`
 }
 
 type GameFinishedPayload struct {

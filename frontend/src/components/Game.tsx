@@ -3,6 +3,7 @@ import { useAppStore } from '../store';
 import { LobbyScreen } from './screens/LobbyScreen';
 import { GuessingScreen } from './screens/GuessingScreen';
 import { WordChoiceScreen } from './screens/WordChoiceScreen';
+import { ScoreDisplayScreen } from './screens/ScoreDisplayScreen';
 import { GameEndScreen } from './screens/GameEndScreen';
 
 export const CANVAS_WIDTH = 800;
@@ -22,6 +23,9 @@ export const Game = () => {
             </Match>
             <Match when={store.gameState.gamePhase === 'Guessing'}>
                 <GuessingScreen />
+            </Match>
+            <Match when={store.gameState.gamePhase === 'ScoreDisplay'}>
+                <ScoreDisplayScreen />
             </Match>
             <Match when={store.gameState.gamePhase === 'GameEnd'}>
                 <GameEndScreen />

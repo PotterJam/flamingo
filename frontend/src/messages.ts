@@ -78,6 +78,22 @@ export interface TurnEndMsg {
     };
 }
 
+export interface PlayerScoreGain {
+    playerId: string;
+    playerName: string;
+    scoreGain: number;
+}
+
+export interface RoundScoreDisplayMsg {
+    type: 'roundScoreDisplay';
+    payload: {
+        gamePhase: string;
+        correctWord: string;
+        scoreGains: PlayerScoreGain[];
+        players: Player[];
+    };
+}
+
 export type DrawEvent =
     | {
           color: string;
@@ -124,6 +140,7 @@ export type ReceivedMsg =
     | TurnSetupMsg
     | TurnStartMsg
     | TurnEndMsg
+    | RoundScoreDisplayMsg
     | DrawEventMsg
     | ErrorMsg
     | GameFinishedMsg

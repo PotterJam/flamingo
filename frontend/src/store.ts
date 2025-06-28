@@ -6,8 +6,10 @@ import {
     DrawEventMsg,
     GameInfoMsg,
     Player,
+    PlayerScoreGain,
     PlayerUpdateMsg,
     ReceivedMsg,
+    RoundScoreDisplayMsg,
     SendMsg,
     TurnEndMsg,
     TurnSetupMsg,
@@ -25,6 +27,8 @@ const mapBackendPhaseToFrontend = (backendPhase: string): GamePhase => {
             return 'WordChoice';
         case 'RoundInProgress':
             return 'Guessing';
+        case 'RoundScoreDisplay':
+            return 'ScoreDisplay';
         case 'RoundFinished':
             return 'Guessing'; // Keep showing guessing screen during the brief results phase
         case 'GameOver':
@@ -47,6 +51,10 @@ export interface GameState {
     messages: ChatMessage[];
     turnEndTime: number | null;
     lastDrawEvent: DrawEvent | null;
+    scoreDisplay: {
+        correctWord: string;
+        scoreGains: PlayerScoreGain[];
+    } | null;
 }
 
 const initialGameState: GameState = {
@@ -61,6 +69,7 @@ const initialGameState: GameState = {
     messages: [],
     turnEndTime: null,
     lastDrawEvent: null,
+    scoreDisplay: null,
 };
 
 export interface AppState {
@@ -217,6 +226,7 @@ export const actions = {
             state.gameState.wordOutline = payload.wordOutline ?? null;
             state.gameState.players = payload.players;
             state.gameState.turnEndTime = payload.turnEndTime;
+            state.gameState.scoreDisplay = null;
         }));
         store.clearCanvas?.();
     },
@@ -246,6 +256,17 @@ export const actions = {
         }));
     },
 
+    handleRoundScoreDisplay: ({ payload }: RoundScoreDisplayMsg) => {
+        setStore(produce((state) => {
+            state.gameState.gamePhase = mapBackendPhaseToFrontend(payload.gamePhase);
+            state.gameState.scoreDisplay = {
+                correctWord: payload.correctWord,
+                scoreGains: payload.scoreGains,
+            };
+            state.gameState.players = payload.players;
+        }));
+    },
+
     handleGameFinished: ({ payload }: GameFinishedMsg) => {
         setStore(produce((state) => {
             state.gameState.gamePhase = mapBackendPhaseToFrontend(payload.gamePhase);
@@ -255,6 +276,7 @@ export const actions = {
             state.gameState.wordOutline = null;
             state.gameState.wordChoices = null;
             state.gameState.turnEndTime = null;
+            state.gameState.scoreDisplay = null;
         }));
     },
 };
