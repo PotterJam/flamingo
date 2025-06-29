@@ -76,10 +76,13 @@ func (p *RoundInProgressHandler) HandleMessage(gs *GameState, player *Player, ms
 		if correct {
 			gs.CorrectGuessTimes[player.Id] = time.Now()
 			gs.BroadcastSystemMessage(player.Name + " guessed the word!")
-			
+
 			go player.SendMessage(messages.WordRevealResponse, messages.WordRevealPayload{
 				Word: gs.Word,
 			})
+
+			// Broadcast player update so all clients know this player guessed correctly
+			gs.broadcastPlayerUpdate()
 
 			if gs.checkAllGuessed() {
 				return ackPhaseTransitionTo(&DelayHandler{
