@@ -13,6 +13,7 @@ const (
 	GameFinishedResponse       = "gameFinished"
 	PhaseChangeAckResponse     = "phaseChangeAck"
 	WordRevealResponse         = "wordReveal"
+	TurnHelpResponse           = "turnHelp"
 )
 
 type ErrorPayload struct {
@@ -66,7 +67,10 @@ type PhaseChangeAckPayload struct {
 	NewPhase string `json:"newPhase"`
 }
 
-// TODO: TurnHelpPayload that gives help for people that haven#t guessed the word
+type TurnHelpPayload struct {
+	WordOutline []string `json:"wordOutline"`
+	HintType    string   `json:"hintType"` // "30s", "40s", etc.
+}
 
 type ChatPayload struct {
 	SenderName string `json:"senderName"`

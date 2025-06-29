@@ -50,6 +50,10 @@ export const useHandleMessage = (message: Accessor<ReceivedMsg | null>) => {
                     actions.handleWordReveal(msg);
                     break;
                 }
+                case 'turnHelp': {
+                    actions.handleTurnHelp(msg);
+                    break;
+                }
                 case 'phaseChangeAck': {
                     store.sendMessage(msg);
                     break;

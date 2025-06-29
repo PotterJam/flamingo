@@ -2,7 +2,9 @@ package game
 
 import (
 	"backend/messages"
+	"hash/fnv"
 	"log"
+	"math/rand"
 	"sync"
 	"time"
 )
@@ -31,6 +33,12 @@ type Broadcaster interface {
 	BroadcastToPlayers(msgType string, payload any, players []*Player)
 }
 
+// HintEvent represents a hint that should be sent
+type HintEvent struct {
+	HintLevel int    // 1 for 30s hint, 2 for 40s hint
+	HintType  string // "30s", "40s"
+}
+
 // GameState represents the single, shared game session.
 // TODO: move a bunch of this state into the phases.
 type GameState struct {
@@ -46,6 +54,7 @@ type GameState struct {
 
 	timerForTimeout *time.Timer
 	turnEndTime     time.Time
+	hintEvents      chan HintEvent // Channel for hint events
 
 	TotalRounds                  int
 	CurrentRound                 int
@@ -109,6 +118,65 @@ func generateWordOutline(word string) []string {
 			outline[i] = string(char)
 		}
 	}
+	return outline
+}
+
+// generateWordOutlineWithHints creates a word outline with some letters revealed based on hint level
+// hintLevel: 0 = no hints, 1 = first hint (30s), 2 = second hint (40s)
+// Letters are revealed randomly but deterministically based on the word
+func generateWordOutlineWithHints(word string, hintLevel int) []string {
+	outline := generateWordOutline(word)
+	if hintLevel <= 0 {
+		return outline
+	}
+
+	// Find all letter positions (excluding spaces, hyphens, etc.)
+	letterPositions := make([]int, 0)
+	for i, char := range word {
+		if (char >= 'A' && char <= 'Z') || (char >= 'a' && char <= 'z') {
+			letterPositions = append(letterPositions, i)
+		}
+	}
+
+	if len(letterPositions) == 0 {
+		return outline
+	}
+
+	// Use hash of the word as seed for consistent results
+	hash := fnv.New32a()
+	hash.Write([]byte(word))
+	seed := int64(hash.Sum32())
+
+	// Create a new random generator with the deterministic seed
+	rng := rand.New(rand.NewSource(seed))
+
+	// Don't reveal more letters than available (minus 1 to keep it challenging)
+	maxRevealable := len(letterPositions) - 1
+	if maxRevealable < 1 {
+		maxRevealable = len(letterPositions)
+	}
+
+	lettersToReveal := hintLevel
+	if lettersToReveal > maxRevealable {
+		lettersToReveal = maxRevealable
+	}
+
+	// Generate only the positions we need for this hint level
+	// Since we use the same seed, hint level N will always include
+	// all positions from hint level N-1 plus additional ones
+	usedPositions := make(map[int]bool)
+
+	for i := 0; i < lettersToReveal; i++ {
+		for {
+			pos := letterPositions[rng.Intn(len(letterPositions))]
+			if !usedPositions[pos] {
+				usedPositions[pos] = true
+				outline[pos] = string(word[pos])
+				break
+			}
+		}
+	}
+
 	return outline
 }
 
@@ -187,4 +255,55 @@ func (g *GameState) checkAllGuessed() bool {
 func (g *GameState) BroadcastChatMessage(senderName, message string) {
 	payload := messages.ChatPayload{SenderName: senderName, Message: message, IsSystem: false}
 	go g.Broadcaster.Broadcast(messages.ChatResponse, payload)
+}
+
+// setupHintTimers creates goroutines that will send hint events at 30s and 40s
+func (g *GameState) setupHintTimers() {
+	// Start goroutines for hint timers
+	go func() {
+		time.Sleep(29 * time.Second)
+		select {
+		case g.hintEvents <- HintEvent{HintLevel: 1, HintType: "30s"}:
+		default:
+			// Channel might be closed or full, ignore
+		}
+	}()
+
+	go func() {
+		time.Sleep(39 * time.Second)
+		select {
+		case g.hintEvents <- HintEvent{HintLevel: 2, HintType: "40s"}:
+		default:
+			// Channel might be closed or full, ignore
+		}
+	}()
+}
+
+func (g *GameState) sendHintToGuessers(hintLevel int, hintType string) {
+	if g.Word == "" {
+		return
+	}
+
+	hintOutline := generateWordOutlineWithHints(g.Word, hintLevel)
+
+	playersToSendTo := make([]*Player, 0)
+	for i, player := range g.Players {
+		if i != g.CurrentDrawerIdx { // Skip drawer
+			if _, hasGuessed := g.CorrectGuessTimes[player.Id]; !hasGuessed {
+				playersToSendTo = append(playersToSendTo, player)
+			}
+		}
+	}
+
+	if len(playersToSendTo) == 0 {
+		return
+	}
+
+	hintPayload := messages.TurnHelpPayload{
+		WordOutline: hintOutline,
+		HintType:    hintType,
+	}
+
+	log.Printf("GameState: Sending %s hint to %d players who haven't guessed", hintType, len(playersToSendTo))
+	go g.Broadcaster.BroadcastToPlayers(messages.TurnHelpResponse, hintPayload, playersToSendTo)
 }

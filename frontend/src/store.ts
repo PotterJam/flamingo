@@ -12,6 +12,7 @@ import {
     RoundScoreDisplayMsg,
     SendMsg,
     TurnEndMsg,
+    TurnHelpMsg,
     TurnSetupMsg,
     TurnStartMsg,
     GameFinishedMsg,
@@ -278,6 +279,12 @@ export const actions = {
             state.gameState.wordChoices = null;
             state.gameState.turnEndTime = null;
             state.gameState.scoreDisplay = null;
+        }));
+    },
+
+    handleTurnHelp: ({ payload }: TurnHelpMsg) => {
+        setStore(produce((state) => {
+            state.gameState.wordOutline = payload.wordOutline;
         }));
     },
 

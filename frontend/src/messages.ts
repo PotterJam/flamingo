@@ -147,6 +147,14 @@ export interface WordRevealMsg {
     };
 }
 
+export interface TurnHelpMsg {
+    type: 'turnHelp';
+    payload: {
+        wordOutline: string[];
+        hintType: string; // "30s", "40s", etc.
+    };
+}
+
 export type ReceivedMsg =
     | GameInfoMsg
     | PlayerUpdateMsg
@@ -159,6 +167,7 @@ export type ReceivedMsg =
     | ErrorMsg
     | GameFinishedMsg
     | WordRevealMsg
+    | TurnHelpMsg
     | PhaseChangeAckMsg;
 
 export interface SetNameMsg {

@@ -32,6 +32,8 @@ func (p *RoundInProgressHandler) StartPhase(gs *GameState) {
 	gs.turnEndTime = now.Add(turnDuration)
 	gs.timerForTimeout = time.NewTimer(turnDuration)
 
+	gs.setupHintTimers()
+
 	turnPayloadBase := messages.TurnStartPayload{
 		GamePhase:       p.Phase().String(),
 		CurrentDrawerID: gs.Players[gs.CurrentDrawerIdx].Id,
