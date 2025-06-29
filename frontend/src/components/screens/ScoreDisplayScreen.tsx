@@ -31,7 +31,7 @@ export const ScoreDisplayScreen = () => {
 
     return (
         <Show when={store.gameState.scoreDisplay}>
-            <div class="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50">
+            <div class="fixed inset-0 z-50 flex items-center justify-center bg-black/30 backdrop-blur-sm">
                 <div class="w-full max-w-md rounded-lg bg-white p-8 text-center shadow-xl">
                     <h1 class="mb-4 text-3xl font-bold text-gray-800">
                         Round Complete!
