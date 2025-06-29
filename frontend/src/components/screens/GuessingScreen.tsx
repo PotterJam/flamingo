@@ -62,7 +62,7 @@ export const GuessingScreen: Component = () => {
                 <section class="order-1 flex w-full flex-col rounded-lg bg-white p-6 shadow-lg lg:order-2 lg:flex-1">
                     <div class="mb-4 flex flex-shrink-0 items-center justify-between gap-4">
                         <div class="min-w-0 flex-1 text-center">
-                            {isLocalPlayerDrawer() ? (
+                            {word() && word() !== '' ? (
                                 <WordDisplay word={word() ?? ''} />
                             ) : currentDrawerId() ? (
                                 <WordDisplay wordOutline={wordOutline() ?? []} />

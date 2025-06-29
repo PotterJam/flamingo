@@ -133,6 +133,13 @@ export interface GameFinishedMsg {
     };
 }
 
+export interface WordRevealMsg {
+    type: 'wordReveal';
+    payload: {
+        word: string;
+    };
+}
+
 export type ReceivedMsg =
     | GameInfoMsg
     | PlayerUpdateMsg
@@ -144,6 +151,7 @@ export type ReceivedMsg =
     | DrawEventMsg
     | ErrorMsg
     | GameFinishedMsg
+    | WordRevealMsg
     | PhaseChangeAckMsg;
 
 export interface SetNameMsg {

@@ -46,6 +46,10 @@ export const useHandleMessage = (message: Accessor<ReceivedMsg | null>) => {
                     actions.handleGameFinished(msg);
                     break;
                 }
+                case 'wordReveal': {
+                    actions.handleWordReveal(msg);
+                    break;
+                }
                 case 'phaseChangeAck': {
                     store.sendMessage(msg);
                     break;

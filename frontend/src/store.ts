@@ -15,6 +15,7 @@ import {
     TurnSetupMsg,
     TurnStartMsg,
     GameFinishedMsg,
+    WordRevealMsg,
 } from './messages';
 import { GamePhase } from './model';
 
@@ -277,6 +278,12 @@ export const actions = {
             state.gameState.wordChoices = null;
             state.gameState.turnEndTime = null;
             state.gameState.scoreDisplay = null;
+        }));
+    },
+
+    handleWordReveal: ({ payload }: WordRevealMsg) => {
+        setStore(produce((state) => {
+            state.gameState.word = payload.word;
         }));
     },
 };
