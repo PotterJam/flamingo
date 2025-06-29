@@ -78,7 +78,12 @@ func (p *RoundInProgressHandler) HandleMessage(gs *GameState, player *Player, ms
 			gs.BroadcastSystemMessage(player.Name + " guessed the word!")
 
 			if gs.checkAllGuessed() {
-				return ackPhaseTransitionTo(&RoundScoreDisplayHandler{})
+				return ackPhaseTransitionTo(&DelayHandler{
+					NextPhase:     &RoundScoreDisplayHandler{},
+					DelayDuration: 1 * time.Second,
+					CurrentPhase:  GamePhaseRoundInProgress,
+					DelayMessage:  "Starting 1-second delay before score display (all players guessed)",
+				})
 			}
 		} else {
 			gs.BroadcastChatMessage(player.Name, guessPayload.Guess)
@@ -97,5 +102,10 @@ func (p *RoundInProgressHandler) HandleMessage(gs *GameState, player *Player, ms
 }
 
 func (p *RoundInProgressHandler) HandleTimeOut(gs *GameState) GamePhaseHandler {
-	return ackPhaseTransitionTo(&RoundScoreDisplayHandler{})
+	return ackPhaseTransitionTo(&DelayHandler{
+		NextPhase:     &RoundScoreDisplayHandler{},
+		DelayDuration: 1 * time.Second,
+		CurrentPhase:  GamePhaseRoundInProgress,
+		DelayMessage:  "Starting 1-second delay before score display (timer expired)",
+	})
 }

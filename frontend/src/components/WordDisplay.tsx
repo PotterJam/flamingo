@@ -74,7 +74,7 @@ function WordDisplay(props: WordDisplayProps) {
                             <For each={wordSegments()}>
                                 {(segment) => (
                                     <div class="flex flex-col items-center gap-1">
-                                        <div class="flex gap-0.5">
+                                        <div class="flex gap-1">
                                             <For each={segment.chars}>
                                                 {(char) => (
                                                     <span class="inline-block min-w-[1rem] text-center">
