@@ -42,7 +42,6 @@ func calculateRoundScores(gs *GameState) map[string]int {
 	}
 
 	numGuessers := len(gs.CorrectGuessTimes)
-	allGuessed := gs.checkAllGuessed()
 	firstGuesserID := ""
 	earliestGuessTime := time.Time{}
 
@@ -58,13 +57,25 @@ func calculateRoundScores(gs *GameState) map[string]int {
 		roundScores[playerID] = calculateGuesserScoreAtTime(gs.TurnStartTime, guessTime, turnDuration, isFirst)
 	}
 
-	if numGuessers > 0 && gs.CurrentDrawerIdx >= 0 && gs.CurrentDrawerIdx < len(gs.Players) {
+	if gs.CurrentDrawerIdx >= 0 && gs.CurrentDrawerIdx < len(gs.Players) {
 		drawer := gs.Players[gs.CurrentDrawerIdx]
-		if allGuessed {
-			roundScores[drawer.Id] += drawerFullBonus
+		totalPossibleGuessers := len(gs.Players) - 1 // Everyone except the drawer
+
+		var drawerScore int
+		if totalPossibleGuessers == 0 {
+			// Edge case: only one player in the game
+			drawerScore = 0
+		} else if numGuessers == 0 {
+			drawerScore = -100
+		} else if numGuessers == 1 {
+			drawerScore = 100
 		} else {
-			roundScores[drawer.Id] += drawerPartialBonus
+			// Scale linearly from 100 (one guesser) to 350 (all guessers)
+			ratio := float64(numGuessers-1) / float64(totalPossibleGuessers-1)
+			drawerScore = 100 + int(ratio*250) // 250 = 350 - 100
 		}
+
+		roundScores[drawer.Id] += drawerScore
 	}
 
 	return roundScores
