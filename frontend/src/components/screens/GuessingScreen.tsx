@@ -22,12 +22,13 @@ export const GuessingScreen: Component = () => {
 
     const localPlayer = () => players().find((p) => p.id === localPlayerId());
     const isLocalPlayerDrawer = () => localPlayerId() === currentDrawerId();
-    const canLocalPlayerGuess = () => !isLocalPlayerDrawer() && !localPlayer()?.hasGuessedCorrectly;
 
     const handleGuess = (message: string) => {
-        // Always send the message - server will handle whether it's a guess or chat
-        // Drawers and players who have guessed correctly will have their messages treated as chat
-        sendMessage()({ type: 'guess', payload: { guess: message } });
+        if (isLocalPlayerDrawer() || localPlayer()?.hasGuessedCorrectly) {
+            sendMessage()({ type: 'chat', payload: { message: message } });
+        } else {
+            sendMessage()({ type: 'guess', payload: { guess: message } });
+        }
     };
 
     return (

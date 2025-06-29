@@ -3,6 +3,7 @@ package messages
 const (
 	ClientRegisterUser    = "setName"
 	ClientGuess           = "guess"
+	ClientChat            = "chat"
 	ClientDrawEvent       = "drawEvent"
 	ClientStartGame       = "startGame"
 	ClientSelectRoundWord = "selectRoundWord"
@@ -15,6 +16,10 @@ type SetNamePayload struct {
 
 type GuessPayload struct {
 	Guess string `json:"guess"`
+}
+
+type ClientChatPayload struct {
+	Message string `json:"message"`
 }
 
 type SelectRoundWordPayload struct {

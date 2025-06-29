@@ -45,6 +45,13 @@ export interface ChatMsg {
     payload: ChatMessage;
 }
 
+export interface SendChatMsg {
+    type: 'chat';
+    payload: {
+        message: string;
+    };
+}
+
 export interface TurnSetupMsg {
     type: 'turnSetup';
     payload: {
@@ -193,6 +200,7 @@ export type SendMsg =
     | SetNameMsg
     | DrawEventMsg
     | GuessMsg
+    | SendChatMsg
     | SelectRoundWordMsg
     | StartGameMsg
     | PhaseChangeAckMsg;

@@ -60,24 +60,28 @@ func (p *RoundInProgressHandler) StartPhase(gs *GameState) {
 }
 
 func (p *RoundInProgressHandler) HandleMessage(gs *GameState, player *Player, msg messages.Message) GamePhaseHandler {
-	if msg.Type == messages.ClientGuess {
+	if msg.Type == messages.ClientChat {
+		var chatPayload messages.ClientChatPayload
+		if err := json.Unmarshal(msg.Payload, &chatPayload); err != nil {
+			player.SendError("Invalid chat format.")
+			return p
+		}
+		gs.BroadcastChatMessage(player.Name, chatPayload.Message)
+		return p
+	}
+
+	if msg.Type == messages.ClientGuess && !gs.isDrawer(player) {
+		// If player has already guessed correctly they should be sending chat messages
+		if _, alreadyGuessed := gs.CorrectGuessTimes[player.Id]; alreadyGuessed {
+			return p
+		}
+
 		var guessPayload messages.GuessPayload
 		if err := json.Unmarshal(msg.Payload, &guessPayload); err != nil {
 			player.SendError("Invalid guess format.")
 			return p
 		}
-		
-		if gs.isDrawer(player) {
-			gs.BroadcastChatMessage(player.Name, guessPayload.Guess)
-			return p
-		}
 
-		if _, alreadyGuessed := gs.CorrectGuessTimes[player.Id]; alreadyGuessed {
-			gs.BroadcastChatMessage(player.Name, guessPayload.Guess)
-			return p
-		}
-
-		// Process as a guess attempt
 		correct := strings.EqualFold(guessPayload.Guess, gs.Word)
 
 		if !correct {
@@ -102,7 +106,11 @@ func (p *RoundInProgressHandler) HandleMessage(gs *GameState, player *Player, ms
 				DelayMessage:  "Starting 1-second delay before score display (all players guessed)",
 			})
 		}
-	} else if msg.Type == messages.ClientDrawEvent && gs.isDrawer(player) {
+
+		return p
+	}
+
+	if msg.Type == messages.ClientDrawEvent && gs.isDrawer(player) {
 		playersToSendTo := make([]*Player, 0, len(gs.Players)-1)
 		for _, p := range gs.Players {
 			if p != nil && p.Id != player.Id {
@@ -111,7 +119,9 @@ func (p *RoundInProgressHandler) HandleMessage(gs *GameState, player *Player, ms
 		}
 
 		go gs.Broadcaster.BroadcastToPlayers(messages.DrawEventBroadcastResponse, msg.Payload, playersToSendTo)
+		return p
 	}
+
 	return p
 }
 
