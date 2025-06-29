@@ -13,6 +13,7 @@ func (p *RoundFinishedHandler) Phase() GamePhase {
 }
 
 func (p *RoundFinishedHandler) StartPhase(gs *GameState) {
+	// Calculate and apply round scores to players
 	playerRoundScores := calculateRoundScores(gs)
 
 	for _, player := range gs.Players {
@@ -23,18 +24,18 @@ func (p *RoundFinishedHandler) StartPhase(gs *GameState) {
 
 	gs.PlayersWhoHaveDrawnThisRound = append(gs.PlayersWhoHaveDrawnThisRound, gs.Players[gs.CurrentDrawerIdx].Id)
 
-	finishDelay := 5 * time.Second
-	gs.timerForTimeout = time.NewTimer(finishDelay)
-	gs.turnEndTime = time.Now().Add(finishDelay)
+	// Use very short timeout to immediately proceed to next phase
+	gs.timerForTimeout = time.NewTimer(1 * time.Millisecond)
+	gs.turnEndTime = time.Now().Add(1 * time.Millisecond)
 
-	gs.BroadcastSystemMessage("Turn over! The word was: " + gs.Word)
+	// Send turn end message with updated scores
 	turnEndPayload := messages.TurnEndPayload{
 		GamePhase:   p.Phase().String(),
 		CorrectWord: gs.Word,
-		Players:     gs.getPlayerInfoList(),
+		Players:     gs.getPlayerInfoList(), // Now includes updated scores
 		RoundScores: playerRoundScores,
 	}
-	
+
 	go gs.Broadcaster.Broadcast(messages.TurnEndResponse, turnEndPayload)
 }
 

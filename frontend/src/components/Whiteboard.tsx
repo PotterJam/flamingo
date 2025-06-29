@@ -167,6 +167,17 @@ const Whiteboard: Component<WhiteboardProps> = ({ height, width }) => {
         });
     });
 
+    // Clean up drawing state when player is no longer the drawer
+    createEffect(() => {
+        if (!isDrawer() && isDrawing()) {
+            // Player is no longer the drawer but still has active drawing state
+            setIsDrawing(false);
+            // Remove global event listeners
+            document.removeEventListener('mousemove', globalMouseMove);
+            document.removeEventListener('mouseup', globalMouseUp);
+        }
+    });
+
     createEffect(() => {
         if (!canvasRef) return;
         const ctx = canvasRef.getContext('2d');

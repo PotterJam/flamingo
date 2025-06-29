@@ -28,7 +28,7 @@ function PlayerList(props: PlayerListProps) {
                             const getClassNames = () => {
                                 let classes = "flex items-center gap-2 rounded p-2 text-gray-800 transition-all duration-200";
                                 if (isCurrentDrawer()) classes += " bg-blue-100 font-semibold";
-                                if (hasGuessedCorrectly() && !isCurrentDrawer()) classes += " bg-green-100";
+                                if (hasGuessedCorrectly() && !isCurrentDrawer()) classes += " bg-green-200 text-green-800 font-medium";
                                 if (isHost()) classes += " border border-yellow-500 font-semibold";
                                 return classes;
                             };
@@ -46,13 +46,10 @@ function PlayerList(props: PlayerListProps) {
                                     title={getTitle()}
                                 >
                                     <span class="inline-flex h-5 w-5 flex-shrink-0 items-center justify-center text-lg">
-                                        <Show when={isHost()}>
-                                            👑
-                                        </Show>
-                                        <Show when={isCurrentDrawer() && !isHost()}>
+                                        <Show when={isCurrentDrawer()}>
                                             ✏️
                                         </Show>
-                                        <Show when={hasGuessedCorrectly() && !isCurrentDrawer() && !isHost()}>
+                                        <Show when={hasGuessedCorrectly() && !isCurrentDrawer()}>
                                             <span class="text-green-600">✅</span>
                                         </Show>
                                     </span>

@@ -4,6 +4,7 @@ import (
 	"backend/messages"
 	"encoding/json"
 	"log"
+	"strings"
 	"time"
 )
 
@@ -30,6 +31,8 @@ func (p *RoundInProgressHandler) StartPhase(gs *GameState) {
 	gs.TurnStartTime = now
 	gs.turnEndTime = now.Add(turnDuration)
 	gs.timerForTimeout = time.NewTimer(turnDuration)
+
+	gs.setupHintTimers()
 
 	turnPayloadBase := messages.TurnStartPayload{
 		GamePhase:       p.Phase().String(),
@@ -59,7 +62,18 @@ func (p *RoundInProgressHandler) StartPhase(gs *GameState) {
 }
 
 func (p *RoundInProgressHandler) HandleMessage(gs *GameState, player *Player, msg messages.Message) GamePhaseHandler {
+	if msg.Type == messages.ClientChat {
+		var chatPayload messages.ClientChatPayload
+		if err := json.Unmarshal(msg.Payload, &chatPayload); err != nil {
+			player.SendError("Invalid chat format.")
+			return p
+		}
+		gs.BroadcastChatMessage(player.Name, chatPayload.Message)
+		return p
+	}
+
 	if msg.Type == messages.ClientGuess && !gs.isDrawer(player) {
+		// If player has already guessed correctly they should be sending chat messages
 		if _, alreadyGuessed := gs.CorrectGuessTimes[player.Id]; alreadyGuessed {
 			return p
 		}
@@ -70,19 +84,35 @@ func (p *RoundInProgressHandler) HandleMessage(gs *GameState, player *Player, ms
 			return p
 		}
 
-		correct := guessPayload.Guess == gs.Word
+		correct := strings.EqualFold(guessPayload.Guess, gs.Word)
 
-		if correct {
-			gs.CorrectGuessTimes[player.Id] = time.Now()
-			gs.BroadcastSystemMessage(player.Name + " guessed the word!")
-
-			if gs.checkAllGuessed() {
-				return ackPhaseTransitionTo(&RoundFinishedHandler{})
-			}
-		} else {
+		if !correct {
 			gs.BroadcastChatMessage(player.Name, guessPayload.Guess)
+			return p
 		}
-	} else if msg.Type == messages.ClientDrawEvent && gs.isDrawer(player) {
+
+		gs.CorrectGuessTimes[player.Id] = time.Now()
+		gs.BroadcastSystemMessage(player.Name + " guessed the word!")
+
+		go player.SendMessage(messages.WordRevealResponse, messages.WordRevealPayload{
+			Word: gs.Word,
+		})
+
+		gs.broadcastPlayerUpdate()
+
+		if gs.checkAllGuessed() {
+			return ackPhaseTransitionTo(&DelayHandler{
+				NextPhase:     &RoundScoreDisplayHandler{},
+				DelayDuration: 1 * time.Second,
+				CurrentPhase:  GamePhaseRoundInProgress,
+				DelayMessage:  "Starting 1-second delay before score display (all players guessed)",
+			})
+		}
+
+		return p
+	}
+
+	if msg.Type == messages.ClientDrawEvent && gs.isDrawer(player) {
 		playersToSendTo := make([]*Player, 0, len(gs.Players)-1)
 		for _, p := range gs.Players {
 			if p != nil && p.Id != player.Id {
@@ -91,10 +121,17 @@ func (p *RoundInProgressHandler) HandleMessage(gs *GameState, player *Player, ms
 		}
 
 		go gs.Broadcaster.BroadcastToPlayers(messages.DrawEventBroadcastResponse, msg.Payload, playersToSendTo)
+		return p
 	}
+
 	return p
 }
 
 func (p *RoundInProgressHandler) HandleTimeOut(gs *GameState) GamePhaseHandler {
-	return ackPhaseTransitionTo(&RoundFinishedHandler{})
+	return ackPhaseTransitionTo(&DelayHandler{
+		NextPhase:     &RoundScoreDisplayHandler{},
+		DelayDuration: 1 * time.Second,
+		CurrentPhase:  GamePhaseRoundInProgress,
+		DelayMessage:  "Starting 1-second delay before score display (timer expired)",
+	})
 }

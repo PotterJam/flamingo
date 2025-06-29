@@ -62,7 +62,7 @@ function WordDisplay(props: WordDisplayProps) {
     };
 
     return (
-        <div class="flex min-h-[3rem] items-center justify-center rounded bg-gray-200 p-2 text-center text-2xl font-semibold tracking-widest select-none lg:text-3xl">
+        <div class="flex min-h-[3.5rem] items-center justify-center rounded bg-gray-200 p-2 text-center text-2xl font-semibold tracking-wide select-none lg:text-3xl">
             <Show
                 when={word()}
                 fallback={
@@ -70,21 +70,21 @@ function WordDisplay(props: WordDisplayProps) {
                         when={wordSegments().length > 0}
                         fallback={<span class="text-gray-400">&nbsp;</span>}
                     >
-                        <div class="flex items-center gap-2">
+                        <div class="flex items-center gap-1 pb-5">
                             <For each={wordSegments()}>
                                 {(segment) => (
                                     <div class="flex flex-col items-center gap-1">
                                         <div class="flex gap-1">
                                             <For each={segment.chars}>
                                                 {(char) => (
-                                                    <span class="inline-block min-w-[1.5rem] text-center">
-                                                        {char || '_'}
+                                                    <span class="inline-block min-w-[1rem] text-center">
+                                                        {char ? char : <span class="border-b-4 border-gray-800 inline-block w-4 relative top-4"></span>}
                                                     </span>
                                                 )}
                                             </For>
                                         </div>
                                         <Show when={segment.showLength}>
-                                            <span class="text-sm text-gray-600">
+                                            <span class="text-sm text-gray-600 relative top-2">
                                                 ({segment.length})
                                             </span>
                                         </Show>

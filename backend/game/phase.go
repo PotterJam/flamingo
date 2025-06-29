@@ -8,6 +8,7 @@ const (
 	GamePhaseWaitingInLobby GamePhase = iota
 	GamePhaseRoundSetup
 	GamePhaseRoundInProgress
+	GamePhaseRoundScoreDisplay
 	GamePhaseRoundFinished
 	GamePhaseGameOver
 	GamePhaseError
@@ -15,13 +16,14 @@ const (
 )
 
 var stateName = map[GamePhase]string{
-	GamePhaseWaitingInLobby:  "WaitingInLobby",
-	GamePhaseRoundSetup:      "RoundSetup",
-	GamePhaseRoundInProgress: "RoundInProgress",
-	GamePhaseRoundFinished:   "RoundFinished",
-	GamePhaseGameOver:        "GameOver",
-	GamePhaseError:           "Error",
-	GamePhaseChangeAck:       "PhaseChangeAck",
+	GamePhaseWaitingInLobby:    "WaitingInLobby",
+	GamePhaseRoundSetup:        "RoundSetup",
+	GamePhaseRoundInProgress:   "RoundInProgress",
+	GamePhaseRoundScoreDisplay: "RoundScoreDisplay",
+	GamePhaseRoundFinished:     "RoundFinished",
+	GamePhaseGameOver:          "GameOver",
+	GamePhaseError:             "Error",
+	GamePhaseChangeAck:         "PhaseChangeAck",
 }
 
 func (ss GamePhase) String() string {

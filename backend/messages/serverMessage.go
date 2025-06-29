@@ -9,8 +9,11 @@ const (
 	DrawEventBroadcastResponse = "drawEvent" // <<< Using "drawEvent" to match frontend expectation
 	TurnSetupResponse          = "turnSetup"
 	TurnEndResponse            = "turnEnd"
+	RoundScoreDisplayResponse  = "roundScoreDisplay"
 	GameFinishedResponse       = "gameFinished"
 	PhaseChangeAckResponse     = "phaseChangeAck"
+	WordRevealResponse         = "wordReveal"
+	TurnHelpResponse           = "turnHelp"
 )
 
 type ErrorPayload struct {
@@ -64,7 +67,10 @@ type PhaseChangeAckPayload struct {
 	NewPhase string `json:"newPhase"`
 }
 
-// TODO: TurnHelpPayload that gives help for people that haven#t guessed the word
+type TurnHelpPayload struct {
+	WordOutline []string `json:"wordOutline"`
+	HintType    string   `json:"hintType"` // "30s", "40s", etc.
+}
 
 type ChatPayload struct {
 	SenderName string `json:"senderName"`
@@ -79,7 +85,24 @@ type TurnEndPayload struct {
 	RoundScores map[string]int `json:"roundScores"`
 }
 
+type PlayerScoreGain struct {
+	PlayerID   string `json:"playerId"`
+	PlayerName string `json:"playerName"`
+	ScoreGain  int    `json:"scoreGain"`
+}
+
+type RoundScoreDisplayPayload struct {
+	GamePhase   string            `json:"gamePhase"`
+	CorrectWord string            `json:"correctWord"`
+	ScoreGains  []PlayerScoreGain `json:"scoreGains"`
+	Players     []PlayerInfo      `json:"players"`
+}
+
 type GameFinishedPayload struct {
 	GamePhase string       `json:"gamePhase"`
 	Players   []PlayerInfo `json:"players"`
+}
+
+type WordRevealPayload struct {
+	Word string `json:"word"`
 }

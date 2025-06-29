@@ -59,6 +59,11 @@ func (g *Game) HandleEvents() {
 			newHandler := g.GameHandler.HandleTimeOut(g.GameState)
 			g.updateHandler(newHandler)
 			g.GameState.mu.Unlock()
+
+		case hintEvent := <-g.GameState.hintEvents:
+			g.GameState.mu.Lock()
+			g.GameState.sendHintToGuessers(hintEvent.HintLevel, hintEvent.HintType)
+			g.GameState.mu.Unlock()
 		}
 	}
 }
@@ -89,6 +94,7 @@ func NewGame(b Broadcaster) *Game {
 			Broadcaster:                  b,
 			IsActive:                     false,
 			timerForTimeout:              nil,
+			hintEvents:                   make(chan HintEvent, 5),
 			TotalRounds:                  1, // Default to 1 round (each player draws once)
 			CurrentRound:                 0,
 			PlayersWhoHaveDrawnThisRound: make([]string, 0),
@@ -183,7 +189,7 @@ func (g *Game) handleRemovePlayer(player *Player) GamePhaseHandler {
 
 		if wasDrawer || allGuessed {
 			log.Printf("GameState: Ending turn early due to player %s leaving (was drawer: %t, all guessed now: %t).", player.Name, wasDrawer, allGuessed)
-			return ackPhaseTransitionTo(&RoundFinishedHandler{})
+			return ackPhaseTransitionTo(&RoundScoreDisplayHandler{})
 		}
 	}
 	return g.GameHandler

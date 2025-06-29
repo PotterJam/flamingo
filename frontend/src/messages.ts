@@ -45,6 +45,13 @@ export interface ChatMsg {
     payload: ChatMessage;
 }
 
+export interface SendChatMsg {
+    type: 'chat';
+    payload: {
+        message: string;
+    };
+}
+
 export interface TurnSetupMsg {
     type: 'turnSetup';
     payload: {
@@ -75,6 +82,22 @@ export interface TurnEndMsg {
         correctWord: string;
         players: Player[];
         roundScores: { [playerId: string]: number };
+    };
+}
+
+export interface PlayerScoreGain {
+    playerId: string;
+    playerName: string;
+    scoreGain: number;
+}
+
+export interface RoundScoreDisplayMsg {
+    type: 'roundScoreDisplay';
+    payload: {
+        gamePhase: string;
+        correctWord: string;
+        scoreGains: PlayerScoreGain[];
+        players: Player[];
     };
 }
 
@@ -117,6 +140,21 @@ export interface GameFinishedMsg {
     };
 }
 
+export interface WordRevealMsg {
+    type: 'wordReveal';
+    payload: {
+        word: string;
+    };
+}
+
+export interface TurnHelpMsg {
+    type: 'turnHelp';
+    payload: {
+        wordOutline: string[];
+        hintType: string; // "30s", "40s", etc.
+    };
+}
+
 export type ReceivedMsg =
     | GameInfoMsg
     | PlayerUpdateMsg
@@ -124,9 +162,12 @@ export type ReceivedMsg =
     | TurnSetupMsg
     | TurnStartMsg
     | TurnEndMsg
+    | RoundScoreDisplayMsg
     | DrawEventMsg
     | ErrorMsg
     | GameFinishedMsg
+    | WordRevealMsg
+    | TurnHelpMsg
     | PhaseChangeAckMsg;
 
 export interface SetNameMsg {
@@ -168,6 +209,7 @@ export type SendMsg =
     | SetNameMsg
     | DrawEventMsg
     | GuessMsg
+    | SendChatMsg
     | SelectRoundWordMsg
     | StartGameMsg
     | PhaseChangeAckMsg;
