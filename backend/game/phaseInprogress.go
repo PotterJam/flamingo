@@ -4,6 +4,7 @@ import (
 	"backend/messages"
 	"encoding/json"
 	"log"
+	"strings"
 	"time"
 )
 
@@ -70,7 +71,7 @@ func (p *RoundInProgressHandler) HandleMessage(gs *GameState, player *Player, ms
 			return p
 		}
 
-		correct := guessPayload.Guess == gs.Word
+		correct := strings.EqualFold(guessPayload.Guess, gs.Word)
 
 		if correct {
 			gs.CorrectGuessTimes[player.Id] = time.Now()
