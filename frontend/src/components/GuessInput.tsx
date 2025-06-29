@@ -23,7 +23,7 @@ const GuessInput: Component<GuessInputProps> = ({ onGuess }) => {
                 type="text"
                 value={currentGuess()}
                 onInput={(e) => setCurrentGuess((e.target as HTMLInputElement).value)}
-                placeholder="Type message or guess..."
+                placeholder=""
                 maxLength={50}
                 class="flex-1 min-w-0 rounded border border-gray-300 px-2 py-2 text-sm transition duration-150 ease-in-out focus:ring-2 focus:ring-blue-500 focus:outline-none"
                 aria-label="Type message or guess"

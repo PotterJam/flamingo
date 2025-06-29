@@ -182,7 +182,7 @@ func generateWordOutlineWithHints(word string, hintLevel int) []string {
 
 var words = []string{"apple", "banana", "cloud", "house", "tree", "computer", "go", "svelte", "network", "game", "player", "draw", "timer", "guess", "score", "host", "lobby", "react", "hello world", "ice cream", "New York", "rock & roll", "mother-in-law"}
 
-var turnDuration = 59 * time.Second
+var turnDuration = 49 * time.Second
 
 const (
 	minPlayersToStart = 2
@@ -257,9 +257,7 @@ func (g *GameState) BroadcastChatMessage(senderName, message string) {
 	go g.Broadcaster.Broadcast(messages.ChatResponse, payload)
 }
 
-// setupHintTimers creates goroutines that will send hint events at 30s and 40s
 func (g *GameState) setupHintTimers() {
-	// Start goroutines for hint timers
 	go func() {
 		time.Sleep(29 * time.Second)
 		select {
