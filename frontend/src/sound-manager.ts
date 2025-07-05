@@ -1,7 +1,9 @@
 import correctTone from './assets/sounds/correct-tone.wav';
+import joinTone from './assets/sounds/retro-join.wav';
 
 export const SOUNDS = {
     correct: correctTone,
+    join: joinTone,
 } as const;
 
 export type SoundName = keyof typeof SOUNDS;
