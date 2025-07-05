@@ -180,8 +180,6 @@ func generateWordOutlineWithHints(word string, hintLevel int) []string {
 	return outline
 }
 
-var words = []string{"apple", "banana", "cloud", "house", "tree", "computer", "go", "svelte", "network", "game", "player", "draw", "timer", "guess", "score", "host", "lobby", "react", "hello world", "ice cream", "New York", "rock & roll", "mother-in-law"}
-
 var turnDuration = 49 * time.Second
 
 const (

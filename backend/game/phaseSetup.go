@@ -2,6 +2,7 @@ package game
 
 import (
 	"backend/messages"
+	"backend/words"
 	"encoding/json"
 	"log"
 	"math/rand"
@@ -25,9 +26,9 @@ func (p *RoundSetupHandler) StartPhase(gs *GameState) {
 	newDrawer := gs.Players[gs.CurrentDrawerIdx]
 
 	wordChoices := make([]string, 3)
-	perms := rand.Perm(len(words))
+	perms := rand.Perm(len(words.DefaultWords))
 	for i, r := range perms[:len(wordChoices)] {
-		wordChoices[i] = words[r]
+		wordChoices[i] = words.DefaultWords[r]
 	}
 	p.WordToPickFrom = &wordChoices
 
