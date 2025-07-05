@@ -4,6 +4,7 @@ import { actions } from '../store';
 import { CreateRoomResponse } from '../api';
 import { Logo } from './Logo';
 import { OutlineButton } from './buttons/OutlineButton';
+import { soundManager } from '../sound-manager';
 
 export const RoomConnection = () => {
     const [name, setName] = createSignal('');
@@ -17,6 +18,7 @@ export const RoomConnection = () => {
         });
         const room: CreateRoomResponse = await response.json();
 
+        soundManager.playSound('join');
         actions.nameChosen(name());
         actions.roomCreated(room.roomId);
     };
@@ -29,6 +31,7 @@ export const RoomConnection = () => {
         if (response.status == 200) {
             actions.nameChosen(name());
             setRoomNotFound(false);
+            soundManager.playSound('join');
             actions.joinRoom(roomName());
         }
 
@@ -77,7 +80,10 @@ export const RoomConnection = () => {
                     </OutlineButton>
                 </div>
                 <h3 class="p-2 text-gray-500 italic">or</h3>
-                <PrimaryButton disabled={!name().trim() || !!roomName().trim()} onClick={createRoom}>
+                <PrimaryButton
+                    disabled={!name().trim() || !!roomName().trim()}
+                    onClick={createRoom}
+                >
                     Create room
                 </PrimaryButton>
             </div>
