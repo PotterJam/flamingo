@@ -2,13 +2,11 @@ import { Component, For, Show, createMemo } from 'solid-js';
 import { store } from '../store';
 
 const PlayerList: Component = () => {
-    const sortedPlayers = createMemo(() => {
-        const sorted = [...store.gameState.players].sort((a, b) =>
+    const sortedPlayers = createMemo(() =>
+        [...store.gameState.players].sort((a, b) =>
             a.name.localeCompare(b.name)
-        );
-        console.log(sorted);
-        return sorted;
-    });
+        )
+    );
 
     return (
         <div class="-mr-2 flex-grow overflow-y-auto pr-2">

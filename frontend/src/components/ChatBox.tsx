@@ -5,6 +5,7 @@ function ChatBox() {
     let chatContainerRef: HTMLDivElement | undefined;
 
     createEffect(() => {
+        store.gameState.messages.length;
         if (chatContainerRef) {
             chatContainerRef.scrollTop = chatContainerRef.scrollHeight;
         }
