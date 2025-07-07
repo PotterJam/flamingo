@@ -1,5 +1,5 @@
 import { createEffect, Show } from 'solid-js';
-import { useAppStore, actions } from '../store';
+import { actions, store } from '../store';
 import { Game } from './Game';
 import { useHandleMessage } from '../hooks/useHandleMessage';
 import { useWebSocket } from '../hooks/useWebSocket';
@@ -9,9 +9,10 @@ interface FlamingoProps {
 }
 
 export const Flamingo = (props: FlamingoProps) => {
-    const { isConnected, receivedMessage, sendMessage } = useWebSocket(props.wsUrl);
+    const { isConnected, receivedMessage, sendMessage } = useWebSocket(
+        props.wsUrl
+    );
     useHandleMessage(receivedMessage);
-    const store = useAppStore();
 
     createEffect(() => {
         actions.assignSendMessage(sendMessage);

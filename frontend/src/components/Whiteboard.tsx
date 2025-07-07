@@ -1,5 +1,5 @@
 import { createSignal, createEffect, onCleanup, Component } from 'solid-js';
-import { useAppStore, actions } from '../store';
+import { actions, store } from '../store';
 import { DrawEvent } from '../messages';
 import classNames from 'classnames';
 
@@ -44,7 +44,6 @@ const Whiteboard: Component<WhiteboardProps> = ({ height, width }) => {
     const [selectedColour, setSelectedColour] = createSignal<keyof typeof PALETTE>('black');
     const [selectedThickness, setSelectedThickness] = createSignal(3);
 
-    const store = useAppStore();
     const lastDrawEvent = () => store.gameState.lastDrawEvent;
     const isDrawer = () => store.gameState.localPlayerId === store.gameState.currentDrawerId;
 

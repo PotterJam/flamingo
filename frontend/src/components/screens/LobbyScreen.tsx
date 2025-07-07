@@ -1,5 +1,5 @@
 import { Show } from 'solid-js';
-import { useAppStore, actions } from '../../store';
+import { actions, store } from '../../store';
 import { OutlineButton } from '../buttons/OutlineButton';
 import { PrimaryButton } from '../buttons/PrimaryButton';
 import PlayerList from '../PlayerList';
@@ -7,8 +7,6 @@ import { CANVAS_HEIGHT } from '../Game';
 import { MIN_PLAYERS } from '../../App';
 
 export const LobbyScreen = () => {
-    const store = useAppStore();
-
     const isHost = () =>
         store.gameState.localPlayerId === store.gameState.hostId;
     const canHostStartGame = () =>
@@ -40,11 +38,7 @@ export const LobbyScreen = () => {
                         Players ({store.gameState.players.length})
                     </h2>
                     <div class="mb-4 min-h-0 flex-shrink overflow-y-auto">
-                        <PlayerList
-                            players={store.gameState.players}
-                            currentDrawerId={store.gameState.currentDrawerId}
-                            hostId={store.gameState.hostId}
-                        />
+                        <PlayerList />
                     </div>
                 </div>
 

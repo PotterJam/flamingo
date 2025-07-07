@@ -1,18 +1,16 @@
 import { Switch, Match } from 'solid-js';
-import { useAppStore } from '../store';
 import { LobbyScreen } from './screens/LobbyScreen';
 import { GuessingScreen } from './screens/GuessingScreen';
 import { WordChoiceScreen } from './screens/WordChoiceScreen';
 import { ScoreDisplayScreen } from './screens/ScoreDisplayScreen';
 import { GameEndScreen } from './screens/GameEndScreen';
+import { store } from '../store';
 
 export const CANVAS_WIDTH = 800;
 export const CANVAS_HEIGHT = 600;
 export const MIN_PLAYERS = 2;
 
 export const Game = () => {
-    const store = useAppStore();
-
     return (
         <Switch>
             <Match when={store.gameState.gamePhase === 'Lobby'}>

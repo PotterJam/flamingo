@@ -1,5 +1,5 @@
 import { For, createMemo } from 'solid-js';
-import { useAppStore } from '../../store';
+import { store } from '../../store';
 
 const getMedal = (index: number): string => {
     switch (index) {
@@ -15,7 +15,6 @@ const getMedal = (index: number): string => {
 };
 
 export const GameEndScreen = () => {
-    const store = useAppStore();
     const sortedPlayers = createMemo(() => 
         [...store.gameState.players].sort((a, b) => b.score - a.score)
     );

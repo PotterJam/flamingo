@@ -1,5 +1,4 @@
 import { Component } from 'solid-js';
-import { useAppStore } from '../../store';
 import { CANVAS_HEIGHT, CANVAS_WIDTH } from '../Game';
 import PlayerList from '../PlayerList';
 import ChatBox from '../ChatBox';
@@ -7,10 +6,9 @@ import WordDisplay from '../WordDisplay';
 import TimerDisplay from '../TimerDisplay';
 import Whiteboard from '../Whiteboard';
 import GuessInput from '../GuessInput';
+import { store } from '../../store';
 
 export const GuessingScreen: Component = () => {
-    const store = useAppStore();
-    
     const sendMessage = () => store.sendMessage;
     const players = () => store.gameState.players;
     const currentDrawerId = () => store.gameState.currentDrawerId;
@@ -40,17 +38,13 @@ export const GuessingScreen: Component = () => {
                 {/* Players Panel */}
                 <aside
                     class="flex w-full flex-shrink-0 flex-col gap-4 rounded-lg bg-white p-4 shadow-lg lg:order-1 lg:w-[250px]"
-                    style={{ "max-height": `${CANVAS_HEIGHT + 100}px` }}
+                    style={{ 'max-height': `${CANVAS_HEIGHT + 100}px` }}
                 >
                     <h2 class="flex-shrink-0 border-b pb-2 text-xl font-semibold">
                         Players ({players().length})
                     </h2>
                     <div class="min-h-0 flex-grow overflow-y-auto">
-                        <PlayerList
-                            players={players()}
-                            currentDrawerId={currentDrawerId()}
-                            hostId={hostId()}
-                        />
+                        <PlayerList />
                     </div>
                 </aside>
 
@@ -61,7 +55,9 @@ export const GuessingScreen: Component = () => {
                             {word() && word() !== '' ? (
                                 <WordDisplay word={word() ?? ''} />
                             ) : currentDrawerId() ? (
-                                <WordDisplay wordOutline={wordOutline() ?? []} />
+                                <WordDisplay
+                                    wordOutline={wordOutline() ?? []}
+                                />
                             ) : (
                                 <div class="h-8 md:h-10"></div>
                             )}
@@ -83,7 +79,7 @@ export const GuessingScreen: Component = () => {
                 {/* Chat Panel */}
                 <aside
                     class="flex w-full flex-shrink-0 flex-col gap-4 rounded-lg bg-white p-4 shadow-lg lg:order-3 lg:w-[250px]"
-                    style={{ "max-height": `${CANVAS_HEIGHT + 100}px` }}
+                    style={{ 'max-height': `${CANVAS_HEIGHT + 100}px` }}
                 >
                     <h2 class="flex-shrink-0 border-b pb-2 text-xl font-semibold">
                         Chat
@@ -91,7 +87,7 @@ export const GuessingScreen: Component = () => {
                     <div class="min-h-0 flex-grow overflow-y-hidden">
                         <ChatBox />
                     </div>
-                    
+
                     <div class="flex-shrink-0">
                         <GuessInput onGuess={handleGuess} />
                     </div>
@@ -100,3 +96,4 @@ export const GuessingScreen: Component = () => {
         </div>
     );
 };
+
