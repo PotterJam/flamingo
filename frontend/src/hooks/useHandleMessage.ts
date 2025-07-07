@@ -48,6 +48,7 @@ export const useHandleMessage = (message: Accessor<ReceivedMsg | null>) => {
                     break;
                 }
                 case 'wordReveal': {
+                    soundManager.playSound('correctGuess');
                     actions.handleWordReveal(msg);
                     break;
                 }
