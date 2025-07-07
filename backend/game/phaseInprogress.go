@@ -40,6 +40,8 @@ func (p *RoundInProgressHandler) StartPhase(gs *GameState) {
 		WordOutline:     generateWordOutline(gs.Word),
 		Players:         gs.getPlayerInfoList(),
 		TurnEndTime:     gs.turnEndTime.UnixMilli(),
+		TotalRounds:     gs.TotalRounds,
+		CurrentRound:    gs.CurrentRound,
 	}
 
 	drawerPayload := turnPayloadBase
