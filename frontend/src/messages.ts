@@ -23,6 +23,8 @@ export interface GameInfoMsg {
         wordOutline?: string[];
         word?: string;
         turnEndTime?: number;
+        totalRounds: number;
+        currentRound: number;
     };
 }
 
