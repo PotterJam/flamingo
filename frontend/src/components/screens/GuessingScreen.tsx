@@ -51,6 +51,10 @@ export const GuessingScreen: Component = () => {
                 {/* Game Area */}
                 <section class="order-2 flex w-full flex-col rounded-lg bg-white p-6 shadow-lg lg:flex-1">
                     <div class="mb-4 flex flex-shrink-0 items-center justify-between gap-4">
+                        <div class="text-center text-gray-600">
+                            Round {store.gameState.currentRound} of{' '}
+                            {store.gameState.totalRounds}
+                        </div>
                         <div class="min-w-0 flex-1 text-center">
                             {word() && word() !== '' ? (
                                 <WordDisplay word={word() ?? ''} />
@@ -96,4 +100,3 @@ export const GuessingScreen: Component = () => {
         </div>
     );
 };
-
