@@ -38,6 +38,8 @@ type GameInfoPayload struct {
 	WordOutline     []string     `json:"wordOutline,omitempty"`
 	Word            string       `json:"word,omitempty"` // For drawer
 	TurnEndTime     int64        `json:"turnEndTime,omitempty"`
+	TotalRounds     int        `json:"totalRounds"`
+	CurrentRound    int        `json:"currentRound"`
 }
 
 type PlayerUpdatePayload struct {
