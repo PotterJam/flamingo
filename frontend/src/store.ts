@@ -237,8 +237,6 @@ export const actions = {
                     payload.currentDrawerId ?? null;
                 state.gameState.wordOutline = payload.wordOutline ?? null;
                 state.gameState.turnEndTime = payload.turnEndTime ?? null;
-                state.gameState.totalRounds = payload.totalRounds;
-                state.gameState.currentRound = payload.currentRound;
             })
         );
     },
@@ -270,6 +268,8 @@ export const actions = {
                 state.gameState.players = payload.players;
                 state.gameState.turnEndTime = payload.turnEndTime;
                 state.gameState.scoreDisplay = null;
+                state.gameState.totalRounds = payload.totalRounds;
+                state.gameState.currentRound = payload.currentRound;
             })
         );
         store.clearCanvas?.();

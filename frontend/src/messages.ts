@@ -23,8 +23,6 @@ export interface GameInfoMsg {
         wordOutline?: string[];
         word?: string;
         turnEndTime?: number;
-        totalRounds: number;
-        currentRound: number;
     };
 }
 
@@ -74,6 +72,8 @@ export interface TurnStartMsg {
         turnEndTime: number;
         word?: string; // undefined for guessing players
         wordOutline: string[];
+        totalRounds: number;
+        currentRound: number;
     };
 }
 

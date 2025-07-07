@@ -194,8 +194,6 @@ func (g *Game) sendGameInfo(player *Player) {
 		Players:      state.getPlayerInfoList(),
 		HostID:       state.HostId,
 		IsGameActive: state.IsActive,
-		TotalRounds:  state.TotalRounds,
-		CurrentRound: state.CurrentRound,
 	}
 
 	// Populate all available game state information

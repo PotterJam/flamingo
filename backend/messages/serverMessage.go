@@ -38,8 +38,6 @@ type GameInfoPayload struct {
 	WordOutline     []string     `json:"wordOutline,omitempty"`
 	Word            string       `json:"word,omitempty"` // For drawer
 	TurnEndTime     int64        `json:"turnEndTime,omitempty"`
-	TotalRounds     int        `json:"totalRounds"`
-	CurrentRound    int        `json:"currentRound"`
 }
 
 type PlayerUpdatePayload struct {
@@ -61,8 +59,10 @@ type TurnStartPayload struct {
 	Word            string   `json:"word,omitempty"`
 	WordOutline     []string `json:"wordOutline"`
 	// TODO: word constants like hyphens and spaces in an array of tuples with their location
-	Players     []PlayerInfo `json:"players"`
-	TurnEndTime int64        `json:"turnEndTime"`
+	Players      []PlayerInfo `json:"players"`
+	TurnEndTime  int64        `json:"turnEndTime"`
+	TotalRounds  int          `json:"totalRounds"`
+	CurrentRound int          `json:"currentRound"`
 }
 
 type PhaseChangeAckPayload struct {
