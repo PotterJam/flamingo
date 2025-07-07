@@ -1,6 +1,7 @@
 import { createEffect, Accessor } from 'solid-js';
 import { ReceivedMsg } from '../messages';
 import { actions, store } from '../store';
+import { soundManager } from '../sound-manager';
 
 export const useHandleMessage = (message: Accessor<ReceivedMsg | null>) => {
     createEffect(() => {
@@ -18,6 +19,7 @@ export const useHandleMessage = (message: Accessor<ReceivedMsg | null>) => {
                     break;
                 }
                 case 'turnSetup':
+                    soundManager.startOrContinueMusic();
                     actions.handleTurnSetup(msg);
                     break;
                 case 'turnStart': {
@@ -41,6 +43,7 @@ export const useHandleMessage = (message: Accessor<ReceivedMsg | null>) => {
                     break;
                 }
                 case 'gameFinished': {
+                    soundManager.stopMusic();
                     actions.handleGameFinished(msg);
                     break;
                 }
