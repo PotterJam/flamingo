@@ -48,7 +48,20 @@ function createSoundManager() {
         sound.pause();
     };
 
-    return { loadSounds, playSound, startOrContinueMusic, stopMusic };
+    const startOrContinueCountdown = () => {
+        const sound = sounds['countdown'];
+        if (sound.paused) {
+            sound.volume = 0.7;
+            sound.play();
+        }
+    };
+
+    const stopCountdown = () => {
+        const sound = sounds['countdown'];
+        sound.pause();
+    };
+
+    return { loadSounds, playSound, startOrContinueMusic, stopMusic, startOrContinueCountdown, stopCountdown };
 }
 
 export const soundManager = createSoundManager();

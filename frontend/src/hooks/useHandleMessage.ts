@@ -39,11 +39,13 @@ export const useHandleMessage = (message: Accessor<ReceivedMsg | null>) => {
                     break;
                 }
                 case 'roundScoreDisplay': {
+                    soundManager.stopCountdown();
                     actions.handleRoundScoreDisplay(msg);
                     break;
                 }
                 case 'gameFinished': {
                     soundManager.stopMusic();
+                    soundManager.stopCountdown();
                     actions.handleGameFinished(msg);
                     break;
                 }
