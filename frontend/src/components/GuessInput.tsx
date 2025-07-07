@@ -1,5 +1,7 @@
 import { createSignal, Component } from 'solid-js';
 import { PrimaryButton } from './buttons/PrimaryButton';
+import { autofocus } from '@solid-primitives/autofocus';
+autofocus;
 
 interface GuessInputProps {
     onGuess: (guess: string) => void;
@@ -22,16 +24,20 @@ const GuessInput: Component<GuessInputProps> = ({ onGuess }) => {
             <input
                 type="text"
                 value={currentGuess()}
-                onInput={(e) => setCurrentGuess((e.target as HTMLInputElement).value)}
+                onInput={(e) =>
+                    setCurrentGuess((e.target as HTMLInputElement).value)
+                }
                 placeholder=""
                 maxLength={50}
-                class="flex-1 min-w-0 rounded border border-gray-300 px-2 py-2 text-sm transition duration-150 ease-in-out focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                class="min-w-0 flex-1 rounded border border-gray-300 px-2 py-2 text-sm transition duration-150 ease-in-out focus:ring-2 focus:ring-blue-500 focus:outline-none"
                 aria-label="Type message or guess"
+                use:autofocus
+                autofocus
             />
             <PrimaryButton
                 type="submit"
                 disabled={!currentGuess().trim()}
-                class="flex-shrink-0 px-2 py-2 text-xs w-12"
+                class="w-12 flex-shrink-0 px-2 py-2 text-xs"
             >
                 Send
             </PrimaryButton>
@@ -40,3 +46,4 @@ const GuessInput: Component<GuessInputProps> = ({ onGuess }) => {
 };
 
 export default GuessInput;
+
