@@ -4,6 +4,7 @@ import gameMusicTrack from './assets/sounds/game-music.mp3';
 import wrongGuessTone from './assets/sounds/wrong-guess.mp3';
 import correctGuessTone from './assets/sounds/correct-guess.mp3';
 import otherPlayerCorrectTone from './assets/sounds/other-player-correct.mp3';
+import countdownTone from './assets/sounds/countdown.mp3';
 
 export const SOUNDS = {
     correct: correctTone,
@@ -12,6 +13,7 @@ export const SOUNDS = {
     wrongGuess: wrongGuessTone,
     correctGuess: correctGuessTone,
     otherPlayerCorrect: otherPlayerCorrectTone,
+    countdown: countdownTone,
 } as const;
 
 export type SoundName = keyof typeof SOUNDS;
