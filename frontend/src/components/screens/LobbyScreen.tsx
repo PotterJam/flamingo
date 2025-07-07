@@ -41,9 +41,6 @@ export const LobbyScreen = () => {
                     </h2>
                     <div class="mb-4 min-h-0 flex-shrink overflow-y-auto">
                         <PlayerList
-                            players={store.gameState.players}
-                            currentDrawerId={store.gameState.currentDrawerId}
-                            hostId={store.gameState.hostId}
                         />
                     </div>
                 </div>
