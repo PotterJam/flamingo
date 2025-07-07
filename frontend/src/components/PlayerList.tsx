@@ -1,8 +1,7 @@
 import { Component, For, Show, createMemo } from 'solid-js';
-import { useAppStore } from '../store';
+import { store } from '../store';
 
 const PlayerList: Component = () => {
-    const store = useAppStore();
     const sortedPlayers = createMemo(() => {
         const sorted = [...store.gameState.players].sort((a, b) =>
             a.name.localeCompare(b.name)

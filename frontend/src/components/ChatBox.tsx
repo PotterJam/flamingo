@@ -1,8 +1,7 @@
 import { createEffect, For, Show } from 'solid-js';
-import { useAppStore } from '../store';
+import { store } from '../store';
 
 function ChatBox() {
-    const store = useAppStore();
     let chatContainerRef: HTMLDivElement | undefined;
 
     createEffect(() => {

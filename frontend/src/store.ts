@@ -115,7 +115,7 @@ const getStoredState = (): Partial<AppState> => {
     }
 };
 
-const [store, setStore] = createStore<AppState>({
+export const [store, setStore] = createStore<AppState>({
     ...initialAppState,
     ...getStoredState(),
 });
@@ -125,8 +125,6 @@ createEffect(() => {
     const { sendMessage, ...storeWithoutSendMessage } = store;
     sessionStorage.setItem('flamingo-store', JSON.stringify(storeWithoutSendMessage));
 });
-
-export const useAppStore = () => store;
 
 export const actions = {
     assignSendMessage: (func: (message: SendMsg) => void) => {

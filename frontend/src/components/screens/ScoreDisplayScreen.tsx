@@ -1,5 +1,5 @@
 import { For, Show } from 'solid-js';
-import { useAppStore } from '../../store';
+import { store } from '../../store';
 
 const getPositionIcon = (index: number): string => {
     switch (index) {
@@ -27,8 +27,6 @@ const getScoreChangeText = (scoreGain: number): string => {
 };
 
 export const ScoreDisplayScreen = () => {
-    const store = useAppStore();
-
     return (
         <Show when={store.gameState.scoreDisplay}>
             <div class="fixed inset-0 z-50 flex items-center justify-center bg-black/30 backdrop-blur-sm">
@@ -37,7 +35,10 @@ export const ScoreDisplayScreen = () => {
                         Round Complete!
                     </h1>
                     <p class="mb-6 text-lg text-gray-600">
-                        The word was: <span class="font-bold text-blue-600">{store.gameState.scoreDisplay!.correctWord}</span>
+                        The word was:{' '}
+                        <span class="font-bold text-blue-600">
+                            {store.gameState.scoreDisplay!.correctWord}
+                        </span>
                     </p>
                     <h2 class="mb-4 text-xl font-semibold text-gray-700">
                         Points Earned This Round:
@@ -54,8 +55,13 @@ export const ScoreDisplayScreen = () => {
                                             {scoreGain.playerName}
                                         </span>
                                     </span>
-                                    <span class={`text-lg font-bold ${getScoreChangeColor(scoreGain.scoreGain)}`}>
-                                        {getScoreChangeText(scoreGain.scoreGain)} pts
+                                    <span
+                                        class={`text-lg font-bold ${getScoreChangeColor(scoreGain.scoreGain)}`}
+                                    >
+                                        {getScoreChangeText(
+                                            scoreGain.scoreGain
+                                        )}{' '}
+                                        pts
                                     </span>
                                 </li>
                             )}
@@ -65,4 +71,5 @@ export const ScoreDisplayScreen = () => {
             </div>
         </Show>
     );
-}; 
+};
+

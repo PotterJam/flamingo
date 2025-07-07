@@ -1,10 +1,8 @@
 import { createEffect, Accessor } from 'solid-js';
 import { ReceivedMsg } from '../messages';
-import { actions, useAppStore } from '../store';
+import { actions, store } from '../store';
 
 export const useHandleMessage = (message: Accessor<ReceivedMsg | null>) => {
-    const store = useAppStore();
-
     createEffect(() => {
         const msg = message();
         if (msg) {

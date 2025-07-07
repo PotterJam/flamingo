@@ -1,5 +1,4 @@
 import { Component } from 'solid-js';
-import { useAppStore } from '../../store';
 import { CANVAS_HEIGHT, CANVAS_WIDTH } from '../Game';
 import PlayerList from '../PlayerList';
 import ChatBox from '../ChatBox';
@@ -7,10 +6,9 @@ import WordDisplay from '../WordDisplay';
 import TimerDisplay from '../TimerDisplay';
 import Whiteboard from '../Whiteboard';
 import GuessInput from '../GuessInput';
+import { store } from '../../store';
 
 export const GuessingScreen: Component = () => {
-    const store = useAppStore();
-
     const sendMessage = () => store.sendMessage;
     const players = () => store.gameState.players;
     const currentDrawerId = () => store.gameState.currentDrawerId;
@@ -46,8 +44,7 @@ export const GuessingScreen: Component = () => {
                         Players ({players().length})
                     </h2>
                     <div class="min-h-0 flex-grow overflow-y-auto">
-                        <PlayerList
-                        />
+                        <PlayerList />
                     </div>
                 </aside>
 
