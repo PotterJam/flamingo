@@ -2,21 +2,16 @@ import { Component } from 'solid-js';
 import { CANVAS_HEIGHT, CANVAS_WIDTH } from '../Game';
 import PlayerList from '../PlayerList';
 import ChatBox from '../ChatBox';
-import WordDisplay from '../WordDisplay';
-import TimerDisplay from '../TimerDisplay';
 import Whiteboard from '../Whiteboard';
 import GuessInput from '../GuessInput';
 import { store } from '../../store';
+import { GameHeader } from '../GameHeader';
 
 export const GuessingScreen: Component = () => {
     const sendMessage = () => store.sendMessage;
     const players = () => store.gameState.players;
     const currentDrawerId = () => store.gameState.currentDrawerId;
-    const hostId = () => store.gameState.hostId;
     const localPlayerId = () => store.gameState.localPlayerId;
-    const word = () => store.gameState.word;
-    const wordOutline = () => store.gameState.wordOutline;
-    const turnEndTime = () => store.gameState.turnEndTime;
 
     const localPlayer = () => players().find((p) => p.id === localPlayerId());
     const isLocalPlayerDrawer = () => localPlayerId() === currentDrawerId();
@@ -51,26 +46,7 @@ export const GuessingScreen: Component = () => {
                 {/* Game Area */}
                 <section class="order-2 flex w-full flex-col rounded-lg bg-white p-6 shadow-lg lg:flex-1">
                     <div class="mb-4 flex flex-shrink-0 items-center justify-between gap-4">
-                        <div class="text-center text-gray-600">
-                            Round {(store.gameState.currentRound ?? 1) + 1} of{' '}
-                            {store.gameState.totalRounds}
-                        </div>
-                        <div class="min-w-0 flex-1 text-center">
-                            {word() && word() !== '' ? (
-                                <WordDisplay word={word() ?? ''} />
-                            ) : currentDrawerId() ? (
-                                <WordDisplay
-                                    wordOutline={wordOutline() ?? []}
-                                />
-                            ) : (
-                                <div class="h-8 md:h-10"></div>
-                            )}
-                        </div>
-                        <div class="w-20 flex-shrink-0 text-right">
-                            {turnEndTime() && (
-                                <TimerDisplay endTime={turnEndTime()!} />
-                            )}
-                        </div>
+                        <GameHeader />
                     </div>
                     <div class="relative overflow-hidden bg-white">
                         <Whiteboard
