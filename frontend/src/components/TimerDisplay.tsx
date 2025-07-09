@@ -14,7 +14,10 @@ function TimerDisplay(props: { endTime: number }) {
                 return;
             }
             const now = Date.now();
-            const remaining = Math.max(0, Math.round((props.endTime - now) / 1000));
+            const remaining = Math.max(
+                0,
+                Math.round((props.endTime - now) / 1000)
+            );
             setRemainingSeconds(remaining);
 
             if (remaining === 0 && intervalId) {
