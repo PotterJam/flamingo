@@ -9,7 +9,7 @@ export const GameHeader: Component = () => {
     const turnEndTime = () => store.gameState.turnEndTime;
 
     return (
-        <div class="scanlines-light flex w-full flex-row items-center justify-center gap-4 border-4 border-t-gray-300 border-l-gray-300 border-gray-500 bg-black p-4">
+        <div class="scanlines-light flex w-full flex-row items-center justify-center gap-4 border-4 border-gray-500 border-t-gray-300 border-l-gray-300 bg-black p-4">
             <div class="font-retro translate-y-0.75 text-center text-xl text-amber-400">
                 Rd {(store.gameState.currentRound ?? 1) + 1}/
                 {store.gameState.totalRounds}
