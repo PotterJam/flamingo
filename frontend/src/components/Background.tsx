@@ -3,8 +3,8 @@ import { For } from 'solid-js';
 export const FlamingoBackground = () => {
     const numRows = 30;
     const numCols = 40;
-    const rowHeightRem = 3;
-    const colWidthRem = 9.5;
+    const rowHeightRem = 2.5;
+    const colWidthRem = 10;
 
     const createCells = () => {
         const cells = [];
@@ -29,7 +29,7 @@ export const FlamingoBackground = () => {
                 <For each={cells}>
                     {(cell) => (
                         <span
-                            class="font-lilita text-4xl font-extrabold whitespace-nowrap text-pink-300 opacity-30 select-none absolute"
+                            class="font-retro-display text-lg font-extrabold whitespace-nowrap text-pink-300 opacity-30 select-none absolute"
                             style={{
                                 top: `${cell.top}rem`,
                                 left: `${cell.left}rem`,

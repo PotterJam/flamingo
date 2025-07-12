@@ -9,8 +9,18 @@
     font-display: swap;
 }
 
+@font-face {
+    font-family: "Daydream";
+    src: url("./assets/fonts/Daydream.ttf") format("truetype");
+    font-weight: normal;
+    font-style: normal;
+    font-display: swap;
+}
+
+
 @theme {
     --font-retro: "Abduction";
+    --font-retro-display: "Daydream";
     --font-lilita: 'Lilita One';
 }
 
