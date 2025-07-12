@@ -44,7 +44,7 @@ export const GuessingScreen: Component = () => {
                 </aside>
 
                 {/* Game Area */}
-                <section class="order-2 flex w-full flex-col rounded-lg bg-white p-6 shadow-lg lg:flex-1">
+                <section class="order-2 flex w-full flex-col rounded-sm bg-gray-700 p-6 shadow-lg lg:flex-1">
                     <div class="mb-4 flex flex-shrink-0 items-center justify-between gap-4">
                         <GameHeader />
                     </div>

@@ -10,7 +10,7 @@ export const GameHeader: Component = () => {
 
     return (
         <div class="flex w-full flex-row items-center justify-center gap-4 rounded-xl border-4 border-gray-300 bg-black p-4">
-            <div class="font-retro text-center text-xl text-amber-400 translate-y-0.75">
+            <div class="font-retro translate-y-0.75 text-center text-xl text-amber-400">
                 Rd {(store.gameState.currentRound ?? 1) + 1}/
                 {store.gameState.totalRounds}
             </div>
