@@ -84,18 +84,6 @@ button {
     pointer-events: none;
 }
 
-.purple-dither {
-    background: repeating-linear-gradient(var(--color-purple-700), var(--color-purple-700) 28px, var(--color-purple-600) 48px, var(--color-purple-700));
-}
-
-/* .pixel-purple { */
-/*     background: linear-gradient(135deg, */
-/*             var(--color-red-600) 0%, var(--color-red-600) 25%, */
-/*             var(--color-red-700) 25%, var(--color-red-700) 50%, */
-/*             var(--color-red-800) 50%, var(--color-red-800) 75%, */
-/*             var(--color-red-900) 75%, var(--color-red-900) 100%); */
-/* } */
-/**/
 .pixel-purple {
     background: linear-gradient(135deg,
             var(--color-sky-600) 0%, var(--color-sky-600) 5%,
@@ -107,4 +95,58 @@ button {
             var(--color-sky-600) 93%, var(--color-sky-600) 94%,
             var(--color-sky-800) 94%, var(--color-sky-800) 95%,
             var(--color-sky-600) 95%, var(--color-sky-600) 100%);
+}
+
+/* CRT Effect Keyframes */
+@keyframes crt-flicker {
+    0% {
+        opacity: 0.95;
+        filter: contrast(1) brightness(0.98);
+    }
+
+    25% {
+        opacity: 0.98;
+        filter: contrast(1.02) brightness(0.99);
+    }
+
+    50% {
+        opacity: 1;
+        filter: contrast(1.05) brightness(1);
+    }
+
+    75% {
+        opacity: 0.97;
+        filter: contrast(1.03) brightness(0.99);
+    }
+
+    100% {
+        opacity: 0.95;
+        filter: contrast(1) brightness(0.98);
+    }
+}
+
+@keyframes scanlines-animation {
+    from {
+        background-position: 0 0;
+    }
+
+    to {
+        background-position: 0 -10px;
+    }
+}
+
+.crt-scanlines {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: repeating-linear-gradient(0deg,
+            transparent,
+            transparent 2px,
+            rgba(0, 0, 0, 0.08) 2px,
+            rgba(0, 0, 0, 0.08) 4px);
+    pointer-events: none;
+    z-index: 50;
+    animation: scanlines-animation 0.1s infinite alternate;
 }
