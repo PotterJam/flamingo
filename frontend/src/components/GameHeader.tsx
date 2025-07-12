@@ -9,9 +9,9 @@ export const GameHeader: Component = () => {
     const turnEndTime = () => store.gameState.turnEndTime;
 
     return (
-        <div>
-            <div class="text-center text-gray-600">
-                Round {(store.gameState.currentRound ?? 1) + 1} of{' '}
+        <div class="flex w-full flex-row items-center justify-center gap-4 rounded-xl border-4 border-gray-300 bg-black p-4">
+            <div class="font-retro text-center text-xl text-amber-400 translate-y-0.75">
+                Rd {(store.gameState.currentRound ?? 1) + 1}/
                 {store.gameState.totalRounds}
             </div>
             <div class="min-w-0 flex-1 text-center">

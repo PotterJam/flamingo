@@ -25,36 +25,39 @@ function WordDisplay(props: WordDisplayProps) {
 
         for (let i = 0; i < outline.length; i++) {
             const char = outline[i];
-            const isAlphabetic = char === '' || (char >= 'A' && char <= 'Z') || (char >= 'a' && char <= 'z');
-            
+            const isAlphabetic =
+                char === '' ||
+                (char >= 'A' && char <= 'Z') ||
+                (char >= 'a' && char <= 'z');
+
             if (!isAlphabetic) {
                 // End current alphabetic segment if it exists
                 if (currentSegment.length > 0) {
                     segments.push({
                         chars: currentSegment,
                         length: currentSegment.length,
-                        showLength: true
+                        showLength: true,
                     });
                     currentSegment = [];
                 }
-                
+
                 // Add the non-alphabetic character as its own segment
                 segments.push({
                     chars: [char],
                     length: 1,
-                    showLength: false
+                    showLength: false,
                 });
             } else {
                 currentSegment.push(char);
             }
         }
-        
+
         // Add the last segment if it exists
         if (currentSegment.length > 0) {
             segments.push({
                 chars: currentSegment,
                 length: currentSegment.length,
-                showLength: true
+                showLength: true,
             });
         }
 
@@ -62,7 +65,7 @@ function WordDisplay(props: WordDisplayProps) {
     };
 
     return (
-        <div class="flex min-h-[3.5rem] items-center justify-center rounded bg-gray-200 p-2 text-center text-2xl font-semibold tracking-wide select-none lg:text-3xl">
+        <div class="font-retro flex-1 text-5xl text-amber-400 translate-y-0.75">
             <Show
                 when={word()}
                 fallback={
@@ -78,13 +81,17 @@ function WordDisplay(props: WordDisplayProps) {
                                             <For each={segment.chars}>
                                                 {(char) => (
                                                     <span class="inline-block min-w-[1rem] text-center">
-                                                        {char ? char : <span class="border-b-4 border-gray-800 inline-block w-4 relative top-4"></span>}
+                                                        {char ? (
+                                                            char
+                                                        ) : (
+                                                            <span class="relative top-4 inline-block w-4 border-b-4 border-gray-800"></span>
+                                                        )}
                                                     </span>
                                                 )}
                                             </For>
                                         </div>
                                         <Show when={segment.showLength}>
-                                            <span class="text-sm text-gray-600 relative top-2">
+                                            <span class="relative top-2 text-sm text-gray-600">
                                                 ({segment.length})
                                             </span>
                                         </Show>
