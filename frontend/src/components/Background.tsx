@@ -2,7 +2,7 @@ import { For } from 'solid-js';
 
 export const FlamingoBackground = () => {
     const numRows = 30;
-    const numCols = 40;
+    const numCols = 45; // Extra columns to account for offset and animation movement
     const rowHeightRem = 2.5;
     const colWidthRem = 10;
 
@@ -14,7 +14,7 @@ export const FlamingoBackground = () => {
                 cells.push({
                     id: `${i}-${j}`,
                     top: i * rowHeightRem,
-                    left: j * colWidthRem - (isOffsetRow ? colWidthRem / 2 : 0),
+                    left: j * colWidthRem - (isOffsetRow ? colWidthRem / 2 : 0) - colWidthRem, // Start one column to the left
                 });
             }
         }
@@ -27,18 +27,23 @@ export const FlamingoBackground = () => {
         <div class="fixed inset-0 -z-10 overflow-hidden bg-pink-200">
             <div class="relative h-full w-full">
                 <For each={cells}>
-                    {(cell) => (
-                        <span
-                            class="font-retro-display text-lg font-extrabold whitespace-nowrap text-pink-300 opacity-30 select-none absolute"
-                            style={{
-                                top: `${cell.top}rem`,
-                                left: `${cell.left}rem`,
-                            }}
-                            aria-hidden="true"
-                        >
-                            flamingo
-                        </span>
-                    )}
+                    {(cell) => {
+                        const row = parseInt(cell.id.split('-')[0]);
+                        const rowClass = row % 2 === 0 ? 'bg-row-even' : 'bg-row-odd';
+                        
+                        return (
+                            <span
+                                class={`font-retro-display text-lg font-extrabold whitespace-nowrap text-pink-300 opacity-30 select-none absolute ${rowClass}`}
+                                style={{
+                                    top: `${cell.top}rem`,
+                                    left: `${cell.left}rem`,
+                                }}
+                                aria-hidden="true"
+                            >
+                                flamingo
+                            </span>
+                        );
+                    }}
                 </For>
             </div>
         </div>

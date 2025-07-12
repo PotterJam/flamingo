@@ -97,32 +97,32 @@ button {
             var(--color-sky-600) 95%, var(--color-sky-600) 100%);
 }
 
-/* CRT Effect Keyframes */
-@keyframes crt-flicker {
+@keyframes drift-left {
     0% {
-        opacity: 0.95;
-        filter: contrast(1) brightness(0.98);
-    }
-
-    25% {
-        opacity: 0.98;
-        filter: contrast(1.02) brightness(0.99);
-    }
-
-    50% {
-        opacity: 1;
-        filter: contrast(1.05) brightness(1);
-    }
-
-    75% {
-        opacity: 0.97;
-        filter: contrast(1.03) brightness(0.99);
+        transform: translateX(-100px);
     }
 
     100% {
-        opacity: 0.95;
-        filter: contrast(1) brightness(0.98);
+        transform: translateX(100px);
     }
+}
+
+@keyframes drift-right {
+    0% {
+        transform: translateX(100px);
+    }
+
+    100% {
+        transform: translateX(-100px);
+    }
+}
+
+.bg-row-even {
+    animation: drift-left 45s linear infinite alternate;
+}
+
+.bg-row-odd {
+    animation: drift-right 45s linear infinite alternate;
 }
 
 @keyframes scanlines-animation {
@@ -148,5 +148,5 @@ button {
             rgba(0, 0, 0, 0.08) 4px);
     pointer-events: none;
     z-index: 50;
-    animation: scanlines-animation 0.1s infinite alternate;
+    animation: scanlines-animation 0.2s infinite alternate;
 }
