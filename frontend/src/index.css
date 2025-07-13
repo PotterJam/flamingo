@@ -97,6 +97,19 @@ button {
             var(--color-sky-600) 95%, var(--color-sky-600) 100%);
 }
 
+.pixel-gray {
+    background: linear-gradient(135deg,
+            var(--color-slate-600) 0%, var(--color-slate-600) 5%,
+            var(--color-slate-800) 5%, var(--color-slate-800) 6%,
+            var(--color-slate-600) 6%, var(--color-slate-600) 7%,
+            var(--color-slate-800) 7%, var(--color-slate-800) 10%,
+            var(--color-slate-600) 10%, var(--color-slate-600) 90%,
+            var(--color-slate-800) 90%, var(--color-slate-800) 93%,
+            var(--color-slate-600) 93%, var(--color-slate-600) 94%,
+            var(--color-slate-800) 94%, var(--color-slate-800) 95%,
+            var(--color-slate-600) 95%, var(--color-slate-600) 100%);
+}
+
 @keyframes drift-left {
     0% {
         transform: translateX(-100px);

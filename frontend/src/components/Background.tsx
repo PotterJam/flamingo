@@ -14,7 +14,10 @@ export const FlamingoBackground = () => {
                 cells.push({
                     id: `${i}-${j}`,
                     top: i * rowHeightRem,
-                    left: j * colWidthRem - (isOffsetRow ? colWidthRem / 2 : 0) - colWidthRem, // Start one column to the left
+                    left:
+                        j * colWidthRem -
+                        (isOffsetRow ? colWidthRem / 2 : 0) -
+                        colWidthRem, // Start one column to the left
                 });
             }
         }
@@ -29,11 +32,12 @@ export const FlamingoBackground = () => {
                 <For each={cells}>
                     {(cell) => {
                         const row = parseInt(cell.id.split('-')[0]);
-                        const rowClass = row % 2 === 0 ? 'bg-row-even' : 'bg-row-odd';
-                        
+                        const rowClass =
+                            row % 2 === 0 ? 'bg-row-even' : 'bg-row-odd';
+
                         return (
                             <span
-                                class={`font-retro-display text-lg font-extrabold whitespace-nowrap text-pink-300 opacity-30 select-none absolute ${rowClass}`}
+                                class={`font-retro-display absolute text-lg font-extrabold whitespace-nowrap text-pink-300 opacity-30 select-none ${rowClass}`}
                                 style={{
                                     top: `${cell.top}rem`,
                                     left: `${cell.left}rem`,
