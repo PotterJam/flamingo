@@ -1,7 +1,6 @@
 import { defineConfig } from 'vite';
 import solidPlugin from 'vite-plugin-solid';
 import tailwindcss from '@tailwindcss/vite';
-import path from 'path';
 
 // https://vite.dev/config/
 export default defineConfig({
@@ -16,8 +15,8 @@ export default defineConfig({
             },
             '/create-room': {
                 target: 'http://localhost:8080',
-                changeOrigin: true,
-                secure: false,
+                    changeOrigin: true,
+                    secure: false,
             },
             '/ws': {
                 target: 'ws://localhost:8080',
@@ -29,10 +28,5 @@ export default defineConfig({
     },
     build: {
         target: 'esnext',
-    },
-    resolve: {
-        alias: {
-            '~': path.resolve(__dirname, './src'),
-        },
     },
 });
