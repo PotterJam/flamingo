@@ -21,7 +21,7 @@ function App() {
         <main class="m-auto w-screen">
             <FlamingoBackground />
             {store.roomId ? <Flamingo wsUrl={wsUrl()} /> : <RoomConnection />}
-            <CRTEffect />
+            {/* <CRTEffect /> */}
         </main>
     );
 }

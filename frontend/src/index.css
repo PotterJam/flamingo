@@ -170,7 +170,7 @@ button {
 @custom-variant dark (&:is(.dark *));
 
 :root {
-    --background: oklch(0.93 0.03 256);
+    --background: var(--color-pink-200);
     --foreground: oklch(0.28 0.09 268);
     --primary: oklch(0.72 0.19 260);
     --primary-foreground: oklch(0.28 0.09 268);
