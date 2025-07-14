@@ -1,8 +1,7 @@
 import { Flamingo } from './components/Flamingo';
-import { FlamingoBackground } from './components/Background';
 import { RoomConnection } from './components/RoomConnection';
 import { WS_ROOT } from './hooks/useWebSocket';
-import { onMount } from 'solid-js';
+import { onMount, Show } from 'solid-js';
 import { soundManager } from './sound-manager';
 import { store } from './store';
 
@@ -17,9 +16,10 @@ function App() {
     });
 
     return (
-        <main class="m-auto w-screen">
-            <FlamingoBackground />
-            {store.roomId ? <Flamingo wsUrl={wsUrl()} /> : <RoomConnection />}
+        <main class="flex h-screen w-screen items-center justify-center">
+            <Show when={store.roomId} fallback={<RoomConnection />}>
+                <Flamingo wsUrl={wsUrl()} />
+            </Show>
         </main>
     );
 }
