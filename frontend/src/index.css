@@ -261,7 +261,7 @@ button {
     --spacing-box-shadow-y: 4px;
     --spacing-reverse-box-shadow-x: -4px;
     --spacing-reverse-box-shadow-y: -4px;
-    --radius-base: 5px;
+    --radius-base: 0px;
     --shadow-shadow: var(--shadow);
     --shadow-destructive: var(--shadow-destructive);
 
