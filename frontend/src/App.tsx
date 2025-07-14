@@ -1,7 +1,6 @@
 import { Flamingo } from './components/Flamingo';
 import { FlamingoBackground } from './components/Background';
 import { RoomConnection } from './components/RoomConnection';
-import { CRTEffect } from './components/CRTEffect';
 import { WS_ROOT } from './hooks/useWebSocket';
 import { onMount } from 'solid-js';
 import { soundManager } from './sound-manager';
@@ -21,7 +20,6 @@ function App() {
         <main class="m-auto w-screen">
             <FlamingoBackground />
             {store.roomId ? <Flamingo wsUrl={wsUrl()} /> : <RoomConnection />}
-            {/* <CRTEffect /> */}
         </main>
     );
 }
