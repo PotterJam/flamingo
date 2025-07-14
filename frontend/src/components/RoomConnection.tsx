@@ -46,7 +46,7 @@ export const RoomConnection = () => {
     return (
         <GridBackground>
             <div class="flex h-full w-full flex-col items-center justify-center">
-                <Card class="mx-auto w-full max-w-sm p-6 text-center">
+                <Card class="mx-auto w-full max-w-sm p-6 px-4 text-center">
                     <CardHeader>
                         <Logo />
                     </CardHeader>
@@ -91,7 +91,7 @@ export const RoomConnection = () => {
                                     Join
                                 </Button>
                             </div>
-                            <h3 class="p-2 text-gray-500 italic">or</h3>
+                            <h3 class="p-2 text-gray-700">or</h3>
                             <Button
                                 variant="default"
                                 disabled={!name().trim() || !!roomName().trim()}
