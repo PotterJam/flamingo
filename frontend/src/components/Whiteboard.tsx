@@ -41,11 +41,13 @@ const Whiteboard: Component<WhiteboardProps> = ({ height, width }) => {
     const [isDrawing, setIsDrawing] = createSignal(false);
     let lastPosRef = { x: 0, y: 0 };
 
-    const [selectedColour, setSelectedColour] = createSignal<keyof typeof PALETTE>('black');
+    const [selectedColour, setSelectedColour] =
+        createSignal<keyof typeof PALETTE>('black');
     const [selectedThickness, setSelectedThickness] = createSignal(3);
 
     const lastDrawEvent = () => store.gameState.lastDrawEvent;
-    const isDrawer = () => store.gameState.localPlayerId === store.gameState.currentDrawerId;
+    const isDrawer = () =>
+        store.gameState.localPlayerId === store.gameState.currentDrawerId;
 
     let remoteLastPosRef = { x: 0, y: 0 };
 
@@ -227,7 +229,7 @@ const Whiteboard: Component<WhiteboardProps> = ({ height, width }) => {
         <div class="flex flex-row">
             <canvas
                 ref={canvasRef}
-                class="block rounded-l border-t-2 border-b-2 border-l-2 border-gray-700 bg-white"
+                class="block border-t-4 border-b-4 border-l-4 border-gray-500 border-t-gray-300 border-l-gray-300 bg-white"
                 style={{
                     cursor: isDrawer() ? 'crosshair' : 'default',
                     'touch-action': 'none',
@@ -241,17 +243,25 @@ const Whiteboard: Component<WhiteboardProps> = ({ height, width }) => {
             >
                 Your browser does not support the HTML canvas element.
             </canvas>
-            <div class="flex flex-col gap-2 rounded-r-lg border-t-2 border-r-2 border-b-2 border-gray-700 bg-gray-100 p-2 align-middle">
-                <div
-                    class="mx-auto my-2 h-12 w-12 rounded-full border-1 border-gray-700"
-                    style={{ 'background-color': PALETTE[selectedColour()] }}
-                />
+            <div class="flex flex-col gap-2 border-t-4 border-r-4 border-b-4 border-gray-500 border-t-gray-300 bg-gray-200 p-2 align-middle">
+                <div class="mx-auto my-2 h-12 w-12 border-2 border-gray-500 border-t-gray-300 border-l-gray-300">
+                    <div
+                        class="h-full w-full border-2 border-gray-300 border-t-gray-100 border-l-gray-300"
+                        style={{
+                            'background-color': PALETTE[selectedColour()],
+                        }}
+                    />
+                </div>
                 <div class="grid w-14 grid-cols-2 items-center justify-center">
                     {Object.entries(PALETTE).map(([colour, hex]) => (
                         <div
-                            class="h-7 w-7 cursor-pointer border-gray-700 transition-transform duration-150 ease-in-out hover:scale-130"
+                            class="h-7 w-7 cursor-pointer transition-transform duration-150 ease-in-out hover:scale-130"
                             style={{ 'background-color': hex }}
-                            onClick={() => setSelectedColour(colour as keyof typeof PALETTE)}
+                            onClick={() =>
+                                setSelectedColour(
+                                    colour as keyof typeof PALETTE
+                                )
+                            }
                         />
                     ))}
                 </div>
@@ -261,7 +271,8 @@ const Whiteboard: Component<WhiteboardProps> = ({ height, width }) => {
                             class={classNames(
                                 'flex h-8 w-8 cursor-pointer items-center justify-center rounded-full border border-gray-400 bg-white hover:ring-2 hover:ring-blue-500',
                                 {
-                                    'ring-2 ring-blue-500 ring-offset-1': selectedThickness() === thickness,
+                                    'ring-2 ring-blue-500 ring-offset-1':
+                                        selectedThickness() === thickness,
                                 }
                             )}
                             onClick={() => setSelectedThickness(thickness)}

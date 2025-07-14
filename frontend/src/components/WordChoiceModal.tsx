@@ -1,6 +1,5 @@
 import { For } from 'solid-js';
 import { PrimaryButton } from './buttons/PrimaryButton';
-import TimerDisplay from './TimerDisplay';
 
 interface WordChoiceModalProps {
     wordChoices: string[];
@@ -16,9 +15,6 @@ export const WordChoiceModal = (props: WordChoiceModalProps) => {
                     <h2 class="text-xl font-semibold text-gray-800">
                         Choose a Word
                     </h2>
-                    <div class="w-20 text-right">
-                        <TimerDisplay endTime={props.turnEndTime} />
-                    </div>
                 </div>
                 <p class="mb-6 text-sm text-gray-600">
                     Select one of the words below to draw. Hurry!
@@ -39,4 +35,3 @@ export const WordChoiceModal = (props: WordChoiceModalProps) => {
         </div>
     );
 };
-
