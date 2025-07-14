@@ -172,7 +172,7 @@ button {
 :root {
     --background: var(--color-pink-200);
     --foreground: oklch(0.28 0.09 268);
-    --primary: oklch(0.72 0.19 260);
+    --primary: var(--color-pink-300);
     --primary-foreground: oklch(0.28 0.09 268);
     --secondary-background: oklch(100% 0 0);
     --border: oklch(0.28 0.09 268);

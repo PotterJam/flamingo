@@ -6,6 +6,7 @@ import { Logo } from './Logo';
 import { OutlineButton } from './buttons/OutlineButton';
 import { soundManager } from '../sound-manager';
 import { Card, CardContent, CardHeader } from './ui/card';
+import { Button } from './ui/button';
 
 export const RoomConnection = () => {
     const [name, setName] = createSignal('');
@@ -56,7 +57,7 @@ export const RoomConnection = () => {
                     placeholder="Enter your name"
                     maxLength={20}
                     required
-                    class="w-full rounded border border-gray-300 p-2 transition duration-150 ease-in-out focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                    class="rounded-base border-border placeholder:text-muted-foreground mt-1 flex h-10 w-full border-2 bg-white px-3 py-2 text-sm focus:ring-2 focus:ring-black focus:ring-offset-2 focus:outline-none"
                     aria-label="Enter your name"
                 />
                 <hr class="text-gray-300" />
@@ -74,23 +75,26 @@ export const RoomConnection = () => {
                                 setRoomNotFound(false);
                             }}
                             aria-label="Enter room name to join"
-                            class="w-full flex-1 rounded border border-gray-300 p-2 transition duration-150 ease-in-out focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                            class="rounded-base border-border bg-background placeholder:text-muted-foreground mt-1 flex h-10 w-full border-2 bg-white px-3 py-2 text-sm focus:ring-2 focus:ring-black focus:ring-offset-2 focus:outline-none"
                         />
-                        <OutlineButton
+                        <Button
                             disabled={!(roomName().trim() && name().trim())}
-                            class="flex-0"
+                            variant="outline-no-shadow"
+                            class="mt-1 ml-1"
                             onClick={findRoom}
                         >
                             Join
-                        </OutlineButton>
+                        </Button>
                     </div>
                     <h3 class="p-2 text-gray-500 italic">or</h3>
-                    <PrimaryButton
+                    <Button
+                        variant="default"
                         disabled={!name().trim() || !!roomName().trim()}
                         onClick={createRoom}
+                        class="w-full"
                     >
                         Create room
-                    </PrimaryButton>
+                    </Button>
                 </div>
             </CardContent>
         </Card>
