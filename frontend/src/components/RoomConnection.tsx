@@ -46,7 +46,7 @@ export const RoomConnection = () => {
     return (
         <GridBackground>
             <div class="flex h-full w-full flex-col items-center justify-center">
-                <Card class="mx-auto w-full max-w-sm p-6 px-4 text-center">
+                <Card class="mx-auto w-full max-w-xs p-6 px-2 text-center">
                     <CardHeader>
                         <Logo />
                     </CardHeader>
