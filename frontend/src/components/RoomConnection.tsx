@@ -1,12 +1,11 @@
 import { createSignal } from 'solid-js';
-import { PrimaryButton } from './buttons/PrimaryButton';
 import { actions } from '../store';
 import { CreateRoomResponse } from '../api';
 import { Logo } from './Logo';
-import { OutlineButton } from './buttons/OutlineButton';
 import { soundManager } from '../sound-manager';
 import { Card, CardContent, CardHeader } from './ui/card';
 import { Button } from './ui/button';
+import { Separator } from './ui/separator';
 
 export const RoomConnection = () => {
     const [name, setName] = createSignal('');
@@ -60,7 +59,7 @@ export const RoomConnection = () => {
                     class="rounded-base border-border placeholder:text-muted-foreground mt-1 flex h-10 w-full border-2 bg-white px-3 py-2 text-sm focus:ring-2 focus:ring-black focus:ring-offset-2 focus:outline-none"
                     aria-label="Enter your name"
                 />
-                <hr class="text-gray-300" />
+                <Separator />
                 <div>
                     {roomNotFound() && (
                         <p class="text-red-400">That room doesn't exist</p>
@@ -79,7 +78,7 @@ export const RoomConnection = () => {
                         />
                         <Button
                             disabled={!(roomName().trim() && name().trim())}
-                            variant="outline-no-shadow"
+                            variant="outline"
                             class="mt-1 ml-1"
                             onClick={findRoom}
                         >
