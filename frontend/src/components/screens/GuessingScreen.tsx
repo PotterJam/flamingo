@@ -27,26 +27,19 @@ export const GuessingScreen: Component = () => {
     };
 
     return (
-        <div class="mx-auto flex flex-grow justify-center gap-4">
+        <div class="mx-auto flex max-h-4/5 max-w-[1400px] flex-grow justify-center gap-4">
             <Card class="w-full bg-white p-0">
                 <CardContent class="flex h-full w-full flex-col p-0">
                     <div class="p-2">
-                        <h2 class="text-xl font-bold">Players</h2>
+                        <h2 class="text-lg font-bold">Players</h2>
                         <div class="min-h-0 flex-grow overflow-y-auto">
                             <PlayerList />
                         </div>
                     </div>
-                        <Separator />
-                    <div class="flex h-full w-full flex-1 flex-col">
-                        <ChatBox />
-                        <Separator />
-                        <GuessInput onGuess={handleGuess} />
-                    </div>
                 </CardContent>
             </Card>
 
-            {/* Game Area */}
-            <section class="pixel-purple order-2 flex flex-col border-4 border-blue-300 border-t-blue-200 border-l-blue-200 p-6">
+            <section class="pixel-purple flex flex-col border-4 border-blue-300 border-t-blue-200 border-l-blue-200 p-6">
                 <div class="mb-4 flex items-center justify-between gap-4">
                     <GameHeader />
                 </div>
@@ -54,6 +47,16 @@ export const GuessingScreen: Component = () => {
                     <Whiteboard width={CANVAS_WIDTH} height={CANVAS_HEIGHT} />
                 </div>
             </section>
+
+            <Card class="w-full bg-white p-0">
+                <CardContent class="flex h-full w-full flex-col p-0">
+                    <div class="flex h-full w-full flex-1 flex-col">
+                        <ChatBox />
+                        <Separator />
+                        <GuessInput onGuess={handleGuess} />
+                    </div>
+                </CardContent>
+            </Card>
         </div>
     );
 };
