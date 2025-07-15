@@ -7,6 +7,7 @@ import GuessInput from '../GuessInput';
 import { store } from '../../store';
 import { GameHeader } from '../GameHeader';
 import { Card, CardContent } from '../ui/card';
+import { Separator } from '../ui/separator';
 
 export const GuessingScreen: Component = () => {
     const sendMessage = () => store.sendMessage;
@@ -29,14 +30,16 @@ export const GuessingScreen: Component = () => {
         <div class="mx-auto flex flex-grow justify-center gap-4">
             <Card class="w-full bg-white p-0">
                 <CardContent class="flex h-full w-full flex-col p-0">
-                    <div class="border-b-2 border-blue-950 p-2">
+                    <div class="p-2">
                         <h2 class="text-xl font-bold">Players</h2>
                         <div class="min-h-0 flex-grow overflow-y-auto">
                             <PlayerList />
                         </div>
                     </div>
-                    <div class="h-full w-full flex flex-col flex-1">
+                        <Separator />
+                    <div class="flex h-full w-full flex-1 flex-col">
                         <ChatBox />
+                        <Separator />
                         <GuessInput onGuess={handleGuess} />
                     </div>
                 </CardContent>

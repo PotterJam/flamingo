@@ -14,7 +14,7 @@ function ChatBox() {
     return (
         <div
             ref={chatContainerRef!}
-            class="flex h-full flex-1 flex-col gap-1 overflow-y-auto rounded border border-gray-200 bg-gray-50 p-2 text-sm"
+            class="flex h-full flex-1 flex-col gap-1 overflow-y-auto p-2 text-sm"
         >
             <Show
                 when={store.gameState.messages.length > 0}
@@ -27,7 +27,7 @@ function ChatBox() {
                 <For each={store.gameState.messages}>
                     {(msg) => (
                         <div
-                            class={`break-words ${msg.isSystem ? 'text-gray-600 italic' : 'text-gray-800'}`}
+                            class={`break-words ${msg.isSystem ? 'text-gray-600 italic' : 'text-blue-950'}`}
                         >
                             <Show when={!msg.isSystem}>
                                 <span class="mr-1 font-semibold">

@@ -20,7 +20,7 @@ const GuessInput: Component<GuessInputProps> = ({ onGuess }) => {
     };
 
     return (
-        <form onSubmit={handleSubmit} class="p-4">
+        <form onSubmit={handleSubmit} class="p-2">
             <TextField
                 value={currentGuess()}
                 onChange={(e) => setCurrentGuess(e)}
