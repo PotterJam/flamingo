@@ -22,9 +22,6 @@ const GuessInput: Component<GuessInputProps> = ({ onGuess }) => {
     return (
         <form onSubmit={handleSubmit} class="p-2">
             <TextField
-                value={currentGuess()}
-                onChange={(e) => setCurrentGuess(e)}
-                onSubmit={handleSubmit}
                 class="flex flex-col gap-2"
             >
                 <TextFieldLabel>
@@ -33,9 +30,14 @@ const GuessInput: Component<GuessInputProps> = ({ onGuess }) => {
                         <p>{currentGuess().length}</p>
                     </div>
                 </TextFieldLabel>
-                <TextFieldInput
+                <input
                     type="text"
-                    maxlength={12}
+                    value={currentGuess()}
+                    maxLength={15}
+                    onInput={(e) => {
+                        setCurrentGuess(e.currentTarget.value.trim());
+                    }}
+                    class="rounded-base ring-offset-background border-border bg-background placeholder:text-muted-foreground mt-1 flex h-10 w-full border-2 bg-white px-3 py-2 text-sm focus:ring-2 focus:ring-blue-950 focus:ring-offset-2 focus:outline-none"
                     use:autofocus
                     autofocus
                 />
