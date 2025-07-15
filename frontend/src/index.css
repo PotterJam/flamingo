@@ -206,37 +206,6 @@ button {
     --muted-foreground: oklch(0.556 0 0);
 }
 
-.dark {
-    --background: oklch(0.28 0.09 268);
-    --foreground: oklch(0.97 0.01 255);
-    --primary: oklch(0.62 0.19 260);
-    --primary-foreground: oklch(0.28 0.09 268);
-    --secondary-background: oklch(0.28 0.09 268);
-    --border: oklch(0.97 0.01 255);
-    --ring: oklch(0.97 0.01 255);
-    --overlay: oklch(0.28 0.09 268 / 0.8);
-    --shadow: 4px 4px 0px 0px var(--border);
-    --shadow-destructive: 4px 4px 0px 0px oklch(0 0 0);
-    --chart-1: oklch(0.488 0.243 264.376);
-    --chart-2: oklch(0.696 0.17 162.48);
-    --chart-3: oklch(0.769 0.188 70.08);
-    --chart-4: oklch(0.627 0.265 303.9);
-    --chart-5: oklch(0.645 0.246 16.439);
-    --chart-active-dot: oklch(100% 0 0);
-
-    --info: oklch(0.28 0.0875 267.91);
-    --info-foreground: oklch(0.68 0.148143 238.1044);
-    --success: oklch(0.26 0.0487 172.54);
-    --success-foreground: oklch(0.69 0.1481 162.37);
-    --warning: oklch(0.29 0.0638 53.82);
-    --warning-foreground: oklch(0.71 0.186 48.13);
-    --error: oklch(0.26 0.0886 26.05);
-    --error-foreground: oklch(0.64 0.2082 25.38);
-
-    --muted: oklch(0.269 0 0);
-    --muted-foreground: oklch(0.708 0 0);
-}
-
 @theme inline {
     --color-background: var(--background);
     --color-foreground: var(--foreground);
