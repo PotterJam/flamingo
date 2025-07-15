@@ -45,11 +45,13 @@ export const RoomConnection = () => {
 
     return (
         <GridBackground>
-            <div class="flex h-full w-full flex-col items-center justify-center">
-                <Card class="mx-auto w-full max-w-xs p-6 px-2 text-center">
-                    <CardHeader>
+            <div class="flex h-full w-full flex-col gap-4 items-center justify-center">
+                <Card class="w-full max-w-xs bg-white px-6 py-4">
+                    <CardContent>
                         <Logo />
-                    </CardHeader>
+                    </CardContent>
+                </Card>
+                <Card class="mx-auto w-full max-w-xs p-6 px-2 text-center">
                     <CardContent class="flex flex-col gap-6">
                         <input
                             type="text"
@@ -84,7 +86,7 @@ export const RoomConnection = () => {
                                     disabled={
                                         !(roomName().trim() && name().trim())
                                     }
-                                    variant="outline"
+                                    variant="neutral"
                                     class="mt-1 ml-1"
                                     onClick={findRoom}
                                 >
