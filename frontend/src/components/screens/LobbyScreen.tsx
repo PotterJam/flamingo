@@ -1,4 +1,4 @@
-import { Show } from 'solid-js';
+import { createMemo, For, Show } from 'solid-js';
 import { actions, store } from '../../store';
 import { OutlineButton } from '../buttons/OutlineButton';
 import { PrimaryButton } from '../buttons/PrimaryButton';
@@ -34,7 +34,13 @@ export const LobbyScreen = () => {
                 <div class="flex flex-1 flex-col gap-4 border-r-2 border-black p-4">
                     <h2 class="text-xl font-bold">Players</h2>
                     <div class="overflowy-auto h-full">
-                        <PlayerList />
+                        <ul class="space-y-2">
+                            <For each={store.gameState.players}>
+                                {(player) => {
+                                    return <li>{player.name}</li>;
+                                }}
+                            </For>
+                        </ul>
                     </div>
                 </div>
                 <div
