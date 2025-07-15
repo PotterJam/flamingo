@@ -6,6 +6,7 @@ import Whiteboard from '../Whiteboard';
 import GuessInput from '../GuessInput';
 import { store } from '../../store';
 import { GameHeader } from '../GameHeader';
+import { Card, CardContent } from '../ui/card';
 
 export const GuessingScreen: Component = () => {
     const sendMessage = () => store.sendMessage;
@@ -25,50 +26,31 @@ export const GuessingScreen: Component = () => {
     };
 
     return (
-        <div class="flex w-full flex-grow justify-center">
-            <div
-                class="flex flex-col gap-2 lg:flex-row"
-                style={{ width: `${250 + CANVAS_WIDTH + 250 + 64}px` }}
-            >
-                <aside
-                    class="flex w-full flex-shrink-0 flex-col gap-4 rounded-lg bg-white p-4 shadow-lg lg:order-1 lg:w-[250px]"
-                    style={{ 'max-height': `${CANVAS_HEIGHT + 100}px` }}
-                >
-                    <h2 class="flex-shrink-0 border-b pb-2 text-xl font-semibold">
-                        Players ({players().length})
-                    </h2>
-                    <div class="min-h-0 flex-grow overflow-y-auto">
-                        <PlayerList />
+        <div class="mx-auto flex flex-grow justify-center gap-4">
+            <Card class="w-full bg-white p-0">
+                <CardContent class="flex h-full w-full flex-col p-0">
+                    <div class="border-b-2 border-blue-950 p-2">
+                        <h2 class="text-xl font-bold">Players</h2>
+                        <div class="min-h-0 flex-grow overflow-y-auto">
+                            <PlayerList />
+                        </div>
                     </div>
-                </aside>
-
-                {/* Game Area */}
-                <section class="pixel-purple order-2 flex flex-col border-4 border-blue-300 border-t-blue-200 border-l-blue-200 p-6">
-                    <div class="mb-4 flex items-center justify-between gap-4">
-                        <GameHeader />
-                    </div>
-                    <div class="relative overflow-hidden bg-white">
-                        <Whiteboard
-                            width={CANVAS_WIDTH}
-                            height={CANVAS_HEIGHT}
-                        />
-                    </div>
-                </section>
-
-                {/* Chat Panel */}
-                <aside
-                    class="pixel-gray my-auto flex h-4/5 w-full flex-shrink-0 flex-col gap-4 border-4 border-gray-500 border-t-gray-300 border-l-gray-300 p-4 shadow-lg lg:order-3 lg:w-[250px]"
-                    style={{ 'max-height': `${CANVAS_HEIGHT + 100}px` }}
-                >
-                    <div class="min-h-0 flex-grow overflow-y-hidden">
+                    <div class="h-full w-full flex flex-col flex-1">
                         <ChatBox />
-                    </div>
-
-                    <div class="flex-shrink-0 bg-white">
                         <GuessInput onGuess={handleGuess} />
                     </div>
-                </aside>
-            </div>
+                </CardContent>
+            </Card>
+
+            {/* Game Area */}
+            <section class="pixel-purple order-2 flex flex-col border-4 border-blue-300 border-t-blue-200 border-l-blue-200 p-6">
+                <div class="mb-4 flex items-center justify-between gap-4">
+                    <GameHeader />
+                </div>
+                <div class="relative overflow-hidden bg-white">
+                    <Whiteboard width={CANVAS_WIDTH} height={CANVAS_HEIGHT} />
+                </div>
+            </section>
         </div>
     );
 };

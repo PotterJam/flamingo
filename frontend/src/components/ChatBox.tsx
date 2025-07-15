@@ -14,7 +14,7 @@ function ChatBox() {
     return (
         <div
             ref={chatContainerRef!}
-            class="flex h-full flex-col gap-1 overflow-y-auto rounded border border-gray-200 bg-gray-50 p-2 text-sm"
+            class="flex h-full flex-1 flex-col gap-1 overflow-y-auto rounded border border-gray-200 bg-gray-50 p-2 text-sm"
         >
             <Show
                 when={store.gameState.messages.length > 0}
