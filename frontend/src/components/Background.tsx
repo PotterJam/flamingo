@@ -1,6 +1,7 @@
 import { For } from 'solid-js';
+import { ParentComponent } from 'solid-js/types/server/rendering.js';
 
-export const FlamingoBackground = () => {
+export const FlamingoBackground: ParentComponent = (props) => {
     const numRows = 30;
     const numCols = 45; // Extra columns to account for offset and animation movement
     const rowHeightRem = 2.5;
@@ -27,29 +28,32 @@ export const FlamingoBackground = () => {
     const cells = createCells();
 
     return (
-        <div class="fixed inset-0 -z-10 overflow-hidden bg-pink-200">
-            <div class="relative h-full w-full">
-                <For each={cells}>
-                    {(cell) => {
-                        const row = parseInt(cell.id.split('-')[0]);
-                        const rowClass =
-                            row % 2 === 0 ? 'bg-row-even' : 'bg-row-odd';
+        <>
+            <div class="fixed inset-0 -z-10 overflow-hidden bg-pink-200">
+                <div class="relative h-full w-full">
+                    <For each={cells}>
+                        {(cell) => {
+                            const row = parseInt(cell.id.split('-')[0]);
+                            const rowClass =
+                                row % 2 === 0 ? 'bg-row-even' : 'bg-row-odd';
 
-                        return (
-                            <span
-                                class={`font-retro-display absolute text-lg font-extrabold whitespace-nowrap text-pink-300 opacity-30 select-none ${rowClass}`}
-                                style={{
-                                    top: `${cell.top}rem`,
-                                    left: `${cell.left}rem`,
-                                }}
-                                aria-hidden="true"
-                            >
-                                flamingo
-                            </span>
-                        );
-                    }}
-                </For>
+                            return (
+                                <span
+                                    class={`font-retro-display absolute text-lg font-extrabold whitespace-nowrap text-pink-300 opacity-30 select-none ${rowClass}`}
+                                    style={{
+                                        top: `${cell.top}rem`,
+                                        left: `${cell.left}rem`,
+                                    }}
+                                    aria-hidden="true"
+                                >
+                                    flamingo
+                                </span>
+                            );
+                        }}
+                    </For>
+                </div>
             </div>
-        </div>
+            {props.children}
+        </>
     );
 };
