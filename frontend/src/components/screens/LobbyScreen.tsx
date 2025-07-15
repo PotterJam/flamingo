@@ -6,6 +6,14 @@ import { CANVAS_HEIGHT } from '../Game';
 import { MIN_PLAYERS } from '../../App';
 import { Card } from '../ui/card';
 import { Button } from '../ui/button';
+import {
+    Slider,
+    SliderFill,
+    SliderLabel,
+    SliderThumb,
+    SliderTrack,
+    SliderValueLabel,
+} from '../ui/slider';
 
 export const LobbyScreen = () => {
     const isHost = () =>
@@ -53,32 +61,23 @@ export const LobbyScreen = () => {
                         </OutlineButton>
                     </div>
 
-                    <div class="flex flex-col gap-2">
-                        <label class="text-sm font-medium text-gray-700">
-                            Rounds: {store.roundCount}
-                        </label>
-                        <div class="relative">
-                            <input
-                                type="range"
-                                min="1"
-                                max="5"
-                                value={store.roundCount}
-                                onInput={(e) =>
-                                    actions.setRoundCount(
-                                        parseInt(e.currentTarget.value)
-                                    )
-                                }
-                                class="slider h-2 w-full cursor-pointer appearance-none rounded-lg bg-gray-200"
-                            />
-                            <div class="mt-1 flex justify-between text-xs text-gray-500">
-                                <span>1</span>
-                                <span>2</span>
-                                <span>3</span>
-                                <span>4</span>
-                                <span>5</span>
+                        <Slider
+                            minValue={1}
+                            maxValue={5}
+                            defaultValue={[3]}
+                            value={[store.roundCount]}
+                            onChange={(x) => actions.setRoundCount(x[0])}
+                            class="space-y-3"
+                        >
+                            <div class="flex w-full justify-between">
+                                <SliderLabel>Rounds</SliderLabel>
+                                <SliderValueLabel />
                             </div>
-                        </div>
-                    </div>
+                            <SliderTrack>
+                                <SliderFill />
+                                <SliderThumb />
+                            </SliderTrack>
+                        </Slider>
 
                     <Button
                         variant="default"
