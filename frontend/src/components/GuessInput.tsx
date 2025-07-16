@@ -21,9 +21,7 @@ const GuessInput: Component<GuessInputProps> = ({ onGuess }) => {
 
     return (
         <form onSubmit={handleSubmit} class="p-2">
-            <TextField
-                class="flex flex-col gap-2"
-            >
+            <TextField class="flex flex-col gap-2">
                 <TextFieldLabel>
                     <div class="flex w-full flex-row justify-between px-1">
                         <p>Guess</p>

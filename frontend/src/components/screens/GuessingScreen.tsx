@@ -27,8 +27,8 @@ export const GuessingScreen: Component = () => {
     };
 
     return (
-        <div class="mx-auto flex max-h-4/5 max-w-[1400px] flex-grow justify-center gap-4">
-            <Card class="w-full bg-white p-0">
+        <div class="flex max-h-4/5 w-full max-w-[1200px] justify-center gap-4">
+            <Card class="w-full flex-1 bg-white p-0">
                 <CardContent class="flex h-full w-full flex-col p-0">
                     <div class="p-2">
                         <h2 class="text-lg font-bold">Players</h2>
@@ -39,16 +39,25 @@ export const GuessingScreen: Component = () => {
                 </CardContent>
             </Card>
 
-            <section class="pixel-purple flex flex-col border-4 border-blue-300 border-t-blue-200 border-l-blue-200 p-6">
-                <div class="mb-4 flex items-center justify-between gap-4">
-                    <GameHeader />
-                </div>
-                <div class="relative overflow-hidden bg-white">
-                    <Whiteboard width={CANVAS_WIDTH} height={CANVAS_HEIGHT} />
-                </div>
-            </section>
+            <div class="flex w-[700px] flex-0 flex-col gap-2">
+                <Card class="mb-4 flex items-center justify-between gap-4 bg-pink-400 p-2">
+                    <CardContent class="w-full">
+                        <GameHeader />
+                    </CardContent>
+                </Card>
+                <Card class="bg-white p-0">
+                    <CardContent class="p-0">
+                        <div class="relative overflow-hidden bg-white">
+                            <Whiteboard
+                                width={CANVAS_WIDTH}
+                                height={CANVAS_HEIGHT}
+                            />
+                        </div>
+                    </CardContent>
+                </Card>
+            </div>
 
-            <Card class="w-full bg-white p-0">
+            <Card class="w-full flex-1 bg-white p-0">
                 <CardContent class="flex h-full w-full flex-col p-0">
                     <div class="flex h-full w-full flex-1 flex-col">
                         <ChatBox />
