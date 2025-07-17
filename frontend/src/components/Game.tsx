@@ -36,9 +36,9 @@ export const Game = () => {
                 </FlamingoBackground>
             </Match>
             <Match when={store.gameState.gamePhase === 'GameEnd'}>
-                <FlamingoBackground>
+                <GridBackground>
                     <GameEndScreen />
-                </FlamingoBackground>
+                </GridBackground>
             </Match>
         </Switch>
     );
