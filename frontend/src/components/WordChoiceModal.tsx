@@ -8,7 +8,7 @@ import {
 } from './ui/card';
 import { Button } from './ui/button';
 import { store } from '../store';
-import { createEffect, createSignal, onCleanup } from 'solid-js';
+import { useTimer } from '../hooks/useTimer';
 
 interface WordChoiceModalProps {
     wordChoices: string[];
@@ -17,28 +17,11 @@ interface WordChoiceModalProps {
 }
 
 export const WordChoiceModal = (props: WordChoiceModalProps) => {
-    const turnEndTime = () => store.gameState.turnEndTime;
-    const [remainingSeconds, setRemainingSeconds] = createSignal(0);
-
-    createEffect(() => {
-        const updateTimer = () => {
-            const now = Date.now();
-            const remaining = Math.max(
-                0,
-                Math.round((turnEndTime()! - now) / 1000)
-            );
-            setRemainingSeconds(remaining);
-        };
-
-        updateTimer();
-        const interval = setInterval(updateTimer, 1000);
-
-        onCleanup(() => clearInterval(interval));
-    });
+    const remainingSeconds = useTimer(() => store.gameState.turnEndTime);
 
     return (
         <div class="fixed inset-0 z-50 flex items-center justify-center bg-pink-950/30 backdrop-blur-sm">
-            <Card class="bg-white min-w-xs">
+            <Card class="min-w-xs bg-white">
                 <CardHeader>
                     <CardTitle>
                         <div class="flex w-full flex-row justify-between">
@@ -51,7 +34,7 @@ export const WordChoiceModal = (props: WordChoiceModalProps) => {
                     </CardDescription>
                 </CardHeader>
                 <CardContent>
-                    <div class="flex items-center justify-evenly gap-4 flex-row">
+                    <div class="flex flex-row items-center justify-evenly gap-4">
                         <For each={props.wordChoices}>
                             {(word) => (
                                 <Button
