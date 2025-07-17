@@ -30,11 +30,9 @@ export const GuessingScreen: Component = () => {
         <div class="flex max-h-4/5 w-full max-w-[1200px] justify-center gap-4">
             <Card class="w-full flex-1 bg-white p-0">
                 <CardContent class="flex h-full w-full flex-col p-0">
-                    <div class="p-2">
-                        <h2 class="text-lg font-bold">Players</h2>
-                        <div class="min-h-0 flex-grow overflow-y-auto">
-                            <PlayerList />
-                        </div>
+                    <h2 class="p-2 text-lg font-bold">Players</h2>
+                    <div class="min-h-0 flex-grow overflow-y-auto">
+                        <PlayerList />
                     </div>
                 </CardContent>
             </Card>
