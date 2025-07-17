@@ -19,11 +19,7 @@ function TimerDisplay(props: { endTime: number }) {
         onCleanup(() => clearInterval(interval));
     });
 
-    return (
-        <div class="font-retro translate-y-0.75 text-2xl font-semibold text-amber-400">
-            {remainingSeconds()}
-        </div>
-    );
+    return <p class="text-xl font-bold text-white">{remainingSeconds()}</p>;
 }
 
 export default TimerDisplay;

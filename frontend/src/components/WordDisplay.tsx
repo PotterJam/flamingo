@@ -1,17 +1,13 @@
-import { Show } from 'solid-js';
+import { store } from '../store';
 
-interface WordDisplayProps {
-    word?: string;
-    wordOutline?: string[];
-}
+function WordDisplay() {
+    const word = () => store.gameState.word;
+    const wordOutline = () => store.gameState.wordOutline ?? [];
 
-function WordDisplay(props: WordDisplayProps) {
-    const word = () => props.word || '';
-    const wordOutline = () => props.wordOutline || [];
     const wordDisplay = () =>
         word() ||
         wordOutline()
-            .map((char) => char || '_')
+            .map((char) => (char ? char.toUpperCase() : '_'))
             .join('');
 
     if (!word() && !wordOutline().length) {
@@ -19,12 +15,9 @@ function WordDisplay(props: WordDisplayProps) {
     }
 
     return (
-        <div class="font-retro flex flex-1 flex-row justify-center gap-12 text-5xl text-amber-400">
-            <p class="translate-y-0.75">{wordDisplay()}</p>
-            <Show when={!word()}>
-                <p class="translate-y-0.75">({wordOutline().length})</p>
-            </Show>
-        </div>
+        <p class="flex flex-1 flex-row justify-center text-3xl font-black tracking-widest text-white">
+            {word() ? word()?.toUpperCase() : wordDisplay()}
+        </p>
     );
 }
 

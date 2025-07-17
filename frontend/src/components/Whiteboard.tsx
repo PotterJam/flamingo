@@ -2,6 +2,7 @@ import { createSignal, createEffect, onCleanup, Component } from 'solid-js';
 import { actions, store } from '../store';
 import { DrawEvent } from '../messages';
 import classNames from 'classnames';
+import { Separator } from './ui/separator';
 
 const PALETTE = {
     black: '#000000',
@@ -226,10 +227,10 @@ const Whiteboard: Component<WhiteboardProps> = ({ height, width }) => {
     });
 
     return (
-        <div class="flex flex-row">
+        <div class="flex flex-col">
             <canvas
                 ref={canvasRef}
-                class="block border-t-4 border-b-4 border-l-4 border-gray-500 border-t-gray-300 border-l-gray-300 bg-white"
+                class="block bg-white"
                 style={{
                     cursor: isDrawer() ? 'crosshair' : 'default',
                     'touch-action': 'none',
@@ -243,8 +244,9 @@ const Whiteboard: Component<WhiteboardProps> = ({ height, width }) => {
             >
                 Your browser does not support the HTML canvas element.
             </canvas>
-            <div class="flex flex-col gap-2 border-t-4 border-r-4 border-b-4 border-gray-500 border-t-gray-300 bg-gray-200 p-2 align-middle">
-                <div class="mx-auto my-2 h-12 w-12 border-2 border-gray-500 border-t-gray-300 border-l-gray-300">
+            <Separator />
+            <div class="flex w-full flex-row justify-between gap-2 p-2">
+                <div class="my-2 h-12 w-12 border-2 border-gray-500 border-t-gray-300 border-l-gray-300">
                     <div
                         class="h-full w-full border-2 border-gray-300 border-t-gray-100 border-l-gray-300"
                         style={{
@@ -252,7 +254,7 @@ const Whiteboard: Component<WhiteboardProps> = ({ height, width }) => {
                         }}
                     />
                 </div>
-                <div class="grid w-14 grid-cols-2 items-center justify-center">
+                <div class="grid h-14 grid-cols-12 grid-rows-2 items-center justify-center">
                     {Object.entries(PALETTE).map(([colour, hex]) => (
                         <div
                             class="h-7 w-7 cursor-pointer transition-transform duration-150 ease-in-out hover:scale-130"
@@ -265,7 +267,7 @@ const Whiteboard: Component<WhiteboardProps> = ({ height, width }) => {
                         />
                     ))}
                 </div>
-                <div class="mt-4 flex flex-col items-center space-y-2">
+                <div class="flex flex-row items-center space-x-2">
                     {[3, 6, 9].map((thickness) => (
                         <div
                             class={classNames(

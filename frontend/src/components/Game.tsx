@@ -8,8 +8,8 @@ import { store } from '../store';
 import { FlamingoBackground } from './Background';
 import { GridBackground } from './GridBackground';
 
-export const CANVAS_WIDTH = 800;
-export const CANVAS_HEIGHT = 600;
+export const CANVAS_WIDTH = 700;
+export const CANVAS_HEIGHT = 500;
 export const MIN_PLAYERS = 2;
 
 export const Game = () => {
