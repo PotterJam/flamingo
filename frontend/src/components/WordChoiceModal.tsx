@@ -38,7 +38,7 @@ export const WordChoiceModal = (props: WordChoiceModalProps) => {
 
     return (
         <div class="fixed inset-0 z-50 flex items-center justify-center bg-pink-950/30 backdrop-blur-sm">
-            <Card class="bg-white">
+            <Card class="bg-white min-w-xs">
                 <CardHeader>
                     <CardTitle>
                         <div class="flex w-full flex-row justify-between">
@@ -51,7 +51,7 @@ export const WordChoiceModal = (props: WordChoiceModalProps) => {
                     </CardDescription>
                 </CardHeader>
                 <CardContent>
-                    <div class="flex flex-col items-center justify-center gap-4 sm:flex-row">
+                    <div class="flex items-center justify-evenly gap-4 flex-row">
                         <For each={props.wordChoices}>
                             {(word) => (
                                 <Button
