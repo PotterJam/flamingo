@@ -9,7 +9,8 @@ export const WordChoiceScreen = () => {
     const showWordChoiceModal = () =>
         isLocalPlayerDrawer() &&
         store.gameState.wordChoices &&
-        !store.gameState.word;
+        !store.gameState.word &&
+        store.gameState.turnEndTime;
 
     const handleWordChosen = (chosenWord: string) => {
         store.sendMessage({
@@ -21,13 +22,7 @@ export const WordChoiceScreen = () => {
     return (
         <>
             <GuessingScreen />
-            <Show
-                when={
-                    showWordChoiceModal() &&
-                    store.gameState.wordChoices &&
-                    store.gameState.turnEndTime
-                }
-            >
+            <Show when={showWordChoiceModal()}>
                 <WordChoiceModal
                     wordChoices={store.gameState.wordChoices!}
                     turnEndTime={store.gameState.turnEndTime!}
