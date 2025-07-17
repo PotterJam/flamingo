@@ -1,5 +1,6 @@
 import { Component, For, Show, createMemo } from 'solid-js';
 import { store } from '../store';
+import { cn } from '../lib/utils/cn';
 
 const PlayerList: Component = () => {
     const sortedPlayers = createMemo(() =>
@@ -19,14 +20,14 @@ const PlayerList: Component = () => {
                             player.id === store.gameState.currentDrawerId;
 
                         const getClassNames = () => {
-                            let classes =
-                                'flex items-center gap-2 p-2 text-gray-800 transition-all duration-200';
-                            if (isCurrentDrawer())
-                                classes += ' bg-yellow-100 font-semibold';
-                            if (hasGuessedCorrectly() && !isCurrentDrawer())
-                                classes +=
-                                    ' bg-green-200 text-green-800 font-medium';
-                            return classes;
+                            return cn(
+                                'flex items-center gap-2 p-2 text-gray-800 transition-all duration-200',
+                                isCurrentDrawer() &&
+                                    'bg-yellow-100 font-semibold',
+                                hasGuessedCorrectly() &&
+                                    !isCurrentDrawer() &&
+                                    'bg-green-200 text-green-800 font-medium'
+                            );
                         };
 
                         return (
