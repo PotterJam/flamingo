@@ -1,4 +1,4 @@
-import { For } from 'solid-js';
+import { For, Show } from 'solid-js';
 import { actions, store } from '../../store';
 import { MIN_PLAYERS } from '../../App';
 import { Card } from '../ui/card';
@@ -49,47 +49,58 @@ export const LobbyScreen = () => {
                         </ul>
                     </div>
                 </div>
-                <div class="flex h-full w-full flex-3 flex-col gap-4 p-4">
-                    <Slider
-                        minValue={1}
-                        maxValue={5}
-                        defaultValue={[3]}
-                        value={[store.roundCount]}
-                        onChange={(x) => actions.setRoundCount(x[0])}
-                        class="space-y-3"
-                    >
-                        <div class="flex w-full justify-between">
-                            <SliderLabel>Rounds</SliderLabel>
-                            <SliderValueLabel />
+                <Show
+                    when={isHost()}
+                    fallback={
+                        <div class="flex-3 text-center my-auto align-middle">
+                            The host is configuring the game
                         </div>
-                        <SliderTrack>
-                            <SliderFill />
-                            <SliderThumb />
-                        </SliderTrack>
-                    </Slider>
-
-                    <div class="mt-auto flex w-full flex-col gap-4">
-                        <div>
-                            <Label>Room name</Label>
-                            <div class="flex flex-row items-center justify-between">
-                                <p class="text-l font-bold">{store.roomId}</p>
-                                <Button
-                                    variant="outline-no-shadow"
-                                    onClick={copyRoomName}
-                                >
-                                    Copy
-                                </Button>
-                            </div>
-                        </div>
-                        <Button
-                            variant="default"
-                            onClick={handleStartGame}
-                            disabled={!canHostStartGame()}
+                    }
+                >
+                    <div class="flex h-full w-full flex-3 flex-col gap-4 p-4">
+                        <Slider
+                            minValue={1}
+                            maxValue={5}
+                            defaultValue={[3]}
+                            value={[store.roundCount]}
+                            onChange={(x) => actions.setRoundCount(x[0])}
+                            class="space-y-3"
                         >
-                            Start Game
-                        </Button>
+                            <div class="flex w-full justify-between">
+                                <SliderLabel>Rounds</SliderLabel>
+                                <SliderValueLabel />
+                            </div>
+                            <SliderTrack>
+                                <SliderFill />
+                                <SliderThumb />
+                            </SliderTrack>
+                        </Slider>
+
+                        <div class="mt-auto flex w-full flex-col gap-4">
+                            <div>
+                                <Label>Room name</Label>
+                                <div class="flex flex-row items-center justify-between">
+                                    <p class="text-l font-bold">
+                                        {store.roomId}
+                                    </p>
+                                    <Button
+                                        variant="outline-no-shadow"
+                                        onClick={copyRoomName}
+                                    >
+                                        Copy
+                                    </Button>
+                                </div>
+                            </div>
+                            <Button
+                                variant="default"
+                                onClick={handleStartGame}
+                                disabled={!canHostStartGame()}
+                            >
+                                Start Game
+                            </Button>
+                        </div>
                     </div>
-                </div>
+                </Show>
             </Card>
         </div>
     );
