@@ -1,4 +1,4 @@
-import { createSignal } from 'solid-js';
+import { createSignal, onMount } from 'solid-js';
 import { actions } from '../store';
 import { CreateRoomResponse } from '../api';
 import { Logo } from './Logo';
@@ -12,6 +12,16 @@ export const RoomConnection = () => {
     const [name, setName] = createSignal('');
     const [roomName, setRoomName] = createSignal('');
     const [roomNotFound, setRoomNotFound] = createSignal(false);
+
+    onMount(() => {
+        const path = window.location.pathname;
+        if (path !== '/' && path.length > 1) {
+            const lobbyName = path.substring(1);
+            if (lobbyName && !lobbyName.includes('/')) {
+                setRoomName(lobbyName);
+            }
+        }
+    });
 
     const createRoom = async () => {
         const response = await fetch('/create-room', {
