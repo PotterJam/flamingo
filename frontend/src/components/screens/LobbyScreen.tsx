@@ -1,4 +1,4 @@
-import { For, Show } from 'solid-js';
+import { For, Show, createSignal } from 'solid-js';
 import { actions, store } from '../../store';
 import { MIN_PLAYERS } from '../../App';
 import { Card } from '../ui/card';
@@ -14,6 +14,9 @@ import {
 import { Label } from '../ui/label';
 
 export const LobbyScreen = () => {
+    const [nameCopied, setNameCopied] = createSignal(false);
+    const [linkCopied, setLinkCopied] = createSignal(false);
+
     const isHost = () =>
         store.gameState.localPlayerId === store.gameState.hostId;
     const canHostStartGame = () =>
@@ -21,11 +24,15 @@ export const LobbyScreen = () => {
 
     const copyRoomName = () => {
         navigator.clipboard.writeText(store.roomId || '');
+        setNameCopied(true);
+        setTimeout(() => setNameCopied(false), 2000);
     };
 
     const copyRoomLink = () => {
         const roomLink = `${window.location.origin}/${store.roomId}`;
         navigator.clipboard.writeText(roomLink);
+        setLinkCopied(true);
+        setTimeout(() => setLinkCopied(false), 2000);
     };
 
     const handleStartGame = () => {
@@ -92,14 +99,20 @@ export const LobbyScreen = () => {
                                         <Button
                                             variant="ghost"
                                             onClick={copyRoomName}
+                                            class="w-24"
                                         >
-                                            Copy name
+                                            {nameCopied()
+                                                ? 'Copied!'
+                                                : 'Copy name'}
                                         </Button>
                                         <Button
                                             variant="outline-no-shadow"
                                             onClick={copyRoomLink}
+                                            class="w-24"
                                         >
-                                            Copy link
+                                            {linkCopied()
+                                                ? 'Copied!'
+                                                : 'Copy link'}
                                         </Button>
                                     </div>
                                 </div>
