@@ -23,6 +23,11 @@ export const LobbyScreen = () => {
         navigator.clipboard.writeText(store.roomId || '');
     };
 
+    const copyRoomLink = () => {
+        const roomLink = `${window.location.origin}/${store.roomId}`;
+        navigator.clipboard.writeText(roomLink);
+    };
+
     const handleStartGame = () => {
         if (canHostStartGame()) {
             store.sendMessage({
@@ -52,7 +57,7 @@ export const LobbyScreen = () => {
                 <Show
                     when={isHost()}
                     fallback={
-                        <div class="flex-3 text-center my-auto align-middle">
+                        <div class="my-auto flex-3 text-center align-middle">
                             The host is configuring the game
                         </div>
                     }
@@ -83,12 +88,20 @@ export const LobbyScreen = () => {
                                     <p class="text-l font-bold">
                                         {store.roomId}
                                     </p>
-                                    <Button
-                                        variant="outline-no-shadow"
-                                        onClick={copyRoomName}
-                                    >
-                                        Copy
-                                    </Button>
+                                    <div>
+                                        <Button
+                                            variant="ghost"
+                                            onClick={copyRoomName}
+                                        >
+                                            Copy name
+                                        </Button>
+                                        <Button
+                                            variant="outline-no-shadow"
+                                            onClick={copyRoomLink}
+                                        >
+                                            Copy link
+                                        </Button>
+                                    </div>
                                 </div>
                             </div>
                             <Button
