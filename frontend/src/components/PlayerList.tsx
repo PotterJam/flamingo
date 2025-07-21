@@ -10,7 +10,7 @@ const PlayerList: Component = () => {
     );
 
     return (
-        <div class="-mr-2 flex-grow overflow-y-auto pr-2">
+        <div class="flex-grow overflow-y-auto">
             <ul>
                 <For each={sortedPlayers()}>
                     {(player) => {
