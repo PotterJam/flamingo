@@ -29,7 +29,7 @@ export const LobbyScreen = () => {
     };
 
     const copyRoomLink = () => {
-        const roomLink = `${window.location.origin}/${store.roomId}`;
+        const roomLink = `${window.location.origin}/join/${store.roomId}`;
         navigator.clipboard.writeText(roomLink);
         setLinkCopied(true);
         setTimeout(() => setLinkCopied(false), 2000);

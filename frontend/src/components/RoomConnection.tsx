@@ -3,7 +3,7 @@ import { actions } from '../store';
 import { CreateRoomResponse } from '../api';
 import { Logo } from './Logo';
 import { soundManager } from '../sound-manager';
-import { Card, CardContent, CardHeader } from './ui/card';
+import { Card, CardContent } from './ui/card';
 import { Button } from './ui/button';
 import { Separator } from './ui/separator';
 import { GridBackground } from './GridBackground';
@@ -15,8 +15,8 @@ export const RoomConnection = () => {
 
     onMount(() => {
         const path = window.location.pathname;
-        if (path !== '/' && path.length > 1) {
-            const lobbyName = path.substring(1);
+        if (path.startsWith('/join/')) {
+            const lobbyName = path.substring(6);
             if (lobbyName && !lobbyName.includes('/')) {
                 setRoomName(lobbyName);
             }
