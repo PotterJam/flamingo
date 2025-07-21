@@ -26,6 +26,7 @@ import { FaSolidMinus, FaSolidPlus } from 'solid-icons/fa';
 export const LobbyScreen = () => {
     const [nameCopied, setNameCopied] = createSignal(false);
     const [linkCopied, setLinkCopied] = createSignal(false);
+    const [roundLength, setRoundLength] = createSignal('');
 
     const isHost = () =>
         store.gameState.localPlayerId === store.gameState.hostId;
@@ -99,16 +100,19 @@ export const LobbyScreen = () => {
                         </Slider>
                         <NumberField
                             validationState={
-                                store.roundLength < 45 ? 'invalid' : 'valid'
+                                store.roundLength < 30 ? 'invalid' : 'valid'
                             }
-                            value={store.roundLength}
-                            onChange={(x) => actions.setRoundCount(parseInt(x))}
-                            class="w-64"
+                            value={roundLength()}
+                            onChange={(x) => {
+                                setRoundLength(x);
+                                if (x && !!parseInt(x)) {
+                                    actions.setRoundLength(parseInt(x));
+                                }
+                            }}
+                            class="w-full"
                         >
-                            <NumberFieldLabel>
-                                Round length (s)
-                            </NumberFieldLabel>
-                            <NumberFieldGroup>
+                            <NumberFieldLabel>Round length(s)</NumberFieldLabel>
+                            <NumberFieldGroup class="w-48">
                                 <NumberFieldInput />
                                 <NumberFieldIncrementTrigger>
                                     <FaSolidPlus class="size-3" />
@@ -117,8 +121,8 @@ export const LobbyScreen = () => {
                                     <FaSolidMinus class="size-3" />
                                 </NumberFieldDecrementTrigger>
                             </NumberFieldGroup>
-                            <NumberFieldErrorMessage>
-                                Round length must be greater than 30
+                            <NumberFieldErrorMessage class="w-full">
+                                Round length must be greater than 30 seconds
                             </NumberFieldErrorMessage>
                         </NumberField>
 
