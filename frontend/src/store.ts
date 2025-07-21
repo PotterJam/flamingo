@@ -89,7 +89,9 @@ export interface AppState {
     gameState: GameState;
     roomId: string | null;
     clearCanvas: (() => void) | null;
+
     roundCount: number;
+    roundLength: number;
 }
 
 const initialAppState: AppState = {
@@ -104,6 +106,7 @@ const initialAppState: AppState = {
     roomId: null,
     clearCanvas: null,
     roundCount: 3,
+    roundLength: 45,
 };
 
 const getStoredState = (): Partial<AppState> => {
@@ -214,6 +217,14 @@ export const actions = {
         setStore(
             produce((state) => {
                 state.roundCount = count;
+            })
+        );
+    },
+
+    setRoundLength: (length: number) => {
+        setStore(
+            produce((state) => {
+                state.roundLength = length;
             })
         );
     },

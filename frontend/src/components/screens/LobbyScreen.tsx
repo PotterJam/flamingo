@@ -12,6 +12,16 @@ import {
     SliderValueLabel,
 } from '../ui/slider';
 import { Label } from '../ui/label';
+import {
+    NumberField,
+    NumberFieldDecrementTrigger,
+    NumberFieldErrorMessage,
+    NumberFieldGroup,
+    NumberFieldIncrementTrigger,
+    NumberFieldInput,
+    NumberFieldLabel,
+} from '../ui/number-field';
+import { MinusIcon, PlusIcon } from 'lucide-solid';
 
 export const LobbyScreen = () => {
     const [nameCopied, setNameCopied] = createSignal(false);
@@ -87,6 +97,30 @@ export const LobbyScreen = () => {
                                 <SliderThumb />
                             </SliderTrack>
                         </Slider>
+                        <NumberField
+                            validationState={
+                                store.roundLength < 45 ? 'invalid' : 'valid'
+                            }
+                            value={store.roundLength}
+                            onChange={(x) => actions.setRoundCount(parseInt(x))}
+                            class="w-64"
+                        >
+                            <NumberFieldLabel>
+                                Round length (s)
+                            </NumberFieldLabel>
+                            <NumberFieldGroup>
+                                <NumberFieldInput />
+                                <NumberFieldIncrementTrigger>
+                                    <PlusIcon />
+                                </NumberFieldIncrementTrigger>
+                                <NumberFieldDecrementTrigger>
+                                    <MinusIcon />
+                                </NumberFieldDecrementTrigger>
+                            </NumberFieldGroup>
+                            <NumberFieldErrorMessage>
+                                Round length must be greater than 30
+                            </NumberFieldErrorMessage>
+                        </NumberField>
 
                         <div class="mt-auto flex w-full flex-col gap-4">
                             <div>
