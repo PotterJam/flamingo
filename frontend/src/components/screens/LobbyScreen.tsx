@@ -21,7 +21,7 @@ import {
     NumberFieldInput,
     NumberFieldLabel,
 } from '../ui/number-field';
-import { MinusIcon, PlusIcon } from 'lucide-solid';
+import { FaSolidMinus, FaSolidPlus } from 'solid-icons/fa';
 
 export const LobbyScreen = () => {
     const [nameCopied, setNameCopied] = createSignal(false);
@@ -111,10 +111,10 @@ export const LobbyScreen = () => {
                             <NumberFieldGroup>
                                 <NumberFieldInput />
                                 <NumberFieldIncrementTrigger>
-                                    <PlusIcon />
+                                    <FaSolidPlus class="size-3" />
                                 </NumberFieldIncrementTrigger>
                                 <NumberFieldDecrementTrigger>
-                                    <MinusIcon />
+                                    <FaSolidMinus class="size-3" />
                                 </NumberFieldDecrementTrigger>
                             </NumberFieldGroup>
                             <NumberFieldErrorMessage>
