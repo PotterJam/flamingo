@@ -256,8 +256,15 @@ func (g *GameState) BroadcastChatMessage(senderName, message string) {
 }
 
 func (g *GameState) setupHintTimers() {
+	roundNum := g.CurrentRound
+	roundName := g.CurrentDrawerIdx
+
 	go func() {
 		time.Sleep(29 * time.Second)
+		if roundNum != g.CurrentRound || roundName != g.CurrentDrawerIdx {
+			return
+		}
+
 		select {
 		case g.hintEvents <- HintEvent{HintLevel: 1, HintType: "30s"}:
 		default:
@@ -267,6 +274,10 @@ func (g *GameState) setupHintTimers() {
 
 	go func() {
 		time.Sleep(39 * time.Second)
+		if roundNum != g.CurrentRound || roundName != g.CurrentDrawerIdx {
+			return
+		}
+
 		select {
 		case g.hintEvents <- HintEvent{HintLevel: 2, HintType: "40s"}:
 		default:
