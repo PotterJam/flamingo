@@ -25,7 +25,7 @@ const NumberFieldGroup: Component<ComponentProps<'div'>> = (props) => {
         <div
             data-slot="number-field-group"
             class={cn(
-                'focus-within:ring-ring relative rounded-md focus-within:ring-2 focus-within:ring-offset-2',
+                'focus-within:ring-ring relative focus-within:ring-2 focus-within:ring-offset-2',
                 local.class
             )}
             {...others}

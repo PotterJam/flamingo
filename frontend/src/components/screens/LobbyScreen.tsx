@@ -26,7 +26,7 @@ import { FaSolidMinus, FaSolidPlus } from 'solid-icons/fa';
 export const LobbyScreen = () => {
     const [nameCopied, setNameCopied] = createSignal(false);
     const [linkCopied, setLinkCopied] = createSignal(false);
-    const [roundLength, setRoundLength] = createSignal('');
+    const [roundLength, setRoundLength] = createSignal('45');
 
     const isHost = () =>
         store.gameState.localPlayerId === store.gameState.hostId;
@@ -112,7 +112,7 @@ export const LobbyScreen = () => {
                             class="w-full"
                         >
                             <NumberFieldLabel>Round length(s)</NumberFieldLabel>
-                            <NumberFieldGroup class="w-48">
+                            <NumberFieldGroup class="w-48 my-1">
                                 <NumberFieldInput />
                                 <NumberFieldIncrementTrigger>
                                     <FaSolidPlus class="size-3" />
