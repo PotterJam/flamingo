@@ -29,8 +29,8 @@ func (p *RoundInProgressHandler) StartPhase(gs *GameState) {
 	gs.Word = p.Word
 	now := time.Now()
 	gs.TurnStartTime = now
-	gs.turnEndTime = now.Add(turnDuration)
-	gs.timerForTimeout = time.NewTimer(turnDuration)
+	gs.turnEndTime = now.Add(gs.RoundDuration)
+	gs.timerForTimeout = time.NewTimer(gs.RoundDuration)
 
 	gs.setupHintTimers()
 

@@ -204,6 +204,7 @@ export interface StartGameMsg {
     type: 'startGame';
     payload: {
         roundCount: number;
+        roundLength: number;
     };
 }
 

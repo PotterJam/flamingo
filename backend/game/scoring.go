@@ -54,7 +54,7 @@ func calculateRoundScores(gs *GameState) map[string]int {
 
 	for playerID, guessTime := range gs.CorrectGuessTimes {
 		isFirst := playerID == firstGuesserID
-		roundScores[playerID] = calculateGuesserScoreAtTime(gs.TurnStartTime, guessTime, turnDuration, isFirst)
+		roundScores[playerID] = calculateGuesserScoreAtTime(gs.TurnStartTime, guessTime, gs.RoundDuration, isFirst)
 	}
 
 	if gs.CurrentDrawerIdx >= 0 && gs.CurrentDrawerIdx < len(gs.Players) {

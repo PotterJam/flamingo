@@ -35,5 +35,6 @@ type DrawEventPayload struct {
 }
 
 type StartGamePayload struct {
-	RoundCount int `json:"roundCount"`
+	RoundCount  int `json:"roundCount"`
+	RoundLength int `json:"roundLength"`
 }

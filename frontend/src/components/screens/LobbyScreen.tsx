@@ -12,10 +12,21 @@ import {
     SliderValueLabel,
 } from '../ui/slider';
 import { Label } from '../ui/label';
+import {
+    NumberField,
+    NumberFieldDecrementTrigger,
+    NumberFieldErrorMessage,
+    NumberFieldGroup,
+    NumberFieldIncrementTrigger,
+    NumberFieldInput,
+    NumberFieldLabel,
+} from '../ui/number-field';
+import { FaSolidMinus, FaSolidPlus } from 'solid-icons/fa';
 
 export const LobbyScreen = () => {
     const [nameCopied, setNameCopied] = createSignal(false);
     const [linkCopied, setLinkCopied] = createSignal(false);
+    const [roundLength, setRoundLength] = createSignal('45');
 
     const isHost = () =>
         store.gameState.localPlayerId === store.gameState.hostId;
@@ -39,7 +50,10 @@ export const LobbyScreen = () => {
         if (canHostStartGame()) {
             store.sendMessage({
                 type: 'startGame',
-                payload: { roundCount: store.roundCount },
+                payload: {
+                    roundCount: store.roundCount,
+                    roundLength: store.roundLength,
+                },
             });
         } else {
             console.warn('Start game attempted but conditions not met.');
@@ -87,6 +101,33 @@ export const LobbyScreen = () => {
                                 <SliderThumb />
                             </SliderTrack>
                         </Slider>
+                        <NumberField
+                            validationState={
+                                store.roundLength < 30 ? 'invalid' : 'valid'
+                            }
+                            value={roundLength()}
+                            onChange={(x) => {
+                                setRoundLength(x);
+                                if (x && !!parseInt(x)) {
+                                    actions.setRoundLength(parseInt(x));
+                                }
+                            }}
+                            class="w-full"
+                        >
+                            <NumberFieldLabel>Round length(s)</NumberFieldLabel>
+                            <NumberFieldGroup class="my-1 w-48">
+                                <NumberFieldInput />
+                                <NumberFieldIncrementTrigger>
+                                    <FaSolidPlus class="size-3" />
+                                </NumberFieldIncrementTrigger>
+                                <NumberFieldDecrementTrigger>
+                                    <FaSolidMinus class="size-3" />
+                                </NumberFieldDecrementTrigger>
+                            </NumberFieldGroup>
+                            <NumberFieldErrorMessage class="w-full">
+                                Round length must be greater than 30 seconds
+                            </NumberFieldErrorMessage>
+                        </NumberField>
 
                         <div class="mt-auto flex w-full flex-col gap-4">
                             <div>
