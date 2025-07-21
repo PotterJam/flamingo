@@ -18,11 +18,11 @@ func main() {
 
 	router := mux.NewRouter()
 
-	router.HandleFunc("/ws/{roomId}", func(w http.ResponseWriter, r *http.Request) { api.ServeWS(rm, w, r) })
 	router.PathPrefix("/assets/").Handler(fileServer)
 	router.Path("/").HandlerFunc(func(w http.ResponseWriter, r *http.Request) { api.HandleIndex(staticDir, fileServer, w, r) })
-	router.PathPrefix("/create-room").Methods(http.MethodPost).HandlerFunc(func(w http.ResponseWriter, r *http.Request) { api.HandleCreateRoom(rm, w, r) })
 	router.PathPrefix("/join/{roomId}").Methods(http.MethodGet).HandlerFunc(func(w http.ResponseWriter, r *http.Request) { api.HandleIndex(staticDir, fileServer, w, r) })
+	router.PathPrefix("/create-room").Methods(http.MethodPost).HandlerFunc(func(w http.ResponseWriter, r *http.Request) { api.HandleCreateRoom(rm, w, r) })
+	router.HandleFunc("/ws/{roomId}", func(w http.ResponseWriter, r *http.Request) { api.ServeWS(rm, w, r) })
 	router.PathPrefix("/{roomId}").Methods(http.MethodGet).HandlerFunc(func(w http.ResponseWriter, r *http.Request) { api.HandleGetRoom(rm, w, r) })
 
 	port := "8080"
