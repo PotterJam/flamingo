@@ -52,6 +52,8 @@ type GameState struct {
 	mu                sync.Mutex // Mutex to protect concurrent access to game state
 	IsActive          bool       // Flag indicating if a round/turn is currently running
 
+	RoundDuration time.Duration
+
 	timerForTimeout *time.Timer
 	turnEndTime     time.Time
 	hintEvents      chan HintEvent // Channel for hint events
@@ -179,8 +181,6 @@ func generateWordOutlineWithHints(word string, hintLevel int) []string {
 
 	return outline
 }
-
-var turnDuration = 49 * time.Second
 
 const (
 	minPlayersToStart = 2
