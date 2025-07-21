@@ -50,7 +50,10 @@ export const LobbyScreen = () => {
         if (canHostStartGame()) {
             store.sendMessage({
                 type: 'startGame',
-                payload: { roundCount: store.roundCount },
+                payload: {
+                    roundCount: store.roundCount,
+                    roundLength: store.roundLength,
+                },
             });
         } else {
             console.warn('Start game attempted but conditions not met.');
@@ -112,7 +115,7 @@ export const LobbyScreen = () => {
                             class="w-full"
                         >
                             <NumberFieldLabel>Round length(s)</NumberFieldLabel>
-                            <NumberFieldGroup class="w-48 my-1">
+                            <NumberFieldGroup class="my-1 w-48">
                                 <NumberFieldInput />
                                 <NumberFieldIncrementTrigger>
                                     <FaSolidPlus class="size-3" />
