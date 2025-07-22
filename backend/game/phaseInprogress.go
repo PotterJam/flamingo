@@ -100,6 +100,18 @@ func (p *RoundInProgressHandler) HandleMessage(gs *GameState, player *Player, ms
 			Word: gs.Word,
 		})
 
+		// Broadcast to other players of the correct guess
+		playersToNotify := make([]*Player, 0, len(gs.Players)-1)
+		for _, p := range gs.Players {
+			if p != nil && p.Id != player.Id {
+				playersToNotify = append(playersToNotify, p)
+			}
+		}
+		go gs.Broadcaster.BroadcastToPlayers(messages.PlayerCorrectResponse, messages.PlayerCorrectPayload{
+			PlayerID:   player.Id,
+			PlayerName: player.Name,
+		}, playersToNotify)
+
 		gs.broadcastPlayerUpdate()
 
 		if gs.checkAllGuessed() {
