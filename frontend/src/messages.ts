@@ -157,6 +157,14 @@ export interface TurnHelpMsg {
     };
 }
 
+export interface PlayerCorrectMsg {
+    type: 'playerCorrect';
+    payload: {
+        playerId: string;
+        playerName: string;
+    };
+}
+
 export type ReceivedMsg =
     | GameInfoMsg
     | PlayerUpdateMsg
@@ -170,6 +178,7 @@ export type ReceivedMsg =
     | GameFinishedMsg
     | WordRevealMsg
     | TurnHelpMsg
+    | PlayerCorrectMsg
     | PhaseChangeAckMsg;
 
 export interface SetNameMsg {
