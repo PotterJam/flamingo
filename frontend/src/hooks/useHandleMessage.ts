@@ -54,6 +54,10 @@ export const useHandleMessage = (message: Accessor<ReceivedMsg | null>) => {
                     actions.handleWordReveal(msg);
                     break;
                 }
+                case 'playerCorrect': {
+                    soundManager.playSound('otherPlayerCorrect');
+                    break;
+                }
                 case 'turnHelp': {
                     actions.handleTurnHelp(msg);
                     break;
