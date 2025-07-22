@@ -100,13 +100,7 @@ func (p *RoundInProgressHandler) HandleMessage(gs *GameState, player *Player, ms
 			Word: gs.Word,
 		})
 
-		// Broadcast to other players of the correct guess
-		playersToNotify := make([]*Player, 0, len(gs.Players)-1)
-		for _, p := range gs.Players {
-			if p != nil && p.Id != player.Id {
-				playersToNotify = append(playersToNotify, p)
-			}
-		}
+		playersToNotify := gs.allOtherPlayers(player)
 		go gs.Broadcaster.BroadcastToPlayers(messages.PlayerCorrectResponse, messages.PlayerCorrectPayload{
 			PlayerID:   player.Id,
 			PlayerName: player.Name,
@@ -127,13 +121,7 @@ func (p *RoundInProgressHandler) HandleMessage(gs *GameState, player *Player, ms
 	}
 
 	if msg.Type == messages.ClientDrawEvent && gs.isDrawer(player) {
-		playersToSendTo := make([]*Player, 0, len(gs.Players)-1)
-		for _, p := range gs.Players {
-			if p != nil && p.Id != player.Id {
-				playersToSendTo = append(playersToSendTo, p)
-			}
-		}
-
+		playersToSendTo := gs.allOtherPlayers(player)
 		go gs.Broadcaster.BroadcastToPlayers(messages.DrawEventBroadcastResponse, msg.Payload, playersToSendTo)
 		return p
 	}
@@ -148,4 +136,14 @@ func (p *RoundInProgressHandler) HandleTimeOut(gs *GameState) GamePhaseHandler {
 		CurrentPhase:  GamePhaseRoundInProgress,
 		DelayMessage:  "Starting 1-second delay before score display (timer expired)",
 	})
+}
+
+func (gs *GameState) allOtherPlayers(excludePlayer *Player) []*Player {
+	playersToSendTo := make([]*Player, 0, len(gs.Players)-1)
+	for _, player := range gs.Players {
+		if player != nil && player.Id != excludePlayer.Id {
+			playersToSendTo = append(playersToSendTo, player)
+		}
+	}
+	return playersToSendTo
 }
