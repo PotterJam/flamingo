@@ -14,6 +14,7 @@ const (
 	PhaseChangeAckResponse     = "phaseChangeAck"
 	WordRevealResponse         = "wordReveal"
 	TurnHelpResponse           = "turnHelp"
+	PlayerCorrectResponse      = "playerCorrect"
 )
 
 type ErrorPayload struct {
@@ -91,6 +92,11 @@ type PlayerScoreGain struct {
 	PlayerID   string `json:"playerId"`
 	PlayerName string `json:"playerName"`
 	ScoreGain  int    `json:"scoreGain"`
+}
+
+type PlayerCorrectPayload struct {
+	PlayerID   string `json:"playerId"`
+	PlayerName string `json:"playerName"`
 }
 
 type RoundScoreDisplayPayload struct {
