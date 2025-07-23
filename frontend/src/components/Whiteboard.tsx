@@ -5,6 +5,7 @@ import classNames from 'classnames';
 import { Separator } from './ui/separator';
 import { getStroke } from 'perfect-freehand';
 import { FaSolidArrowRotateLeft } from 'solid-icons/fa';
+import { translatePointerToCanvas } from '~/lib/utils/canvas';
 
 const PALETTE = {
     black: '#000000',
@@ -39,7 +40,7 @@ interface WhiteboardProps {
 }
 
 // The format perfect-freehand expects: [x, y, pressure]
-type StrokePoint = [number, number, number];
+export type PathPoint = [number, number, number];
 
 const defaultBrushThickness = 9;
 
@@ -53,10 +54,10 @@ const sendDrawEvent = (drawEvent: DrawEvent) => {
 const Whiteboard: Component<WhiteboardProps> = ({ height, width }) => {
     let canvasRef: HTMLCanvasElement | undefined;
     let ctxRef: CanvasRenderingContext2D | null = null;
-    const [isDrawing, setIsDrawing] = createSignal(false);
 
-    const finishedPaths: StrokePoint[][] = [];
-    const currentPath: StrokePoint[] = [];
+    const [isDrawing, setIsDrawing] = createSignal(false);
+    const [finishedPaths, setFinishedPaths] = createSignal<PathPoint[][]>([]);
+    const [currentPath, setCurrentPath] = createSignal<PathPoint[]>([]);
 
     const [selectedColour, setSelectedColour] =
         createSignal<keyof typeof PALETTE>('black');
@@ -86,27 +87,32 @@ const Whiteboard: Component<WhiteboardProps> = ({ height, width }) => {
     const isDrawer = () =>
         store.gameState.localPlayerId === store.gameState.currentDrawerId;
 
-    let remoteCurrentStroke: Array<StrokePoint> = [];
+    let remoteCurrentStroke: Array<PathPoint> = [];
     let remoteStrokeColor = '#000000';
     let remoteStrokeSize = 3;
 
     const handlePointerDown = (e: PointerEvent) => {
         e.preventDefault();
+        if (!canvasRef) return;
         setIsDrawing(true);
+        setCurrentPath([translatePointerToCanvas(e, canvasRef)]);
     };
 
     const handlePointerUp = (e: PointerEvent) => {
         e.preventDefault();
+        if (!canvasRef) return;
         setIsDrawing(false);
     };
 
     const handlePointerLeave = (e: PointerEvent) => {
         if (!isDrawing()) return;
+        if (!canvasRef) return;
         handlePointerUp(e);
     };
 
     const handlePointerMove = (e: PointerEvent) => {
         if (!isDrawing()) return;
+        if (!canvasRef) return;
     };
 
     return (
