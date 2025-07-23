@@ -3,6 +3,7 @@ import { actions, store } from '../store';
 import { DrawEvent } from '../messages';
 import classNames from 'classnames';
 import { Separator } from './ui/separator';
+import { getStroke } from 'perfect-freehand';
 
 const PALETTE = {
     black: '#000000',
@@ -40,7 +41,7 @@ const Whiteboard: Component<WhiteboardProps> = ({ height, width }) => {
     let canvasRef: HTMLCanvasElement | undefined;
     let ctxRef: CanvasRenderingContext2D | null = null;
     const [isDrawing, setIsDrawing] = createSignal(false);
-    let lastPosRef = { x: 0, y: 0 };
+    let currentStroke: Array<[number, number, number]> = []; // [x, y, pressure]
 
     const [selectedColour, setSelectedColour] =
         createSignal<keyof typeof PALETTE>('black');
@@ -50,7 +51,9 @@ const Whiteboard: Component<WhiteboardProps> = ({ height, width }) => {
     const isDrawer = () =>
         store.gameState.localPlayerId === store.gameState.currentDrawerId;
 
-    let remoteLastPosRef = { x: 0, y: 0 };
+    let remoteCurrentStroke: Array<[number, number, number]> = [];
+    let remoteStrokeColor = '#000000';
+    let remoteStrokeSize = 3;
 
     const handleDraw = (drawEvent: DrawEvent) => {
         store.sendMessage({
@@ -71,38 +74,78 @@ const Whiteboard: Component<WhiteboardProps> = ({ height, width }) => {
         };
     };
 
-    const drawLine = (
-        x1: number,
-        y1: number,
-        x2: number,
-        y2: number,
-        color: string,
-        width: number
-    ) => {
-        if (!ctxRef) return;
+    const drawStroke = (points: Array<[number, number, number]>, color: string, size: number, clear = false) => {
+        if (!ctxRef || points.length === 0) return;
+        
+        // Clear canvas if this is a fresh stroke (for real-time drawing)
+        if (clear && canvasRef) {
+            ctxRef.fillStyle = '#FFFFFF';
+            ctxRef.fillRect(0, 0, canvasRef.width, canvasRef.height);
+        }
+        
+        const stroke = getStroke(points, {
+            size,
+            thinning: 0.5,
+            smoothing: 0.5,
+            streamline: 0.5,
+        });
+
+        if (stroke.length === 0) return;
+
+        ctxRef.fillStyle = color;
         ctxRef.beginPath();
-        ctxRef.strokeStyle = color;
-        ctxRef.lineWidth = width;
-        ctxRef.lineCap = 'round';
-        ctxRef.lineJoin = 'round';
-        ctxRef.moveTo(x1, y1);
-        ctxRef.lineTo(x2, y2);
-        ctxRef.stroke();
+        ctxRef.moveTo(stroke[0][0], stroke[0][1]);
+
+        for (let i = 1; i < stroke.length; i++) {
+            ctxRef.lineTo(stroke[i][0], stroke[i][1]);
+        }
+
         ctxRef.closePath();
+        ctxRef.fill();
+    };
+
+    // Store completed strokes to redraw when needed
+    let completedStrokes: Array<{
+        points: Array<[number, number, number]>;
+        color: string;
+        size: number;
+    }> = [];
+
+    const redrawCanvas = () => {
+        if (!ctxRef || !canvasRef) return;
+        
+        // Clear canvas
+        ctxRef.fillStyle = '#FFFFFF';
+        ctxRef.fillRect(0, 0, canvasRef.width, canvasRef.height);
+        
+        // Redraw all completed strokes
+        completedStrokes.forEach(stroke => {
+            drawStroke(stroke.points, stroke.color, stroke.size);
+        });
+        
+        // Draw current stroke if drawing
+        if (currentStroke.length > 0) {
+            drawStroke(currentStroke, PALETTE[selectedColour()], selectedThickness());
+        }
+        
+        // Draw remote stroke if in progress
+        if (remoteCurrentStroke.length > 0) {
+            drawStroke(remoteCurrentStroke, remoteStrokeColor, remoteStrokeSize);
+        }
     };
 
     const globalMouseMove = (e: MouseEvent) => {
         if (!isDrawer() || !isDrawing()) return;
         const pos = getEventPos(e);
         if (!pos) return;
-        drawLine(
-            lastPosRef.x,
-            lastPosRef.y,
-            pos.x,
-            pos.y,
-            PALETTE[selectedColour()],
-            selectedThickness()
-        );
+        
+        // Add point to current stroke with simulated pressure
+        const pressure = 0.5; // Could be enhanced with actual pressure data
+        currentStroke.push([pos.x, pos.y, pressure]);
+        
+        // Redraw entire canvas with current stroke
+        redrawCanvas();
+        
         handleDraw({
             eventType: 'draw',
             x: pos.x,
@@ -110,13 +153,25 @@ const Whiteboard: Component<WhiteboardProps> = ({ height, width }) => {
             color: PALETTE[selectedColour()],
             lineWidth: selectedThickness(),
         });
-        lastPosRef = pos;
+        
         if (e.cancelable) e.preventDefault();
     };
 
     const globalMouseUp = () => {
         if (!isDrawer() || !isDrawing()) return;
         setIsDrawing(false);
+        
+        // Finalize the stroke
+        if (currentStroke.length > 0) {
+            completedStrokes.push({
+                points: [...currentStroke],
+                color: PALETTE[selectedColour()],
+                size: selectedThickness()
+            });
+            currentStroke = [];
+            redrawCanvas();
+        }
+        
         handleDraw({ eventType: 'end' });
         // Remove global event listeners
         document.removeEventListener('mousemove', globalMouseMove);
@@ -128,7 +183,11 @@ const Whiteboard: Component<WhiteboardProps> = ({ height, width }) => {
         const pos = getEventPos(e);
         if (!pos) return;
         setIsDrawing(true);
-        lastPosRef = pos;
+        
+        // Start new stroke
+        const pressure = 0.5;
+        currentStroke = [[pos.x, pos.y, pressure]];
+        
         handleDraw({
             eventType: 'start',
             x: pos.x,
@@ -156,6 +215,9 @@ const Whiteboard: Component<WhiteboardProps> = ({ height, width }) => {
         if (ctxRef && canvasRef) {
             ctxRef.fillStyle = '#FFFFFF';
             ctxRef.fillRect(0, 0, canvasRef.width, canvasRef.height);
+            completedStrokes = [];
+            currentStroke = [];
+            remoteCurrentStroke = [];
         }
     };
 
@@ -205,24 +267,31 @@ const Whiteboard: Component<WhiteboardProps> = ({ height, width }) => {
 
         const event = lastDrawEvent();
         if (event?.eventType === 'start') {
-            const { x, y } = event;
-            remoteLastPosRef = { x, y };
+            const { x, y, color, lineWidth } = event;
+            const pressure = 0.5;
+            remoteCurrentStroke = [[x, y, pressure]];
+            remoteStrokeColor = color || '#000000';
+            remoteStrokeSize = lineWidth || 3;
         } else if (event?.eventType === 'end') {
-            // No action needed for end event
+            // Finalize the remote stroke
+            if (remoteCurrentStroke.length > 0) {
+                completedStrokes.push({
+                    points: [...remoteCurrentStroke],
+                    color: remoteStrokeColor,
+                    size: remoteStrokeSize
+                });
+                remoteCurrentStroke = [];
+                redrawCanvas();
+            }
         } else if (event?.eventType === 'draw') {
-            const { x, y, color, lineWidth: lw } = event;
-            const eventColor = color || '#000000';
-            const eventLineWidth = lw || 3;
+            const { x, y } = event;
+            const pressure = 0.5;
 
-            drawLine(
-                remoteLastPosRef.x,
-                remoteLastPosRef.y,
-                x,
-                y,
-                eventColor,
-                eventLineWidth
-            );
-            remoteLastPosRef = { x, y };
+            // Add point to remote stroke
+            remoteCurrentStroke.push([x, y, pressure]);
+            
+            // Redraw entire canvas with remote stroke in progress
+            redrawCanvas();
         }
     });
 
