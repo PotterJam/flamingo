@@ -102,6 +102,11 @@ const Whiteboard: Component<WhiteboardProps> = ({ height, width }) => {
         e.preventDefault();
         if (!canvasRef) return;
         setIsDrawing(false);
+
+        if (!currentPath()) return;
+
+        setFinishedPaths((prev) => [...prev, currentPath()]);
+        setCurrentPath([]);
     };
 
     const handlePointerLeave = (e: PointerEvent) => {
