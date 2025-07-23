@@ -38,7 +38,7 @@ interface WhiteboardProps {
     height: number;
 }
 
-const defaultBrushThickness = 6;
+const defaultBrushThickness = 9;
 
 const Whiteboard: Component<WhiteboardProps> = ({ height, width }) => {
     let canvasRef: HTMLCanvasElement | undefined;
@@ -89,8 +89,14 @@ const Whiteboard: Component<WhiteboardProps> = ({ height, width }) => {
         const stroke = getStroke(points, {
             size,
             thinning: 0.5,
-            smoothing: 0.5,
-            streamline: 0.5,
+            smoothing: 0.3,
+            streamline: 0.6,
+            start: {
+                taper: false,
+            },
+            end: {
+                taper: false,
+            }
         });
 
         if (stroke.length === 0) return;
@@ -340,7 +346,7 @@ const Whiteboard: Component<WhiteboardProps> = ({ height, width }) => {
                     ))}
                 </div>
                 <div class="flex flex-row items-center space-x-2">
-                    {[3, 6, 9].map((thickness) => (
+                    {[6, 9, 12].map((thickness) => (
                         <div
                             class={classNames(
                                 'flex h-8 w-8 cursor-pointer items-center justify-center rounded-full border border-gray-400 bg-white hover:ring-2 hover:ring-blue-500',
