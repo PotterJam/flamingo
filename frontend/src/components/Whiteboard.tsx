@@ -1,11 +1,19 @@
-import { createSignal, createEffect, onCleanup, Component } from 'solid-js';
+import {
+    createSignal,
+    Component,
+    createMemo,
+    For,
+} from 'solid-js';
 import { actions, store } from '../store';
 import { DrawEvent } from '../messages';
 import classNames from 'classnames';
 import { Separator } from './ui/separator';
 import { getStroke } from 'perfect-freehand';
 import { FaSolidArrowRotateLeft } from 'solid-icons/fa';
-import { translatePointerToCanvas } from '~/lib/utils/canvas';
+import {
+    getSvgPathFromStroke,
+    translatePointerToCanvas,
+} from '../lib/utils/canvas';
 
 const PALETTE = {
     black: '#000000',
@@ -52,7 +60,7 @@ const sendDrawEvent = (drawEvent: DrawEvent) => {
 };
 
 const Whiteboard: Component<WhiteboardProps> = ({ height, width }) => {
-    let canvasRef: HTMLCanvasElement | undefined;
+    let canvasRef: SVGSVGElement | undefined;
     let ctxRef: CanvasRenderingContext2D | null = null;
 
     const [isDrawing, setIsDrawing] = createSignal(false);
@@ -126,14 +134,23 @@ const Whiteboard: Component<WhiteboardProps> = ({ height, width }) => {
         ]);
     };
 
+    const renderedFinishedPaths = createMemo(() => {
+        return finishedPaths().map((path) =>
+            getSvgPathFromStroke(getStroke(path))
+        );
+    });
+
+    const renderedCurrentPath = createMemo(() => {
+        if (!currentPath()) return null;
+        return getSvgPathFromStroke(getStroke(currentPath()));
+    });
+
     return (
         <div class="flex flex-col">
-            <canvas
+            <svg
                 ref={canvasRef}
                 class="block bg-white"
                 style={{
-                    cursor: isDrawer() ? 'crosshair' : 'default',
-                    'touch-action': 'none',
                     width: `${width}px`,
                     height: `${height}px`,
                 }}
@@ -142,8 +159,11 @@ const Whiteboard: Component<WhiteboardProps> = ({ height, width }) => {
                 onPointerUp={handlePointerUp}
                 onPointerLeave={handlePointerLeave}
             >
-                Your browser does not support the HTML canvas element.
-            </canvas>
+                <For each={renderedFinishedPaths()}>
+                    {(path) => <path d={path} />}
+                </For>
+                {renderedCurrentPath() && <path d={renderedCurrentPath()!} />}
+            </svg>
             <Separator />
             <div class="flex w-full flex-row justify-between gap-2 p-2">
                 <div class="my-2 h-12 w-12 border-2 border-gray-500 border-t-gray-300 border-l-gray-300">

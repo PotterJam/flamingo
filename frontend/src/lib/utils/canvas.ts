@@ -1,15 +1,25 @@
-import { PathPoint } from "~/components/Whiteboard";
+import { PathPoint } from '~/components/Whiteboard';
 
 export const translatePointerToCanvas = (
     e: PointerEvent,
-    canvas: HTMLCanvasElement
+    canvas: SVGSVGElement
 ): PathPoint => {
     const rect = canvas.getBoundingClientRect();
-    const scaleX = canvas.width / rect.width;
-    const scaleY = canvas.height / rect.height;
-    return [
-        (e.clientX - rect.left) * scaleX,
-        (e.clientY - rect.top) * scaleY,
-        e.pressure,
-    ];
+    return [e.clientX - rect.left, e.clientY - rect.top, e.pressure];
 };
+
+export function getSvgPathFromStroke(stroke: number[][]) {
+    if (!stroke.length) return '';
+
+    const d = stroke.reduce(
+        (acc, [x0, y0], i, arr) => {
+            const [x1, y1] = arr[(i + 1) % arr.length];
+            acc.push(x0, y0, (x0 + x1) / 2, (y0 + y1) / 2);
+            return acc;
+        },
+        ['M', ...stroke[0], 'Q']
+    );
+
+    d.push('Z');
+    return d.join(' ');
+}
