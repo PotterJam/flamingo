@@ -66,6 +66,10 @@ export const useHandleMessage = (message: Accessor<ReceivedMsg | null>) => {
                     store.sendMessage(msg);
                     break;
                 }
+                case 'canvasUpdate': {
+                    actions.handleCanvasUpdate(msg)
+                    break;
+                }
                 case 'error': {
                     const payload = msg.payload;
                     if (!payload) {

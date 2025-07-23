@@ -16,7 +16,7 @@ import {
     TurnSetupMsg,
     TurnStartMsg,
     GameFinishedMsg,
-    WordRevealMsg,
+    WordRevealMsg, CanvasUpdateMsg,
 } from './messages';
 import { GamePhase } from './model';
 
@@ -366,4 +366,8 @@ export const actions = {
             })
         );
     },
+
+    handleCanvasUpdate: ({ payload }: CanvasUpdateMsg) => {
+        // TODO
+    }
 };

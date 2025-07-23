@@ -122,9 +122,18 @@ export type DrawEvent =
           lineWidth: number;
       };
 
+export interface CanvasUpdate {
+    drawPaths: DrawEvent[];
+}
+
 export interface DrawEventMsg {
     type: 'drawEvent';
     payload: DrawEvent;
+}
+
+export interface CanvasUpdateMsg {
+    type: 'canvasUpdate';
+    payload: CanvasUpdate;
 }
 
 export interface ErrorMsg {
@@ -179,7 +188,8 @@ export type ReceivedMsg =
     | WordRevealMsg
     | TurnHelpMsg
     | PlayerCorrectMsg
-    | PhaseChangeAckMsg;
+    | PhaseChangeAckMsg
+    | CanvasUpdateMsg;
 
 export interface SetNameMsg {
     type: 'setName';
@@ -217,6 +227,11 @@ export interface StartGameMsg {
     };
 }
 
+export interface DrawPathUndoMsg {
+    type: 'drawPathUndo';
+    payload: {};
+}
+
 export type SendMsg =
     | SetNameMsg
     | DrawEventMsg
@@ -224,4 +239,5 @@ export type SendMsg =
     | SendChatMsg
     | SelectRoundWordMsg
     | StartGameMsg
-    | PhaseChangeAckMsg;
+    | PhaseChangeAckMsg
+    | DrawPathUndoMsg;

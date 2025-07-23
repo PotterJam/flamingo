@@ -121,9 +121,43 @@ func (p *RoundInProgressHandler) HandleMessage(gs *GameState, player *Player, ms
 	}
 
 	if msg.Type == messages.ClientDrawEvent && gs.isDrawer(player) {
+		var drawPayload messages.DrawEventPayload
+		if err := json.Unmarshal(msg.Payload, &drawPayload); err != nil {
+			player.SendError("Invalid draw payload format.")
+			return p
+		}
+
+		if drawPayload.EventType == "start" {
+			newDrawStack := make([]messages.DrawEventPayload, 0)
+			gs.DrawStack = append(gs.DrawStack, &newDrawStack)
+		}
+
+		ds := gs.DrawStack[len(gs.DrawStack)-1]
+		*ds = append(*ds, messages.DrawEventPayload{
+			X:         drawPayload.X,
+			Y:         drawPayload.Y,
+			Color:     drawPayload.Color,
+			LineWidth: drawPayload.LineWidth,
+		})
+
 		playersToSendTo := gs.allOtherPlayers(player)
 		go gs.Broadcaster.BroadcastToPlayers(messages.DrawEventBroadcastResponse, msg.Payload, playersToSendTo)
 		return p
+	}
+
+	if msg.Type == messages.ClientDrawPathUndo && gs.isDrawer(player) && len(gs.DrawStack) > 0 {
+		allButLatest := gs.DrawStack[:len(gs.DrawStack)-1]
+
+		paths := make([]messages.DrawEventPayload, 0)
+		for _, ds := range allButLatest {
+			for _, p := range *ds {
+				paths = append(paths, p)
+			}
+		}
+
+		go gs.Broadcaster.Broadcast(messages.CanvasUpdateBroadcastResponse, messages.CanvasUpdatePayload{
+			DrawPaths: paths,
+		})
 	}
 
 	return p

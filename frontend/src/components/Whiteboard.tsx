@@ -4,6 +4,7 @@ import { DrawEvent } from '../messages';
 import classNames from 'classnames';
 import { Separator } from './ui/separator';
 import { getStroke } from 'perfect-freehand';
+import {FaSolidArrowRotateLeft} from "solid-icons/fa";
 
 const PALETTE = {
     black: '#000000',
@@ -37,6 +38,8 @@ interface WhiteboardProps {
     height: number;
 }
 
+const defaultBrushThickness = 6;
+
 const Whiteboard: Component<WhiteboardProps> = ({ height, width }) => {
     let canvasRef: HTMLCanvasElement | undefined;
     let ctxRef: CanvasRenderingContext2D | null = null;
@@ -45,7 +48,7 @@ const Whiteboard: Component<WhiteboardProps> = ({ height, width }) => {
 
     const [selectedColour, setSelectedColour] =
         createSignal<keyof typeof PALETTE>('black');
-    const [selectedThickness, setSelectedThickness] = createSignal(3);
+    const [selectedThickness, setSelectedThickness] = createSignal(defaultBrushThickness);
 
     const lastDrawEvent = () => store.gameState.lastDrawEvent;
     const isDrawer = () =>
@@ -357,6 +360,11 @@ const Whiteboard: Component<WhiteboardProps> = ({ height, width }) => {
                             />
                         </div>
                     ))}
+                </div>
+                <div class="flex flex-row items-center space-x-2 p-2">
+                    <button onClick={() => store.sendMessage({ type: "drawPathUndo", payload: {}})}>
+                        <FaSolidArrowRotateLeft></FaSolidArrowRotateLeft>
+                    </button>
                 </div>
             </div>
         </div>

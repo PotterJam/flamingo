@@ -1,20 +1,21 @@
 package messages
 
 const (
-	TypeErrorResponse          = "error"
-	GameInfoResponse           = "gameInfo"
-	PlayerUpdateResponse       = "playerUpdate"
-	TurnStartResponse          = "turnStart"
-	ChatResponse               = "chat"
-	DrawEventBroadcastResponse = "drawEvent" // <<< Using "drawEvent" to match frontend expectation
-	TurnSetupResponse          = "turnSetup"
-	TurnEndResponse            = "turnEnd"
-	RoundScoreDisplayResponse  = "roundScoreDisplay"
-	GameFinishedResponse       = "gameFinished"
-	PhaseChangeAckResponse     = "phaseChangeAck"
-	WordRevealResponse         = "wordReveal"
-	TurnHelpResponse           = "turnHelp"
-	PlayerCorrectResponse      = "playerCorrect"
+	TypeErrorResponse             = "error"
+	GameInfoResponse              = "gameInfo"
+	PlayerUpdateResponse          = "playerUpdate"
+	TurnStartResponse             = "turnStart"
+	ChatResponse                  = "chat"
+	DrawEventBroadcastResponse    = "drawEvent" // <<< Using "drawEvent" to match frontend expectation
+	CanvasUpdateBroadcastResponse = "canvasUpdate"
+	TurnSetupResponse             = "turnSetup"
+	TurnEndResponse               = "turnEnd"
+	RoundScoreDisplayResponse     = "roundScoreDisplay"
+	GameFinishedResponse          = "gameFinished"
+	PhaseChangeAckResponse        = "phaseChangeAck"
+	WordRevealResponse            = "wordReveal"
+	TurnHelpResponse              = "turnHelp"
+	PlayerCorrectResponse         = "playerCorrect"
 )
 
 type ErrorPayload struct {
@@ -113,4 +114,8 @@ type GameFinishedPayload struct {
 
 type WordRevealPayload struct {
 	Word string `json:"word"`
+}
+
+type CanvasUpdatePayload struct {
+	DrawPaths []DrawEventPayload `json:"drawPaths"`
 }

@@ -64,32 +64,34 @@ type GameState struct {
 
 	// Channel for handlers to request player operations (add, remove, etc.)
 	PlayerOperations chan PlayerOperation
+
+	DrawStack []*[]messages.DrawEventPayload
 }
 
-func (g *GameState) broadcastPlayerUpdate() {
+func (gs *GameState) broadcastPlayerUpdate() {
 	payload := messages.PlayerUpdatePayload{
-		Players: g.getPlayerInfoList(), // Assumes lock held
-		HostID:  g.HostId,
+		Players: gs.getPlayerInfoList(), // Assumes lock held
+		HostID:  gs.HostId,
 	}
 
-	go g.Broadcaster.Broadcast(messages.PlayerUpdateResponse, payload)
+	go gs.Broadcaster.Broadcast(messages.PlayerUpdateResponse, payload)
 }
 
-func (g *GameState) BroadcastSystemMessage(message string) {
+func (gs *GameState) BroadcastSystemMessage(message string) {
 	payload := messages.ChatPayload{SenderName: "System", Message: message, IsSystem: true}
-	go g.Broadcaster.Broadcast(messages.ChatResponse, payload)
+	go gs.Broadcaster.Broadcast(messages.ChatResponse, payload)
 }
 
-func (g *GameState) getPlayerInfoList() []messages.PlayerInfo {
-	infoList := make([]messages.PlayerInfo, 0, len(g.Players))
-	for _, p := range g.Players {
+func (gs *GameState) getPlayerInfoList() []messages.PlayerInfo {
+	infoList := make([]messages.PlayerInfo, 0, len(gs.Players))
+	for _, p := range gs.Players {
 		if p != nil {
-			_, hasGuessedCorrectly := g.CorrectGuessTimes[p.Id]
+			_, hasGuessedCorrectly := gs.CorrectGuessTimes[p.Id]
 			infoList = append(infoList, messages.PlayerInfo{
 				ID:                  p.Id,
 				Name:                p.Name,
 				Score:               p.Score,
-				IsHost:              p.Id == g.HostId,
+				IsHost:              p.Id == gs.HostId,
 				HasGuessedCorrectly: hasGuessedCorrectly,
 			})
 		} else {
@@ -99,16 +101,16 @@ func (g *GameState) getPlayerInfoList() []messages.PlayerInfo {
 	return infoList
 }
 
-func (g *GameState) isDrawer(p *Player) bool {
-	if !g.IsActive {
+func (gs *GameState) isDrawer(p *Player) bool {
+	if !gs.IsActive {
 		return false
 	}
 
-	if g.CurrentDrawerIdx < 0 || g.CurrentDrawerIdx >= len(g.Players) {
+	if gs.CurrentDrawerIdx < 0 || gs.CurrentDrawerIdx >= len(gs.Players) {
 		return false
 	}
 
-	return g.Players[g.CurrentDrawerIdx].Id == p.Id
+	return gs.Players[gs.CurrentDrawerIdx].Id == p.Id
 }
 
 func generateWordOutline(word string) []string {
@@ -208,39 +210,39 @@ func (g *Game) sendGameInfo(player *Player) {
 	go player.SendMessage(messages.GameInfoResponse, payload)
 }
 
-func (g *GameState) HandleStartGame(sender *Player) {
+func (gs *GameState) HandleStartGame(sender *Player) {
 	log.Printf("GameState: Received StartGame request from %s (%s)", sender.Id, sender.Name)
 
-	if sender.Id != g.HostId {
-		log.Printf("GameState: StartGame denied. Player %s is not the host (%s).", sender.Name, g.HostId)
+	if sender.Id != gs.HostId {
+		log.Printf("GameState: StartGame denied. Player %s is not the host (%s).", sender.Name, gs.HostId)
 		sender.SendError("Only the host can start the game.")
 		return
 	}
-	if g.IsActive {
+	if gs.IsActive {
 		log.Println("GameState: StartGame denied. GameState is already active.")
 		sender.SendError("The game is already in progress.")
 		return
 	}
-	if len(g.Players) < minPlayersToStart {
-		log.Printf("GameState: StartGame denied. Not enough players (%d/%d).", len(g.Players), minPlayersToStart)
+	if len(gs.Players) < minPlayersToStart {
+		log.Printf("GameState: StartGame denied. Not enough players (%d/%d).", len(gs.Players), minPlayersToStart)
 		sender.SendError("Not enough players to start the game (minimum " + string(minPlayersToStart+'0') + ").")
 		return
 	}
 
-	g.CurrentRound = 0
-	g.PlayersWhoHaveDrawnThisRound = make([]string, 0)
+	gs.CurrentRound = 0
+	gs.PlayersWhoHaveDrawnThisRound = make([]string, 0)
 }
 
-func (g *GameState) checkAllGuessed() bool {
-	totalPlayers := len(g.Players)
+func (gs *GameState) checkAllGuessed() bool {
+	totalPlayers := len(gs.Players)
 
-	if !g.IsActive || totalPlayers < minPlayersToStart || g.CurrentDrawerIdx < 0 || g.CurrentDrawerIdx >= len(g.Players) {
+	if !gs.IsActive || totalPlayers < minPlayersToStart || gs.CurrentDrawerIdx < 0 || gs.CurrentDrawerIdx >= len(gs.Players) {
 		return false
 	}
 	correctCount := 0
-	for i, p := range g.Players {
-		if i != g.CurrentDrawerIdx {
-			if _, guessed := g.CorrectGuessTimes[p.Id]; guessed {
+	for i, p := range gs.Players {
+		if i != gs.CurrentDrawerIdx {
+			if _, guessed := gs.CorrectGuessTimes[p.Id]; guessed {
 				correctCount++
 			}
 		}
@@ -250,23 +252,23 @@ func (g *GameState) checkAllGuessed() bool {
 	return correctCount == requiredCorrect
 }
 
-func (g *GameState) BroadcastChatMessage(senderName, message string) {
+func (gs *GameState) BroadcastChatMessage(senderName, message string) {
 	payload := messages.ChatPayload{SenderName: senderName, Message: message, IsSystem: false}
-	go g.Broadcaster.Broadcast(messages.ChatResponse, payload)
+	go gs.Broadcaster.Broadcast(messages.ChatResponse, payload)
 }
 
-func (g *GameState) setupHintTimers() {
-	roundNum := g.CurrentRound
-	roundName := g.CurrentDrawerIdx
+func (gs *GameState) setupHintTimers() {
+	roundNum := gs.CurrentRound
+	roundName := gs.CurrentDrawerIdx
 
 	go func() {
 		time.Sleep(29 * time.Second)
-		if roundNum != g.CurrentRound || roundName != g.CurrentDrawerIdx {
+		if roundNum != gs.CurrentRound || roundName != gs.CurrentDrawerIdx {
 			return
 		}
 
 		select {
-		case g.hintEvents <- HintEvent{HintLevel: 1, HintType: "30s"}:
+		case gs.hintEvents <- HintEvent{HintLevel: 1, HintType: "30s"}:
 		default:
 			// Channel might be closed or full, ignore
 		}
@@ -274,29 +276,29 @@ func (g *GameState) setupHintTimers() {
 
 	go func() {
 		time.Sleep(39 * time.Second)
-		if roundNum != g.CurrentRound || roundName != g.CurrentDrawerIdx {
+		if roundNum != gs.CurrentRound || roundName != gs.CurrentDrawerIdx {
 			return
 		}
 
 		select {
-		case g.hintEvents <- HintEvent{HintLevel: 2, HintType: "40s"}:
+		case gs.hintEvents <- HintEvent{HintLevel: 2, HintType: "40s"}:
 		default:
 			// Channel might be closed or full, ignore
 		}
 	}()
 }
 
-func (g *GameState) sendHintToGuessers(hintLevel int, hintType string) {
-	if g.Word == "" {
+func (gs *GameState) sendHintToGuessers(hintLevel int, hintType string) {
+	if gs.Word == "" {
 		return
 	}
 
-	hintOutline := generateWordOutlineWithHints(g.Word, hintLevel)
+	hintOutline := generateWordOutlineWithHints(gs.Word, hintLevel)
 
 	playersToSendTo := make([]*Player, 0)
-	for i, player := range g.Players {
-		if i != g.CurrentDrawerIdx { // Skip drawer
-			if _, hasGuessed := g.CorrectGuessTimes[player.Id]; !hasGuessed {
+	for i, player := range gs.Players {
+		if i != gs.CurrentDrawerIdx { // Skip drawer
+			if _, hasGuessed := gs.CorrectGuessTimes[player.Id]; !hasGuessed {
 				playersToSendTo = append(playersToSendTo, player)
 			}
 		}
@@ -312,5 +314,5 @@ func (g *GameState) sendHintToGuessers(hintLevel int, hintType string) {
 	}
 
 	log.Printf("GameState: Sending %s hint to %d players who haven't guessed", hintType, len(playersToSendTo))
-	go g.Broadcaster.BroadcastToPlayers(messages.TurnHelpResponse, hintPayload, playersToSendTo)
+	go gs.Broadcaster.BroadcastToPlayers(messages.TurnHelpResponse, hintPayload, playersToSendTo)
 }
