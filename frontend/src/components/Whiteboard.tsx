@@ -118,6 +118,12 @@ const Whiteboard: Component<WhiteboardProps> = ({ height, width }) => {
     const handlePointerMove = (e: PointerEvent) => {
         if (!isDrawing()) return;
         if (!canvasRef) return;
+        e.preventDefault();
+
+        setCurrentPath((prev) => [
+            ...prev,
+            translatePointerToCanvas(e, canvasRef),
+        ]);
     };
 
     return (
