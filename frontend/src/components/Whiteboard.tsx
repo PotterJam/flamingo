@@ -3,7 +3,7 @@ import { store } from '../store';
 import { DrawEvent } from '../messages';
 import classNames from 'classnames';
 import { Separator } from './ui/separator';
-import { getStroke } from 'perfect-freehand';
+import { getStroke, StrokeOptions } from 'perfect-freehand';
 import { FaSolidArrowRotateLeft } from 'solid-icons/fa';
 import {
     getSvgPathFromStroke,
@@ -49,6 +49,7 @@ export type PathPoint = [number, number, number];
 
 export interface Path {
     points: PathPoint[];
+    thickness: number;
     colour: PaletteColor;
 }
 
@@ -115,10 +116,12 @@ const Whiteboard: Component<WhiteboardProps> = ({ height, width }) => {
 
         if (!currentPath()) return;
 
-        setFinishedPaths((prev) => [
-            ...prev,
-            { points: currentPath(), colour: selectedColour() },
-        ]);
+        const newFinishedPath = {
+            points: currentPath(),
+            colour: selectedColour(),
+            thickness: selectedThickness(),
+        };
+        setFinishedPaths((prev) => [...prev, newFinishedPath]);
         setCurrentPath([]);
     };
 
@@ -146,15 +149,26 @@ const Whiteboard: Component<WhiteboardProps> = ({ height, width }) => {
     };
 
     const renderedFinishedPaths = createMemo(() => {
-        return finishedPaths().map((path) => ({
-            colour: path.colour,
-            points: getSvgPathFromStroke(getStroke(path.points)),
-        }));
+        return finishedPaths().map((path) => {
+            const settings = {
+                size: path.thickness,
+            } as StrokeOptions;
+
+            return {
+                colour: path.colour,
+                points: getSvgPathFromStroke(getStroke(path.points, settings)),
+            };
+        });
     });
 
     const renderedCurrentPath = createMemo(() => {
         if (!currentPath()) return null;
-        return getSvgPathFromStroke(getStroke(currentPath()));
+
+        const settings = {
+            size: selectedThickness(),
+        } as StrokeOptions;
+
+        return getSvgPathFromStroke(getStroke(currentPath(), settings));
     });
 
     return (
