@@ -53,12 +53,14 @@ const Whiteboard: Component<WhiteboardProps> = ({ height, width }) => {
     const [selectedThickness, setSelectedThickness] = createSignal(
         defaultBrushThickness
     );
-
     const [isDrawing, setIsDrawing] = createSignal(false);
+
+    const isDrawer = () =>
+        store.gameState.localPlayerId === store.gameState.currentDrawerId;
 
     const handlePointerDown = (e: PointerEvent) => {
         e.preventDefault();
-        if (!canvasRef) return;
+        if (!canvasRef || !isDrawer()) return;
         setIsDrawing(true);
         actions.startPath(
             translatePointerToCanvas(e, canvasRef),
@@ -69,7 +71,7 @@ const Whiteboard: Component<WhiteboardProps> = ({ height, width }) => {
 
     const handlePointerUp = (e: PointerEvent) => {
         e.preventDefault();
-        if (!canvasRef) return;
+        if (!canvasRef || !isDrawer()) return;
         setIsDrawing(false);
         actions.finishPath();
     };
@@ -81,13 +83,13 @@ const Whiteboard: Component<WhiteboardProps> = ({ height, width }) => {
     };
 
     const handlePointerEnter = (e: PointerEvent) => {
-        if (e.buttons === 1) {
+        if (e.buttons === 1 && isDrawer()) {
             handlePointerDown(e);
         }
     };
 
     const handlePointerMove = (e: PointerEvent) => {
-        if (!isDrawing()) return;
+        if (!isDrawing() || !isDrawer()) return;
         if (!canvasRef) return;
         e.preventDefault();
         actions.continuePath(translatePointerToCanvas(e, canvasRef));
