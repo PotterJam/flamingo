@@ -16,9 +16,10 @@ import {
     TurnSetupMsg,
     TurnStartMsg,
     GameFinishedMsg,
-    WordRevealMsg, CanvasUpdateMsg,
+    WordRevealMsg,
+    CanvasUpdateMsg,
 } from './messages';
-import { GamePhase } from './model';
+import { GamePhase, Path, PathPoint } from './model';
 
 // Map backend phase names to frontend phase names
 const mapBackendPhaseToFrontend = (backendPhase: string): GamePhase => {
@@ -43,6 +44,11 @@ const mapBackendPhaseToFrontend = (backendPhase: string): GamePhase => {
     }
 };
 
+export interface WhiteboardState {
+    finishedPaths: Path[];
+    currentPath: PathPoint[];
+}
+
 export interface GameState {
     gamePhase: GamePhase;
     players: Player[];
@@ -62,6 +68,11 @@ export interface GameState {
     totalRounds: number | null;
     currentRound: number | null;
 }
+
+const initialWhiteboardState: WhiteboardState = {
+    finishedPaths: [],
+    currentPath: [],
+};
 
 const initialGameState: GameState = {
     gamePhase: 'Lobby',
@@ -87,6 +98,7 @@ export interface AppState {
     selfId: string;
     launchAsHost: boolean;
     gameState: GameState;
+    whiteboardState: WhiteboardState;
     roomId: string | null;
     clearCanvas: (() => void) | null;
 
@@ -103,6 +115,7 @@ const initialAppState: AppState = {
     selfId: '',
     launchAsHost: false,
     gameState: initialGameState,
+    whiteboardState: initialWhiteboardState,
     roomId: null,
     clearCanvas: null,
     roundCount: 3,
@@ -281,6 +294,7 @@ export const actions = {
                 state.gameState.scoreDisplay = null;
                 state.gameState.totalRounds = payload.totalRounds;
                 state.gameState.currentRound = payload.currentRound;
+                state.whiteboardState = initialWhiteboardState;
             })
         );
         store.clearCanvas?.();
@@ -369,5 +383,22 @@ export const actions = {
 
     handleCanvasUpdate: ({ payload }: CanvasUpdateMsg) => {
         // TODO
-    }
+    },
+
+    setCurrentPath: (path: PathPoint[]) => {
+        setStore(
+            produce((state) => {
+                state.whiteboardState.currentPath = path;
+            })
+        );
+    },
+
+    addFinishedPath: (path: Path) => {
+        setStore(
+            produce((state) => {
+                state.whiteboardState.finishedPaths.push(path);
+                state.whiteboardState.currentPath = [];
+            })
+        );
+    },
 };

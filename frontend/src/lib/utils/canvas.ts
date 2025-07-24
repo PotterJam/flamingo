@@ -1,4 +1,4 @@
-import { PathPoint } from '~/components/Whiteboard';
+import { PathPoint } from '../../model';
 
 export const translatePointerToCanvas = (
     e: PointerEvent,

@@ -1,5 +1,5 @@
 import { createSignal, Component, createMemo, For, Show } from 'solid-js';
-import { store } from '../store';
+import { actions, store } from '../store';
 import { DrawEvent } from '../messages';
 import classNames from 'classnames';
 import { Separator } from './ui/separator';
@@ -44,15 +44,6 @@ interface WhiteboardProps {
     height: number;
 }
 
-// The format perfect-freehand expects: [x, y, pressure]
-export type PathPoint = [number, number, number];
-
-export interface Path {
-    points: PathPoint[];
-    thickness: number;
-    colour: PaletteColor;
-}
-
 const defaultBrushThickness = 9;
 
 const sendDrawEvent = (drawEvent: DrawEvent) => {
@@ -73,8 +64,6 @@ const Whiteboard: Component<WhiteboardProps> = ({ height, width }) => {
     );
 
     const [isDrawing, setIsDrawing] = createSignal(false);
-    const [finishedPaths, setFinishedPaths] = createSignal<Path[]>([]);
-    const [currentPath, setCurrentPath] = createSignal<PathPoint[]>([]);
 
     // handleDraw({
     //     eventType: 'draw',
@@ -98,15 +87,11 @@ const Whiteboard: Component<WhiteboardProps> = ({ height, width }) => {
     const isDrawer = () =>
         store.gameState.localPlayerId === store.gameState.currentDrawerId;
 
-    let remoteCurrentStroke: Array<Path> = [];
-    let remoteStrokeColor = '#000000';
-    let remoteStrokeSize = 3;
-
     const handlePointerDown = (e: PointerEvent) => {
         e.preventDefault();
         if (!canvasRef) return;
         setIsDrawing(true);
-        setCurrentPath([translatePointerToCanvas(e, canvasRef)]);
+        actions.setCurrentPath([translatePointerToCanvas(e, canvasRef)]);
     };
 
     const handlePointerUp = (e: PointerEvent) => {
@@ -114,15 +99,14 @@ const Whiteboard: Component<WhiteboardProps> = ({ height, width }) => {
         if (!canvasRef) return;
         setIsDrawing(false);
 
-        if (!currentPath()) return;
+        if (!store.whiteboardState.currentPath.length) return;
 
         const newFinishedPath = {
-            points: currentPath(),
+            points: store.whiteboardState.currentPath,
             colour: selectedColour(),
             thickness: selectedThickness(),
         };
-        setFinishedPaths((prev) => [...prev, newFinishedPath]);
-        setCurrentPath([]);
+        actions.addFinishedPath(newFinishedPath);
     };
 
     const handlePointerLeave = (e: PointerEvent) => {
@@ -142,14 +126,14 @@ const Whiteboard: Component<WhiteboardProps> = ({ height, width }) => {
         if (!canvasRef) return;
         e.preventDefault();
 
-        setCurrentPath((prev) => [
-            ...prev,
+        actions.setCurrentPath([
+            ...store.whiteboardState.currentPath,
             translatePointerToCanvas(e, canvasRef),
         ]);
     };
 
     const renderedFinishedPaths = createMemo(() => {
-        return finishedPaths().map((path) => {
+        return store.whiteboardState.finishedPaths.map((path) => {
             const settings = {
                 size: path.thickness,
             } as StrokeOptions;
@@ -162,13 +146,15 @@ const Whiteboard: Component<WhiteboardProps> = ({ height, width }) => {
     });
 
     const renderedCurrentPath = createMemo(() => {
-        if (!currentPath()) return null;
+        if (!store.whiteboardState.currentPath.length) return null;
 
         const settings = {
             size: selectedThickness(),
         } as StrokeOptions;
 
-        return getSvgPathFromStroke(getStroke(currentPath(), settings));
+        return getSvgPathFromStroke(
+            getStroke(store.whiteboardState.currentPath, settings)
+        );
     });
 
     return (
