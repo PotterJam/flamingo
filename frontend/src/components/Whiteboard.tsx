@@ -91,22 +91,14 @@ const Whiteboard: Component<WhiteboardProps> = ({ height, width }) => {
         e.preventDefault();
         if (!canvasRef) return;
         setIsDrawing(true);
-        actions.setCurrentPath([translatePointerToCanvas(e, canvasRef)]);
+        actions.startPath(translatePointerToCanvas(e, canvasRef));
     };
 
     const handlePointerUp = (e: PointerEvent) => {
         e.preventDefault();
         if (!canvasRef) return;
         setIsDrawing(false);
-
-        if (!store.whiteboardState.currentPath.length) return;
-
-        const newFinishedPath = {
-            points: store.whiteboardState.currentPath,
-            colour: selectedColour(),
-            thickness: selectedThickness(),
-        };
-        actions.addFinishedPath(newFinishedPath);
+        actions.finishPath(selectedColour(), selectedThickness());
     };
 
     const handlePointerLeave = (e: PointerEvent) => {
@@ -125,11 +117,7 @@ const Whiteboard: Component<WhiteboardProps> = ({ height, width }) => {
         if (!isDrawing()) return;
         if (!canvasRef) return;
         e.preventDefault();
-
-        actions.setCurrentPath([
-            ...store.whiteboardState.currentPath,
-            translatePointerToCanvas(e, canvasRef),
-        ]);
+        actions.continuePath(translatePointerToCanvas(e, canvasRef));
     };
 
     const renderedFinishedPaths = createMemo(() => {

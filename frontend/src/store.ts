@@ -385,19 +385,33 @@ export const actions = {
         // TODO
     },
 
-    setCurrentPath: (path: PathPoint[]) => {
+    startPath: (point: PathPoint) => {
         setStore(
             produce((state) => {
-                state.whiteboardState.currentPath = path;
+                state.whiteboardState.currentPath = [point];
             })
         );
     },
 
-    addFinishedPath: (path: Path) => {
+    continuePath: (point: PathPoint) => {
         setStore(
             produce((state) => {
-                state.whiteboardState.finishedPaths.push(path);
-                state.whiteboardState.currentPath = [];
+                state.whiteboardState.currentPath.push(point);
+            })
+        );
+    },
+
+    finishPath: (colour: string, thickness: number) => {
+        setStore(
+            produce((state) => {
+                if (state.whiteboardState.currentPath.length > 0) {
+                    state.whiteboardState.finishedPaths.push({
+                        points: state.whiteboardState.currentPath,
+                        colour,
+                        thickness,
+                    });
+                    state.whiteboardState.currentPath = [];
+                }
             })
         );
     },
