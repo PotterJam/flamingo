@@ -100,7 +100,6 @@ export interface AppState {
     gameState: GameState;
     whiteboardState: WhiteboardState;
     roomId: string | null;
-    clearCanvas: (() => void) | null;
 
     roundCount: number;
     roundLength: number;
@@ -117,7 +116,6 @@ const initialAppState: AppState = {
     gameState: initialGameState,
     whiteboardState: initialWhiteboardState,
     roomId: null,
-    clearCanvas: null,
     roundCount: 3,
     roundLength: 45,
 };
@@ -214,14 +212,6 @@ export const actions = {
         setStore(
             produce((state) => {
                 state.gameState.messages.push(message);
-            })
-        );
-    },
-
-    setClearCanvas: (callback: (() => void) | null) => {
-        setStore(
-            produce((state) => {
-                state.clearCanvas = callback;
             })
         );
     },
