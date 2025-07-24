@@ -1,4 +1,4 @@
-import { createSignal, Component, createMemo, For } from 'solid-js';
+import { createSignal, Component, createMemo, For, Show } from 'solid-js';
 import { actions, store } from '../store';
 import { DrawEvent } from '../messages';
 import classNames from 'classnames';
@@ -9,6 +9,7 @@ import {
     getSvgPathFromStroke,
     translatePointerToCanvas,
 } from '../lib/utils/canvas';
+import { render } from 'solid-js/web';
 
 const PALETTE = {
     black: '#000000',
@@ -45,6 +46,11 @@ interface WhiteboardProps {
 // The format perfect-freehand expects: [x, y, pressure]
 export type PathPoint = [number, number, number];
 
+export interface Path {
+    points: PathPoint[];
+    colour: keyof typeof PALETTE;
+}
+
 const defaultBrushThickness = 9;
 
 const sendDrawEvent = (drawEvent: DrawEvent) => {
@@ -58,15 +64,15 @@ const Whiteboard: Component<WhiteboardProps> = ({ height, width }) => {
     let canvasRef: SVGSVGElement | undefined;
     let ctxRef: CanvasRenderingContext2D | null = null;
 
-    const [isDrawing, setIsDrawing] = createSignal(false);
-    const [finishedPaths, setFinishedPaths] = createSignal<PathPoint[][]>([]);
-    const [currentPath, setCurrentPath] = createSignal<PathPoint[]>([]);
-
     const [selectedColour, setSelectedColour] =
         createSignal<keyof typeof PALETTE>('black');
     const [selectedThickness, setSelectedThickness] = createSignal(
         defaultBrushThickness
     );
+
+    const [isDrawing, setIsDrawing] = createSignal(false);
+    const [finishedPaths, setFinishedPaths] = createSignal<Path[]>([]);
+    const [currentPath, setCurrentPath] = createSignal<PathPoint[]>([]);
 
     // handleDraw({
     //     eventType: 'draw',
@@ -90,7 +96,7 @@ const Whiteboard: Component<WhiteboardProps> = ({ height, width }) => {
     const isDrawer = () =>
         store.gameState.localPlayerId === store.gameState.currentDrawerId;
 
-    let remoteCurrentStroke: Array<PathPoint> = [];
+    let remoteCurrentStroke: Array<Path> = [];
     let remoteStrokeColor = '#000000';
     let remoteStrokeSize = 3;
 
@@ -108,7 +114,10 @@ const Whiteboard: Component<WhiteboardProps> = ({ height, width }) => {
 
         if (!currentPath()) return;
 
-        setFinishedPaths((prev) => [...prev, currentPath()]);
+        setFinishedPaths((prev) => [
+            ...prev,
+            { points: currentPath(), colour: selectedColour() },
+        ]);
         setCurrentPath([]);
     };
 
@@ -136,9 +145,10 @@ const Whiteboard: Component<WhiteboardProps> = ({ height, width }) => {
     };
 
     const renderedFinishedPaths = createMemo(() => {
-        return finishedPaths().map((path) =>
-            getSvgPathFromStroke(getStroke(path))
-        );
+        return finishedPaths().map((path) => ({
+            colour: path.colour,
+            points: getSvgPathFromStroke(getStroke(path.points)),
+        }));
     });
 
     const renderedCurrentPath = createMemo(() => {
@@ -162,9 +172,11 @@ const Whiteboard: Component<WhiteboardProps> = ({ height, width }) => {
                 onPointerEnter={handlePointerEnter}
             >
                 <For each={renderedFinishedPaths()}>
-                    {(path) => <path d={path} />}
+                    {(path) => <path d={path.points} fill={path.colour} />}
                 </For>
-                {renderedCurrentPath() && <path d={renderedCurrentPath()!} />}
+                <Show when={renderedCurrentPath()}>
+                    {(path) => <path d={path()} fill={selectedColour()} />}
+                </Show>
             </svg>
             <Separator />
             <div class="flex w-full flex-row justify-between gap-2 p-2">
