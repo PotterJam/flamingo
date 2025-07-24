@@ -1,5 +1,5 @@
 import { createSignal, Component, createMemo, For, Show } from 'solid-js';
-import { actions, store } from '../store';
+import { store } from '../store';
 import { DrawEvent } from '../messages';
 import classNames from 'classnames';
 import { Separator } from './ui/separator';
@@ -9,34 +9,35 @@ import {
     getSvgPathFromStroke,
     translatePointerToCanvas,
 } from '../lib/utils/canvas';
-import { render } from 'solid-js/web';
 
-const PALETTE = {
-    black: '#000000',
-    white: '#FFFFFF',
-    grey: '#C1C1C1',
-    'dark-grey': '#505050',
-    red: '#EF120B',
-    'dark-red': '#740A08',
-    orange: '#FF7700',
-    'dark-orange': '#C23900',
-    yellow: '#FFE404',
-    'dark-yellow': '#E8A202',
-    green: '#08C202',
-    'dark-green': '#00461A',
-    cyan: '#00FF91',
-    'dark-cyan': '#02569E',
-    blue: '#2220D3',
-    'dark-blue': '#0E0865',
-    purple: '#A302BA',
-    'dark-purple': '#550069',
-    pink: '#DF69A7',
-    'dark-pink': '#883454',
-    peach: '#FFAC8A',
-    'dark-peach': '#CC7C4D',
-    brown: '#A0522D',
-    'dark-brown': '#63300D',
-} as const;
+const PALETTE = [
+    '#000000',
+    '#FFFFFF',
+    '#C1C1C1',
+    '#505050',
+    '#EF120B',
+    '#740A08',
+    '#FF7700',
+    '#C23900',
+    '#FFE404',
+    '#E8A202',
+    '#08C202',
+    '#00461A',
+    '#00FF91',
+    '#02569E',
+    '#2220D3',
+    '#0E0865',
+    '#A302BA',
+    '#550069',
+    '#DF69A7',
+    '#883454',
+    '#FFAC8A',
+    '#CC7C4D',
+    '#A0522D',
+    '#63300D',
+] as const;
+
+type PaletteColor = (typeof PALETTE)[number];
 
 interface WhiteboardProps {
     width: number;
@@ -48,7 +49,7 @@ export type PathPoint = [number, number, number];
 
 export interface Path {
     points: PathPoint[];
-    colour: keyof typeof PALETTE;
+    colour: PaletteColor;
 }
 
 const defaultBrushThickness = 9;
@@ -65,7 +66,7 @@ const Whiteboard: Component<WhiteboardProps> = ({ height, width }) => {
     let ctxRef: CanvasRenderingContext2D | null = null;
 
     const [selectedColour, setSelectedColour] =
-        createSignal<keyof typeof PALETTE>('black');
+        createSignal<PaletteColor>('#000000');
     const [selectedThickness, setSelectedThickness] = createSignal(
         defaultBrushThickness
     );
@@ -172,10 +173,10 @@ const Whiteboard: Component<WhiteboardProps> = ({ height, width }) => {
                 onPointerEnter={handlePointerEnter}
             >
                 <For each={renderedFinishedPaths()}>
-                    {(path) => <path d={path.points} fill={PALETTE[path.colour]} />}
+                    {(path) => <path d={path.points} fill={path.colour} />}
                 </For>
                 <Show when={renderedCurrentPath()}>
-                    {(path) => <path d={path()} fill={PALETTE[selectedColour()]} />}
+                    {(path) => <path d={path()} fill={selectedColour()} />}
                 </Show>
             </svg>
             <Separator />
@@ -184,20 +185,16 @@ const Whiteboard: Component<WhiteboardProps> = ({ height, width }) => {
                     <div
                         class="h-full w-full border-2 border-gray-300 border-t-gray-100 border-l-gray-300"
                         style={{
-                            'background-color': PALETTE[selectedColour()],
+                            'background-color': selectedColour(),
                         }}
                     />
                 </div>
                 <div class="grid h-14 grid-cols-12 grid-rows-2 items-center justify-center">
-                    {Object.entries(PALETTE).map(([colour, hex]) => (
+                    {PALETTE.map((hex) => (
                         <div
                             class="h-7 w-7 cursor-pointer transition-transform duration-150 ease-in-out hover:scale-130"
                             style={{ 'background-color': hex }}
-                            onClick={() =>
-                                setSelectedColour(
-                                    colour as keyof typeof PALETTE
-                                )
-                            }
+                            onClick={() => setSelectedColour(hex)}
                         />
                     ))}
                 </div>
