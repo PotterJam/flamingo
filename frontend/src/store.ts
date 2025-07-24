@@ -2,7 +2,6 @@ import { createStore, produce } from 'solid-js/store';
 import { createEffect } from 'solid-js';
 import {
     ChatMessage,
-    DrawEvent,
     DrawEventMsg,
     GameInfoMsg,
     Player,
@@ -60,7 +59,6 @@ export interface GameState {
     wordChoices: string[] | null;
     messages: ChatMessage[];
     turnEndTime: number | null;
-    lastDrawEvent: DrawEvent | null;
     scoreDisplay: {
         correctWord: string;
         scoreGains: PlayerScoreGain[];
@@ -85,7 +83,6 @@ const initialGameState: GameState = {
     wordOutline: null,
     messages: [],
     turnEndTime: null,
-    lastDrawEvent: null,
     scoreDisplay: null,
     totalRounds: null,
     currentRound: null,

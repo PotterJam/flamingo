@@ -1,6 +1,5 @@
 import { createSignal, Component, createMemo, For, Show } from 'solid-js';
 import { actions, store } from '../store';
-import { DrawEvent } from '../messages';
 import classNames from 'classnames';
 import { Separator } from './ui/separator';
 import { getStroke, StrokeOptions } from 'perfect-freehand';
@@ -46,16 +45,8 @@ interface WhiteboardProps {
 
 const defaultBrushThickness = 9;
 
-const sendDrawEvent = (drawEvent: DrawEvent) => {
-    store.sendMessage({
-        type: 'drawEvent',
-        payload: drawEvent,
-    });
-};
-
 const Whiteboard: Component<WhiteboardProps> = ({ height, width }) => {
     let canvasRef: SVGSVGElement | undefined;
-    let ctxRef: CanvasRenderingContext2D | null = null;
 
     const [selectedColour, setSelectedColour] =
         createSignal<PaletteColor>('#000000');
@@ -64,28 +55,6 @@ const Whiteboard: Component<WhiteboardProps> = ({ height, width }) => {
     );
 
     const [isDrawing, setIsDrawing] = createSignal(false);
-
-    // handleDraw({
-    //     eventType: 'draw',
-    //     x: pos.x,
-    //     y: pos.y,
-    //     color: PALETTE[selectedColour()],
-    //     lineWidth: selectedThickness(),
-    // });
-
-    // handleDraw({ eventType: 'end' });
-
-    // handleDraw({
-    //     eventType: 'start',
-    //     x: pos.x,
-    //     y: pos.y,
-    //     color: PALETTE[selectedColour()],
-    //     lineWidth: selectedThickness(),
-    // });
-
-    const lastDrawEvent = () => store.gameState.lastDrawEvent;
-    const isDrawer = () =>
-        store.gameState.localPlayerId === store.gameState.currentDrawerId;
 
     const handlePointerDown = (e: PointerEvent) => {
         e.preventDefault();
