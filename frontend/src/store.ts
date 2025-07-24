@@ -382,7 +382,36 @@ export const actions = {
     },
 
     handleCanvasUpdate: ({ payload }: CanvasUpdateMsg) => {
-        // TODO
+        setStore(
+            produce((state) => {
+                state.whiteboardState = initialWhiteboardState;
+
+                payload.drawPaths.forEach((event) => {
+                    if (event.eventType === 'start') {
+                        state.whiteboardState.currentPath = {
+                            points: [[event.x, event.y, 0.5]],
+                            colour: event.color,
+                            thickness: event.lineWidth,
+                        };
+                    } else if (event.eventType === 'draw') {
+                        if (state.whiteboardState.currentPath) {
+                            state.whiteboardState.currentPath.points.push([
+                                event.x,
+                                event.y,
+                                1,
+                            ]);
+                        }
+                    } else if (event.eventType === 'end') {
+                        if (state.whiteboardState.currentPath) {
+                            state.whiteboardState.finishedPaths.push(
+                                state.whiteboardState.currentPath
+                            );
+                            state.whiteboardState.currentPath = null;
+                        }
+                    }
+                });
+            })
+        );
     },
 
     startPath: (point: PathPoint, colour: string, thickness: number) => {
