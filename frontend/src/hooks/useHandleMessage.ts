@@ -31,7 +31,7 @@ export const useHandleMessage = (message: Accessor<ReceivedMsg | null>) => {
                     break;
                 }
                 case 'drawEvent': {
-                    actions.handleDraw(msg);
+                    actions.handleDrawPayload(msg);
                     break;
                 }
                 case 'turnEnd': {
@@ -67,7 +67,7 @@ export const useHandleMessage = (message: Accessor<ReceivedMsg | null>) => {
                     break;
                 }
                 case 'canvasUpdate': {
-                    actions.handleCanvasUpdate(msg)
+                    actions.handleCanvasUpdate(msg);
                     break;
                 }
                 case 'error': {

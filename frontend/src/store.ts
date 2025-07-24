@@ -325,14 +325,6 @@ export const actions = {
         );
     },
 
-    handleDraw: ({ payload }: DrawEventMsg) => {
-        setStore(
-            produce((state) => {
-                state.gameState.lastDrawEvent = payload;
-            })
-        );
-    },
-
     handleRoundScoreDisplay: ({ payload }: RoundScoreDisplayMsg) => {
         setStore(
             produce((state) => {
@@ -377,6 +369,36 @@ export const actions = {
         setStore(
             produce((state) => {
                 state.gameState.word = payload.word;
+            })
+        );
+    },
+
+    handleDrawPayload: ({ payload }: DrawEventMsg) => {
+        console.log(payload);
+        setStore(
+            produce((state) => {
+                if (payload.eventType === 'start') {
+                    state.whiteboardState.currentPath = {
+                        points: [[payload.x, payload.y, 0.5]],
+                        colour: payload.color,
+                        thickness: payload.lineWidth,
+                    };
+                } else if (payload.eventType === 'draw') {
+                    if (state.whiteboardState.currentPath) {
+                        state.whiteboardState.currentPath.points.push([
+                            payload.x,
+                            payload.y,
+                            0.5,
+                        ]);
+                    }
+                } else if (payload.eventType === 'end') {
+                    if (state.whiteboardState.currentPath) {
+                        state.whiteboardState.finishedPaths.push(
+                            state.whiteboardState.currentPath
+                        );
+                        state.whiteboardState.currentPath = null;
+                    }
+                }
             })
         );
     },
