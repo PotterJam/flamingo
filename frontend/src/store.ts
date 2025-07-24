@@ -46,7 +46,7 @@ const mapBackendPhaseToFrontend = (backendPhase: string): GamePhase => {
 
 export interface WhiteboardState {
     finishedPaths: Path[];
-    currentPath: PathPoint[];
+    currentPath: Path | null;
 }
 
 export interface GameState {
@@ -71,7 +71,7 @@ export interface GameState {
 
 const initialWhiteboardState: WhiteboardState = {
     finishedPaths: [],
-    currentPath: [],
+    currentPath: null,
 };
 
 const initialGameState: GameState = {
@@ -385,34 +385,69 @@ export const actions = {
         // TODO
     },
 
-    startPath: (point: PathPoint) => {
+    startPath: (point: PathPoint, colour: string, thickness: number) => {
         setStore(
             produce((state) => {
-                state.whiteboardState.currentPath = [point];
+                state.whiteboardState.currentPath = {
+                    points: [point],
+                    colour,
+                    thickness,
+                };
             })
         );
+
+        store.sendMessage({
+            type: 'drawEvent',
+            payload: {
+                eventType: 'start',
+                x: point[0],
+                y: point[1],
+                color: colour,
+                lineWidth: thickness,
+            },
+        });
     },
 
     continuePath: (point: PathPoint) => {
         setStore(
             produce((state) => {
-                state.whiteboardState.currentPath.push(point);
-            })
-        );
-    },
-
-    finishPath: (colour: string, thickness: number) => {
-        setStore(
-            produce((state) => {
-                if (state.whiteboardState.currentPath.length > 0) {
-                    state.whiteboardState.finishedPaths.push({
-                        points: state.whiteboardState.currentPath,
-                        colour,
-                        thickness,
-                    });
-                    state.whiteboardState.currentPath = [];
+                if (state.whiteboardState.currentPath) {
+                    state.whiteboardState.currentPath.points.push(point);
                 }
             })
         );
+
+        if (store.whiteboardState.currentPath) {
+            store.sendMessage({
+                type: 'drawEvent',
+                payload: {
+                    eventType: 'draw',
+                    x: point[0],
+                    y: point[1],
+                    color: store.whiteboardState.currentPath.colour,
+                    lineWidth: store.whiteboardState.currentPath.thickness,
+                },
+            });
+        }
+    },
+
+    finishPath: () => {
+        setStore(
+            produce((state) => {
+                if (state.whiteboardState.currentPath) {
+                    state.whiteboardState.finishedPaths.push(
+                        state.whiteboardState.currentPath
+                    );
+                    state.whiteboardState.currentPath = null;
+                }
+            })
+        );
+
+        store.sendMessage({
+            type: 'drawEvent',
+            payload: {
+                eventType: 'end',
+            },
+        });
     },
 };

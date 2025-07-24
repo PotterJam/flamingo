@@ -91,14 +91,18 @@ const Whiteboard: Component<WhiteboardProps> = ({ height, width }) => {
         e.preventDefault();
         if (!canvasRef) return;
         setIsDrawing(true);
-        actions.startPath(translatePointerToCanvas(e, canvasRef));
+        actions.startPath(
+            translatePointerToCanvas(e, canvasRef),
+            selectedColour(),
+            selectedThickness()
+        );
     };
 
     const handlePointerUp = (e: PointerEvent) => {
         e.preventDefault();
         if (!canvasRef) return;
         setIsDrawing(false);
-        actions.finishPath(selectedColour(), selectedThickness());
+        actions.finishPath();
     };
 
     const handlePointerLeave = (e: PointerEvent) => {
@@ -134,14 +138,18 @@ const Whiteboard: Component<WhiteboardProps> = ({ height, width }) => {
     });
 
     const renderedCurrentPath = createMemo(() => {
-        if (!store.whiteboardState.currentPath.length) return null;
+        if (
+            !store.whiteboardState.currentPath ||
+            !store.whiteboardState.currentPath.points.length
+        )
+            return null;
 
         const settings = {
-            size: selectedThickness(),
+            size: store.whiteboardState.currentPath.thickness,
         } as StrokeOptions;
 
         return getSvgPathFromStroke(
-            getStroke(store.whiteboardState.currentPath, settings)
+            getStroke(store.whiteboardState.currentPath.points, settings)
         );
     });
 
@@ -164,7 +172,15 @@ const Whiteboard: Component<WhiteboardProps> = ({ height, width }) => {
                     {(path) => <path d={path.points} fill={path.colour} />}
                 </For>
                 <Show when={renderedCurrentPath()}>
-                    {(path) => <path d={path()} fill={selectedColour()} />}
+                    {(path) => (
+                        <path
+                            d={path()}
+                            fill={
+                                store.whiteboardState.currentPath?.colour ||
+                                selectedColour()
+                            }
+                        />
+                    )}
                 </Show>
             </svg>
             <Separator />
