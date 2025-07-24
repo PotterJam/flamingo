@@ -172,10 +172,10 @@ const Whiteboard: Component<WhiteboardProps> = ({ height, width }) => {
                 onPointerEnter={handlePointerEnter}
             >
                 <For each={renderedFinishedPaths()}>
-                    {(path) => <path d={path.points} fill={path.colour} />}
+                    {(path) => <path d={path.points} fill={PALETTE[path.colour]} />}
                 </For>
                 <Show when={renderedCurrentPath()}>
-                    {(path) => <path d={path()} fill={selectedColour()} />}
+                    {(path) => <path d={path()} fill={PALETTE[selectedColour()]} />}
                 </Show>
             </svg>
             <Separator />
