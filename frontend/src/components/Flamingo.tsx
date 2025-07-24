@@ -20,7 +20,6 @@ export const Flamingo = (props: FlamingoProps) => {
 
     createEffect(() => {
         if (!isConnected()) {
-            console.log('WebSocket disconnected.');
             actions.resetGameState();
         }
     });

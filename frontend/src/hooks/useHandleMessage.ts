@@ -7,8 +7,6 @@ export const useHandleMessage = (message: Accessor<ReceivedMsg | null>) => {
     createEffect(() => {
         const msg = message();
         if (msg) {
-            console.log('Processing message in createEffect:', msg);
-
             switch (msg.type) {
                 case 'gameInfo': {
                     actions.handleGameInfo(msg);
