@@ -265,6 +265,8 @@ export const actions = {
                 state.gameState.wordChoices = payload.wordChoices ?? null;
                 state.gameState.players = payload.players;
                 state.gameState.turnEndTime = payload.turnEndTime;
+                state.whiteboardState.finishedPaths = [];
+                state.whiteboardState.currentPath = null;
             })
         );
     },
@@ -284,10 +286,8 @@ export const actions = {
                 state.gameState.scoreDisplay = null;
                 state.gameState.totalRounds = payload.totalRounds;
                 state.gameState.currentRound = payload.currentRound;
-                state.whiteboardState = initialWhiteboardState;
             })
         );
-        store.clearCanvas?.();
     },
 
     handlePlayerUpdate: ({ payload }: PlayerUpdateMsg) => {
@@ -396,7 +396,8 @@ export const actions = {
     handleCanvasUpdate: ({ payload }: CanvasUpdateMsg) => {
         setStore(
             produce((state) => {
-                state.whiteboardState = initialWhiteboardState;
+                state.whiteboardState.finishedPaths = [];
+                state.whiteboardState.currentPath = null;
 
                 payload.drawPaths.forEach((event) => {
                     if (event.eventType === 'start') {
