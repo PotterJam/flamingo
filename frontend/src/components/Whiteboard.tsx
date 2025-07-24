@@ -1,9 +1,4 @@
-import {
-    createSignal,
-    Component,
-    createMemo,
-    For,
-} from 'solid-js';
+import { createSignal, Component, createMemo, For } from 'solid-js';
 import { actions, store } from '../store';
 import { DrawEvent } from '../messages';
 import classNames from 'classnames';
@@ -123,6 +118,12 @@ const Whiteboard: Component<WhiteboardProps> = ({ height, width }) => {
         handlePointerUp(e);
     };
 
+    const handlePointerEnter = (e: PointerEvent) => {
+        if (e.buttons === 1) {
+            handlePointerDown(e);
+        }
+    };
+
     const handlePointerMove = (e: PointerEvent) => {
         if (!isDrawing()) return;
         if (!canvasRef) return;
@@ -158,6 +159,7 @@ const Whiteboard: Component<WhiteboardProps> = ({ height, width }) => {
                 onPointerMove={handlePointerMove}
                 onPointerUp={handlePointerUp}
                 onPointerLeave={handlePointerLeave}
+                onPointerEnter={handlePointerEnter}
             >
                 <For each={renderedFinishedPaths()}>
                     {(path) => <path d={path} />}
