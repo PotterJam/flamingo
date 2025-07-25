@@ -8,6 +8,7 @@ import {
     getSvgPathFromStroke,
     translatePointerToCanvas,
 } from '../lib/utils/canvas';
+import { FiTrash2 } from 'solid-icons/fi';
 
 const PALETTE = [
     '#000000',
@@ -205,7 +206,17 @@ const Whiteboard: Component<WhiteboardProps> = ({ height, width }) => {
                                 })
                             }
                         >
-                            <FaSolidArrowRotateLeft></FaSolidArrowRotateLeft>
+                            <FaSolidArrowRotateLeft />
+                        </button>
+                        <button
+                            onClick={() =>
+                                store.sendMessage({
+                                    type: 'clearDrawing',
+                                    payload: {},
+                                })
+                            }
+                        >
+                            <FiTrash2 />
                         </button>
                     </div>
                 </div>
