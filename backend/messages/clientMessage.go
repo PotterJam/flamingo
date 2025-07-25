@@ -9,6 +9,7 @@ const (
 	ClientSelectRoundWord = "selectRoundWord"
 	ClientPhaseChangeAck  = "phaseChangeAck"
 	ClientDrawPathUndo    = "drawPathUndo"
+	ClientClearDrawing    = "clearDrawing"
 )
 
 type SetNamePayload struct {

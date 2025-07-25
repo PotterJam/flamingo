@@ -8,6 +8,7 @@ import {
     getSvgPathFromStroke,
     translatePointerToCanvas,
 } from '../lib/utils/canvas';
+import { FiTrash2 } from 'solid-icons/fi';
 
 const PALETTE = [
     '#000000',
@@ -198,6 +199,7 @@ const Whiteboard: Component<WhiteboardProps> = ({ height, width }) => {
                     </div>
                     <div class="flex flex-row items-center space-x-2 p-2">
                         <button
+                            class="p-1"
                             onClick={() =>
                                 store.sendMessage({
                                     type: 'drawPathUndo',
@@ -205,7 +207,18 @@ const Whiteboard: Component<WhiteboardProps> = ({ height, width }) => {
                                 })
                             }
                         >
-                            <FaSolidArrowRotateLeft></FaSolidArrowRotateLeft>
+                            <FaSolidArrowRotateLeft />
+                        </button>
+                        <button
+                            class="p-1"
+                            onClick={() =>
+                                store.sendMessage({
+                                    type: 'clearDrawing',
+                                    payload: {},
+                                })
+                            }
+                        >
+                            <FiTrash2 />
                         </button>
                     </div>
                 </div>

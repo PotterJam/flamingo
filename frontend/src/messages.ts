@@ -232,6 +232,11 @@ export interface DrawPathUndoMsg {
     payload: {};
 }
 
+export interface ClearDrawingMsg {
+    type: 'clearDrawing';
+    payload: {};
+}
+
 export type SendMsg =
     | SetNameMsg
     | DrawEventMsg
@@ -240,4 +245,5 @@ export type SendMsg =
     | SelectRoundWordMsg
     | StartGameMsg
     | PhaseChangeAckMsg
-    | DrawPathUndoMsg;
+    | DrawPathUndoMsg
+    | ClearDrawingMsg;
