@@ -163,6 +163,14 @@ func (p *RoundInProgressHandler) HandleMessage(gs *GameState, player *Player, ms
 		})
 	}
 
+	if msg.Type == messages.ClientClearDrawing && gs.isDrawer(player) {
+		clear(gs.DrawStack)
+
+		go gs.Broadcaster.Broadcast(messages.CanvasUpdateBroadcastResponse, messages.CanvasUpdatePayload{
+			DrawPaths: make([]messages.DrawEventPayload, 0),
+		})
+	}
+
 	return p
 }
 
