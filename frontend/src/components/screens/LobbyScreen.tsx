@@ -112,6 +112,7 @@ export const LobbyScreen = () => {
                                     actions.setRoundLength(parseInt(x));
                                 }
                             }}
+                            formatOptions={{ useGrouping: false }}
                             class="w-full"
                         >
                             <NumberFieldLabel>Round length(s)</NumberFieldLabel>

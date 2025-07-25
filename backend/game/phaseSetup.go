@@ -19,6 +19,9 @@ func (p *RoundSetupHandler) Phase() GamePhase {
 }
 
 func (p *RoundSetupHandler) StartPhase(gs *GameState) {
+	// New drawing means new draw stack
+	gs.DrawStack = make([]*[]messages.DrawEventPayload, 0)
+
 	gs.turnEndTime = time.Now().Add(10 * time.Second)
 	gs.timerForTimeout = time.NewTimer(10 * time.Second)
 

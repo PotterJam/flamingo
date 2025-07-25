@@ -2,7 +2,6 @@ import { createStore, produce } from 'solid-js/store';
 import { createEffect } from 'solid-js';
 import {
     ChatMessage,
-    DrawEvent,
     DrawEventMsg,
     GameInfoMsg,
     Player,
@@ -17,8 +16,9 @@ import {
     TurnStartMsg,
     GameFinishedMsg,
     WordRevealMsg,
+    CanvasUpdateMsg,
 } from './messages';
-import { GamePhase } from './model';
+import { GamePhase, Path, PathPoint } from './model';
 
 // Map backend phase names to frontend phase names
 const mapBackendPhaseToFrontend = (backendPhase: string): GamePhase => {
@@ -43,6 +43,11 @@ const mapBackendPhaseToFrontend = (backendPhase: string): GamePhase => {
     }
 };
 
+export interface WhiteboardState {
+    finishedPaths: Path[];
+    currentPath: Path | null;
+}
+
 export interface GameState {
     gamePhase: GamePhase;
     players: Player[];
@@ -54,7 +59,6 @@ export interface GameState {
     wordChoices: string[] | null;
     messages: ChatMessage[];
     turnEndTime: number | null;
-    lastDrawEvent: DrawEvent | null;
     scoreDisplay: {
         correctWord: string;
         scoreGains: PlayerScoreGain[];
@@ -62,6 +66,11 @@ export interface GameState {
     totalRounds: number | null;
     currentRound: number | null;
 }
+
+const initialWhiteboardState: WhiteboardState = {
+    finishedPaths: [],
+    currentPath: null,
+};
 
 const initialGameState: GameState = {
     gamePhase: 'Lobby',
@@ -74,7 +83,6 @@ const initialGameState: GameState = {
     wordOutline: null,
     messages: [],
     turnEndTime: null,
-    lastDrawEvent: null,
     scoreDisplay: null,
     totalRounds: null,
     currentRound: null,
@@ -87,8 +95,8 @@ export interface AppState {
     selfId: string;
     launchAsHost: boolean;
     gameState: GameState;
+    whiteboardState: WhiteboardState;
     roomId: string | null;
-    clearCanvas: (() => void) | null;
 
     roundCount: number;
     roundLength: number;
@@ -103,8 +111,8 @@ const initialAppState: AppState = {
     selfId: '',
     launchAsHost: false,
     gameState: initialGameState,
+    whiteboardState: initialWhiteboardState,
     roomId: null,
-    clearCanvas: null,
     roundCount: 3,
     roundLength: 45,
 };
@@ -205,14 +213,6 @@ export const actions = {
         );
     },
 
-    setClearCanvas: (callback: (() => void) | null) => {
-        setStore(
-            produce((state) => {
-                state.clearCanvas = callback;
-            })
-        );
-    },
-
     setRoundCount: (count: number) => {
         setStore(
             produce((state) => {
@@ -262,6 +262,8 @@ export const actions = {
                 state.gameState.wordChoices = payload.wordChoices ?? null;
                 state.gameState.players = payload.players;
                 state.gameState.turnEndTime = payload.turnEndTime;
+                state.whiteboardState.finishedPaths = [];
+                state.whiteboardState.currentPath = null;
             })
         );
     },
@@ -283,7 +285,6 @@ export const actions = {
                 state.gameState.currentRound = payload.currentRound;
             })
         );
-        store.clearCanvas?.();
     },
 
     handlePlayerUpdate: ({ payload }: PlayerUpdateMsg) => {
@@ -307,14 +308,6 @@ export const actions = {
                 state.gameState.wordOutline = null;
                 state.gameState.wordChoices = null;
                 state.gameState.currentDrawerId = null;
-            })
-        );
-    },
-
-    handleDraw: ({ payload }: DrawEventMsg) => {
-        setStore(
-            produce((state) => {
-                state.gameState.lastDrawEvent = payload;
             })
         );
     },
@@ -365,5 +358,135 @@ export const actions = {
                 state.gameState.word = payload.word;
             })
         );
+    },
+
+    handleDrawPayload: ({ payload }: DrawEventMsg) => {
+        console.log(payload);
+        setStore(
+            produce((state) => {
+                if (payload.eventType === 'start') {
+                    state.whiteboardState.currentPath = {
+                        points: [[payload.x, payload.y, 0.5]],
+                        colour: payload.color,
+                        thickness: payload.lineWidth,
+                    };
+                } else if (payload.eventType === 'draw') {
+                    if (state.whiteboardState.currentPath) {
+                        state.whiteboardState.currentPath.points.push([
+                            payload.x,
+                            payload.y,
+                            0.5,
+                        ]);
+                    }
+                } else if (payload.eventType === 'end') {
+                    if (state.whiteboardState.currentPath) {
+                        state.whiteboardState.finishedPaths.push(
+                            state.whiteboardState.currentPath
+                        );
+                        state.whiteboardState.currentPath = null;
+                    }
+                }
+            })
+        );
+    },
+
+    handleCanvasUpdate: ({ payload }: CanvasUpdateMsg) => {
+        setStore(
+            produce((state) => {
+                state.whiteboardState.finishedPaths = [];
+                state.whiteboardState.currentPath = null;
+
+                payload.drawPaths.forEach((event) => {
+                    if (event.eventType === 'start') {
+                        state.whiteboardState.currentPath = {
+                            points: [[event.x, event.y, 0.5]],
+                            colour: event.color,
+                            thickness: event.lineWidth,
+                        };
+                    } else if (event.eventType === 'draw') {
+                        if (state.whiteboardState.currentPath) {
+                            state.whiteboardState.currentPath.points.push([
+                                event.x,
+                                event.y,
+                                1,
+                            ]);
+                        }
+                    } else if (event.eventType === 'end') {
+                        if (state.whiteboardState.currentPath) {
+                            state.whiteboardState.finishedPaths.push(
+                                state.whiteboardState.currentPath
+                            );
+                            state.whiteboardState.currentPath = null;
+                        }
+                    }
+                });
+            })
+        );
+    },
+
+    startPath: (point: PathPoint, colour: string, thickness: number) => {
+        setStore(
+            produce((state) => {
+                state.whiteboardState.currentPath = {
+                    points: [point],
+                    colour,
+                    thickness,
+                };
+            })
+        );
+
+        store.sendMessage({
+            type: 'drawEvent',
+            payload: {
+                eventType: 'start',
+                x: point[0],
+                y: point[1],
+                color: colour,
+                lineWidth: thickness,
+            },
+        });
+    },
+
+    continuePath: (point: PathPoint) => {
+        setStore(
+            produce((state) => {
+                if (state.whiteboardState.currentPath) {
+                    state.whiteboardState.currentPath.points.push(point);
+                }
+            })
+        );
+
+        if (store.whiteboardState.currentPath) {
+            store.sendMessage({
+                type: 'drawEvent',
+                payload: {
+                    eventType: 'draw',
+                    x: point[0],
+                    y: point[1],
+                    color: store.whiteboardState.currentPath.colour,
+                    lineWidth: store.whiteboardState.currentPath.thickness,
+                },
+            });
+        }
+    },
+
+    finishPath: () => {
+        setStore(
+            produce((state) => {
+                if (state.whiteboardState.currentPath) {
+                    state.whiteboardState.finishedPaths.push(
+                        state.whiteboardState.currentPath
+                    );
+                    state.whiteboardState.currentPath = null;
+                }
+            })
+        );
+
+        store.sendMessage({
+            type: 'drawEvent',
+            payload: {
+                eventType: 'end',
+            },
+        });
     },
 };

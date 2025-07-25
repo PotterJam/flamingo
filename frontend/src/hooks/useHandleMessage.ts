@@ -7,8 +7,6 @@ export const useHandleMessage = (message: Accessor<ReceivedMsg | null>) => {
     createEffect(() => {
         const msg = message();
         if (msg) {
-            console.log('Processing message in createEffect:', msg);
-
             switch (msg.type) {
                 case 'gameInfo': {
                     actions.handleGameInfo(msg);
@@ -31,7 +29,7 @@ export const useHandleMessage = (message: Accessor<ReceivedMsg | null>) => {
                     break;
                 }
                 case 'drawEvent': {
-                    actions.handleDraw(msg);
+                    actions.handleDrawPayload(msg);
                     break;
                 }
                 case 'turnEnd': {
@@ -64,6 +62,10 @@ export const useHandleMessage = (message: Accessor<ReceivedMsg | null>) => {
                 }
                 case 'phaseChangeAck': {
                     store.sendMessage(msg);
+                    break;
+                }
+                case 'canvasUpdate': {
+                    actions.handleCanvasUpdate(msg);
                     break;
                 }
                 case 'error': {

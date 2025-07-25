@@ -99,6 +99,7 @@ func NewGame(b Broadcaster) *Game {
 			CurrentRound:                 0,
 			PlayersWhoHaveDrawnThisRound: make([]string, 0),
 			PlayerOperations:             make(chan PlayerOperation, 5),
+			DrawStack:                    make([]*[]messages.DrawEventPayload, 0),
 		},
 		GameHandler: handler,
 		Messages:    make(chan GameMessage, 5),

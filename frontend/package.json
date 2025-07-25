@@ -17,6 +17,7 @@
         "classnames": "^2.5.1",
         "clsx": "^2.1.1",
         "immer": "^10.1.1",
+        "perfect-freehand": "^1.2.2",
         "solid-icons": "^1.1.0",
         "solid-js": "^1.8.0",
         "tailwind-merge": "^3.3.1",
