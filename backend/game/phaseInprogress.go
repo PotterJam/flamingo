@@ -156,6 +156,8 @@ func (p *RoundInProgressHandler) HandleMessage(gs *GameState, player *Player, ms
 			}
 		}
 
+		gs.DrawStack = gs.DrawStack[:len(gs.DrawStack)-1]
+
 		go gs.Broadcaster.Broadcast(messages.CanvasUpdateBroadcastResponse, messages.CanvasUpdatePayload{
 			DrawPaths: paths,
 		})
