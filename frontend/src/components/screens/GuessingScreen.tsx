@@ -33,7 +33,7 @@ export const GuessingScreen: Component = () => {
                     <GameHeader />
                 </CardContent>
             </Card>
-            <div class="flex w-full flex-row gap-4">
+            <div class="flex h-full w-full flex-1 flex-row gap-4">
                 <Card class="w-full flex-1 bg-white p-0">
                     <CardContent class="flex w-full flex-col p-0">
                         <h2 class="p-2 text-lg font-bold">Players</h2>
