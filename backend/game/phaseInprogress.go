@@ -134,6 +134,7 @@ func (p *RoundInProgressHandler) HandleMessage(gs *GameState, player *Player, ms
 
 		ds := gs.DrawStack[len(gs.DrawStack)-1]
 		*ds = append(*ds, messages.DrawEventPayload{
+			EventType: drawPayload.EventType,
 			X:         drawPayload.X,
 			Y:         drawPayload.Y,
 			Color:     drawPayload.Color,
