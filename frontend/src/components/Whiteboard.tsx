@@ -155,59 +155,61 @@ const Whiteboard: Component<WhiteboardProps> = ({ height, width }) => {
                 </Show>
             </svg>
             <Separator />
-            <div class="flex w-full flex-row justify-between gap-2 p-2">
-                <div class="my-2 h-12 w-12 border-2 border-gray-500 border-t-gray-300 border-l-gray-300">
-                    <div
-                        class="h-full w-full border-2 border-gray-300 border-t-gray-100 border-l-gray-300"
-                        style={{
-                            'background-color': selectedColour(),
-                        }}
-                    />
-                </div>
-                <div class="grid h-14 grid-cols-12 grid-rows-2 items-center justify-center">
-                    {PALETTE.map((hex) => (
+            <Show when={isDrawer()}>
+                <div class="flex w-full flex-row justify-between gap-2 p-2">
+                    <div class="my-2 h-12 w-12 border-2 border-gray-500 border-t-gray-300 border-l-gray-300">
                         <div
-                            class="h-7 w-7 cursor-pointer transition-transform duration-150 ease-in-out hover:scale-130"
-                            style={{ 'background-color': hex }}
-                            onClick={() => setSelectedColour(hex)}
+                            class="h-full w-full border-2 border-gray-300 border-t-gray-100 border-l-gray-300"
+                            style={{
+                                'background-color': selectedColour(),
+                            }}
                         />
-                    ))}
-                </div>
-                <div class="flex flex-row items-center space-x-2">
-                    {[6, 9, 12].map((thickness) => (
-                        <div
-                            class={classNames(
-                                'flex h-8 w-8 cursor-pointer items-center justify-center rounded-full border border-gray-400 bg-white hover:ring-2 hover:ring-blue-500',
-                                {
-                                    'ring-2 ring-blue-500 ring-offset-1':
-                                        selectedThickness() === thickness,
-                                }
-                            )}
-                            onClick={() => setSelectedThickness(thickness)}
-                        >
+                    </div>
+                    <div class="grid h-14 grid-cols-12 grid-rows-2 items-center justify-center">
+                        {PALETTE.map((hex) => (
                             <div
-                                class="rounded-full bg-black"
-                                style={{
-                                    width: `${thickness * 2}px`,
-                                    height: `${thickness * 2}px`,
-                                }}
+                                class="h-7 w-7 cursor-pointer transition-transform duration-150 ease-in-out hover:scale-130"
+                                style={{ 'background-color': hex }}
+                                onClick={() => setSelectedColour(hex)}
                             />
-                        </div>
-                    ))}
+                        ))}
+                    </div>
+                    <div class="flex flex-row items-center space-x-2">
+                        {[6, 9, 12].map((thickness) => (
+                            <div
+                                class={classNames(
+                                    'flex h-8 w-8 cursor-pointer items-center justify-center rounded-full border border-gray-400 bg-white hover:ring-2 hover:ring-blue-500',
+                                    {
+                                        'ring-2 ring-blue-500 ring-offset-1':
+                                            selectedThickness() === thickness,
+                                    }
+                                )}
+                                onClick={() => setSelectedThickness(thickness)}
+                            >
+                                <div
+                                    class="rounded-full bg-black"
+                                    style={{
+                                        width: `${thickness * 2}px`,
+                                        height: `${thickness * 2}px`,
+                                    }}
+                                />
+                            </div>
+                        ))}
+                    </div>
+                    <div class="flex flex-row items-center space-x-2 p-2">
+                        <button
+                            onClick={() =>
+                                store.sendMessage({
+                                    type: 'drawPathUndo',
+                                    payload: {},
+                                })
+                            }
+                        >
+                            <FaSolidArrowRotateLeft></FaSolidArrowRotateLeft>
+                        </button>
+                    </div>
                 </div>
-                <div class="flex flex-row items-center space-x-2 p-2">
-                    <button
-                        onClick={() =>
-                            store.sendMessage({
-                                type: 'drawPathUndo',
-                                payload: {},
-                            })
-                        }
-                    >
-                        <FaSolidArrowRotateLeft></FaSolidArrowRotateLeft>
-                    </button>
-                </div>
-            </div>
+            </Show>
         </div>
     );
 };

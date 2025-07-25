@@ -27,15 +27,15 @@ export const GuessingScreen: Component = () => {
     };
 
     return (
-        <div class="flex-col flex h-[675px] w-full max-w-[1200px] justify-center gap-4">
+        <div class="flex h-[675px] w-full max-w-[1200px] flex-col justify-center gap-4">
             <Card class="flex items-center justify-between gap-4 bg-pink-400 p-2">
                 <CardContent class="w-full">
                     <GameHeader />
                 </CardContent>
             </Card>
-            <div class="flex flex-row w-full gap-4">
+            <div class="flex w-full flex-row gap-4">
                 <Card class="w-full flex-1 bg-white p-0">
-                    <CardContent class="flex h-full w-full flex-col p-0">
+                    <CardContent class="flex w-full flex-col p-0">
                         <h2 class="p-2 text-lg font-bold">Players</h2>
                         <div class="min-h-0 flex-grow overflow-y-auto">
                             <PlayerList />
