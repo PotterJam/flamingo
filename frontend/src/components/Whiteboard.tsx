@@ -199,6 +199,7 @@ const Whiteboard: Component<WhiteboardProps> = ({ height, width }) => {
                     </div>
                     <div class="flex flex-row items-center space-x-2 p-2">
                         <button
+                            class="p-1"
                             onClick={() =>
                                 store.sendMessage({
                                     type: 'drawPathUndo',
@@ -209,6 +210,7 @@ const Whiteboard: Component<WhiteboardProps> = ({ height, width }) => {
                             <FaSolidArrowRotateLeft />
                         </button>
                         <button
+                            class="p-1"
                             onClick={() =>
                                 store.sendMessage({
                                     type: 'clearDrawing',
