@@ -179,6 +179,16 @@ func (p *RoundInProgressHandler) HandleMessage(gs *GameState, player *Player, ms
 		})
 	}
 
+	if msg.Type == messages.ClientFill && gs.isDrawer(player) {
+		var fillPayload messages.ClientFillPayload
+		if err := json.Unmarshal(msg.Payload, &fillPayload); err != nil {
+			player.SendError("invalid fill payload format")
+			return p
+		}
+
+		return p
+	}
+
 	return p
 }
 
