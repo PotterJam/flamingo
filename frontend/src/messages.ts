@@ -131,6 +131,16 @@ export interface DrawEventMsg {
     payload: DrawEvent;
 }
 
+export interface FillEvent {
+    x: number;
+    y: number;
+}
+
+export interface FillMsg {
+    type: 'fill';
+    payload: FillEvent;
+}
+
 export interface CanvasUpdateMsg {
     type: 'canvasUpdate';
     payload: CanvasUpdate;
@@ -246,4 +256,5 @@ export type SendMsg =
     | StartGameMsg
     | PhaseChangeAckMsg
     | DrawPathUndoMsg
-    | ClearDrawingMsg;
+    | ClearDrawingMsg
+    | FillMsg;
