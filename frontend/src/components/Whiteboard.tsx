@@ -70,7 +70,14 @@ const Whiteboard: Component<WhiteboardProps> = ({ height, width }) => {
 
         if (isFill()) {
             const [x, y, _] = translatePointerToCanvas(e, canvasRef);
-            store.sendMessage({ type: 'fill', payload: { x: x, y: y } });
+            store.sendMessage({ 
+                type: 'fill', 
+                payload: { 
+                    x: x, 
+                    y: y, 
+                    color: selectedColour() 
+                } 
+            });
             return;
         }
 
@@ -153,6 +160,15 @@ const Whiteboard: Component<WhiteboardProps> = ({ height, width }) => {
                 onPointerLeave={handlePointerLeave}
                 onPointerEnter={handlePointerEnter}
             >
+                <Show when={store.whiteboardState.rasterData}>
+                    <image
+                        href={store.whiteboardState.rasterData!}
+                        width={width}
+                        height={height}
+                        x={0}
+                        y={0}
+                    />
+                </Show>
                 <For each={renderedFinishedPaths()}>
                     {(path) => <path d={path.points} fill={path.colour} />}
                 </For>

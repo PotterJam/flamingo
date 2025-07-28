@@ -68,6 +68,10 @@ export const useHandleMessage = (message: Accessor<ReceivedMsg | null>) => {
                     actions.handleCanvasUpdate(msg);
                     break;
                 }
+                case 'rasterUpdate': {
+                    actions.handleRasterUpdate(msg);
+                    break;
+                }
                 case 'error': {
                     const payload = msg.payload;
                     if (!payload) {

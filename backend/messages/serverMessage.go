@@ -8,6 +8,7 @@ const (
 	ChatResponse                  = "chat"
 	DrawEventBroadcastResponse    = "drawEvent" // <<< Using "drawEvent" to match frontend expectation
 	CanvasUpdateBroadcastResponse = "canvasUpdate"
+	RasterUpdateBroadcastResponse = "rasterUpdate"
 	TurnSetupResponse             = "turnSetup"
 	TurnEndResponse               = "turnEnd"
 	RoundScoreDisplayResponse     = "roundScoreDisplay"
@@ -117,6 +118,9 @@ type WordRevealPayload struct {
 }
 
 type CanvasUpdatePayload struct {
-	DrawPaths  []DrawEventPayload `json:"drawPaths"`
-	RasterData string             `json:"rasterData,omitempty"`
+	DrawPaths []DrawEventPayload `json:"drawPaths"`
+}
+
+type RasterUpdatePayload struct {
+	RasterData string `json:"rasterData"`
 }

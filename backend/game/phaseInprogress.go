@@ -196,9 +196,8 @@ func (p *RoundInProgressHandler) HandleMessage(gs *GameState, player *Player, ms
 		// Generate PNG data URL for the updated canvas
 		rasterData := gs.CanvasToPNGDataURL()
 
-		// Broadcast the updated canvas to all players
-		go gs.Broadcaster.Broadcast(messages.CanvasUpdateBroadcastResponse, messages.CanvasUpdatePayload{
-			DrawPaths:  make([]messages.DrawEventPayload, 0), // Empty since this is just a raster update
+		// Broadcast the updated raster canvas to all players
+		go gs.Broadcaster.Broadcast(messages.RasterUpdateBroadcastResponse, messages.RasterUpdatePayload{
 			RasterData: rasterData,
 		})
 

@@ -17,6 +17,7 @@ import {
     GameFinishedMsg,
     WordRevealMsg,
     CanvasUpdateMsg,
+    RasterUpdateMsg,
 } from './messages';
 import { GamePhase, Path, PathPoint } from './model';
 
@@ -46,6 +47,7 @@ const mapBackendPhaseToFrontend = (backendPhase: string): GamePhase => {
 export interface WhiteboardState {
     finishedPaths: Path[];
     currentPath: Path | null;
+    rasterData: string | null;
 }
 
 export interface GameState {
@@ -70,6 +72,7 @@ export interface GameState {
 const initialWhiteboardState: WhiteboardState = {
     finishedPaths: [],
     currentPath: null,
+    rasterData: null,
 };
 
 const initialGameState: GameState = {
@@ -264,6 +267,7 @@ export const actions = {
                 state.gameState.turnEndTime = payload.turnEndTime;
                 state.whiteboardState.finishedPaths = [];
                 state.whiteboardState.currentPath = null;
+                state.whiteboardState.rasterData = null;
             })
         );
     },
@@ -420,6 +424,14 @@ export const actions = {
                         }
                     }
                 });
+            })
+        );
+    },
+
+    handleRasterUpdate: ({ payload }: RasterUpdateMsg) => {
+        setStore(
+            produce((state) => {
+                state.whiteboardState.rasterData = payload.rasterData;
             })
         );
     },
