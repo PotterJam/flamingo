@@ -36,28 +36,50 @@ func (gs *GameState) DrawPixel(x, y int, color string) {
 
 // DrawLine uses Bresenham's line algorithm to draw a line between two points
 func (gs *GameState) DrawLine(x0, y0, x1, y1 int, color string) {
+	if x0 == x1 && y0 == y1 {
+		gs.DrawPixel(x0, y0, color)
+		return
+	}
+
 	dx := abs(x1 - x0)
 	dy := abs(y1 - y0)
-	sx := sign(x1 - x0)
-	sy := sign(y1 - y0)
+
+	// Determine step direction for x and y
+	stepX := 1
+	if x0 > x1 {
+		stepX = -1
+	}
+	stepY := 1
+	if y0 > y1 {
+		stepY = -1
+	}
+
+	// Initialize error term
 	err := dx - dy
 
 	x, y := x0, y0
+
 	for {
 		gs.DrawPixel(x, y, color)
 
+		// Check if we've reached the destination
 		if x == x1 && y == y1 {
 			break
 		}
 
+		// Calculate error for next step
 		e2 := 2 * err
+
+		// Move in x direction if error indicates we should
 		if e2 > -dy {
 			err -= dy
-			x += sx
+			x += stepX
 		}
+
+		// Move in y direction if error indicates we should
 		if e2 < dx {
 			err += dx
-			y += sy
+			y += stepY
 		}
 	}
 }
@@ -70,21 +92,23 @@ func (gs *GameState) ClearRasterCanvas() {
 	}
 }
 
-func (gs *GameState) HandleRasterDrawEvent(drawEvent messages.DrawEventPayload, prevX, prevY *int, currentColor *string) {
+func (gs *GameState) HandleRasterDrawEvent(drawEvent messages.DrawEventPayload) {
 	currentX := int(drawEvent.X)
 	currentY := int(drawEvent.Y)
 
 	switch drawEvent.EventType {
 	case "start":
 		gs.DrawPixel(currentX, currentY, drawEvent.Color)
-		*currentColor = drawEvent.Color
-		*prevX = currentX
-		*prevY = currentY
+		gs.currentStrokeColor = drawEvent.Color
+		gs.PrevX = currentX
+		gs.PrevY = currentY
 
-	case "continue", "end":
-		gs.DrawLine(*prevX, *prevY, currentX, currentY, *currentColor)
-		*prevX = currentX
-		*prevY = currentY
+	case "draw":
+		if gs.PrevX != -1 && gs.PrevY != -1 {
+			gs.DrawLine(gs.PrevX, gs.PrevY, currentX, currentY, gs.currentStrokeColor)
+		}
+		gs.PrevX = currentX
+		gs.PrevY = currentY
 	}
 }
 
@@ -105,11 +129,9 @@ func hexToColor(hex string) color.RGBA {
 func (gs *GameState) CanvasToPNGDataURL() string {
 	height := len(gs.RasterCanvas)
 	if height == 0 {
-		log.Printf("DEBUG: RasterCanvas height is 0")
 		return ""
 	}
 	width := len(gs.RasterCanvas[0])
-	log.Printf("DEBUG: Canvas dimensions: %dx%d", width, height)
 
 	// Create a new RGBA image
 	img := image.NewRGBA(image.Rect(0, 0, width, height))
@@ -126,36 +148,24 @@ func (gs *GameState) CanvasToPNGDataURL() string {
 	// Encode to PNG
 	var buf bytes.Buffer
 	if err := png.Encode(&buf, img); err != nil {
-		log.Printf("DEBUG: PNG encode error: %v", err)
 		return ""
 	}
 
-	log.Printf("DEBUG: PNG buffer size: %d bytes", buf.Len())
-
 	// Convert to base64 data URL
 	encoded := base64.StdEncoding.EncodeToString(buf.Bytes())
-	dataURL := "data:image/png;base64," + encoded
-	log.Printf("DEBUG: Data URL length: %d", len(dataURL))
-	return dataURL
+	return "data:image/png;base64," + encoded
 }
 
 // FloodFill implements flood fill algorithm for paint bucket tool
 func (gs *GameState) FloodFill(startX, startY int, newColor string) {
-	log.Printf("DEBUG: FloodFill called at (%d, %d) with color %s", startX, startY, newColor)
-
 	if startY < 0 || startY >= len(gs.RasterCanvas) || startX < 0 || startX >= len(gs.RasterCanvas[0]) {
-		log.Printf("DEBUG: FloodFill coordinates out of bounds")
 		return
 	}
 
 	originalColor := gs.RasterCanvas[startY][startX]
-	log.Printf("DEBUG: Original color at (%d, %d): %s", startX, startY, originalColor)
-
 	if originalColor == newColor {
-		log.Printf("DEBUG: Original color same as new color, no change needed")
 		return // No change needed
-	}
-	// Use a stack-based flood fill to avoid recursion depth issues
+	} // Use a stack-based flood fill to avoid recursion depth issues
 	type point struct{ x, y int }
 	stack := []point{{startX, startY}}
 	pixelsFilled := 0
@@ -189,6 +199,4 @@ func (gs *GameState) FloodFill(startX, startY int, newColor string) {
 			point{x, y - 1}, // Up
 		)
 	}
-
-	log.Printf("DEBUG: FloodFill completed, filled %d pixels", pixelsFilled)
 }

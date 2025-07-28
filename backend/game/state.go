@@ -68,8 +68,8 @@ type GameState struct {
 	DrawStack    []*[]messages.DrawEventPayload
 	RasterCanvas [][]string
 
-	currentStrokePrevX int
-	currentStrokePrevY int
+	PrevX int
+	PrevY int
 	currentStrokeColor string
 }
 

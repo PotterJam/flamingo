@@ -130,9 +130,9 @@ func (p *RoundInProgressHandler) HandleMessage(gs *GameState, player *Player, ms
 		if drawPayload.EventType == "start" {
 			newDrawStack := make([]messages.DrawEventPayload, 0)
 			gs.DrawStack = append(gs.DrawStack, &newDrawStack)
-
-			gs.currentStrokePrevX = -1
-			gs.currentStrokePrevY = -1
+			// Reset stroke state for rasterization
+			gs.PrevX = -1
+			gs.PrevY = -1
 			gs.currentStrokeColor = drawPayload.Color
 		}
 
@@ -145,7 +145,13 @@ func (p *RoundInProgressHandler) HandleMessage(gs *GameState, player *Player, ms
 			LineWidth: drawPayload.LineWidth,
 		})
 
-		gs.HandleRasterDrawEvent(drawPayload, &gs.currentStrokePrevX, &gs.currentStrokePrevY, &gs.currentStrokeColor)
+		gs.HandleRasterDrawEvent(drawPayload)
+
+		// Generate and broadcast raster update after every draw event
+		rasterData := gs.CanvasToPNGDataURL()
+		go gs.Broadcaster.Broadcast(messages.RasterUpdateBroadcastResponse, messages.RasterUpdatePayload{
+			RasterData: rasterData,
+		})
 
 		playersToSendTo := gs.allOtherPlayers(player)
 		go gs.Broadcaster.BroadcastToPlayers(messages.DrawEventBroadcastResponse, msg.Payload, playersToSendTo)
@@ -186,21 +192,15 @@ func (p *RoundInProgressHandler) HandleMessage(gs *GameState, player *Player, ms
 			return p
 		}
 
-		log.Printf("DEBUG: Received fill request at (%.2f, %.2f) with color %s", fillPayload.X, fillPayload.Y, fillPayload.Color)
-
 		// Convert float coordinates to int
 		startX := int(fillPayload.X)
 		startY := int(fillPayload.Y)
-
-		log.Printf("DEBUG: Converted coordinates to (%d, %d)", startX, startY)
 
 		// Perform flood fill
 		gs.FloodFill(startX, startY, fillPayload.Color)
 
 		// Generate PNG data URL for the updated canvas
 		rasterData := gs.CanvasToPNGDataURL()
-
-		log.Printf("DEBUG: Generated raster data, sending to clients")
 
 		// Broadcast the updated raster canvas to all players
 		go gs.Broadcaster.Broadcast(messages.RasterUpdateBroadcastResponse, messages.RasterUpdatePayload{

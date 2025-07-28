@@ -112,6 +112,8 @@ func NewGame(b Broadcaster) *Game {
 			PlayerOperations:             make(chan PlayerOperation, 5),
 			DrawStack:                    make([]*[]messages.DrawEventPayload, 0),
 			RasterCanvas:                 canvas,
+			PrevX:           -1,
+			PrevY:           -1,
 		},
 		GameHandler: handler,
 		Messages:    make(chan GameMessage, 5),
