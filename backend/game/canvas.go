@@ -7,7 +7,6 @@ import (
 	"image"
 	"image/color"
 	"image/png"
-	"log"
 	"strconv"
 )
 
@@ -31,6 +30,20 @@ func sign(x int) int {
 func (gs *GameState) DrawPixel(x, y int, color string) {
 	if y >= 0 && y < len(gs.RasterCanvas) && x >= 0 && x < len(gs.RasterCanvas[0]) {
 		gs.RasterCanvas[y][x] = color
+	}
+}
+
+func (gs *GameState) DrawLineWithThickness(x0, y0, x1, y1 int, color string, thickness float64) {
+	radius := int(thickness / 2)
+
+	// Draw multiple parallel lines to create thickness
+	for dy := -radius; dy <= radius; dy++ {
+		for dx := -radius; dx <= radius; dx++ {
+			// Only draw if within circular radius (for round brush)
+			if dx*dx+dy*dy <= radius*radius {
+				gs.DrawLine(x0+dx, y0+dy, x1+dx, y1+dy, color)
+			}
+		}
 	}
 }
 
@@ -98,14 +111,22 @@ func (gs *GameState) HandleRasterDrawEvent(drawEvent messages.DrawEventPayload) 
 
 	switch drawEvent.EventType {
 	case "start":
-		gs.DrawPixel(currentX, currentY, drawEvent.Color)
+		// Draw a thick point for the start
+		radius := int(drawEvent.LineWidth / 2)
+		for dy := -radius; dy <= radius; dy++ {
+			for dx := -radius; dx <= radius; dx++ {
+				if dx*dx+dy*dy <= radius*radius {
+					gs.DrawPixel(currentX+dx, currentY+dy, drawEvent.Color)
+				}
+			}
+		}
 		gs.currentStrokeColor = drawEvent.Color
 		gs.PrevX = currentX
 		gs.PrevY = currentY
 
 	case "draw":
 		if gs.PrevX != -1 && gs.PrevY != -1 {
-			gs.DrawLine(gs.PrevX, gs.PrevY, currentX, currentY, gs.currentStrokeColor)
+			gs.DrawLineWithThickness(gs.PrevX, gs.PrevY, currentX, currentY, gs.currentStrokeColor, drawEvent.LineWidth)
 		}
 		gs.PrevX = currentX
 		gs.PrevY = currentY
