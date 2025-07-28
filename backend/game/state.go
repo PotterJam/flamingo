@@ -67,6 +67,10 @@ type GameState struct {
 
 	DrawStack    []*[]messages.DrawEventPayload
 	RasterCanvas [][]string
+
+	currentStrokePrevX int
+	currentStrokePrevY int
+	currentStrokeColor string
 }
 
 func (gs *GameState) broadcastPlayerUpdate() {

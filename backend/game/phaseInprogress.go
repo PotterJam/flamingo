@@ -130,6 +130,10 @@ func (p *RoundInProgressHandler) HandleMessage(gs *GameState, player *Player, ms
 		if drawPayload.EventType == "start" {
 			newDrawStack := make([]messages.DrawEventPayload, 0)
 			gs.DrawStack = append(gs.DrawStack, &newDrawStack)
+
+			gs.currentStrokePrevX = -1
+			gs.currentStrokePrevY = -1
+			gs.currentStrokeColor = drawPayload.Color
 		}
 
 		ds := gs.DrawStack[len(gs.DrawStack)-1]
@@ -140,6 +144,8 @@ func (p *RoundInProgressHandler) HandleMessage(gs *GameState, player *Player, ms
 			Color:     drawPayload.Color,
 			LineWidth: drawPayload.LineWidth,
 		})
+
+		gs.HandleRasterDrawEvent(drawPayload, &gs.currentStrokePrevX, &gs.currentStrokePrevY, &gs.currentStrokeColor)
 
 		playersToSendTo := gs.allOtherPlayers(player)
 		go gs.Broadcaster.BroadcastToPlayers(messages.DrawEventBroadcastResponse, msg.Payload, playersToSendTo)
@@ -165,6 +171,8 @@ func (p *RoundInProgressHandler) HandleMessage(gs *GameState, player *Player, ms
 
 	if msg.Type == messages.ClientClearDrawing && gs.isDrawer(player) {
 		clear(gs.DrawStack)
+
+		gs.ClearRasterCanvas()
 
 		go gs.Broadcaster.Broadcast(messages.CanvasUpdateBroadcastResponse, messages.CanvasUpdatePayload{
 			DrawPaths: make([]messages.DrawEventPayload, 0),
