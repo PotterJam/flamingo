@@ -8,7 +8,7 @@ import (
 )
 
 const CANVAS_WIDTH = 700
-const CANVAS_HEIGHT = 600
+const CANVAS_HEIGHT = 500
 
 type GameMessage struct {
 	player *Player
@@ -111,6 +111,7 @@ func NewGame(b Broadcaster) *Game {
 			PlayersWhoHaveDrawnThisRound: make([]string, 0),
 			PlayerOperations:             make(chan PlayerOperation, 5),
 			DrawStack:                    make([]*[]messages.DrawEventPayload, 0),
+			RasterCanvas:                 canvas,
 		},
 		GameHandler: handler,
 		Messages:    make(chan GameMessage, 5),

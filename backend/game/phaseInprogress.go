@@ -186,15 +186,21 @@ func (p *RoundInProgressHandler) HandleMessage(gs *GameState, player *Player, ms
 			return p
 		}
 
+		log.Printf("DEBUG: Received fill request at (%.2f, %.2f) with color %s", fillPayload.X, fillPayload.Y, fillPayload.Color)
+
 		// Convert float coordinates to int
 		startX := int(fillPayload.X)
 		startY := int(fillPayload.Y)
+
+		log.Printf("DEBUG: Converted coordinates to (%d, %d)", startX, startY)
 
 		// Perform flood fill
 		gs.FloodFill(startX, startY, fillPayload.Color)
 
 		// Generate PNG data URL for the updated canvas
 		rasterData := gs.CanvasToPNGDataURL()
+
+		log.Printf("DEBUG: Generated raster data, sending to clients")
 
 		// Broadcast the updated raster canvas to all players
 		go gs.Broadcaster.Broadcast(messages.RasterUpdateBroadcastResponse, messages.RasterUpdatePayload{
