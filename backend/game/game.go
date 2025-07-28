@@ -7,6 +7,9 @@ import (
 	"time"
 )
 
+const CANVAS_WIDTH = 700
+const CANVAS_HEIGHT = 600
+
 type GameMessage struct {
 	player *Player
 	msg    messages.Message
@@ -84,6 +87,14 @@ func (g *Game) updateHandler(newHandler GamePhaseHandler) {
 
 func NewGame(b Broadcaster) *Game {
 	handler := GamePhaseHandler(&WaitingInLobbyHandler{})
+
+	canvas := make([][]string, CANVAS_HEIGHT)
+	for y := range canvas {
+		canvas[y] = make([]string, CANVAS_WIDTH)
+		for x := range canvas[y] {
+			canvas[y][x] = "#ffffff"
+		}
+	}
 
 	return &Game{
 		GameState: &GameState{
