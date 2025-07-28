@@ -88,11 +88,11 @@ func (g *Game) updateHandler(newHandler GamePhaseHandler) {
 func NewGame(b Broadcaster) *Game {
 	handler := GamePhaseHandler(&WaitingInLobbyHandler{})
 
-	canvas := make([][]string, CANVAS_HEIGHT)
+	canvas := make([][]Pixel, CANVAS_HEIGHT)
 	for y := range canvas {
-		canvas[y] = make([]string, CANVAS_WIDTH)
+		canvas[y] = make([]Pixel, CANVAS_WIDTH)
 		for x := range canvas[y] {
-			canvas[y][x] = "#ffffff"
+			canvas[y][x] = Pixel{Color: "#ffffff", Type: PixelFill}
 		}
 	}
 
@@ -112,8 +112,8 @@ func NewGame(b Broadcaster) *Game {
 			PlayerOperations:             make(chan PlayerOperation, 5),
 			DrawStack:                    make([]*[]messages.DrawEventPayload, 0),
 			RasterCanvas:                 canvas,
-			PrevX:           -1,
-			PrevY:           -1,
+			PrevX:                        -1,
+			PrevY:                        -1,
 		},
 		GameHandler: handler,
 		Messages:    make(chan GameMessage, 5),

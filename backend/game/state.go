@@ -66,10 +66,10 @@ type GameState struct {
 	PlayerOperations chan PlayerOperation
 
 	DrawStack    []*[]messages.DrawEventPayload
-	RasterCanvas [][]string
+	RasterCanvas [][]Pixel
 
-	PrevX int
-	PrevY int
+	PrevX              int
+	PrevY              int
 	currentStrokeColor string
 }
 

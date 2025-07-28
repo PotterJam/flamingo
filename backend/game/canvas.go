@@ -10,6 +10,20 @@ import (
 	"strconv"
 )
 
+// PixelType represents the type of pixel on the canvas
+type PixelType int
+
+const (
+	PixelFill PixelType = iota // Filled area (visible in render)
+	PixelPath                  // Drawn path (invisible in render, acts as boundary)
+)
+
+// Pixel represents a single pixel with color and type information
+type Pixel struct {
+	Color string
+	Type  PixelType
+}
+
 func abs(x int) int {
 	if x < 0 {
 		return -x
@@ -29,7 +43,13 @@ func sign(x int) int {
 
 func (gs *GameState) DrawPixel(x, y int, color string) {
 	if y >= 0 && y < len(gs.RasterCanvas) && x >= 0 && x < len(gs.RasterCanvas[0]) {
-		gs.RasterCanvas[y][x] = color
+		gs.RasterCanvas[y][x] = Pixel{Color: color, Type: PixelPath}
+	}
+}
+
+func (gs *GameState) FillPixel(x, y int, color string) {
+	if y >= 0 && y < len(gs.RasterCanvas) && x >= 0 && x < len(gs.RasterCanvas[0]) {
+		gs.RasterCanvas[y][x] = Pixel{Color: color, Type: PixelFill}
 	}
 }
 
@@ -100,7 +120,7 @@ func (gs *GameState) DrawLine(x0, y0, x1, y1 int, color string) {
 func (gs *GameState) ClearRasterCanvas() {
 	for y := range gs.RasterCanvas {
 		for x := range gs.RasterCanvas[y] {
-			gs.RasterCanvas[y][x] = "#ffffff"
+			gs.RasterCanvas[y][x] = Pixel{Color: "#ffffff", Type: PixelFill}
 		}
 	}
 }
@@ -146,6 +166,41 @@ func hexToColor(hex string) color.RGBA {
 	return color.RGBA{uint8(r), uint8(g), uint8(b), 255}
 }
 
+// getMostCommonFillColor finds the most common fill color in a radius around the given position
+func (gs *GameState) getMostCommonFillColor(centerX, centerY, radius int) string {
+	colorCounts := make(map[string]int)
+
+	// Search in a square around the center point
+	for dy := -radius; dy <= radius; dy++ {
+		for dx := -radius; dx <= radius; dx++ {
+			x, y := centerX+dx, centerY+dy
+
+			// Check bounds
+			if y >= 0 && y < len(gs.RasterCanvas) && x >= 0 && x < len(gs.RasterCanvas[0]) {
+				pixel := gs.RasterCanvas[y][x]
+
+				// Only count fill pixels, not paths or empty
+				if pixel.Type == PixelFill {
+					colorCounts[pixel.Color]++
+				}
+			}
+		}
+	}
+
+	// Find the most common color
+	maxCount := 0
+	mostCommonColor := "#ffffff" // Default to white if no fill colors found
+
+	for color, count := range colorCounts {
+		if count > maxCount {
+			maxCount = count
+			mostCommonColor = color
+		}
+	}
+
+	return mostCommonColor
+}
+
 // CanvasToPNGDataURL converts the raster canvas to a base64-encoded PNG data URL
 func (gs *GameState) CanvasToPNGDataURL() string {
 	height := len(gs.RasterCanvas)
@@ -157,15 +212,24 @@ func (gs *GameState) CanvasToPNGDataURL() string {
 	// Create a new RGBA image
 	img := image.NewRGBA(image.Rect(0, 0, width, height))
 
-	// Fill the image with canvas data
+	// Fill the image with canvas data - render filled pixels and extend colors into paths
 	for y := 0; y < height; y++ {
 		for x := 0; x < width; x++ {
-			hexColor := gs.RasterCanvas[y][x]
-			rgba := hexToColor(hexColor)
+			pixel := gs.RasterCanvas[y][x]
+			var rgba color.RGBA
+
+			if pixel.Type == PixelFill {
+				// Render filled pixels normally
+				rgba = hexToColor(pixel.Color)
+			} else { // PixelPath
+				// For path pixels, use the most common fill color in surrounding area
+				surroundingColor := gs.getMostCommonFillColor(x, y, 5) // Search radius of 5
+				rgba = hexToColor(surroundingColor)
+			}
+
 			img.Set(x, y, rgba)
 		}
 	}
-
 	// Encode to PNG
 	var buf bytes.Buffer
 	if err := png.Encode(&buf, img); err != nil {
@@ -183,13 +247,21 @@ func (gs *GameState) FloodFill(startX, startY int, newColor string) {
 		return
 	}
 
-	originalColor := gs.RasterCanvas[startY][startX]
-	if originalColor == newColor {
-		return // No change needed
-	} // Use a stack-based flood fill to avoid recursion depth issues
+	originalPixel := gs.RasterCanvas[startY][startX]
+
+	// Don't fill if clicking on a path pixel (they act as boundaries)
+	if originalPixel.Type == PixelPath {
+		return
+	}
+
+	// Don't fill if the color would be the same
+	if originalPixel.Color == newColor && originalPixel.Type == PixelFill {
+		return
+	}
+
+	// Use a stack-based flood fill to avoid recursion depth issues
 	type point struct{ x, y int }
 	stack := []point{{startX, startY}}
-	pixelsFilled := 0
 
 	for len(stack) > 0 {
 		// Pop from stack
@@ -203,14 +275,20 @@ func (gs *GameState) FloodFill(startX, startY int, newColor string) {
 			continue
 		}
 
-		// Check if this pixel needs to be filled
-		if gs.RasterCanvas[y][x] != originalColor {
+		currentPixel := gs.RasterCanvas[y][x]
+
+		// Don't fill path pixels (they act as boundaries)
+		if currentPixel.Type == PixelPath {
+			continue
+		}
+
+		// Check if this pixel needs to be filled (same color and type as original)
+		if currentPixel.Color != originalPixel.Color || currentPixel.Type != originalPixel.Type {
 			continue
 		}
 
 		// Fill this pixel
-		gs.RasterCanvas[y][x] = newColor
-		pixelsFilled++
+		gs.FillPixel(x, y, newColor)
 
 		// Add neighbors to stack
 		stack = append(stack,
