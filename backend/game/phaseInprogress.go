@@ -147,12 +147,6 @@ func (p *RoundInProgressHandler) HandleMessage(gs *GameState, player *Player, ms
 
 		gs.HandleRasterDrawEvent(drawPayload)
 
-		// Generate and broadcast raster update after every draw event
-		rasterData := gs.CanvasToPNGDataURL()
-		go gs.Broadcaster.Broadcast(messages.RasterUpdateBroadcastResponse, messages.RasterUpdatePayload{
-			RasterData: rasterData,
-		})
-
 		playersToSendTo := gs.allOtherPlayers(player)
 		go gs.Broadcaster.BroadcastToPlayers(messages.DrawEventBroadcastResponse, msg.Payload, playersToSendTo)
 		return p
