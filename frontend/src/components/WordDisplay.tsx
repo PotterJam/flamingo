@@ -15,7 +15,14 @@ function WordDisplay() {
             .map((char) => (char ? char.toUpperCase() : '_'))
             .join('');
 
-    const letterCount = () => wordOutline().length;
+    const letterCount = () => {
+        return wordOutline()
+            .map((char) => char || '_')
+            .join('')
+            .split(' ')
+            .map((word) => word.length)
+            .join('-');
+    };
 
     const showLetterCount = () =>
         !word() && !isLocalPlayerDrawer() && wordOutline().length > 0;
