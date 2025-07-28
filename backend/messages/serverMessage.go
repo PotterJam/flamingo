@@ -117,5 +117,6 @@ type WordRevealPayload struct {
 }
 
 type CanvasUpdatePayload struct {
-	DrawPaths []DrawEventPayload `json:"drawPaths"`
+	DrawPaths  []DrawEventPayload `json:"drawPaths"`
+	RasterData string             `json:"rasterData,omitempty"`
 }

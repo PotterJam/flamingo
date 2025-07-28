@@ -10,7 +10,7 @@ const (
 	ClientPhaseChangeAck  = "phaseChangeAck"
 	ClientDrawPathUndo    = "drawPathUndo"
 	ClientClearDrawing    = "clearDrawing"
-	ClientFill            = "clientFill"
+	ClientFill            = "fill"
 )
 
 type SetNamePayload struct {
@@ -43,6 +43,7 @@ type StartGamePayload struct {
 }
 
 type ClientFillPayload struct {
-	X float64 `json:"x"`
-	Y float64 `json:"y"`
+	X     float64 `json:"x"`
+	Y     float64 `json:"y"`
+	Color string  `json:"color"`
 }

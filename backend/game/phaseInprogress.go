@@ -186,6 +186,22 @@ func (p *RoundInProgressHandler) HandleMessage(gs *GameState, player *Player, ms
 			return p
 		}
 
+		// Convert float coordinates to int
+		startX := int(fillPayload.X)
+		startY := int(fillPayload.Y)
+
+		// Perform flood fill
+		gs.FloodFill(startX, startY, fillPayload.Color)
+
+		// Generate PNG data URL for the updated canvas
+		rasterData := gs.CanvasToPNGDataURL()
+
+		// Broadcast the updated canvas to all players
+		go gs.Broadcaster.Broadcast(messages.CanvasUpdateBroadcastResponse, messages.CanvasUpdatePayload{
+			DrawPaths:  make([]messages.DrawEventPayload, 0), // Empty since this is just a raster update
+			RasterData: rasterData,
+		})
+
 		return p
 	}
 
