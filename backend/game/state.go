@@ -65,12 +65,11 @@ type GameState struct {
 	// Channel for handlers to request player operations (add, remove, etc.)
 	PlayerOperations chan PlayerOperation
 
-	DrawStack    []*[]messages.DrawEventPayload
-	RasterCanvas [][]Pixel
+	DrawStack []*[]messages.DrawEventPayload
 
-	PrevX              int
-	PrevY              int
-	currentStrokeColor string
+	RasterCanvas [][]Pixel
+	PrevX        int
+	PrevY        int
 }
 
 func (gs *GameState) broadcastPlayerUpdate() {

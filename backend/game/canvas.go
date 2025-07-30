@@ -10,15 +10,13 @@ import (
 	"strconv"
 )
 
-// PixelType represents the type of pixel on the canvas
 type PixelType int
 
 const (
-	PixelFill PixelType = iota // Filled area (visible in render)
-	PixelPath                  // Drawn path (invisible in render, acts as boundary)
+	PixelFill PixelType = iota
+	PixelPath
 )
 
-// Pixel represents a single pixel with color and type information
 type Pixel struct {
 	Color string
 	Type  PixelType
@@ -31,19 +29,9 @@ func abs(x int) int {
 	return x
 }
 
-func sign(x int) int {
-	if x > 0 {
-		return 1
-	}
-	if x < 0 {
-		return -1
-	}
-	return 0
-}
-
-func (gs *GameState) DrawPixel(x, y int, color string) {
+func (gs *GameState) InsertPathPixel(x, y int) {
 	if y >= 0 && y < len(gs.RasterCanvas) && x >= 0 && x < len(gs.RasterCanvas[0]) {
-		gs.RasterCanvas[y][x] = Pixel{Color: color, Type: PixelPath}
+		gs.RasterCanvas[y][x] = Pixel{Color: "#ffffff", Type: PixelPath}
 	}
 }
 
@@ -53,31 +41,29 @@ func (gs *GameState) FillPixel(x, y int, color string) {
 	}
 }
 
-func (gs *GameState) DrawLineWithThickness(x0, y0, x1, y1 int, color string, thickness float64) {
+func (gs *GameState) DrawLineWithThickness(x0, y0, x1, y1 int, thickness float64) {
 	radius := int(thickness / 2)
 
-	// Draw multiple parallel lines to create thickness
 	for dy := -radius; dy <= radius; dy++ {
 		for dx := -radius; dx <= radius; dx++ {
-			// Only draw if within circular radius (for round brush)
+			// Filter out some coords so that we are drawing thickness as a circle rather than a square
 			if dx*dx+dy*dy <= radius*radius {
-				gs.DrawLine(x0+dx, y0+dy, x1+dx, y1+dy, color)
+				gs.DrawLine(x0+dx, y0+dy, x1+dx, y1+dy)
 			}
 		}
 	}
 }
 
-// DrawLine uses Bresenham's line algorithm to draw a line between two points
-func (gs *GameState) DrawLine(x0, y0, x1, y1 int, color string) {
+// Bresenham's line algorithm
+func (gs *GameState) DrawLine(x0, y0, x1, y1 int) {
 	if x0 == x1 && y0 == y1 {
-		gs.DrawPixel(x0, y0, color)
+		gs.InsertPathPixel(x0, y0)
 		return
 	}
 
 	dx := abs(x1 - x0)
 	dy := abs(y1 - y0)
 
-	// Determine step direction for x and y
 	stepX := 1
 	if x0 > x1 {
 		stepX = -1
@@ -87,29 +73,23 @@ func (gs *GameState) DrawLine(x0, y0, x1, y1 int, color string) {
 		stepY = -1
 	}
 
-	// Initialize error term
 	err := dx - dy
-
 	x, y := x0, y0
 
 	for {
-		gs.DrawPixel(x, y, color)
+		gs.InsertPathPixel(x, y)
 
-		// Check if we've reached the destination
 		if x == x1 && y == y1 {
 			break
 		}
 
-		// Calculate error for next step
 		e2 := 2 * err
 
-		// Move in x direction if error indicates we should
 		if e2 > -dy {
 			err -= dy
 			x += stepX
 		}
 
-		// Move in y direction if error indicates we should
 		if e2 < dx {
 			err += dx
 			y += stepY
@@ -131,22 +111,20 @@ func (gs *GameState) HandleRasterDrawEvent(drawEvent messages.DrawEventPayload) 
 
 	switch drawEvent.EventType {
 	case "start":
-		// Draw a thick point for the start
 		radius := int(drawEvent.LineWidth / 2)
 		for dy := -radius; dy <= radius; dy++ {
 			for dx := -radius; dx <= radius; dx++ {
 				if dx*dx+dy*dy <= radius*radius {
-					gs.DrawPixel(currentX+dx, currentY+dy, drawEvent.Color)
+					gs.InsertPathPixel(currentX+dx, currentY+dy)
 				}
 			}
 		}
-		gs.currentStrokeColor = drawEvent.Color
 		gs.PrevX = currentX
 		gs.PrevY = currentY
 
 	case "draw":
 		if gs.PrevX != -1 && gs.PrevY != -1 {
-			gs.DrawLineWithThickness(gs.PrevX, gs.PrevY, currentX, currentY, gs.currentStrokeColor, drawEvent.LineWidth)
+			gs.DrawLineWithThickness(gs.PrevX, gs.PrevY, currentX, currentY, drawEvent.LineWidth)
 		}
 		gs.PrevX = currentX
 		gs.PrevY = currentY

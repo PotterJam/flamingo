@@ -133,7 +133,6 @@ func (p *RoundInProgressHandler) HandleMessage(gs *GameState, player *Player, ms
 			// Reset stroke state for rasterization
 			gs.PrevX = -1
 			gs.PrevY = -1
-			gs.currentStrokeColor = drawPayload.Color
 		}
 
 		ds := gs.DrawStack[len(gs.DrawStack)-1]
