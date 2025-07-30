@@ -1,7 +1,6 @@
 package game
 
 import (
-	"backend/messages"
 	"bytes"
 	"encoding/base64"
 	"image"
@@ -105,33 +104,6 @@ func (gs *GameState) ClearRasterCanvas() {
 	}
 }
 
-func (gs *GameState) HandleRasterDrawEvent(drawEvent messages.DrawEventPayload) {
-	currentX := int(drawEvent.X)
-	currentY := int(drawEvent.Y)
-
-	switch drawEvent.EventType {
-	case "start":
-		radius := int(drawEvent.LineWidth / 2)
-		for dy := -radius; dy <= radius; dy++ {
-			for dx := -radius; dx <= radius; dx++ {
-				if dx*dx+dy*dy <= radius*radius {
-					gs.InsertPathPixel(currentX+dx, currentY+dy)
-				}
-			}
-		}
-		gs.PrevX = currentX
-		gs.PrevY = currentY
-
-	case "draw":
-		if gs.PrevX != -1 && gs.PrevY != -1 {
-			gs.DrawLineWithThickness(gs.PrevX, gs.PrevY, currentX, currentY, drawEvent.LineWidth)
-		}
-		gs.PrevX = currentX
-		gs.PrevY = currentY
-	}
-}
-
-// hexToColor converts a hex color string to color.RGBA
 func hexToColor(hex string) color.RGBA {
 	if len(hex) != 7 || hex[0] != '#' {
 		return color.RGBA{255, 255, 255, 255} // Default to white
