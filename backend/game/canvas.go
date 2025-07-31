@@ -28,9 +28,20 @@ func abs(x int) int {
 	return x
 }
 
-func (gs *GameState) InsertPathPixel(x, y int) {
-	if y >= 0 && y < len(gs.RasterCanvas) && x >= 0 && x < len(gs.RasterCanvas[0]) {
-		gs.RasterCanvas[y][x] = Pixel{Color: "#ffffff", Type: PixelPath}
+func (gs *GameState) DrawPathPixel(x, y, thickness int) {
+	radius := int(thickness / 2)
+
+	for dy := -radius; dy <= radius; dy++ {
+		for dx := -radius; dx <= radius; dx++ {
+			// Filter out some coords so that we are drawing thickness as a circle rather than a square
+			if dx*dx+dy*dy <= radius*radius {
+				cx := dx + x
+				cy := dy + y
+				if cy >= 0 && cy < len(gs.RasterCanvas) && cx >= 0 && cx < len(gs.RasterCanvas[0]) {
+					gs.RasterCanvas[cy][cx] = Pixel{Color: "#ffffff", Type: PixelPath}
+				}
+			}
+		}
 	}
 }
 
@@ -40,23 +51,10 @@ func (gs *GameState) FillPixel(x, y int, color string) {
 	}
 }
 
-func (gs *GameState) DrawLineWithThickness(x0, y0, x1, y1 int, thickness float64) {
-	radius := int(thickness / 2)
-
-	for dy := -radius; dy <= radius; dy++ {
-		for dx := -radius; dx <= radius; dx++ {
-			// Filter out some coords so that we are drawing thickness as a circle rather than a square
-			if dx*dx+dy*dy <= radius*radius {
-				gs.DrawLine(x0+dx, y0+dy, x1+dx, y1+dy)
-			}
-		}
-	}
-}
-
 // Bresenham's line algorithm
-func (gs *GameState) DrawLine(x0, y0, x1, y1 int) {
+func (gs *GameState) DrawLine(x0, y0, x1, y1, thickness int) {
 	if x0 == x1 && y0 == y1 {
-		gs.InsertPathPixel(x0, y0)
+		gs.DrawPathPixel(x0, y0, thickness)
 		return
 	}
 
@@ -76,7 +74,7 @@ func (gs *GameState) DrawLine(x0, y0, x1, y1 int) {
 	x, y := x0, y0
 
 	for {
-		gs.InsertPathPixel(x, y)
+		gs.DrawPathPixel(x, y, thickness)
 
 		if x == x1 && y == y1 {
 			break

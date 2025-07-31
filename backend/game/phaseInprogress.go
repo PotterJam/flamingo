@@ -141,7 +141,7 @@ func (p *RoundInProgressHandler) HandleMessage(gs *GameState, player *Player, ms
 			LineWidth: drawPayload.LineWidth,
 		})
 
-		gs.handleRasterUpdate(drawPayload)
+		gs.HandleRasterDrawEvent(drawPayload)
 
 		playersToSendTo := gs.allOtherPlayers(player)
 		go gs.Broadcaster.BroadcastToPlayers(messages.DrawEventBroadcastResponse, msg.Payload, playersToSendTo)
@@ -222,26 +222,19 @@ func (gs *GameState) allOtherPlayers(excludePlayer *Player) []*Player {
 	return playersToSendTo
 }
 
-func (gs *GameState) handleRasterUpdate(drawEvent messages.DrawEventPayload) {
+func (gs *GameState) HandleRasterDrawEvent(drawEvent messages.DrawEventPayload) {
 	currentX := int(drawEvent.X)
 	currentY := int(drawEvent.Y)
 
 	switch drawEvent.EventType {
 	case "start":
-		radius := int(drawEvent.LineWidth / 2)
-		for dy := -radius; dy <= radius; dy++ {
-			for dx := -radius; dx <= radius; dx++ {
-				if dx*dx+dy*dy <= radius*radius {
-					gs.InsertPathPixel(currentX+dx, currentY+dy)
-				}
-			}
-		}
+		gs.DrawPathPixel(currentX, currentY, int(drawEvent.LineWidth))
 		gs.PrevX = currentX
 		gs.PrevY = currentY
 
 	case "draw":
 		if gs.PrevX != -1 && gs.PrevY != -1 {
-			gs.DrawLineWithThickness(gs.PrevX, gs.PrevY, currentX, currentY, drawEvent.LineWidth)
+			gs.DrawLine(gs.PrevX, gs.PrevY, currentX, currentY, int(drawEvent.LineWidth))
 		}
 		gs.PrevX = currentX
 		gs.PrevY = currentY
