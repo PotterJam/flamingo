@@ -114,8 +114,8 @@ func hexToColor(hex string) color.RGBA {
 	return color.RGBA{uint8(r), uint8(g), uint8(b), 255}
 }
 
-// getMostCommonFillColor finds the most common fill color in a radius around the given position
-func (gs *GameState) getMostCommonFillColor(centerX, centerY, radius int) string {
+// mostCommonNeighbour finds the most common fill color in a radius around the given position
+func (gs *GameState) mostCommonNeighbour(centerX, centerY, radius int) string {
 	colorCounts := make(map[string]int)
 
 	// Search in a square around the center point
@@ -149,29 +149,22 @@ func (gs *GameState) getMostCommonFillColor(centerX, centerY, radius int) string
 	return mostCommonColor
 }
 
-// CanvasToPNGDataURL converts the raster canvas to a base64-encoded PNG data URL
 func (gs *GameState) CanvasToPNGDataURL() string {
 	height := len(gs.RasterCanvas)
-	if height == 0 {
-		return ""
-	}
 	width := len(gs.RasterCanvas[0])
 
-	// Create a new RGBA image
 	img := image.NewRGBA(image.Rect(0, 0, width, height))
 
-	// Fill the image with canvas data - render filled pixels and extend colors into paths
-	for y := 0; y < height; y++ {
-		for x := 0; x < width; x++ {
+	for y := range height {
+		for x := range width {
 			pixel := gs.RasterCanvas[y][x]
 			var rgba color.RGBA
 
 			if pixel.Type == PixelFill {
-				// Render filled pixels normally
 				rgba = hexToColor(pixel.Color)
-			} else { // PixelPath
-				// For path pixels, use the most common fill color in surrounding area
-				surroundingColor := gs.getMostCommonFillColor(x, y, 5) // Search radius of 5
+			} else {
+				// We want to fill in any empty regions left by that paths that deviate slightly when rendering the stroke effect
+				surroundingColor := gs.mostCommonNeighbour(x, y, 5)
 				rgba = hexToColor(surroundingColor)
 			}
 
