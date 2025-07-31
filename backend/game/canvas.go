@@ -189,61 +189,50 @@ func (gs *GameState) CanvasToPNGDataURL() string {
 	return "data:image/png;base64," + encoded
 }
 
-// FloodFill implements flood fill algorithm for paint bucket tool
 func (gs *GameState) FloodFill(startX, startY int, newColor string) {
 	if startY < 0 || startY >= len(gs.RasterCanvas) || startX < 0 || startX >= len(gs.RasterCanvas[0]) {
 		return
 	}
 
-	originalPixel := gs.RasterCanvas[startY][startX]
+	startPixel := gs.RasterCanvas[startY][startX]
 
-	// Don't fill if clicking on a path pixel (they act as boundaries)
-	if originalPixel.Type == PixelPath {
+	if startPixel.Type == PixelPath {
+		return
+	}
+	if startPixel.Color == newColor && startPixel.Type == PixelFill {
 		return
 	}
 
-	// Don't fill if the color would be the same
-	if originalPixel.Color == newColor && originalPixel.Type == PixelFill {
-		return
-	}
-
-	// Use a stack-based flood fill to avoid recursion depth issues
 	type point struct{ x, y int }
 	stack := []point{{startX, startY}}
 
 	for len(stack) > 0 {
-		// Pop from stack
 		current := stack[len(stack)-1]
 		stack = stack[:len(stack)-1]
 
 		x, y := current.x, current.y
 
-		// Check bounds
 		if y < 0 || y >= len(gs.RasterCanvas) || x < 0 || x >= len(gs.RasterCanvas[0]) {
 			continue
 		}
 
 		currentPixel := gs.RasterCanvas[y][x]
 
-		// Don't fill path pixels (they act as boundaries)
 		if currentPixel.Type == PixelPath {
 			continue
 		}
-
-		// Check if this pixel needs to be filled (same color and type as original)
-		if currentPixel.Color != originalPixel.Color || currentPixel.Type != originalPixel.Type {
+		// Don't floodfill into different colours
+		if currentPixel.Color != startPixel.Color {
 			continue
 		}
 
-		// Fill this pixel
 		gs.FillPixel(x, y, newColor)
 
-		// Add neighbors to stack
 		stack = append(stack,
-			point{x + 1, y}, // Right
-			point{x - 1, y}, // Left
-			point{x, y + 1}, // Down
-			point{x, y - 1}, // Up
+			point{x + 1, y},
+			point{x - 1, y},
+			point{x, y + 1},
+			point{x, y - 1},
 		)
 	}
 }
