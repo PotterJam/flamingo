@@ -102,11 +102,7 @@ func (gs *GameState) ClearRasterCanvas() {
 	}
 }
 
-func hexToColor(hex string) color.RGBA {
-	if len(hex) != 7 || hex[0] != '#' {
-		return color.RGBA{255, 255, 255, 255} // Default to white
-	}
-
+func hexToRgb(hex string) color.RGBA {
 	r, _ := strconv.ParseUint(hex[1:3], 16, 8)
 	g, _ := strconv.ParseUint(hex[3:5], 16, 8)
 	b, _ := strconv.ParseUint(hex[5:7], 16, 8)
@@ -114,20 +110,14 @@ func hexToColor(hex string) color.RGBA {
 	return color.RGBA{uint8(r), uint8(g), uint8(b), 255}
 }
 
-// mostCommonNeighbour finds the most common fill color in a radius around the given position
-func (gs *GameState) mostCommonNeighbour(centerX, centerY, radius int) string {
+func (gs *GameState) mostCommonNeighbourColour(centerX, centerY, radius int) string {
 	colorCounts := make(map[string]int)
 
-	// Search in a square around the center point
 	for dy := -radius; dy <= radius; dy++ {
 		for dx := -radius; dx <= radius; dx++ {
 			x, y := centerX+dx, centerY+dy
-
-			// Check bounds
 			if y >= 0 && y < len(gs.RasterCanvas) && x >= 0 && x < len(gs.RasterCanvas[0]) {
 				pixel := gs.RasterCanvas[y][x]
-
-				// Only count fill pixels, not paths or empty
 				if pixel.Type == PixelFill {
 					colorCounts[pixel.Color]++
 				}
@@ -135,9 +125,8 @@ func (gs *GameState) mostCommonNeighbour(centerX, centerY, radius int) string {
 		}
 	}
 
-	// Find the most common color
 	maxCount := 0
-	mostCommonColor := "#ffffff" // Default to white if no fill colors found
+	mostCommonColor := "#ffffff"
 
 	for color, count := range colorCounts {
 		if count > maxCount {
@@ -161,23 +150,22 @@ func (gs *GameState) CanvasToPNGDataURL() string {
 			var rgba color.RGBA
 
 			if pixel.Type == PixelFill {
-				rgba = hexToColor(pixel.Color)
+				rgba = hexToRgb(pixel.Color)
 			} else {
 				// We want to fill in any empty regions left by that paths that deviate slightly when rendering the stroke effect
-				surroundingColor := gs.mostCommonNeighbour(x, y, 5)
-				rgba = hexToColor(surroundingColor)
+				surroundingColor := gs.mostCommonNeighbourColour(x, y, 5)
+				rgba = hexToRgb(surroundingColor)
 			}
 
 			img.Set(x, y, rgba)
 		}
 	}
-	// Encode to PNG
+
 	var buf bytes.Buffer
 	if err := png.Encode(&buf, img); err != nil {
 		return ""
 	}
 
-	// Convert to base64 data URL
 	encoded := base64.StdEncoding.EncodeToString(buf.Bytes())
 	return "data:image/png;base64," + encoded
 }
@@ -209,13 +197,12 @@ func (gs *GameState) FloodFill(startX, startY int, newColor string) {
 			continue
 		}
 
-		currentPixel := gs.RasterCanvas[y][x]
+		pixelToFill := gs.RasterCanvas[y][x]
 
-		if currentPixel.Type == PixelPath {
+		if pixelToFill.Type == PixelPath {
 			continue
 		}
-		// Don't floodfill into different colours
-		if currentPixel.Color != startPixel.Color {
+		if pixelToFill.Color != startPixel.Color {
 			continue
 		}
 
