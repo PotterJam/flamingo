@@ -124,11 +124,23 @@ export type DrawEvent =
 
 export interface CanvasUpdate {
     drawPaths: DrawEvent[];
+    rasterData: string;
 }
 
 export interface DrawEventMsg {
     type: 'drawEvent';
     payload: DrawEvent;
+}
+
+export interface FillEvent {
+    x: number;
+    y: number;
+    color: string;
+}
+
+export interface FillMsg {
+    type: 'fill';
+    payload: FillEvent;
 }
 
 export interface CanvasUpdateMsg {
@@ -246,4 +258,5 @@ export type SendMsg =
     | StartGameMsg
     | PhaseChangeAckMsg
     | DrawPathUndoMsg
-    | ClearDrawingMsg;
+    | ClearDrawingMsg
+    | FillMsg;

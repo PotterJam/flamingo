@@ -2,6 +2,7 @@ package game
 
 import (
 	"backend/messages"
+	"backend/util"
 	"hash/fnv"
 	"log"
 	"math/rand"
@@ -39,6 +40,14 @@ type HintEvent struct {
 	HintType  string // "30s", "40s"
 }
 
+type RasterCanvas = [][]Pixel
+
+type CanvasState struct {
+	PathStack *util.Stack[[]messages.DrawEventPayload]
+	FillStack *util.Stack[RasterCanvas]
+	Actions   *util.Stack[string]
+}
+
 // GameState represents the single, shared game session.
 // TODO: move a bunch of this state into the phases.
 type GameState struct {
@@ -65,7 +74,10 @@ type GameState struct {
 	// Channel for handlers to request player operations (add, remove, etc.)
 	PlayerOperations chan PlayerOperation
 
-	DrawStack []*[]messages.DrawEventPayload
+	PrevX int
+	PrevY int
+
+	Canvas CanvasState
 }
 
 func (gs *GameState) broadcastPlayerUpdate() {

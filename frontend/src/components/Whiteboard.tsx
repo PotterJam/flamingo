@@ -3,7 +3,11 @@ import { actions, store } from '../store';
 import classNames from 'classnames';
 import { Separator } from './ui/separator';
 import { getStroke, StrokeOptions } from 'perfect-freehand';
-import { FaSolidArrowRotateLeft } from 'solid-icons/fa';
+import {
+    FaSolidArrowRotateLeft,
+    FaSolidBucket,
+    FaSolidPen,
+} from 'solid-icons/fa';
 import {
     getSvgPathFromStroke,
     translatePointerToCanvas,
@@ -55,6 +59,7 @@ const Whiteboard: Component<WhiteboardProps> = ({ height, width }) => {
         defaultBrushThickness
     );
     const [isDrawing, setIsDrawing] = createSignal(false);
+    const [isFill, setIsFill] = createSignal(false);
 
     const isDrawer = () =>
         store.gameState.localPlayerId === store.gameState.currentDrawerId;
@@ -62,6 +67,20 @@ const Whiteboard: Component<WhiteboardProps> = ({ height, width }) => {
     const handlePointerDown = (e: PointerEvent) => {
         e.preventDefault();
         if (!canvasRef || !isDrawer()) return;
+
+        if (isFill()) {
+            const [x, y, _] = translatePointerToCanvas(e, canvasRef);
+            store.sendMessage({ 
+                type: 'fill', 
+                payload: { 
+                    x: x, 
+                    y: y, 
+                    color: selectedColour() 
+                } 
+            });
+            return;
+        }
+
         setIsDrawing(true);
         actions.startPath(
             translatePointerToCanvas(e, canvasRef),
@@ -72,7 +91,7 @@ const Whiteboard: Component<WhiteboardProps> = ({ height, width }) => {
 
     const handlePointerUp = (e: PointerEvent) => {
         e.preventDefault();
-        if (!canvasRef || !isDrawer()) return;
+        if (!canvasRef || !isDrawer() || isFill()) return;
         setIsDrawing(false);
         actions.finishPath();
     };
@@ -91,6 +110,7 @@ const Whiteboard: Component<WhiteboardProps> = ({ height, width }) => {
 
     const handlePointerMove = (e: PointerEvent) => {
         if (!isDrawing() || !isDrawer()) return;
+        if (isFill()) return;
         if (!canvasRef) return;
         e.preventDefault();
         actions.continuePath(translatePointerToCanvas(e, canvasRef));
@@ -140,6 +160,15 @@ const Whiteboard: Component<WhiteboardProps> = ({ height, width }) => {
                 onPointerLeave={handlePointerLeave}
                 onPointerEnter={handlePointerEnter}
             >
+                <Show when={store.whiteboardState.rasterData}>
+                    <image
+                        href={store.whiteboardState.rasterData!}
+                        width={width}
+                        height={height}
+                        x={0}
+                        y={0}
+                    />
+                </Show>
                 <For each={renderedFinishedPaths()}>
                     {(path) => <path d={path.points} fill={path.colour} />}
                 </For>
@@ -219,6 +248,14 @@ const Whiteboard: Component<WhiteboardProps> = ({ height, width }) => {
                             }
                         >
                             <FiTrash2 />
+                        </button>
+                        <button
+                            class="p-1"
+                            onClick={() => setIsFill((prev) => !prev)}
+                        >
+                            <Show when={isFill()} fallback={<FaSolidBucket />}>
+                                <FaSolidPen />
+                            </Show>
                         </button>
                     </div>
                 </div>
