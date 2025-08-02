@@ -21,14 +21,7 @@ func (p *RoundSetupHandler) Phase() GamePhase {
 func (p *RoundSetupHandler) StartPhase(gs *GameState) {
 	gs.Canvas.PathStack = make([]*[]messages.DrawEventPayload, 0)
 
-	canvas := make([][]Pixel, CANVAS_HEIGHT)
-	for y := range canvas {
-		canvas[y] = make([]Pixel, CANVAS_WIDTH)
-		for x := range canvas[y] {
-			canvas[y][x] = Pixel{Color: "#ffffff", Type: PixelFill}
-		}
-	}
-	gs.Canvas.FillStack[0] = canvas
+	gs.Canvas.FillStack[0] = BlankCanvas()
 
 	gs.turnEndTime = time.Now().Add(10 * time.Second)
 	gs.timerForTimeout = time.NewTimer(10 * time.Second)

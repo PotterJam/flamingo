@@ -2,6 +2,7 @@ package game
 
 import (
 	"backend/messages"
+	"backend/util"
 	"hash/fnv"
 	"log"
 	"math/rand"
@@ -44,7 +45,7 @@ type RasterCanvas = [][]Pixel
 type CanvasState struct {
 	PathStack []*[]messages.DrawEventPayload
 	FillStack []RasterCanvas
-	Actions   []string
+	Actions   *util.Stack[string]
 }
 
 // GameState represents the single, shared game session.
@@ -73,8 +74,8 @@ type GameState struct {
 	// Channel for handlers to request player operations (add, remove, etc.)
 	PlayerOperations chan PlayerOperation
 
-	PrevX        int
-	PrevY        int
+	PrevX int
+	PrevY int
 
 	Canvas CanvasState
 }

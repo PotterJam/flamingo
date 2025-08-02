@@ -28,6 +28,17 @@ func abs(x int) int {
 	return x
 }
 
+func BlankCanvas() RasterCanvas {
+	canvas := make([][]Pixel, CANVAS_HEIGHT)
+	for y := range canvas {
+		canvas[y] = make([]Pixel, CANVAS_WIDTH)
+		for x := range canvas[y] {
+			canvas[y][x] = Pixel{Color: "#ffffff", Type: PixelFill}
+		}
+	}
+	return canvas
+}
+
 func DrawPathPixel(c RasterCanvas, x, y, thickness int) {
 	radius := int(thickness / 2)
 

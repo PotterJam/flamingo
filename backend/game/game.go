@@ -2,6 +2,7 @@ package game
 
 import (
 	"backend/messages"
+	"backend/util"
 	"log"
 	"slices"
 	"time"
@@ -88,17 +89,10 @@ func (g *Game) updateHandler(newHandler GamePhaseHandler) {
 func NewGame(b Broadcaster) *Game {
 	handler := GamePhaseHandler(&WaitingInLobbyHandler{})
 
-	canvas := make([][]Pixel, CANVAS_HEIGHT)
-	for y := range canvas {
-		canvas[y] = make([]Pixel, CANVAS_WIDTH)
-		for x := range canvas[y] {
-			canvas[y][x] = Pixel{Color: "#ffffff", Type: PixelFill}
-		}
-	}
-
 	canvasState := CanvasState{
 		PathStack: make([]*[]messages.DrawEventPayload, 0),
-		FillStack: []RasterCanvas{canvas},
+		FillStack: []RasterCanvas{BlankCanvas()},
+		Actions:   util.NewStack[string](),
 	}
 
 	return &Game{

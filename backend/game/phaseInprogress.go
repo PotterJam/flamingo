@@ -130,7 +130,7 @@ func (p *RoundInProgressHandler) HandleMessage(gs *GameState, player *Player, ms
 		if drawPayload.EventType == "start" {
 			newPathStack := make([]messages.DrawEventPayload, 0)
 			gs.Canvas.PathStack = append(gs.Canvas.PathStack, &newPathStack)
-			gs.Canvas.Actions = append(gs.Canvas.Actions, "path")
+			gs.Canvas.Actions.Push("path")
 		}
 
 		ds := gs.Canvas.PathStack[len(gs.Canvas.PathStack)-1]
@@ -149,11 +149,10 @@ func (p *RoundInProgressHandler) HandleMessage(gs *GameState, player *Player, ms
 		return p
 	}
 
-	if msg.Type == messages.ClientDrawPathUndo && gs.isDrawer(player) && len(gs.Canvas.PathStack) > 0 && len(gs.Canvas.Actions) > 0 {
-		lastAction := gs.Canvas.Actions[len(gs.Canvas.Actions)-1]
+	if msg.Type == messages.ClientDrawPathUndo && gs.isDrawer(player) && len(gs.Canvas.PathStack) > 0 && !gs.Canvas.Actions.IsEmpty() {
+		lastAction := gs.Canvas.Actions.Pop()
 
 		if lastAction == "fill" {
-			gs.Canvas.Actions = gs.Canvas.Actions[:len(gs.Canvas.Actions)-1]
 			return p
 		}
 
@@ -190,7 +189,7 @@ func (p *RoundInProgressHandler) HandleMessage(gs *GameState, player *Player, ms
 			return p
 		}
 
-		gs.Canvas.Actions = append(gs.Canvas.Actions, "fill")
+		gs.Canvas.Actions.Push("fill")
 
 		c := gs.Canvas.FillStack[0]
 		startX := int(fillPayload.X)
