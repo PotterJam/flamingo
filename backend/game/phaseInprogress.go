@@ -130,6 +130,7 @@ func (p *RoundInProgressHandler) HandleMessage(gs *GameState, player *Player, ms
 		if drawPayload.EventType == "start" {
 			newPathStack := make([]messages.DrawEventPayload, 0)
 			gs.Canvas.PathStack = append(gs.Canvas.PathStack, &newPathStack)
+			gs.Canvas.Actions = append(gs.Canvas.Actions, "path")
 		}
 
 		ds := gs.Canvas.PathStack[len(gs.Canvas.PathStack)-1]
@@ -148,7 +149,14 @@ func (p *RoundInProgressHandler) HandleMessage(gs *GameState, player *Player, ms
 		return p
 	}
 
-	if msg.Type == messages.ClientDrawPathUndo && gs.isDrawer(player) && len(gs.Canvas.PathStack) > 0 {
+	if msg.Type == messages.ClientDrawPathUndo && gs.isDrawer(player) && len(gs.Canvas.PathStack) > 0 && len(gs.Canvas.Actions) > 0 {
+		lastAction := gs.Canvas.Actions[len(gs.Canvas.Actions)-1]
+
+		if lastAction == "fill" {
+			gs.Canvas.Actions = gs.Canvas.Actions[:len(gs.Canvas.Actions)-1]
+			return p
+		}
+
 		allButLatest := gs.Canvas.PathStack[:len(gs.Canvas.PathStack)-1]
 
 		paths := make([]messages.DrawEventPayload, 0)
@@ -163,6 +171,8 @@ func (p *RoundInProgressHandler) HandleMessage(gs *GameState, player *Player, ms
 		go gs.Broadcaster.Broadcast(messages.CanvasUpdateBroadcastResponse, messages.CanvasUpdatePayload{
 			DrawPaths: paths,
 		})
+
+		return p
 	}
 
 	if msg.Type == messages.ClientClearDrawing && gs.isDrawer(player) {
@@ -181,6 +191,8 @@ func (p *RoundInProgressHandler) HandleMessage(gs *GameState, player *Player, ms
 			player.SendError("invalid fill payload format")
 			return p
 		}
+
+		gs.Canvas.Actions = append(gs.Canvas.Actions, "fill")
 
 		// Convert float coordinates to int
 		startX := int(fillPayload.X)
