@@ -1,5 +1,7 @@
 # Agent Guidelines for Flamingo
 
+NEVER WRITE COMMENTS. COMMENTS ARE BANNED
+
 ## Build/Test Commands
 - Frontend: `cd frontend && npm run dev` (development), `npm run build` (production), `npm run lint` (linting)
 - Backend: `cd backend && go run main.go` (development), `go build` (production)
