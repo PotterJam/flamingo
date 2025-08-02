@@ -142,7 +142,7 @@ func (p *RoundInProgressHandler) HandleMessage(gs *GameState, player *Player, ms
 			LineWidth: drawPayload.LineWidth,
 		})
 
-		gs.HandleRasterDrawEvent(drawPayload)
+		gs.handleRasterDrawEvent(drawPayload)
 
 		playersToSendTo := gs.allOtherPlayers(player)
 		go gs.Broadcaster.BroadcastToPlayers(messages.DrawEventBroadcastResponse, msg.Payload, playersToSendTo)
@@ -241,7 +241,7 @@ func (gs *GameState) allOtherPlayers(excludePlayer *Player) []*Player {
 	return playersToSendTo
 }
 
-func (gs *GameState) HandleRasterDrawEvent(drawEvent messages.DrawEventPayload) {
+func (gs *GameState) handleRasterDrawEvent(drawEvent messages.DrawEventPayload) {
 	currentX := int(drawEvent.X)
 	currentY := int(drawEvent.Y)
 
