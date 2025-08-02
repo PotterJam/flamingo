@@ -91,7 +91,7 @@ func NewGame(b Broadcaster) *Game {
 
 	canvasState := CanvasState{
 		PathStack: util.NewStack[[]messages.DrawEventPayload](),
-		FillStack: []RasterCanvas{BlankCanvas()},
+		FillStack: util.NewStackWith(BlankCanvas()),
 		Actions:   util.NewStack[string](),
 	}
 

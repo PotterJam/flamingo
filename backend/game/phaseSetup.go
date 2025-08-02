@@ -22,7 +22,7 @@ func (p *RoundSetupHandler) Phase() GamePhase {
 func (p *RoundSetupHandler) StartPhase(gs *GameState) {
 	gs.Canvas.PathStack = &util.Stack[[]messages.DrawEventPayload]{}
 
-	gs.Canvas.FillStack[0] = BlankCanvas()
+	*gs.Canvas.FillStack.Head() = BlankCanvas()
 
 	gs.turnEndTime = time.Now().Add(10 * time.Second)
 	gs.timerForTimeout = time.NewTimer(10 * time.Second)

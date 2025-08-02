@@ -44,7 +44,7 @@ type RasterCanvas = [][]Pixel
 
 type CanvasState struct {
 	PathStack *util.Stack[[]messages.DrawEventPayload]
-	FillStack []RasterCanvas
+	FillStack *util.Stack[RasterCanvas]
 	Actions   *util.Stack[string]
 }
 

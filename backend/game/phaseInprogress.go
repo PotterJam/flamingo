@@ -189,12 +189,12 @@ func (p *RoundInProgressHandler) HandleMessage(gs *GameState, player *Player, ms
 
 		gs.Canvas.Actions.Push("fill")
 
-		c := gs.Canvas.FillStack[0]
+		c := *gs.Canvas.FillStack.Head()
 		startX := int(fillPayload.X)
 		startY := int(fillPayload.Y)
 		FloodFill(c, startX, startY, fillPayload.Color)
 
-		rasterData := CanvasToPNGDataURL(gs.Canvas.FillStack[0])
+		rasterData := CanvasToPNGDataURL(c)
 
 		go gs.Broadcaster.Broadcast(messages.RasterUpdateBroadcastResponse, messages.RasterUpdatePayload{
 			RasterData: rasterData,
@@ -229,7 +229,7 @@ func (gs *GameState) HandleRasterDrawEvent(drawEvent messages.DrawEventPayload) 
 	currentX := int(drawEvent.X)
 	currentY := int(drawEvent.Y)
 
-	c := gs.Canvas.FillStack[0]
+	c := *gs.Canvas.FillStack.Head()
 
 	switch drawEvent.EventType {
 	case "start":

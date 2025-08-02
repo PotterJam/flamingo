@@ -10,6 +10,12 @@ func NewStack[T any]() *Stack[T] {
 	}
 }
 
+func NewStackWith[T any](items ...T) *Stack[T] {
+	return &Stack[T]{
+		items: items,
+	}
+}
+
 func (s *Stack[T]) Size() int {
 	return len(s.items)
 }
