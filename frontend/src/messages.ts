@@ -124,9 +124,6 @@ export type DrawEvent =
 
 export interface CanvasUpdate {
     drawPaths: DrawEvent[];
-}
-
-export interface RasterUpdate {
     rasterData: string;
 }
 
@@ -149,11 +146,6 @@ export interface FillMsg {
 export interface CanvasUpdateMsg {
     type: 'canvasUpdate';
     payload: CanvasUpdate;
-}
-
-export interface RasterUpdateMsg {
-    type: 'rasterUpdate';
-    payload: RasterUpdate;
 }
 
 export interface ErrorMsg {
@@ -209,8 +201,7 @@ export type ReceivedMsg =
     | TurnHelpMsg
     | PlayerCorrectMsg
     | PhaseChangeAckMsg
-    | CanvasUpdateMsg
-    | RasterUpdateMsg;
+    | CanvasUpdateMsg;
 
 export interface SetNameMsg {
     type: 'setName';

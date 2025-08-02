@@ -4,6 +4,7 @@ import (
 	"backend/messages"
 	"encoding/json"
 	"log"
+	"slices"
 	"strings"
 	"time"
 )
@@ -149,14 +150,16 @@ func (p *RoundInProgressHandler) HandleMessage(gs *GameState, player *Player, ms
 		return p
 	}
 
-	if msg.Type == messages.ClientDrawPathUndo && gs.isDrawer(player) && !gs.Canvas.PathStack.IsEmpty() && !gs.Canvas.Actions.IsEmpty() {
+	if msg.Type == messages.ClientDrawPathUndo && gs.isDrawer(player) && !gs.Canvas.Actions.IsEmpty() {
 		lastAction := gs.Canvas.Actions.Pop()
 
 		if lastAction == "fill" {
-			return p
+			gs.Canvas.FillStack.Pop()
+		} else {
+			gs.Canvas.PathStack.Pop()
+			// Can't have raster paths on the fill canvas that have lines that have neen undone
+			gs.Canvas.FillStack.Pop()
 		}
-
-		gs.Canvas.PathStack.Pop()
 
 		paths := make([]messages.DrawEventPayload, 0)
 		for _, ds := range gs.Canvas.PathStack.Items() {
@@ -166,7 +169,8 @@ func (p *RoundInProgressHandler) HandleMessage(gs *GameState, player *Player, ms
 		}
 
 		go gs.Broadcaster.Broadcast(messages.CanvasUpdateBroadcastResponse, messages.CanvasUpdatePayload{
-			DrawPaths: paths,
+			DrawPaths:  paths,
+			RasterData: CanvasToPNGDataURL(*gs.Canvas.FillStack.Head()),
 		})
 
 		return p
@@ -174,9 +178,12 @@ func (p *RoundInProgressHandler) HandleMessage(gs *GameState, player *Player, ms
 
 	if msg.Type == messages.ClientClearDrawing && gs.isDrawer(player) {
 		gs.Canvas.PathStack.Clear()
+		gs.Canvas.FillStack.Clear()
+		gs.Canvas.Actions.Clear()
 
 		go gs.Broadcaster.Broadcast(messages.CanvasUpdateBroadcastResponse, messages.CanvasUpdatePayload{
-			DrawPaths: make([]messages.DrawEventPayload, 0),
+			DrawPaths:  make([]messages.DrawEventPayload, 0),
+			RasterData: CanvasToPNGDataURL(BlankCanvas()),
 		})
 	}
 
@@ -189,14 +196,24 @@ func (p *RoundInProgressHandler) HandleMessage(gs *GameState, player *Player, ms
 
 		gs.Canvas.Actions.Push("fill")
 
-		c := *gs.Canvas.FillStack.Head()
+		c := slices.Clone(*gs.Canvas.FillStack.Head())
+		gs.Canvas.FillStack.Push(c)
+
 		startX := int(fillPayload.X)
 		startY := int(fillPayload.Y)
 		FloodFill(c, startX, startY, fillPayload.Color)
 
 		rasterData := CanvasToPNGDataURL(c)
 
-		go gs.Broadcaster.Broadcast(messages.RasterUpdateBroadcastResponse, messages.RasterUpdatePayload{
+		paths := make([]messages.DrawEventPayload, 0)
+		for _, ds := range gs.Canvas.PathStack.Items() {
+			for _, p := range ds {
+				paths = append(paths, p)
+			}
+		}
+
+		go gs.Broadcaster.Broadcast(messages.CanvasUpdateBroadcastResponse, messages.CanvasUpdatePayload{
+			DrawPaths:  paths,
 			RasterData: rasterData,
 		})
 
@@ -229,15 +246,18 @@ func (gs *GameState) HandleRasterDrawEvent(drawEvent messages.DrawEventPayload) 
 	currentX := int(drawEvent.X)
 	currentY := int(drawEvent.Y)
 
-	c := *gs.Canvas.FillStack.Head()
-
 	switch drawEvent.EventType {
 	case "start":
+		// Need to start a new canvas for new path so if we undo a path we can undo this canvas and fills will ignore that undone raster path
+		c := slices.Clone(*gs.Canvas.FillStack.Head())
+		gs.Canvas.FillStack.Push(c)
+
 		DrawPathPixel(c, currentX, currentY, int(drawEvent.LineWidth))
 		gs.PrevX = currentX
 		gs.PrevY = currentY
 
 	case "draw":
+		c := *gs.Canvas.FillStack.Head()
 		if gs.PrevX != -1 && gs.PrevY != -1 {
 			DrawLine(c, gs.PrevX, gs.PrevY, currentX, currentY, int(drawEvent.LineWidth))
 		}

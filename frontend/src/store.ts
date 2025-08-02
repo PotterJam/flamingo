@@ -17,7 +17,6 @@ import {
     GameFinishedMsg,
     WordRevealMsg,
     CanvasUpdateMsg,
-    RasterUpdateMsg,
 } from './messages';
 import { GamePhase, Path, PathPoint } from './model';
 
@@ -424,13 +423,7 @@ export const actions = {
                         }
                     }
                 });
-            })
-        );
-    },
 
-    handleRasterUpdate: ({ payload }: RasterUpdateMsg) => {
-        setStore(
-            produce((state) => {
                 state.whiteboardState.rasterData = payload.rasterData;
             })
         );
