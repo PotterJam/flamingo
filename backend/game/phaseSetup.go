@@ -2,6 +2,7 @@ package game
 
 import (
 	"backend/messages"
+	"backend/util"
 	"backend/words"
 	"encoding/json"
 	"log"
@@ -19,7 +20,7 @@ func (p *RoundSetupHandler) Phase() GamePhase {
 }
 
 func (p *RoundSetupHandler) StartPhase(gs *GameState) {
-	gs.Canvas.PathStack = make([]*[]messages.DrawEventPayload, 0)
+	gs.Canvas.PathStack = &util.Stack[[]messages.DrawEventPayload]{}
 
 	gs.Canvas.FillStack[0] = BlankCanvas()
 

@@ -129,12 +129,12 @@ func (p *RoundInProgressHandler) HandleMessage(gs *GameState, player *Player, ms
 
 		if drawPayload.EventType == "start" {
 			newPathStack := make([]messages.DrawEventPayload, 0)
-			gs.Canvas.PathStack = append(gs.Canvas.PathStack, &newPathStack)
+			gs.Canvas.PathStack.Push(newPathStack)
 			gs.Canvas.Actions.Push("path")
 		}
 
-		ds := gs.Canvas.PathStack[len(gs.Canvas.PathStack)-1]
-		*ds = append(*ds, messages.DrawEventPayload{
+		currentPath := gs.Canvas.PathStack.Head()
+		*currentPath = append(*currentPath, messages.DrawEventPayload{
 			EventType: drawPayload.EventType,
 			X:         drawPayload.X,
 			Y:         drawPayload.Y,
@@ -149,23 +149,21 @@ func (p *RoundInProgressHandler) HandleMessage(gs *GameState, player *Player, ms
 		return p
 	}
 
-	if msg.Type == messages.ClientDrawPathUndo && gs.isDrawer(player) && len(gs.Canvas.PathStack) > 0 && !gs.Canvas.Actions.IsEmpty() {
+	if msg.Type == messages.ClientDrawPathUndo && gs.isDrawer(player) && !gs.Canvas.PathStack.IsEmpty() && !gs.Canvas.Actions.IsEmpty() {
 		lastAction := gs.Canvas.Actions.Pop()
 
 		if lastAction == "fill" {
 			return p
 		}
 
-		allButLatest := gs.Canvas.PathStack[:len(gs.Canvas.PathStack)-1]
+		gs.Canvas.PathStack.Pop()
 
 		paths := make([]messages.DrawEventPayload, 0)
-		for _, ds := range allButLatest {
-			for _, p := range *ds {
+		for _, ds := range gs.Canvas.PathStack.Items() {
+			for _, p := range ds {
 				paths = append(paths, p)
 			}
 		}
-
-		gs.Canvas.PathStack = gs.Canvas.PathStack[:len(gs.Canvas.PathStack)-1]
 
 		go gs.Broadcaster.Broadcast(messages.CanvasUpdateBroadcastResponse, messages.CanvasUpdatePayload{
 			DrawPaths: paths,
@@ -175,7 +173,7 @@ func (p *RoundInProgressHandler) HandleMessage(gs *GameState, player *Player, ms
 	}
 
 	if msg.Type == messages.ClientClearDrawing && gs.isDrawer(player) {
-		clear(gs.Canvas.PathStack)
+		gs.Canvas.PathStack.Clear()
 
 		go gs.Broadcaster.Broadcast(messages.CanvasUpdateBroadcastResponse, messages.CanvasUpdatePayload{
 			DrawPaths: make([]messages.DrawEventPayload, 0),

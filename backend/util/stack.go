@@ -28,3 +28,15 @@ func (s *Stack[T]) Push(i T) {
 func (s *Stack[T]) IsEmpty() bool {
 	return len(s.items) == 0
 }
+
+func (s *Stack[T]) Head() *T {
+	return &s.items[len(s.items)-1]
+}
+
+func (s *Stack[T]) Items() []T {
+	return s.items
+}
+
+func (s *Stack[T]) Clear() {
+	clear(s.items)
+}

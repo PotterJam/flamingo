@@ -90,7 +90,7 @@ func NewGame(b Broadcaster) *Game {
 	handler := GamePhaseHandler(&WaitingInLobbyHandler{})
 
 	canvasState := CanvasState{
-		PathStack: make([]*[]messages.DrawEventPayload, 0),
+		PathStack: util.NewStack[[]messages.DrawEventPayload](),
 		FillStack: []RasterCanvas{BlankCanvas()},
 		Actions:   util.NewStack[string](),
 	}

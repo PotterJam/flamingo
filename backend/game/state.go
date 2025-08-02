@@ -43,7 +43,7 @@ type HintEvent struct {
 type RasterCanvas = [][]Pixel
 
 type CanvasState struct {
-	PathStack []*[]messages.DrawEventPayload
+	PathStack *util.Stack[[]messages.DrawEventPayload]
 	FillStack []RasterCanvas
 	Actions   *util.Stack[string]
 }
