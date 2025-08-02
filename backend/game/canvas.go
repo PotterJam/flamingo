@@ -37,7 +37,7 @@ func (gs *GameState) DrawPathPixel(x, y, thickness int) {
 			if dx*dx+dy*dy <= radius*radius {
 				cx := dx + x
 				cy := dy + y
-				if cy >= 0 && cy < len(gs.RasterCanvas) && cx >= 0 && cx < len(gs.RasterCanvas[0]) {
+				if cy >= 0 && cy < CANVAS_HEIGHT && cx >= 0 && cx < CANVAS_WIDTH {
 					gs.RasterCanvas[cy][cx] = Pixel{Color: "#ffffff", Type: PixelPath}
 				}
 			}
@@ -46,7 +46,7 @@ func (gs *GameState) DrawPathPixel(x, y, thickness int) {
 }
 
 func (gs *GameState) FillPixel(x, y int, color string) {
-	if y >= 0 && y < len(gs.RasterCanvas) && x >= 0 && x < len(gs.RasterCanvas[0]) {
+	if y >= 0 && y < CANVAS_HEIGHT && x >= 0 && x < CANVAS_WIDTH {
 		gs.RasterCanvas[y][x] = Pixel{Color: color, Type: PixelFill}
 	}
 }
@@ -116,7 +116,7 @@ func (gs *GameState) mostCommonNeighbourColour(centerX, centerY, radius int) str
 	for dy := -radius; dy <= radius; dy++ {
 		for dx := -radius; dx <= radius; dx++ {
 			x, y := centerX+dx, centerY+dy
-			if y >= 0 && y < len(gs.RasterCanvas) && x >= 0 && x < len(gs.RasterCanvas[0]) {
+			if y >= 0 && y < CANVAS_HEIGHT && x >= 0 && x < CANVAS_WIDTH {
 				pixel := gs.RasterCanvas[y][x]
 				if pixel.Type == PixelFill {
 					colorCounts[pixel.Color]++
@@ -139,13 +139,10 @@ func (gs *GameState) mostCommonNeighbourColour(centerX, centerY, radius int) str
 }
 
 func (gs *GameState) CanvasToPNGDataURL() string {
-	height := len(gs.RasterCanvas)
-	width := len(gs.RasterCanvas[0])
+	img := image.NewRGBA(image.Rect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT))
 
-	img := image.NewRGBA(image.Rect(0, 0, width, height))
-
-	for y := range height {
-		for x := range width {
+	for y := range CANVAS_HEIGHT {
+		for x := range CANVAS_WIDTH {
 			pixel := gs.RasterCanvas[y][x]
 			var rgba color.RGBA
 
@@ -171,7 +168,7 @@ func (gs *GameState) CanvasToPNGDataURL() string {
 }
 
 func (gs *GameState) FloodFill(startX, startY int, newColor string) {
-	if startY < 0 || startY >= len(gs.RasterCanvas) || startX < 0 || startX >= len(gs.RasterCanvas[0]) {
+	if startY < 0 || startY >= CANVAS_HEIGHT || startX < 0 || startX >= CANVAS_WIDTH {
 		return
 	}
 
@@ -193,7 +190,7 @@ func (gs *GameState) FloodFill(startX, startY int, newColor string) {
 
 		x, y := current.x, current.y
 
-		if y < 0 || y >= len(gs.RasterCanvas) || x < 0 || x >= len(gs.RasterCanvas[0]) {
+		if y < 0 || y >= CANVAS_HEIGHT || x < 0 || x >= CANVAS_WIDTH {
 			continue
 		}
 
