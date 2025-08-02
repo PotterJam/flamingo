@@ -13,7 +13,8 @@ func (p *RoundFinishedHandler) Phase() GamePhase {
 }
 
 func (p *RoundFinishedHandler) StartPhase(gs *GameState) {
-	// Calculate and apply round scores to players
+	gs.storeCurrentDrawing()
+
 	playerRoundScores := calculateRoundScores(gs)
 
 	for _, player := range gs.Players {

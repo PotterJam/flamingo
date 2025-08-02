@@ -3,9 +3,11 @@ package game
 import (
 	"backend/messages"
 	"backend/util"
+	"fmt"
 	"hash/fnv"
 	"log"
 	"math/rand"
+	"slices"
 	"sync"
 	"time"
 )
@@ -48,6 +50,16 @@ type CanvasState struct {
 	Actions   *util.Stack[string]
 }
 
+type StoredDrawing struct {
+	PlayerID  string
+	Round     int
+	Word      string
+	PathStack [][]messages.DrawEventPayload
+	FillStack []RasterCanvas
+	Actions   []string
+	Timestamp time.Time
+}
+
 // GameState represents the single, shared game session.
 // TODO: move a bunch of this state into the phases.
 type GameState struct {
@@ -78,6 +90,8 @@ type GameState struct {
 	PrevY int
 
 	Canvas CanvasState
+
+	StoredDrawings map[string]*StoredDrawing
 }
 
 func (gs *GameState) broadcastPlayerUpdate() {
@@ -243,6 +257,7 @@ func (gs *GameState) HandleStartGame(sender *Player) {
 
 	gs.CurrentRound = 0
 	gs.PlayersWhoHaveDrawnThisRound = make([]string, 0)
+	gs.StoredDrawings = make(map[string]*StoredDrawing)
 }
 
 func (gs *GameState) checkAllGuessed() bool {
@@ -327,4 +342,39 @@ func (gs *GameState) sendHintToGuessers(hintLevel int, hintType string) {
 
 	log.Printf("GameState: Sending %s hint to %d players who haven't guessed", hintType, len(playersToSendTo))
 	go gs.Broadcaster.BroadcastToPlayers(messages.TurnHelpResponse, hintPayload, playersToSendTo)
+}
+
+func (gs *GameState) storeCurrentDrawing() {
+	drawer := gs.Players[gs.CurrentDrawerIdx]
+
+	key := fmt.Sprintf("%s:%d", drawer.Id, gs.CurrentRound)
+
+	pathStackCopy := make([][]messages.DrawEventPayload, 0)
+	for _, pathSlice := range gs.Canvas.PathStack.Items() {
+		pathCopy := slices.Clone(pathSlice)
+		pathStackCopy = append(pathStackCopy, pathCopy)
+	}
+
+	fillStackCopy := make([]RasterCanvas, 0)
+	for _, rasterCanvas := range gs.Canvas.FillStack.Items() {
+		canvasCopy := make(RasterCanvas, len(rasterCanvas))
+		for i, row := range rasterCanvas {
+			canvasCopy[i] = slices.Clone(row)
+		}
+		fillStackCopy = append(fillStackCopy, canvasCopy)
+	}
+
+	actionsCopy := slices.Clone(gs.Canvas.Actions.Items())
+
+	storedDrawing := &StoredDrawing{
+		PlayerID:  drawer.Id,
+		Round:     gs.CurrentRound,
+		Word:      gs.Word,
+		PathStack: pathStackCopy,
+		FillStack: fillStackCopy,
+		Actions:   actionsCopy,
+		Timestamp: time.Now(),
+	}
+
+	gs.StoredDrawings[key] = storedDrawing
 }

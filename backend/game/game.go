@@ -112,6 +112,7 @@ func NewGame(b Broadcaster) *Game {
 			PrevX:                        -1,
 			PrevY:                        -1,
 			Canvas:                       canvasState,
+			StoredDrawings:               make(map[string]*StoredDrawing),
 		},
 		GameHandler: handler,
 		Messages:    make(chan GameMessage, 5),
