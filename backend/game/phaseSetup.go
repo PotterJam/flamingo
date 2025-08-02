@@ -19,7 +19,7 @@ func (p *RoundSetupHandler) Phase() GamePhase {
 }
 
 func (p *RoundSetupHandler) StartPhase(gs *GameState) {
-	gs.DrawStack = make([]*[]messages.DrawEventPayload, 0)
+	gs.Canvas.PathStack = make([]*[]messages.DrawEventPayload, 0)
 
 	gs.ClearRasterCanvas()
 

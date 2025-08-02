@@ -96,6 +96,11 @@ func NewGame(b Broadcaster) *Game {
 		}
 	}
 
+	canvasState := CanvasState{
+		PathStack: make([]*[]messages.DrawEventPayload, 0),
+		FillStack: make([]*RasterCanvas, 0),
+	}
+
 	return &Game{
 		GameState: &GameState{
 			Players:                      make([]*Player, 0, 10),
@@ -110,10 +115,10 @@ func NewGame(b Broadcaster) *Game {
 			CurrentRound:                 0,
 			PlayersWhoHaveDrawnThisRound: make([]string, 0),
 			PlayerOperations:             make(chan PlayerOperation, 5),
-			DrawStack:                    make([]*[]messages.DrawEventPayload, 0),
 			RasterCanvas:                 canvas,
 			PrevX:                        -1,
 			PrevY:                        -1,
+			Canvas:                       canvasState,
 		},
 		GameHandler: handler,
 		Messages:    make(chan GameMessage, 5),

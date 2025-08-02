@@ -128,11 +128,11 @@ func (p *RoundInProgressHandler) HandleMessage(gs *GameState, player *Player, ms
 		}
 
 		if drawPayload.EventType == "start" {
-			newDrawStack := make([]messages.DrawEventPayload, 0)
-			gs.DrawStack = append(gs.DrawStack, &newDrawStack)
+			newPathStack := make([]messages.DrawEventPayload, 0)
+			gs.Canvas.PathStack = append(gs.Canvas.PathStack, &newPathStack)
 		}
 
-		ds := gs.DrawStack[len(gs.DrawStack)-1]
+		ds := gs.Canvas.PathStack[len(gs.Canvas.PathStack)-1]
 		*ds = append(*ds, messages.DrawEventPayload{
 			EventType: drawPayload.EventType,
 			X:         drawPayload.X,
@@ -148,8 +148,8 @@ func (p *RoundInProgressHandler) HandleMessage(gs *GameState, player *Player, ms
 		return p
 	}
 
-	if msg.Type == messages.ClientDrawPathUndo && gs.isDrawer(player) && len(gs.DrawStack) > 0 {
-		allButLatest := gs.DrawStack[:len(gs.DrawStack)-1]
+	if msg.Type == messages.ClientDrawPathUndo && gs.isDrawer(player) && len(gs.Canvas.PathStack) > 0 {
+		allButLatest := gs.Canvas.PathStack[:len(gs.Canvas.PathStack)-1]
 
 		paths := make([]messages.DrawEventPayload, 0)
 		for _, ds := range allButLatest {
@@ -158,7 +158,7 @@ func (p *RoundInProgressHandler) HandleMessage(gs *GameState, player *Player, ms
 			}
 		}
 
-		gs.DrawStack = gs.DrawStack[:len(gs.DrawStack)-1]
+		gs.Canvas.PathStack = gs.Canvas.PathStack[:len(gs.Canvas.PathStack)-1]
 
 		go gs.Broadcaster.Broadcast(messages.CanvasUpdateBroadcastResponse, messages.CanvasUpdatePayload{
 			DrawPaths: paths,
@@ -166,7 +166,7 @@ func (p *RoundInProgressHandler) HandleMessage(gs *GameState, player *Player, ms
 	}
 
 	if msg.Type == messages.ClientClearDrawing && gs.isDrawer(player) {
-		clear(gs.DrawStack)
+		clear(gs.Canvas.PathStack)
 
 		gs.ClearRasterCanvas()
 
