@@ -178,8 +178,6 @@ func (p *RoundInProgressHandler) HandleMessage(gs *GameState, player *Player, ms
 	if msg.Type == messages.ClientClearDrawing && gs.isDrawer(player) {
 		clear(gs.Canvas.PathStack)
 
-		gs.ClearRasterCanvas()
-
 		go gs.Broadcaster.Broadcast(messages.CanvasUpdateBroadcastResponse, messages.CanvasUpdatePayload{
 			DrawPaths: make([]messages.DrawEventPayload, 0),
 		})
@@ -194,11 +192,12 @@ func (p *RoundInProgressHandler) HandleMessage(gs *GameState, player *Player, ms
 
 		gs.Canvas.Actions = append(gs.Canvas.Actions, "fill")
 
+		c := gs.Canvas.FillStack[0]
 		startX := int(fillPayload.X)
 		startY := int(fillPayload.Y)
-		gs.FloodFill(startX, startY, fillPayload.Color)
+		FloodFill(c, startX, startY, fillPayload.Color)
 
-		rasterData := gs.CanvasToPNGDataURL()
+		rasterData := CanvasToPNGDataURL(gs.Canvas.FillStack[0])
 
 		go gs.Broadcaster.Broadcast(messages.RasterUpdateBroadcastResponse, messages.RasterUpdatePayload{
 			RasterData: rasterData,
@@ -233,15 +232,17 @@ func (gs *GameState) HandleRasterDrawEvent(drawEvent messages.DrawEventPayload) 
 	currentX := int(drawEvent.X)
 	currentY := int(drawEvent.Y)
 
+	c := gs.Canvas.FillStack[0]
+
 	switch drawEvent.EventType {
 	case "start":
-		gs.DrawPathPixel(currentX, currentY, int(drawEvent.LineWidth))
+		DrawPathPixel(c, currentX, currentY, int(drawEvent.LineWidth))
 		gs.PrevX = currentX
 		gs.PrevY = currentY
 
 	case "draw":
 		if gs.PrevX != -1 && gs.PrevY != -1 {
-			gs.DrawLine(gs.PrevX, gs.PrevY, currentX, currentY, int(drawEvent.LineWidth))
+			DrawLine(c, gs.PrevX, gs.PrevY, currentX, currentY, int(drawEvent.LineWidth))
 		}
 		gs.PrevX = currentX
 		gs.PrevY = currentY

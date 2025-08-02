@@ -43,7 +43,7 @@ type RasterCanvas = [][]Pixel
 
 type CanvasState struct {
 	PathStack []*[]messages.DrawEventPayload
-	FillStack []*RasterCanvas
+	FillStack []RasterCanvas
 	Actions   []string
 }
 
@@ -73,7 +73,6 @@ type GameState struct {
 	// Channel for handlers to request player operations (add, remove, etc.)
 	PlayerOperations chan PlayerOperation
 
-	RasterCanvas [][]Pixel
 	PrevX        int
 	PrevY        int
 

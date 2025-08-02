@@ -28,7 +28,7 @@ func abs(x int) int {
 	return x
 }
 
-func (gs *GameState) DrawPathPixel(x, y, thickness int) {
+func DrawPathPixel(c RasterCanvas, x, y, thickness int) {
 	radius := int(thickness / 2)
 
 	for dy := -radius; dy <= radius; dy++ {
@@ -38,23 +38,23 @@ func (gs *GameState) DrawPathPixel(x, y, thickness int) {
 				cx := dx + x
 				cy := dy + y
 				if cy >= 0 && cy < CANVAS_HEIGHT && cx >= 0 && cx < CANVAS_WIDTH {
-					gs.RasterCanvas[cy][cx] = Pixel{Color: "#ffffff", Type: PixelPath}
+					c[cy][cx] = Pixel{Color: "#ffffff", Type: PixelPath}
 				}
 			}
 		}
 	}
 }
 
-func (gs *GameState) FillPixel(x, y int, color string) {
+func FillPixel(c RasterCanvas, x, y int, color string) {
 	if y >= 0 && y < CANVAS_HEIGHT && x >= 0 && x < CANVAS_WIDTH {
-		gs.RasterCanvas[y][x] = Pixel{Color: color, Type: PixelFill}
+		c[y][x] = Pixel{Color: color, Type: PixelFill}
 	}
 }
 
 // Bresenham's line algorithm
-func (gs *GameState) DrawLine(x0, y0, x1, y1, thickness int) {
+func DrawLine(c RasterCanvas, x0, y0, x1, y1, thickness int) {
 	if x0 == x1 && y0 == y1 {
-		gs.DrawPathPixel(x0, y0, thickness)
+		DrawPathPixel(c, x0, y0, thickness)
 		return
 	}
 
@@ -74,7 +74,7 @@ func (gs *GameState) DrawLine(x0, y0, x1, y1, thickness int) {
 	x, y := x0, y0
 
 	for {
-		gs.DrawPathPixel(x, y, thickness)
+		DrawPathPixel(c, x, y, thickness)
 
 		if x == x1 && y == y1 {
 			break
@@ -94,14 +94,6 @@ func (gs *GameState) DrawLine(x0, y0, x1, y1, thickness int) {
 	}
 }
 
-func (gs *GameState) ClearRasterCanvas() {
-	for y := range gs.RasterCanvas {
-		for x := range gs.RasterCanvas[y] {
-			gs.RasterCanvas[y][x] = Pixel{Color: "#ffffff", Type: PixelFill}
-		}
-	}
-}
-
 func hexToRgb(hex string) color.RGBA {
 	r, _ := strconv.ParseUint(hex[1:3], 16, 8)
 	g, _ := strconv.ParseUint(hex[3:5], 16, 8)
@@ -110,14 +102,14 @@ func hexToRgb(hex string) color.RGBA {
 	return color.RGBA{uint8(r), uint8(g), uint8(b), 255}
 }
 
-func (gs *GameState) mostCommonNeighbourColour(centerX, centerY, radius int) string {
+func mostCommonNeighbourColour(c RasterCanvas, centerX, centerY, radius int) string {
 	colorCounts := make(map[string]int)
 
 	for dy := -radius; dy <= radius; dy++ {
 		for dx := -radius; dx <= radius; dx++ {
 			x, y := centerX+dx, centerY+dy
 			if y >= 0 && y < CANVAS_HEIGHT && x >= 0 && x < CANVAS_WIDTH {
-				pixel := gs.RasterCanvas[y][x]
+				pixel := c[y][x]
 				if pixel.Type == PixelFill {
 					colorCounts[pixel.Color]++
 				}
@@ -138,19 +130,19 @@ func (gs *GameState) mostCommonNeighbourColour(centerX, centerY, radius int) str
 	return mostCommonColor
 }
 
-func (gs *GameState) CanvasToPNGDataURL() string {
+func CanvasToPNGDataURL(c RasterCanvas) string {
 	img := image.NewRGBA(image.Rect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT))
 
 	for y := range CANVAS_HEIGHT {
 		for x := range CANVAS_WIDTH {
-			pixel := gs.RasterCanvas[y][x]
+			pixel := c[y][x]
 			var rgba color.RGBA
 
 			if pixel.Type == PixelFill {
 				rgba = hexToRgb(pixel.Color)
 			} else {
 				// We want to fill in any empty regions left by that paths that deviate slightly when rendering the stroke effect
-				surroundingColor := gs.mostCommonNeighbourColour(x, y, 5)
+				surroundingColor := mostCommonNeighbourColour(c, x, y, 5)
 				rgba = hexToRgb(surroundingColor)
 			}
 
@@ -167,12 +159,12 @@ func (gs *GameState) CanvasToPNGDataURL() string {
 	return "data:image/png;base64," + encoded
 }
 
-func (gs *GameState) FloodFill(startX, startY int, newColor string) {
+func FloodFill(c RasterCanvas, startX, startY int, newColor string) {
 	if startY < 0 || startY >= CANVAS_HEIGHT || startX < 0 || startX >= CANVAS_WIDTH {
 		return
 	}
 
-	startPixel := gs.RasterCanvas[startY][startX]
+	startPixel := c[startY][startX]
 
 	if startPixel.Type == PixelPath {
 		return
@@ -194,7 +186,7 @@ func (gs *GameState) FloodFill(startX, startY int, newColor string) {
 			continue
 		}
 
-		pixelToFill := gs.RasterCanvas[y][x]
+		pixelToFill := c[y][x]
 
 		if pixelToFill.Type == PixelPath {
 			continue
@@ -203,7 +195,7 @@ func (gs *GameState) FloodFill(startX, startY int, newColor string) {
 			continue
 		}
 
-		gs.FillPixel(x, y, newColor)
+		FillPixel(c, x, y, newColor)
 
 		stack = append(stack,
 			point{x + 1, y},
