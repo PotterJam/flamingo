@@ -4,7 +4,6 @@ import (
 	"backend/messages"
 	"encoding/json"
 	"log"
-	"slices"
 	"strings"
 	"time"
 )
@@ -196,7 +195,7 @@ func (p *RoundInProgressHandler) HandleMessage(gs *GameState, player *Player, ms
 
 		gs.Canvas.Actions.Push("fill")
 
-		c := slices.Clone(*gs.Canvas.FillStack.Head())
+		c := CloneRasterCanvas(*gs.Canvas.FillStack.Head())
 		gs.Canvas.FillStack.Push(c)
 
 		startX := int(fillPayload.X)
@@ -249,7 +248,7 @@ func (gs *GameState) HandleRasterDrawEvent(drawEvent messages.DrawEventPayload) 
 	switch drawEvent.EventType {
 	case "start":
 		// Need to start a new canvas for new path so if we undo a path we can undo this canvas and fills will ignore that undone raster path
-		c := slices.Clone(*gs.Canvas.FillStack.Head())
+		c := CloneRasterCanvas(*gs.Canvas.FillStack.Head())
 		gs.Canvas.FillStack.Push(c)
 
 		DrawPathPixel(c, currentX, currentY, int(drawEvent.LineWidth))

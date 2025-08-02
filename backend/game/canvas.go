@@ -6,6 +6,7 @@ import (
 	"image"
 	"image/color"
 	"image/png"
+	"slices"
 	"strconv"
 )
 
@@ -168,6 +169,14 @@ func CanvasToPNGDataURL(c RasterCanvas) string {
 
 	encoded := base64.StdEncoding.EncodeToString(buf.Bytes())
 	return "data:image/png;base64," + encoded
+}
+
+func CloneRasterCanvas(original RasterCanvas) RasterCanvas {
+	cloned := make(RasterCanvas, len(original))
+	for i, row := range original {
+		cloned[i] = slices.Clone(row)
+	}
+	return cloned
 }
 
 func FloodFill(c RasterCanvas, startX, startY int, newColor string) {
