@@ -1,4 +1,4 @@
-import { For, createMemo } from 'solid-js';
+import { For } from 'solid-js';
 import { store } from '../../store';
 import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
 
@@ -16,9 +16,7 @@ const getMedal = (index: number): string => {
 };
 
 export const GameEndScreen = () => {
-    const sortedPlayers = createMemo(() =>
-        [...store.gameState.players].sort((a, b) => b.score - a.score)
-    );
+    const finalPlayers = [...store.gameState.players].sort((a, b) => b.score - a.score);
 
     return (
         <div class="fixed inset-0 z-50 flex items-center justify-center">
@@ -28,7 +26,7 @@ export const GameEndScreen = () => {
                 </CardHeader>
                 <CardContent>
                     <ul>
-                        <For each={sortedPlayers()}>
+                        <For each={finalPlayers}>
                             {(player, index) => (
                                 <li class="flex items-center justify-between p-3 text-lg">
                                     <span class="flex items-center">
