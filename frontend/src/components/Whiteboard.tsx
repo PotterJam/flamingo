@@ -5,7 +5,6 @@ import { Separator } from './ui/separator';
 import { getStroke, StrokeOptions } from 'perfect-freehand';
 import {
     FaSolidArrowRotateLeft,
-    FaSolidBucket,
     FaSolidPen,
 } from 'solid-icons/fa';
 import {
@@ -13,6 +12,7 @@ import {
     translatePointerToCanvas,
 } from '../lib/utils/canvas';
 import { FiTrash2 } from 'solid-icons/fi';
+import { BsPaintBucket } from 'solid-icons/bs';
 
 const PALETTE = [
     '#000000',
@@ -253,7 +253,7 @@ const Whiteboard: Component<WhiteboardProps> = ({ height, width }) => {
                             class="p-1"
                             onClick={() => setIsFill((prev) => !prev)}
                         >
-                            <Show when={isFill()} fallback={<FaSolidBucket />}>
+                            <Show when={isFill()} fallback={<BsPaintBucket />}>
                                 <FaSolidPen />
                             </Show>
                         </button>
