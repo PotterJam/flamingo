@@ -89,9 +89,7 @@ func (g *Game) updateHandler(newHandler GamePhaseHandler) {
 func NewGame(b Broadcaster) *Game {
 	handler := GamePhaseHandler(&WaitingInLobbyHandler{})
 
-	canvas := Canvas{
-		Grid: make([]uint32, 700*600),
-	}
+	canvas := BlankCanvas()
 
 	return &Game{
 		GameState: &GameState{
