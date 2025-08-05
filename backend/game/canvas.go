@@ -43,6 +43,14 @@ func (c *Canvas) Copy() *Canvas {
 	}
 }
 
+func (c *Canvas) Set(x, y int, colour uint32) {
+	c.Grid[y*CANVAS_WIDTH+x] = colour
+}
+
+func (c *Canvas) Get(x, y int) uint32 {
+	return c.Grid[y*CANVAS_WIDTH+x]
+}
+
 func abs(x int) int {
 	if x < 0 {
 		return -x
@@ -52,7 +60,7 @@ func abs(x int) int {
 
 func BlankCanvas() *Canvas {
 	return &Canvas{
-		Grid: make([]uint32, 700*600),
+		Grid: make([]uint32, CANVAS_WIDTH*CANVAS_HEIGHT),
 	}
 }
 
