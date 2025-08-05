@@ -42,6 +42,10 @@ type HintEvent struct {
 
 type RasterCanvas = [][]Pixel
 
+type Canvas struct {
+	Grid []uint32
+}
+
 type CanvasState struct {
 	PathStack *util.Stack[[]messages.DrawEventPayload]
 	FillStack *util.Stack[RasterCanvas]
@@ -77,7 +81,7 @@ type GameState struct {
 	PrevX int
 	PrevY int
 
-	Canvas CanvasState
+	CanvasStack *util.Stack[Canvas]
 }
 
 func (gs *GameState) broadcastPlayerUpdate() {
