@@ -17,6 +17,7 @@ import {
     GameFinishedMsg,
     WordRevealMsg,
     CanvasUpdateMsg,
+    DrawEvent,
 } from './messages';
 import { GamePhase, Path, PathPoint } from './model';
 
@@ -66,6 +67,8 @@ export interface GameState {
     } | null;
     totalRounds: number | null;
     currentRound: number | null;
+
+    pendingDrawEvent: DrawEvent | null;
 }
 
 const initialWhiteboardState: WhiteboardState = {
@@ -88,6 +91,7 @@ const initialGameState: GameState = {
     scoreDisplay: null,
     totalRounds: null,
     currentRound: null,
+    pendingDrawEvent: null,
 };
 
 export interface AppState {
@@ -364,7 +368,6 @@ export const actions = {
     },
 
     handleDrawPayload: ({ payload }: DrawEventMsg) => {
-        console.log(payload);
         setStore(
             produce((state) => {
                 if (payload.eventType === 'start') {
@@ -493,5 +496,21 @@ export const actions = {
                 eventType: 'end',
             },
         });
+    },
+
+    setPendingDrawEvent: (message: DrawEvent) => {
+        setStore(
+            produce((state) => {
+                state.gameState.pendingDrawEvent = message;
+            })
+        );
+    },
+
+    clearPendingDrawEvent: () => {
+        setStore(
+            produce((state) => {
+                state.gameState.pendingDrawEvent = null;
+            })
+        );
     },
 };

@@ -1,4 +1,11 @@
-import { createSignal, Component, createMemo, For, Show } from 'solid-js';
+import {
+    createSignal,
+    createEffect,
+    Component,
+    createMemo,
+    For,
+    Show,
+} from 'solid-js';
 import { actions, store } from '../store';
 import classNames from 'classnames';
 import { Separator } from './ui/separator';
@@ -64,19 +71,30 @@ const Whiteboard: Component<WhiteboardProps> = ({ height, width }) => {
     const isDrawer = () =>
         store.gameState.localPlayerId === store.gameState.currentDrawerId;
 
+    // This system relies on the websocket messages being processed synchronously.
+    // If this changes we will need something like a queue system.
+    createEffect(() => {
+        const drawEvent = store.gameState.pendingDrawEvent;
+        if (!drawEvent) {
+            return;
+        }
+
+        actions.clearPendingDrawEvent();
+    });
+
     const handlePointerDown = (e: PointerEvent) => {
         e.preventDefault();
         if (!canvasRef || !isDrawer()) return;
 
         if (isFill()) {
             const [x, y, _] = translatePointerToCanvas(e, canvasRef);
-            store.sendMessage({ 
-                type: 'fill', 
-                payload: { 
-                    x: x, 
-                    y: y, 
-                    color: selectedColour() 
-                } 
+            store.sendMessage({
+                type: 'fill',
+                payload: {
+                    x: x,
+                    y: y,
+                    color: selectedColour(),
+                },
             });
             return;
         }
