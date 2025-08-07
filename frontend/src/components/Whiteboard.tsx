@@ -10,6 +10,7 @@ import {
 import { translatePointerToCanvas } from '../lib/utils/canvas';
 import { FiTrash2 } from 'solid-icons/fi';
 import { CANVAS_HEIGHT, CANVAS_WIDTH } from './Game';
+import { useCanvas } from '../hooks/useCanvas';
 
 const PALETTE = [
     '#000000',
@@ -55,8 +56,10 @@ interface Coord {
 const Whiteboard: Component<WhiteboardProps> = () => {
     let canvasRef!: HTMLCanvasElement;
     let canvasCtx!: CanvasRenderingContext2D;
+    let drawing: ReturnType<typeof useCanvas>;
 
     const [lastCoord, setLastCoord] = createSignal<Coord | null>(null);
+    const [isDrawing, setIsDrawing] = createSignal(false);
 
     onMount(() => {
         const ctx = canvasRef.getContext('2d');
@@ -64,6 +67,7 @@ const Whiteboard: Component<WhiteboardProps> = () => {
             throw new Error('Null canvas context');
         }
         canvasCtx = ctx;
+        drawing = useCanvas({ canvasCtx });
     });
 
     const [selectedColour, setSelectedColour] =
@@ -71,49 +75,10 @@ const Whiteboard: Component<WhiteboardProps> = () => {
     const [selectedThickness, setSelectedThickness] = createSignal(
         defaultBrushThickness
     );
-    const [isDrawing, setIsDrawing] = createSignal(false);
     const [isFill, setIsFill] = createSignal(false);
 
     const isDrawer = () =>
         store.gameState.localPlayerId === store.gameState.currentDrawerId;
-
-    const drawBetween = (
-        startX: number,
-        startY: number,
-        endX: number,
-        endY: number,
-        thickness: number,
-        hexColor: string
-    ) => {
-        const dx = endX - startX;
-        const dy = endY - startY;
-        const distance = Math.sqrt(dx * dx + dy * dy);
-        const steps = Math.max(Math.ceil(distance), 1);
-
-        for (let i = 0; i <= steps; i++) {
-            const t = i / steps; // Liner interpolation
-            const x = Math.round(startX + dx * t);
-            const y = Math.round(startY + dy * t);
-
-            drawAtCoord(x, y, thickness, hexColor);
-        }
-    };
-
-    const drawAtCoord = (
-        centerX: number,
-        centerY: number,
-        thickness: number,
-        hexColor: string
-    ) => {
-        const radius = thickness / 2;
-        const x = Math.round(centerX);
-        const y = Math.round(centerY);
-
-        canvasCtx.fillStyle = hexColor;
-        canvasCtx.beginPath();
-        canvasCtx.arc(x, y, radius, 0, 2 * Math.PI);
-        canvasCtx.fill();
-    };
 
     // This system relies on the websocket messages being processed synchronously.
     // If this changes we will need something like a queue system.
@@ -128,13 +93,10 @@ const Whiteboard: Component<WhiteboardProps> = () => {
         }
 
         let prev = lastCoord();
-        if (prev === null) {
-            prev = { x: drawEvent.x, y: drawEvent.y };
-        }
 
-        drawBetween(
-            prev.x,
-            prev.y,
+        drawing.drawBetween(
+            prev?.x ?? drawEvent.x,
+            prev?.y ?? drawEvent.y,
             drawEvent.x,
             drawEvent.y,
             drawEvent.lineWidth,
@@ -166,7 +128,7 @@ const Whiteboard: Component<WhiteboardProps> = () => {
         setIsDrawing(true);
 
         const [x, y, p] = translatePointerToCanvas(e, canvasRef);
-        drawBetween(x, y, x, y, selectedThickness(), selectedColour());
+        drawing.drawBetween(x, y, x, y, selectedThickness(), selectedColour());
         setLastCoord({ x, y });
         actions.startPath([x, y, p], selectedColour(), selectedThickness());
     };
@@ -179,7 +141,7 @@ const Whiteboard: Component<WhiteboardProps> = () => {
 
         const [x, y, _] = translatePointerToCanvas(e, canvasRef);
         const prev = lastCoord();
-        drawBetween(
+        drawing.drawBetween(
             prev?.x ?? x,
             prev?.y ?? y,
             x,
@@ -209,7 +171,7 @@ const Whiteboard: Component<WhiteboardProps> = () => {
 
         const [x, y, _] = translatePointerToCanvas(e, canvasRef);
         const prev = lastCoord();
-        drawBetween(
+        drawing.drawBetween(
             prev?.x ?? x,
             prev?.y ?? y,
             x,
