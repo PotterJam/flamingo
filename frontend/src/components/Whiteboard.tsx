@@ -1,25 +1,15 @@
-import {
-    createSignal,
-    createEffect,
-    Component,
-    createMemo,
-    For,
-    Show,
-} from 'solid-js';
+import { createSignal, createEffect, Component, Show, onMount } from 'solid-js';
 import { actions, store } from '../store';
 import classNames from 'classnames';
 import { Separator } from './ui/separator';
-import { getStroke, StrokeOptions } from 'perfect-freehand';
 import {
     FaSolidArrowRotateLeft,
     FaSolidBucket,
     FaSolidPen,
 } from 'solid-icons/fa';
-import {
-    getSvgPathFromStroke,
-    translatePointerToCanvas,
-} from '../lib/utils/canvas';
+import { translatePointerToCanvas } from '../lib/utils/canvas';
 import { FiTrash2 } from 'solid-icons/fi';
+import { CANVAS_HEIGHT, CANVAS_WIDTH } from './Game';
 
 const PALETTE = [
     '#000000',
@@ -57,8 +47,24 @@ interface WhiteboardProps {
 
 const defaultBrushThickness = 9;
 
-const Whiteboard: Component<WhiteboardProps> = ({ height, width }) => {
-    let canvasRef: SVGSVGElement | undefined;
+interface Coord {
+    x: number;
+    y: number;
+}
+
+const Whiteboard: Component<WhiteboardProps> = () => {
+    let canvasRef!: HTMLCanvasElement;
+    let canvasCtx!: CanvasRenderingContext2D;
+
+    const [lastCoord, setLastCoord] = createSignal<Coord | null>(null);
+
+    onMount(() => {
+        const ctx = canvasRef.getContext('2d');
+        if (ctx === null) {
+            throw new Error('Null canvas context');
+        }
+        canvasCtx = ctx;
+    });
 
     const [selectedColour, setSelectedColour] =
         createSignal<PaletteColor>('#000000');
@@ -71,13 +77,71 @@ const Whiteboard: Component<WhiteboardProps> = ({ height, width }) => {
     const isDrawer = () =>
         store.gameState.localPlayerId === store.gameState.currentDrawerId;
 
+    const drawBetween = (
+        startX: number,
+        startY: number,
+        endX: number,
+        endY: number,
+        thickness: number,
+        hexColor: string
+    ) => {
+        const dx = endX - startX;
+        const dy = endY - startY;
+        const distance = Math.sqrt(dx * dx + dy * dy);
+        const steps = Math.max(Math.ceil(distance), 1);
+
+        for (let i = 0; i <= steps; i++) {
+            const t = i / steps; // Liner interpolation
+            const x = Math.round(startX + dx * t);
+            const y = Math.round(startY + dy * t);
+
+            drawAtCoord(x, y, thickness, hexColor);
+        }
+    };
+
+    const drawAtCoord = (
+        centerX: number,
+        centerY: number,
+        thickness: number,
+        hexColor: string
+    ) => {
+        const radius = thickness / 2;
+        const x = Math.round(centerX);
+        const y = Math.round(centerY);
+
+        canvasCtx.fillStyle = hexColor;
+        canvasCtx.beginPath();
+        canvasCtx.arc(x, y, radius, 0, 2 * Math.PI);
+        canvasCtx.fill();
+    };
+
     // This system relies on the websocket messages being processed synchronously.
     // If this changes we will need something like a queue system.
     createEffect(() => {
         const drawEvent = store.gameState.pendingDrawEvent;
-        if (!drawEvent) {
+        if (!drawEvent) return;
+
+        if (drawEvent.eventType === 'end') {
+            setLastCoord(null);
+            actions.clearPendingDrawEvent();
             return;
         }
+
+        let prev = lastCoord();
+        if (prev === null) {
+            prev = { x: drawEvent.x, y: drawEvent.y };
+        }
+
+        drawBetween(
+            prev.x,
+            prev.y,
+            drawEvent.x,
+            drawEvent.y,
+            drawEvent.lineWidth,
+            drawEvent.color
+        );
+
+        setLastCoord({ x: drawEvent.x, y: drawEvent.y });
 
         actions.clearPendingDrawEvent();
     });
@@ -100,23 +164,35 @@ const Whiteboard: Component<WhiteboardProps> = ({ height, width }) => {
         }
 
         setIsDrawing(true);
-        actions.startPath(
-            translatePointerToCanvas(e, canvasRef),
-            selectedColour(),
-            selectedThickness()
-        );
+
+        const [x, y, p] = translatePointerToCanvas(e, canvasRef);
+        drawBetween(x, y, x, y, selectedThickness(), selectedColour());
+        setLastCoord({ x, y });
+        actions.startPath([x, y, p], selectedColour(), selectedThickness());
     };
 
     const handlePointerUp = (e: PointerEvent) => {
         e.preventDefault();
-        if (!canvasRef || !isDrawer() || isFill()) return;
+        if (!isDrawer() || isFill()) return;
+
         setIsDrawing(false);
+
+        const [x, y, _] = translatePointerToCanvas(e, canvasRef);
+        const prev = lastCoord();
+        drawBetween(
+            prev?.x ?? x,
+            prev?.y ?? y,
+            x,
+            y,
+            selectedThickness(),
+            selectedColour()
+        );
+        setLastCoord(null);
         actions.finishPath();
     };
 
     const handlePointerLeave = (e: PointerEvent) => {
         if (!isDrawing()) return;
-        if (!canvasRef) return;
         handlePointerUp(e);
     };
 
@@ -129,79 +205,35 @@ const Whiteboard: Component<WhiteboardProps> = ({ height, width }) => {
     const handlePointerMove = (e: PointerEvent) => {
         if (!isDrawing() || !isDrawer()) return;
         if (isFill()) return;
-        if (!canvasRef) return;
         e.preventDefault();
+
+        const [x, y, _] = translatePointerToCanvas(e, canvasRef);
+        const prev = lastCoord();
+        drawBetween(
+            prev?.x ?? x,
+            prev?.y ?? y,
+            x,
+            y,
+            selectedThickness(),
+            selectedColour()
+        );
+        setLastCoord({ x, y });
+
         actions.continuePath(translatePointerToCanvas(e, canvasRef));
     };
 
-    const renderedFinishedPaths = createMemo(() => {
-        return store.whiteboardState.finishedPaths.map((path) => {
-            const settings = {
-                size: path.thickness,
-            } as StrokeOptions;
-
-            return {
-                colour: path.colour,
-                points: getSvgPathFromStroke(getStroke(path.points, settings)),
-            };
-        });
-    });
-
-    const renderedCurrentPath = createMemo(() => {
-        if (
-            !store.whiteboardState.currentPath ||
-            !store.whiteboardState.currentPath.points.length
-        )
-            return null;
-
-        const settings = {
-            size: store.whiteboardState.currentPath.thickness,
-        } as StrokeOptions;
-
-        return getSvgPathFromStroke(
-            getStroke(store.whiteboardState.currentPath.points, settings)
-        );
-    });
-
     return (
         <div class="flex flex-col">
-            <svg
+            <canvas
+                width={CANVAS_WIDTH}
+                height={CANVAS_HEIGHT}
                 ref={canvasRef}
-                class="block bg-white"
-                style={{
-                    width: `${width}px`,
-                    height: `${height}px`,
-                }}
-                onPointerDown={handlePointerDown}
-                onPointerMove={handlePointerMove}
-                onPointerUp={handlePointerUp}
-                onPointerLeave={handlePointerLeave}
                 onPointerEnter={handlePointerEnter}
-            >
-                <Show when={store.whiteboardState.rasterData}>
-                    <image
-                        href={store.whiteboardState.rasterData!}
-                        width={width}
-                        height={height}
-                        x={0}
-                        y={0}
-                    />
-                </Show>
-                <For each={renderedFinishedPaths()}>
-                    {(path) => <path d={path.points} fill={path.colour} />}
-                </For>
-                <Show when={renderedCurrentPath()}>
-                    {(path) => (
-                        <path
-                            d={path()}
-                            fill={
-                                store.whiteboardState.currentPath?.colour ||
-                                selectedColour()
-                            }
-                        />
-                    )}
-                </Show>
-            </svg>
+                onPointerUp={handlePointerUp}
+                onPointerMove={handlePointerMove}
+                onPointerLeave={handlePointerLeave}
+                onPointerDown={handlePointerDown}
+            />
             <Separator />
             <Show when={isDrawer()}>
                 <div class="flex w-full flex-row justify-between gap-2 p-2">

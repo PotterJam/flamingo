@@ -29,6 +29,7 @@ export const useHandleMessage = (message: Accessor<ReceivedMsg | null>) => {
                     break;
                 }
                 case 'drawEvent': {
+                    actions.setPendingDrawEvent(msg.payload);
                     actions.handleDrawPayload(msg);
                     break;
                 }
