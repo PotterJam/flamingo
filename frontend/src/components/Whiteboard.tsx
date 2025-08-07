@@ -217,7 +217,7 @@ const Whiteboard: Component<WhiteboardProps> = () => {
                         ))}
                     </div>
                     <div class="flex flex-row items-center space-x-2">
-                        {[6, 9, 12].map((thickness) => (
+                        {[6, 9, 15].map((thickness) => (
                             <div
                                 class={classNames(
                                     'flex h-8 w-8 cursor-pointer items-center justify-center rounded-full border border-gray-400 bg-white hover:ring-2 hover:ring-blue-500',
