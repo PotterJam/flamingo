@@ -10,7 +10,6 @@ export const useCanvas = ({ canvasCtx }: UseCanvasProps) => {
         const r = parseInt(hex.substring(1, 3), 16);
         const g = parseInt(hex.substring(3, 5), 16);
         const b = parseInt(hex.substring(5, 7), 16);
-
         return [r, g, b];
     };
 
@@ -23,8 +22,15 @@ export const useCanvas = ({ canvasCtx }: UseCanvasProps) => {
         const radius = Math.round(thickness / 2);
         const centerXRound = Math.round(centerX);
         const centerYRound = Math.round(centerY);
+        const fillRgb = hexToRgb(hexColour);
 
-        canvasCtx.fillStyle = hexColour;
+        const imageData = canvasCtx.getImageData(
+            0,
+            0,
+            CANVAS_WIDTH,
+            CANVAS_HEIGHT
+        );
+        const data = imageData.data;
 
         for (let x = centerXRound - radius; x <= centerXRound + radius; x++) {
             for (
@@ -32,15 +38,23 @@ export const useCanvas = ({ canvasCtx }: UseCanvasProps) => {
                 y <= centerYRound + radius;
                 y++
             ) {
-                const distance = Math.sqrt(
-                    (x - centerXRound) ** 2 + (y - centerYRound) ** 2
-                );
+                if (x >= 0 && x < CANVAS_WIDTH && y >= 0 && y < CANVAS_HEIGHT) {
+                    const distance = Math.sqrt(
+                        (x - centerXRound) ** 2 + (y - centerYRound) ** 2
+                    );
 
-                if (distance < radius) {
-                    canvasCtx.fillRect(x, y, 1, 1);
+                    if (distance < radius) {
+                        const index = (y * CANVAS_WIDTH + x) * 4;
+                        data[index] = fillRgb[0];
+                        data[index + 1] = fillRgb[1];
+                        data[index + 2] = fillRgb[2];
+                        data[index + 3] = 255;
+                    }
                 }
             }
         }
+
+        canvasCtx.putImageData(imageData, 0, 0);
     };
 
     const drawBetween = (

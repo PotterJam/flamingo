@@ -58,7 +58,7 @@ const Whiteboard: Component<WhiteboardProps> = () => {
     const [isDrawing, setIsDrawing] = createSignal(false);
 
     onMount(() => {
-        const ctx = canvasRef.getContext('2d');
+        const ctx = canvasRef.getContext('2d', { willReadFrequently: true });
         if (ctx === null) {
             throw new Error('Null canvas context');
         }
@@ -67,9 +67,8 @@ const Whiteboard: Component<WhiteboardProps> = () => {
         drawing = useCanvas({ canvasCtx });
 
         // Canvas is empty by default so need to make it white
-        canvasCtx.fillStyle = "#ffffff";
+        canvasCtx.fillStyle = '#ffffff';
         canvasCtx.fillRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
-
     });
 
     const [selectedColour, setSelectedColour] =
