@@ -2,7 +2,6 @@ import { createStore, produce } from 'solid-js/store';
 import { createEffect } from 'solid-js';
 import {
     ChatMessage,
-    DrawEventMsg,
     GameInfoMsg,
     Player,
     PlayerScoreGain,
@@ -69,6 +68,7 @@ export interface GameState {
     currentRound: number | null;
 
     pendingDrawEvent: DrawEvent | null;
+    drawEventsStack: DrawEvent[];
 }
 
 const initialWhiteboardState: WhiteboardState = {
@@ -92,6 +92,7 @@ const initialGameState: GameState = {
     totalRounds: null,
     currentRound: null,
     pendingDrawEvent: null,
+    drawEventsStack: [],
 };
 
 export interface AppState {
@@ -367,35 +368,6 @@ export const actions = {
         );
     },
 
-    handleDrawPayload: ({ payload }: DrawEventMsg) => {
-        setStore(
-            produce((state) => {
-                if (payload.eventType === 'start') {
-                    state.whiteboardState.currentPath = {
-                        points: [[payload.x, payload.y, 0.5]],
-                        colour: payload.color,
-                        thickness: payload.lineWidth,
-                    };
-                } else if (payload.eventType === 'draw') {
-                    if (state.whiteboardState.currentPath) {
-                        state.whiteboardState.currentPath.points.push([
-                            payload.x,
-                            payload.y,
-                            0.5,
-                        ]);
-                    }
-                } else if (payload.eventType === 'end') {
-                    if (state.whiteboardState.currentPath) {
-                        state.whiteboardState.finishedPaths.push(
-                            state.whiteboardState.currentPath
-                        );
-                        state.whiteboardState.currentPath = null;
-                    }
-                }
-            })
-        );
-    },
-
     handleCanvasUpdate: ({ payload }: CanvasUpdateMsg) => {
         setStore(
             produce((state) => {
@@ -432,76 +404,13 @@ export const actions = {
         );
     },
 
-    startPath: (point: PathPoint, colour: string, thickness: number) => {
-        setStore(
-            produce((state) => {
-                state.whiteboardState.currentPath = {
-                    points: [point],
-                    colour,
-                    thickness,
-                };
-            })
-        );
 
-        store.sendMessage({
-            type: 'drawEvent',
-            payload: {
-                eventType: 'start',
-                x: point[0],
-                y: point[1],
-                color: colour,
-                lineWidth: thickness,
-            },
-        });
-    },
 
-    continuePath: (point: PathPoint) => {
-        setStore(
-            produce((state) => {
-                if (state.whiteboardState.currentPath) {
-                    state.whiteboardState.currentPath.points.push(point);
-                }
-            })
-        );
-
-        if (store.whiteboardState.currentPath) {
-            store.sendMessage({
-                type: 'drawEvent',
-                payload: {
-                    eventType: 'draw',
-                    x: point[0],
-                    y: point[1],
-                    color: store.whiteboardState.currentPath.colour,
-                    lineWidth: store.whiteboardState.currentPath.thickness,
-                },
-            });
-        }
-    },
-
-    finishPath: () => {
-        setStore(
-            produce((state) => {
-                if (state.whiteboardState.currentPath) {
-                    state.whiteboardState.finishedPaths.push(
-                        state.whiteboardState.currentPath
-                    );
-                    state.whiteboardState.currentPath = null;
-                }
-            })
-        );
-
-        store.sendMessage({
-            type: 'drawEvent',
-            payload: {
-                eventType: 'end',
-            },
-        });
-    },
-
-    setPendingDrawEvent: (message: DrawEvent) => {
+    handleDrawPayload: (message: DrawEvent) => {
         setStore(
             produce((state) => {
                 state.gameState.pendingDrawEvent = message;
+                state.gameState.drawEventsStack.push(message);
             })
         );
     },

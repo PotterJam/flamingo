@@ -97,6 +97,8 @@ const Whiteboard: Component<WhiteboardProps> = () => {
             return;
         }
 
+        if (drawEvent.eventType === 'undo') return;
+
         if (drawEvent.eventType === 'fill') {
             canvas.fill(
                 Math.round(drawEvent.x),
@@ -128,24 +130,43 @@ const Whiteboard: Component<WhiteboardProps> = () => {
             const [x, y, _] = translatePointerToCanvas(e, canvasRef);
             canvas.fill(Math.round(x), Math.round(y), selectedColour());
 
+            const fillEvent = {
+                eventType: 'fill' as const,
+                x: x,
+                y: y,
+                color: selectedColour(),
+            };
+
+            actions.handleDrawPayload(fillEvent);
+
             store.sendMessage({
                 type: 'drawEvent',
-                payload: {
-                    eventType: 'fill',
-                    x: x,
-                    y: y,
-                    color: selectedColour(),
-                },
+                payload: fillEvent,
             });
+
             return;
         }
 
         setIsDrawing(true);
 
-        const [x, y, p] = translatePointerToCanvas(e, canvasRef);
+        const [x, y, _] = translatePointerToCanvas(e, canvasRef);
         canvas.drawBetween(x, y, x, y, selectedThickness(), selectedColour());
         setLastCoord({ x, y });
-        actions.startPath([x, y, p], selectedColour(), selectedThickness());
+
+        const startEvent = {
+            eventType: 'start' as const,
+            x: x,
+            y: y,
+            color: selectedColour(),
+            lineWidth: selectedThickness(),
+        };
+
+        actions.handleDrawPayload(startEvent);
+
+        store.sendMessage({
+            type: 'drawEvent',
+            payload: startEvent,
+        });
     };
 
     const handlePointerUp = (e: PointerEvent) => {
@@ -165,7 +186,17 @@ const Whiteboard: Component<WhiteboardProps> = () => {
             selectedColour()
         );
         setLastCoord(null);
-        actions.finishPath();
+
+        const endEvent = {
+            eventType: 'end' as const,
+        };
+
+        actions.handleDrawPayload(endEvent);
+
+        store.sendMessage({
+            type: 'drawEvent',
+            payload: endEvent,
+        });
     };
 
     const handlePointerLeave = (e: PointerEvent) => {
@@ -196,7 +227,20 @@ const Whiteboard: Component<WhiteboardProps> = () => {
         );
         setLastCoord({ x, y });
 
-        actions.continuePath(translatePointerToCanvas(e, canvasRef));
+        const drawEvent = {
+            eventType: 'draw' as const,
+            x: x,
+            y: y,
+            color: selectedColour(),
+            lineWidth: selectedThickness(),
+        };
+
+        actions.handleDrawPayload(drawEvent);
+
+        store.sendMessage({
+            type: 'drawEvent',
+            payload: drawEvent,
+        });
     };
 
     const handleClear = () => {
@@ -266,14 +310,18 @@ const Whiteboard: Component<WhiteboardProps> = () => {
                     <div class="flex flex-row items-center space-x-2 p-2">
                         <button
                             class="p-1"
-                            onClick={() =>
+                            onClick={() => {
+                                const undoEvent = {
+                                    eventType: 'undo' as const,
+                                };
+
+                                actions.handleDrawPayload(undoEvent);
+
                                 store.sendMessage({
                                     type: 'drawEvent',
-                                    payload: {
-                                        eventType: 'undo',
-                                    },
-                                })
-                            }
+                                    payload: undoEvent,
+                                });
+                            }}
                         >
                             <FaSolidArrowRotateLeft />
                         </button>
