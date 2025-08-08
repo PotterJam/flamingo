@@ -268,8 +268,10 @@ const Whiteboard: Component<WhiteboardProps> = () => {
                             class="p-1"
                             onClick={() =>
                                 store.sendMessage({
-                                    type: 'drawPathUndo',
-                                    payload: {},
+                                    type: 'drawEvent',
+                                    payload: {
+                                        eventType: 'undo',
+                                    },
                                 })
                             }
                         >

@@ -129,6 +129,9 @@ export type DrawEvent =
       }
     | {
           eventType: 'clear';
+      }
+    | {
+          eventType: 'undo';
       };
 
 export interface CanvasUpdate {
@@ -237,11 +240,6 @@ export interface StartGameMsg {
     };
 }
 
-export interface DrawPathUndoMsg {
-    type: 'drawPathUndo';
-    payload: {};
-}
-
 export interface ClearDrawingMsg {
     type: 'clearDrawing';
     payload: {};
@@ -255,5 +253,4 @@ export type SendMsg =
     | SelectRoundWordMsg
     | StartGameMsg
     | PhaseChangeAckMsg
-    | DrawPathUndoMsg
     | ClearDrawingMsg;

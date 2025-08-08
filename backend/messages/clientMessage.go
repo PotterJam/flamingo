@@ -8,7 +8,6 @@ const (
 	ClientStartGame       = "startGame"
 	ClientSelectRoundWord = "selectRoundWord"
 	ClientPhaseChangeAck  = "phaseChangeAck"
-	ClientDrawPathUndo    = "drawPathUndo"
 	ClientClearDrawing    = "clearDrawing"
 )
 

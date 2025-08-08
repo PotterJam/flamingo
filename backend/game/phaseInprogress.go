@@ -76,10 +76,6 @@ func (p *RoundInProgressHandler) HandleMessage(gs *GameState, player *Player, ms
 		return p.handleDrawEvent(gs, player, msg)
 	}
 
-	if msg.Type == messages.ClientDrawPathUndo && gs.isDrawer(player) {
-		return p.handleDrawPathUndo(gs)
-	}
-
 	if msg.Type == messages.ClientClearDrawing && gs.isDrawer(player) {
 		return p.handleClearDrawing(gs)
 	}
@@ -163,25 +159,7 @@ func (p *RoundInProgressHandler) handleGuessMessage(gs *GameState, player *Playe
 }
 
 func (p *RoundInProgressHandler) handleDrawEvent(gs *GameState, player *Player, msg messages.Message) GamePhaseHandler {
-	var drawPayload messages.DrawEventPayload
-	if err := json.Unmarshal(msg.Payload, &drawPayload); err != nil {
-		player.SendError("Invalid draw payload format.")
-		return p
-	}
-
 	go gs.Broadcaster.BroadcastToPlayers(messages.DrawEventBroadcastResponse, msg.Payload, gs.allOtherPlayers(player))
-	return p
-}
-
-func (p *RoundInProgressHandler) handleDrawPathUndo(gs *GameState) GamePhaseHandler {
-
-	// TODO: return all the pixels
-	// paths := make([]messages.DrawEventPayload, 0)
-	// go gs.Broadcaster.Broadcast(messages.CanvasUpdateBroadcastResponse, messages.CanvasUpdatePayload{
-	// 	DrawPaths:  paths,
-	// 	RasterData: CanvasToPNGDataURL(*gs.Canvas.FillStack.Head()),
-	// })
-
 	return p
 }
 
@@ -192,10 +170,5 @@ func (p *RoundInProgressHandler) handleClearDrawing(gs *GameState) GamePhaseHand
 	// 	RasterData: CanvasToPNGDataURL(BlankCanvas()),
 	// })
 
-	return p
-}
-
-func (p *RoundInProgressHandler) handleFillEvent(gs *GameState, player *Player, drawPayload messages.DrawEventPayload) GamePhaseHandler {
-	go gs.Broadcaster.BroadcastToPlayers(messages.DrawEventBroadcastResponse, drawPayload, gs.allOtherPlayers(player))
 	return p
 }
