@@ -120,6 +120,12 @@ export type DrawEvent =
           y: number;
           color: string;
           lineWidth: number;
+      }
+    | {
+          eventType: 'fill';
+          x: number;
+          y: number;
+          color: string;
       };
 
 export interface CanvasUpdate {
@@ -132,16 +138,7 @@ export interface DrawEventMsg {
     payload: DrawEvent;
 }
 
-export interface FillEvent {
-    x: number;
-    y: number;
-    color: string;
-}
 
-export interface FillMsg {
-    type: 'fill';
-    payload: FillEvent;
-}
 
 export interface CanvasUpdateMsg {
     type: 'canvasUpdate';
@@ -258,5 +255,4 @@ export type SendMsg =
     | StartGameMsg
     | PhaseChangeAckMsg
     | DrawPathUndoMsg
-    | ClearDrawingMsg
-    | FillMsg;
+    | ClearDrawingMsg;

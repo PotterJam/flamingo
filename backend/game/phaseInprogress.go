@@ -84,10 +84,6 @@ func (p *RoundInProgressHandler) HandleMessage(gs *GameState, player *Player, ms
 		return p.handleClearDrawing(gs)
 	}
 
-	if msg.Type == messages.ClientFill && gs.isDrawer(player) {
-		return p.handleFillEvent(gs, player, msg)
-	}
-
 	return p
 }
 
@@ -173,7 +169,9 @@ func (p *RoundInProgressHandler) handleDrawEvent(gs *GameState, player *Player, 
 		return p
 	}
 
-	canvas := *gs.CanvasStack.Head()
+	if drawPayload.EventType == "fill" {
+		return p.handleFillEvent(gs, player, drawPayload)
+	}
 
 	if drawPayload.EventType == "start" {
 		newCanvas := canvas.Copy()
@@ -219,27 +217,7 @@ func (p *RoundInProgressHandler) handleClearDrawing(gs *GameState) GamePhaseHand
 	return p
 }
 
-func (p *RoundInProgressHandler) handleFillEvent(gs *GameState, player *Player, msg messages.Message) GamePhaseHandler {
-	var fillPayload messages.ClientFillPayload
-	if err := json.Unmarshal(msg.Payload, &fillPayload); err != nil {
-		player.SendError("invalid fill payload format")
-		return p
-	}
-
-	newCanvas := (*gs.CanvasStack.Head()).Copy()
-	gs.CanvasStack.Push(newCanvas)
-	newCanvas.Grid[0] = 0
-
-	// TODO: fill in the new canvas
-	// startX := int(fillPayload.X)
-	// startY := int(fillPayload.Y)
-	// FloodFill(c, startX, startY, fillPayload.Color)
-
-	// TODO: send all the new pixels
-	// go gs.Broadcaster.Broadcast(messages.CanvasUpdateBroadcastResponse, messages.CanvasUpdatePayload{
-	// 	DrawPaths:  paths,
-	// 	RasterData: rasterData,
-	// })
-
+func (p *RoundInProgressHandler) handleFillEvent(gs *GameState, player *Player, drawPayload messages.DrawEventPayload) GamePhaseHandler {
+	go gs.Broadcaster.BroadcastToPlayers(messages.DrawEventBroadcastResponse, drawPayload, gs.allOtherPlayers(player))
 	return p
 }

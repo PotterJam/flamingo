@@ -93,6 +93,12 @@ const Whiteboard: Component<WhiteboardProps> = () => {
             return;
         }
 
+        if (drawEvent.eventType === 'fill') {
+            drawing.fill(Math.round(drawEvent.x), Math.round(drawEvent.y), drawEvent.color);
+            actions.clearPendingDrawEvent();
+            return;
+        }
+
         let prev = lastCoord();
 
         drawing.drawBetween(
@@ -118,8 +124,9 @@ const Whiteboard: Component<WhiteboardProps> = () => {
             drawing.fill(Math.round(x), Math.round(y), selectedColour());
 
             store.sendMessage({
-                type: 'fill',
+                type: 'drawEvent',
                 payload: {
+                    eventType: 'fill',
                     x: x,
                     y: y,
                     color: selectedColour(),
