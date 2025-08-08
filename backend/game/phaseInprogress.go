@@ -169,29 +169,11 @@ func (p *RoundInProgressHandler) handleDrawEvent(gs *GameState, player *Player, 
 		return p
 	}
 
-	if drawPayload.EventType == "fill" {
-		return p.handleFillEvent(gs, player, drawPayload)
-	}
-
-	if drawPayload.EventType == "start" {
-		newCanvas := canvas.Copy()
-		gs.CanvasStack.Push(newCanvas)
-		canvas = newCanvas
-	}
-
-	// Draw the points
-	canvas.Grid[0] = 0
-
 	go gs.Broadcaster.BroadcastToPlayers(messages.DrawEventBroadcastResponse, msg.Payload, gs.allOtherPlayers(player))
 	return p
 }
 
 func (p *RoundInProgressHandler) handleDrawPathUndo(gs *GameState) GamePhaseHandler {
-	if gs.CanvasStack.IsEmpty() {
-		return p
-	}
-
-	gs.CanvasStack.Pop()
 
 	// TODO: return all the pixels
 	// paths := make([]messages.DrawEventPayload, 0)
@@ -204,10 +186,6 @@ func (p *RoundInProgressHandler) handleDrawPathUndo(gs *GameState) GamePhaseHand
 }
 
 func (p *RoundInProgressHandler) handleClearDrawing(gs *GameState) GamePhaseHandler {
-	gs.CanvasStack.Clear()
-	blankCanvas := BlankCanvas()
-	gs.CanvasStack.Push(blankCanvas)
-
 	// TODO: send all blank pixels or just send clear event
 	// go gs.Broadcaster.Broadcast(messages.CanvasUpdateBroadcastResponse, messages.CanvasUpdatePayload{
 	// 	DrawPaths:  make([]messages.DrawEventPayload, 0),

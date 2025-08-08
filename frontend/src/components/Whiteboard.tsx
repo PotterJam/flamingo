@@ -94,7 +94,11 @@ const Whiteboard: Component<WhiteboardProps> = () => {
         }
 
         if (drawEvent.eventType === 'fill') {
-            drawing.fill(Math.round(drawEvent.x), Math.round(drawEvent.y), drawEvent.color);
+            drawing.fill(
+                Math.round(drawEvent.x),
+                Math.round(drawEvent.y),
+                drawEvent.color
+            );
             actions.clearPendingDrawEvent();
             return;
         }
