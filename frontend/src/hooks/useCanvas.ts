@@ -13,6 +13,11 @@ export const useCanvas = ({ canvasCtx }: UseCanvasProps) => {
         return [r, g, b];
     };
 
+    const clear = () => {
+        canvasCtx.fillStyle = '#ffffff';
+        canvasCtx.fillRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
+    };
+
     const drawAtCoord = (
         centerX: number,
         centerY: number,
@@ -139,6 +144,7 @@ export const useCanvas = ({ canvasCtx }: UseCanvasProps) => {
 
     return {
         drawBetween,
+        clear,
         fill,
     };
 };

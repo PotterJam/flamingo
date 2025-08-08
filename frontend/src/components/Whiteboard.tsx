@@ -52,7 +52,7 @@ const defaultBrushThickness = 9;
 const Whiteboard: Component<WhiteboardProps> = () => {
     let canvasRef!: HTMLCanvasElement;
     let canvasCtx!: CanvasRenderingContext2D;
-    let drawing: ReturnType<typeof useCanvas>;
+    let canvas: ReturnType<typeof useCanvas>;
 
     const [lastCoord, setLastCoord] = createSignal<Point | null>(null);
     const [isDrawing, setIsDrawing] = createSignal(false);
@@ -64,11 +64,10 @@ const Whiteboard: Component<WhiteboardProps> = () => {
         }
         canvasCtx = ctx;
 
-        drawing = useCanvas({ canvasCtx });
+        canvas = useCanvas({ canvasCtx });
 
         // Canvas is empty by default so need to make it white
-        canvasCtx.fillStyle = '#ffffff';
-        canvasCtx.fillRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
+        canvas.clear();
     });
 
     const [selectedColour, setSelectedColour] =
@@ -86,26 +85,30 @@ const Whiteboard: Component<WhiteboardProps> = () => {
     createEffect(() => {
         const drawEvent = store.gameState.pendingDrawEvent;
         if (!drawEvent) return;
+        actions.clearPendingDrawEvent();
+
+        if (drawEvent.eventType === 'clear') {
+            canvas.clear();
+            return;
+        }
 
         if (drawEvent.eventType === 'end') {
             setLastCoord(null);
-            actions.clearPendingDrawEvent();
             return;
         }
 
         if (drawEvent.eventType === 'fill') {
-            drawing.fill(
+            canvas.fill(
                 Math.round(drawEvent.x),
                 Math.round(drawEvent.y),
                 drawEvent.color
             );
-            actions.clearPendingDrawEvent();
             return;
         }
 
         let prev = lastCoord();
 
-        drawing.drawBetween(
+        canvas.drawBetween(
             prev?.x ?? drawEvent.x,
             prev?.y ?? drawEvent.y,
             drawEvent.x,
@@ -115,8 +118,6 @@ const Whiteboard: Component<WhiteboardProps> = () => {
         );
 
         setLastCoord({ x: drawEvent.x, y: drawEvent.y });
-
-        actions.clearPendingDrawEvent();
     });
 
     const handlePointerDown = (e: PointerEvent) => {
@@ -125,7 +126,7 @@ const Whiteboard: Component<WhiteboardProps> = () => {
 
         if (isFill()) {
             const [x, y, _] = translatePointerToCanvas(e, canvasRef);
-            drawing.fill(Math.round(x), Math.round(y), selectedColour());
+            canvas.fill(Math.round(x), Math.round(y), selectedColour());
 
             store.sendMessage({
                 type: 'drawEvent',
@@ -142,7 +143,7 @@ const Whiteboard: Component<WhiteboardProps> = () => {
         setIsDrawing(true);
 
         const [x, y, p] = translatePointerToCanvas(e, canvasRef);
-        drawing.drawBetween(x, y, x, y, selectedThickness(), selectedColour());
+        canvas.drawBetween(x, y, x, y, selectedThickness(), selectedColour());
         setLastCoord({ x, y });
         actions.startPath([x, y, p], selectedColour(), selectedThickness());
     };
@@ -155,7 +156,7 @@ const Whiteboard: Component<WhiteboardProps> = () => {
 
         const [x, y, _] = translatePointerToCanvas(e, canvasRef);
         const prev = lastCoord();
-        drawing.drawBetween(
+        canvas.drawBetween(
             prev?.x ?? x,
             prev?.y ?? y,
             x,
@@ -185,7 +186,7 @@ const Whiteboard: Component<WhiteboardProps> = () => {
 
         const [x, y, _] = translatePointerToCanvas(e, canvasRef);
         const prev = lastCoord();
-        drawing.drawBetween(
+        canvas.drawBetween(
             prev?.x ?? x,
             prev?.y ?? y,
             x,
@@ -196,6 +197,16 @@ const Whiteboard: Component<WhiteboardProps> = () => {
         setLastCoord({ x, y });
 
         actions.continuePath(translatePointerToCanvas(e, canvasRef));
+    };
+
+    const handleClear = () => {
+        canvas.clear();
+        store.sendMessage({
+            type: 'drawEvent',
+            payload: {
+                eventType: 'clear',
+            },
+        });
     };
 
     return (
@@ -264,15 +275,7 @@ const Whiteboard: Component<WhiteboardProps> = () => {
                         >
                             <FaSolidArrowRotateLeft />
                         </button>
-                        <button
-                            class="p-1"
-                            onClick={() =>
-                                store.sendMessage({
-                                    type: 'clearDrawing',
-                                    payload: {},
-                                })
-                            }
-                        >
+                        <button class="p-1" onClick={handleClear}>
                             <FiTrash2 />
                         </button>
                         <button

@@ -126,6 +126,9 @@ export type DrawEvent =
           x: number;
           y: number;
           color: string;
+      }
+    | {
+          eventType: 'clear';
       };
 
 export interface CanvasUpdate {
@@ -137,8 +140,6 @@ export interface DrawEventMsg {
     type: 'drawEvent';
     payload: DrawEvent;
 }
-
-
 
 export interface CanvasUpdateMsg {
     type: 'canvasUpdate';
