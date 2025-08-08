@@ -11,6 +11,7 @@ import { translatePointerToCanvas } from '../lib/utils/canvas';
 import { FiTrash2 } from 'solid-icons/fi';
 import { CANVAS_HEIGHT, CANVAS_WIDTH } from './Game';
 import { useCanvas } from '../hooks/useCanvas';
+import { Point } from '../model';
 
 const PALETTE = [
     '#000000',
@@ -48,17 +49,12 @@ interface WhiteboardProps {
 
 const defaultBrushThickness = 9;
 
-interface Coord {
-    x: number;
-    y: number;
-}
-
 const Whiteboard: Component<WhiteboardProps> = () => {
     let canvasRef!: HTMLCanvasElement;
     let canvasCtx!: CanvasRenderingContext2D;
     let drawing: ReturnType<typeof useCanvas>;
 
-    const [lastCoord, setLastCoord] = createSignal<Coord | null>(null);
+    const [lastCoord, setLastCoord] = createSignal<Point | null>(null);
     const [isDrawing, setIsDrawing] = createSignal(false);
 
     onMount(() => {
@@ -67,7 +63,13 @@ const Whiteboard: Component<WhiteboardProps> = () => {
             throw new Error('Null canvas context');
         }
         canvasCtx = ctx;
+
         drawing = useCanvas({ canvasCtx });
+
+        // Canvas is empty by default so need to make it white
+        canvasCtx.fillStyle = "#ffffff";
+        canvasCtx.fillRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
+
     });
 
     const [selectedColour, setSelectedColour] =
@@ -114,6 +116,8 @@ const Whiteboard: Component<WhiteboardProps> = () => {
 
         if (isFill()) {
             const [x, y, _] = translatePointerToCanvas(e, canvasRef);
+            drawing.fill(Math.round(x), Math.round(y), selectedColour());
+
             store.sendMessage({
                 type: 'fill',
                 payload: {

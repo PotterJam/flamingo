@@ -13,3 +13,8 @@ export interface Path {
     thickness: number;
     colour: string;
 }
+
+export interface Point {
+    x: number;
+    y: number;
+}
