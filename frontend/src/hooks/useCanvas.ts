@@ -18,15 +18,15 @@ export const useCanvas = ({ canvasCtx }: UseCanvasProps) => {
         canvasCtx.fillRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
     };
 
-    const drawAtCoord = (
-        centerX: number,
-        centerY: number,
+    const drawBetween = (
+        startX: number,
+        startY: number,
+        endX: number,
+        endY: number,
         thickness: number,
         hexColour: string
     ) => {
-        const radius = Math.round(thickness / 2);
-        const centerXRound = Math.round(centerX);
-        const centerYRound = Math.round(centerY);
+        const radius = thickness / 2;
         const fillRgb = hexToRgb(hexColour);
 
         const imageData = canvasCtx.getImageData(
@@ -37,54 +37,60 @@ export const useCanvas = ({ canvasCtx }: UseCanvasProps) => {
         );
         const data = imageData.data;
 
-        for (let x = centerXRound - radius; x <= centerXRound + radius; x++) {
-            for (
-                let y = centerYRound - radius;
-                y <= centerYRound + radius;
-                y++
-            ) {
-                if (x >= 0 && x < CANVAS_WIDTH && y >= 0 && y < CANVAS_HEIGHT) {
-                    const distance = Math.sqrt(
-                        (x - centerXRound) ** 2 + (y - centerYRound) ** 2
-                    );
+        // This algo is generally called Line Segment SDF and uses the "distance to line segment"
+        // Create the smallest possible bounding rectangle that contains the line
+        // We only need to consider points inside this region rather than the whole canvas
+        // We add radius onto the max and min to support rounding the ends of the line
+        const minX = Math.max(0, Math.floor(Math.min(startX, endX) - radius));
+        const maxX = Math.min(
+            CANVAS_WIDTH - 1,
+            Math.ceil(Math.max(startX, endX) + radius)
+        );
+        const minY = Math.max(0, Math.floor(Math.min(startY, endY) - radius));
+        const maxY = Math.min(
+            CANVAS_HEIGHT - 1,
+            Math.ceil(Math.max(startY, endY) + radius)
+        );
 
-                    if (distance < radius) {
-                        const index = (y * CANVAS_WIDTH + x) * 4;
-                        data[index] = fillRgb[0];
-                        data[index + 1] = fillRgb[1];
-                        data[index + 2] = fillRgb[2];
-                        data[index + 3] = 255;
-                    }
+        const dx = endX - startX;
+        const dy = endY - startY;
+        const lineLength = Math.sqrt(dx * dx + dy * dy);
+
+        for (let x = minX; x <= maxX; x++) {
+            for (let y = minY; y <= maxY; y++) {
+                let distance;
+
+                // We want to work out the distance between the point in question in the rectangle
+                // and its projected point along the line
+                if (lineLength === 0) {
+                    distance = Math.sqrt((x - startX) ** 2 + (y - startY) ** 2);
+                } else {
+                    // t is how far along the line we are, so 0.2 = 20% of the way from min to max
+                    const t = Math.max(
+                        0,
+                        Math.min(
+                            1,
+                            ((x - startX) * dx + (y - startY) * dy) /
+                                (lineLength * lineLength)
+                        )
+                    );
+                    const projX = startX + t * dx;
+                    const projY = startY + t * dy;
+                    distance = Math.sqrt((x - projX) ** 2 + (y - projY) ** 2);
+                }
+
+                // Only fill things where the distance to the line is within the desired radius
+                if (distance <= radius) {
+                    const index = (y * CANVAS_WIDTH + x) * 4;
+                    data[index] = fillRgb[0];
+                    data[index + 1] = fillRgb[1];
+                    data[index + 2] = fillRgb[2];
+                    data[index + 3] = 255;
                 }
             }
         }
 
         canvasCtx.putImageData(imageData, 0, 0);
-    };
-
-    const drawBetween = (
-        startX: number,
-        startY: number,
-        endX: number,
-        endY: number,
-        thickness: number,
-        hexColour: string
-    ) => {
-        if (startX === endX && startY === endY)
-            drawAtCoord(startX, startY, thickness, hexColour);
-
-        const dx = endX - startX;
-        const dy = endY - startY;
-        const distance = Math.sqrt(dx * dx + dy * dy);
-        const steps = Math.max(Math.ceil(distance), 1);
-
-        for (let i = 0; i <= steps; i++) {
-            const t = i / steps; // Linear interpolation
-            const x = Math.round(startX + dx * t);
-            const y = Math.round(startY + dy * t);
-
-            drawAtCoord(x, y, thickness, hexColour);
-        }
     };
 
     const fill = (rootX: number, rootY: number, colour: string) => {
