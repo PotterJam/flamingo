@@ -70,21 +70,16 @@ export const useCanvas = ({ canvasCtx }: UseCanvasProps) => {
         thickness: number,
         hexColour: string
     ) => {
-        if (startX === endX && startY === endY)
-            drawAtCoord(startX, startY, thickness, hexColour);
+        canvasCtx.imageSmoothingEnabled = false;
+        canvasCtx.strokeStyle = hexColour;
+        canvasCtx.lineWidth = thickness;
+        canvasCtx.lineCap = 'round';
+        canvasCtx.lineJoin = 'miter';
 
-        const dx = endX - startX;
-        const dy = endY - startY;
-        const distance = Math.sqrt(dx * dx + dy * dy);
-        const steps = Math.max(Math.ceil(distance), 1);
-
-        for (let i = 0; i <= steps; i++) {
-            const t = i / steps; // Linear interpolation
-            const x = Math.round(startX + dx * t);
-            const y = Math.round(startY + dy * t);
-
-            drawAtCoord(x, y, thickness, hexColour);
-        }
+        canvasCtx.beginPath();
+        canvasCtx.moveTo(Math.round(startX), Math.round(startY));
+        canvasCtx.lineTo(Math.round(endX), Math.round(endY));
+        canvasCtx.stroke();
     };
 
     const fill = (rootX: number, rootY: number, colour: string) => {
