@@ -108,10 +108,10 @@ export const useCanvas = ({ canvasCtx }: UseCanvasProps) => {
             const { x, y } = stack.pop()!;
             visited.add({ x, y });
 
+            if (visited.has({ x, y })) continue;
+
             if (x >= CANVAS_WIDTH || y >= CANVAS_HEIGHT || x < 0 || y < 0)
                 continue;
-
-            if (visited.has({ x, y })) continue;
 
             const index = (y * CANVAS_WIDTH + x) * 4;
             const currentColor = [

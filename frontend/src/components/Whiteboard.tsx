@@ -137,13 +137,7 @@ const Whiteboard: Component<WhiteboardProps> = () => {
                 color: selectedColour(),
             };
 
-            actions.handleDrawPayload(fillEvent);
-
-            store.sendMessage({
-                type: 'drawEvent',
-                payload: fillEvent,
-            });
-
+            actions.handleClientDraw(fillEvent);
             return;
         }
 
@@ -161,12 +155,7 @@ const Whiteboard: Component<WhiteboardProps> = () => {
             lineWidth: selectedThickness(),
         };
 
-        actions.handleDrawPayload(startEvent);
-
-        store.sendMessage({
-            type: 'drawEvent',
-            payload: startEvent,
-        });
+        actions.handleClientDraw(startEvent);
     };
 
     const handlePointerUp = (e: PointerEvent) => {
@@ -191,12 +180,7 @@ const Whiteboard: Component<WhiteboardProps> = () => {
             eventType: 'end' as const,
         };
 
-        actions.handleDrawPayload(endEvent);
-
-        store.sendMessage({
-            type: 'drawEvent',
-            payload: endEvent,
-        });
+        actions.handleClientDraw(endEvent);
     };
 
     const handlePointerLeave = (e: PointerEvent) => {
@@ -235,12 +219,7 @@ const Whiteboard: Component<WhiteboardProps> = () => {
             lineWidth: selectedThickness(),
         };
 
-        actions.handleDrawPayload(drawEvent);
-
-        store.sendMessage({
-            type: 'drawEvent',
-            payload: drawEvent,
-        });
+        actions.handleClientDraw(drawEvent);
     };
 
     const handleClear = () => {
@@ -315,12 +294,7 @@ const Whiteboard: Component<WhiteboardProps> = () => {
                                     eventType: 'undo' as const,
                                 };
 
-                                actions.handleDrawPayload(undoEvent);
-
-                                store.sendMessage({
-                                    type: 'drawEvent',
-                                    payload: undoEvent,
-                                });
+                                actions.handleClientDraw(undoEvent);
                             }}
                         >
                             <FaSolidArrowRotateLeft />

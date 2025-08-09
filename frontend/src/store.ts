@@ -18,7 +18,7 @@ import {
     CanvasUpdateMsg,
     DrawEvent,
 } from './messages';
-import { GamePhase, Path, PathPoint } from './model';
+import { GamePhase, Path } from './model';
 
 // Map backend phase names to frontend phase names
 const mapBackendPhaseToFrontend = (backendPhase: string): GamePhase => {
@@ -404,7 +404,18 @@ export const actions = {
         );
     },
 
+    handleClientDraw: (message: DrawEvent) => {
+        setStore(
+            produce((state) => {
+                state.gameState.drawEventsStack.push(message);
+            })
+        );
 
+        store.sendMessage({
+            type: 'drawEvent',
+            payload: message,
+        });
+    },
 
     handleDrawPayload: (message: DrawEvent) => {
         setStore(
