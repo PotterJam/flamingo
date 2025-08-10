@@ -287,18 +287,18 @@ const Whiteboard: Component<WhiteboardProps> = () => {
                         ))}
                     </div>
                     <div class="flex flex-row items-center space-x-2 p-2">
-                        <button
-                            class="p-1"
-                            onClick={() => {
-                                const undoEvent = {
-                                    eventType: 'undo' as const,
-                                };
-
-                                actions.handleClientDraw(undoEvent);
-                            }}
-                        >
-                            <FaSolidArrowRotateLeft />
-                        </button>
+                        {/* <button */}
+                        {/*     class="p-1" */}
+                        {/*     onClick={() => { */}
+                        {/*         const undoEvent = { */}
+                        {/*             eventType: 'undo' as const, */}
+                        {/*         }; */}
+                        {/**/}
+                        {/*         actions.handleClientDraw(undoEvent); */}
+                        {/*     }} */}
+                        {/* > */}
+                        {/*     <FaSolidArrowRotateLeft /> */}
+                        {/* </button> */}
                         <button class="p-1" onClick={handleClear}>
                             <FiTrash2 />
                         </button>
