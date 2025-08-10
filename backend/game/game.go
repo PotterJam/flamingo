@@ -2,7 +2,6 @@ package game
 
 import (
 	"backend/messages"
-	"backend/util"
 	"log"
 	"slices"
 	"time"
@@ -89,12 +88,6 @@ func (g *Game) updateHandler(newHandler GamePhaseHandler) {
 func NewGame(b Broadcaster) *Game {
 	handler := GamePhaseHandler(&WaitingInLobbyHandler{})
 
-	canvasState := CanvasState{
-		PathStack: util.NewStack[[]messages.DrawEventPayload](),
-		FillStack: util.NewStackWith(BlankCanvas()),
-		Actions:   util.NewStack[string](),
-	}
-
 	return &Game{
 		GameState: &GameState{
 			Players:                      make([]*Player, 0, 10),
@@ -111,7 +104,6 @@ func NewGame(b Broadcaster) *Game {
 			PlayerOperations:             make(chan PlayerOperation, 5),
 			PrevX:                        -1,
 			PrevY:                        -1,
-			Canvas:                       canvasState,
 		},
 		GameHandler: handler,
 		Messages:    make(chan GameMessage, 5),

@@ -3,12 +3,17 @@ package game
 import (
 	"bytes"
 	"encoding/base64"
+	"fmt"
 	"image"
 	"image/color"
 	"image/png"
 	"slices"
 	"strconv"
 )
+
+type Canvas struct {
+	Grid []uint32
+}
 
 type PixelType int
 
@@ -22,6 +27,30 @@ type Pixel struct {
 	Type  PixelType
 }
 
+// Assumes #ffffff format
+func HexToU32(hex string) uint32 {
+	rgb, _ := strconv.ParseUint(hex[1:], 16, 32)
+	return uint32(rgb)
+}
+
+func RgbToHex(rgb uint32) string {
+	return fmt.Sprintf("#%06X", rgb)
+}
+
+func (c *Canvas) Copy() *Canvas {
+	return &Canvas{
+		Grid: slices.Clone(c.Grid),
+	}
+}
+
+func (c *Canvas) Set(x, y int, colour uint32) {
+	c.Grid[y*CANVAS_WIDTH+x] = colour
+}
+
+func (c *Canvas) Get(x, y int) uint32 {
+	return c.Grid[y*CANVAS_WIDTH+x]
+}
+
 func abs(x int) int {
 	if x < 0 {
 		return -x
@@ -29,15 +58,10 @@ func abs(x int) int {
 	return x
 }
 
-func BlankCanvas() RasterCanvas {
-	canvas := make([][]Pixel, CANVAS_HEIGHT)
-	for y := range canvas {
-		canvas[y] = make([]Pixel, CANVAS_WIDTH)
-		for x := range canvas[y] {
-			canvas[y][x] = Pixel{Color: "#ffffff", Type: PixelFill}
-		}
+func BlankCanvas() *Canvas {
+	return &Canvas{
+		Grid: make([]uint32, CANVAS_WIDTH*CANVAS_HEIGHT),
 	}
-	return canvas
 }
 
 func DrawPathPixel(c RasterCanvas, x, y, thickness int) {

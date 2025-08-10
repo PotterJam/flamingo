@@ -2,7 +2,6 @@ package game
 
 import (
 	"backend/messages"
-	"backend/util"
 	"backend/words"
 	"encoding/json"
 	"log"
@@ -20,10 +19,6 @@ func (p *RoundSetupHandler) Phase() GamePhase {
 }
 
 func (p *RoundSetupHandler) StartPhase(gs *GameState) {
-	gs.Canvas.PathStack = &util.Stack[[]messages.DrawEventPayload]{}
-
-	*gs.Canvas.FillStack.Head() = BlankCanvas()
-
 	gs.turnEndTime = time.Now().Add(10 * time.Second)
 	gs.timerForTimeout = time.NewTimer(10 * time.Second)
 

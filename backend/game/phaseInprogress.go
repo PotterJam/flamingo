@@ -76,16 +76,8 @@ func (p *RoundInProgressHandler) HandleMessage(gs *GameState, player *Player, ms
 		return p.handleDrawEvent(gs, player, msg)
 	}
 
-	if msg.Type == messages.ClientDrawPathUndo && gs.isDrawer(player) {
-		return p.handleDrawPathUndo(gs)
-	}
-
 	if msg.Type == messages.ClientClearDrawing && gs.isDrawer(player) {
 		return p.handleClearDrawing(gs)
-	}
-
-	if msg.Type == messages.ClientFill && gs.isDrawer(player) {
-		return p.handleFillEvent(gs, player, msg)
 	}
 
 	return p
@@ -167,129 +159,16 @@ func (p *RoundInProgressHandler) handleGuessMessage(gs *GameState, player *Playe
 }
 
 func (p *RoundInProgressHandler) handleDrawEvent(gs *GameState, player *Player, msg messages.Message) GamePhaseHandler {
-	var drawPayload messages.DrawEventPayload
-	if err := json.Unmarshal(msg.Payload, &drawPayload); err != nil {
-		player.SendError("Invalid draw payload format.")
-		return p
-	}
-
-	if drawPayload.EventType == "start" {
-		newPathStack := make([]messages.DrawEventPayload, 0)
-		gs.Canvas.PathStack.Push(newPathStack)
-		gs.Canvas.Actions.Push("path")
-	}
-
-	currentPath := gs.Canvas.PathStack.Head()
-	*currentPath = append(*currentPath, messages.DrawEventPayload{
-		EventType: drawPayload.EventType,
-		X:         drawPayload.X,
-		Y:         drawPayload.Y,
-		Color:     drawPayload.Color,
-		LineWidth: drawPayload.LineWidth,
-	})
-
-	gs.handleRasterDrawEvent(drawPayload)
-
 	go gs.Broadcaster.BroadcastToPlayers(messages.DrawEventBroadcastResponse, msg.Payload, gs.allOtherPlayers(player))
 	return p
 }
 
-func (p *RoundInProgressHandler) handleDrawPathUndo(gs *GameState) GamePhaseHandler {
-	if gs.Canvas.Actions.IsEmpty() {
-		return p
-	}
-
-	lastAction := gs.Canvas.Actions.Pop()
-
-	if lastAction == "fill" {
-		gs.Canvas.FillStack.Pop()
-	} else {
-		gs.Canvas.PathStack.Pop()
-		// Can't have raster paths on the fill canvas that have lines that have neen undone
-		gs.Canvas.FillStack.Pop()
-	}
-
-	paths := make([]messages.DrawEventPayload, 0)
-	for _, ds := range gs.Canvas.PathStack.Items() {
-		for _, p := range ds {
-			paths = append(paths, p)
-		}
-	}
-
-	go gs.Broadcaster.Broadcast(messages.CanvasUpdateBroadcastResponse, messages.CanvasUpdatePayload{
-		DrawPaths:  paths,
-		RasterData: CanvasToPNGDataURL(*gs.Canvas.FillStack.Head()),
-	})
-
-	return p
-}
-
 func (p *RoundInProgressHandler) handleClearDrawing(gs *GameState) GamePhaseHandler {
-	gs.Canvas.PathStack.Clear()
-	gs.Canvas.FillStack.Clear()
-	gs.Canvas.Actions.Clear()
-
-	go gs.Broadcaster.Broadcast(messages.CanvasUpdateBroadcastResponse, messages.CanvasUpdatePayload{
-		DrawPaths:  make([]messages.DrawEventPayload, 0),
-		RasterData: CanvasToPNGDataURL(BlankCanvas()),
-	})
+	// TODO: send all blank pixels or just send clear event
+	// go gs.Broadcaster.Broadcast(messages.CanvasUpdateBroadcastResponse, messages.CanvasUpdatePayload{
+	// 	DrawPaths:  make([]messages.DrawEventPayload, 0),
+	// 	RasterData: CanvasToPNGDataURL(BlankCanvas()),
+	// })
 
 	return p
-}
-
-func (p *RoundInProgressHandler) handleFillEvent(gs *GameState, player *Player, msg messages.Message) GamePhaseHandler {
-	var fillPayload messages.ClientFillPayload
-	if err := json.Unmarshal(msg.Payload, &fillPayload); err != nil {
-		player.SendError("invalid fill payload format")
-		return p
-	}
-
-	gs.Canvas.Actions.Push("fill")
-
-	c := CloneRasterCanvas(*gs.Canvas.FillStack.Head())
-	gs.Canvas.FillStack.Push(c)
-
-	startX := int(fillPayload.X)
-	startY := int(fillPayload.Y)
-	FloodFill(c, startX, startY, fillPayload.Color)
-
-	rasterData := CanvasToPNGDataURL(c)
-
-	paths := make([]messages.DrawEventPayload, 0)
-	for _, ds := range gs.Canvas.PathStack.Items() {
-		for _, path := range ds {
-			paths = append(paths, path)
-		}
-	}
-
-	go gs.Broadcaster.Broadcast(messages.CanvasUpdateBroadcastResponse, messages.CanvasUpdatePayload{
-		DrawPaths:  paths,
-		RasterData: rasterData,
-	})
-
-	return p
-}
-
-func (gs *GameState) handleRasterDrawEvent(drawEvent messages.DrawEventPayload) {
-	currentX := int(drawEvent.X)
-	currentY := int(drawEvent.Y)
-
-	switch drawEvent.EventType {
-	case "start":
-		// Need to start a new canvas for new path so if we undo a path we can undo this canvas and fills will ignore that undone raster path
-		c := CloneRasterCanvas(*gs.Canvas.FillStack.Head())
-		gs.Canvas.FillStack.Push(c)
-
-		DrawPathPixel(c, currentX, currentY, int(drawEvent.LineWidth))
-		gs.PrevX = currentX
-		gs.PrevY = currentY
-
-	case "draw":
-		c := *gs.Canvas.FillStack.Head()
-		if gs.PrevX != -1 && gs.PrevY != -1 {
-			DrawLine(c, gs.PrevX, gs.PrevY, currentX, currentY, int(drawEvent.LineWidth))
-		}
-		gs.PrevX = currentX
-		gs.PrevY = currentY
-	}
 }

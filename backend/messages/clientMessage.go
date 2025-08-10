@@ -8,9 +8,7 @@ const (
 	ClientStartGame       = "startGame"
 	ClientSelectRoundWord = "selectRoundWord"
 	ClientPhaseChangeAck  = "phaseChangeAck"
-	ClientDrawPathUndo    = "drawPathUndo"
 	ClientClearDrawing    = "clearDrawing"
-	ClientFill            = "fill"
 )
 
 type SetNamePayload struct {
@@ -40,10 +38,4 @@ type DrawEventPayload struct {
 type StartGamePayload struct {
 	RoundCount  int `json:"roundCount"`
 	RoundLength int `json:"roundLength"`
-}
-
-type ClientFillPayload struct {
-	X     float64 `json:"x"`
-	Y     float64 `json:"y"`
-	Color string  `json:"color"`
 }

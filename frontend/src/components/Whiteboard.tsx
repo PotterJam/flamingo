@@ -1,18 +1,17 @@
-import { createSignal, Component, createMemo, For, Show } from 'solid-js';
+import { createSignal, createEffect, Component, Show, onMount } from 'solid-js';
 import { actions, store } from '../store';
 import classNames from 'classnames';
 import { Separator } from './ui/separator';
-import { getStroke, StrokeOptions } from 'perfect-freehand';
 import {
-    FaSolidArrowRotateLeft,
-    FaSolidBucket,
     FaSolidPen,
 } from 'solid-icons/fa';
-import {
-    getSvgPathFromStroke,
-    translatePointerToCanvas,
-} from '../lib/utils/canvas';
+import { translatePointerToCanvas } from '../lib/utils/canvas';
 import { FiTrash2 } from 'solid-icons/fi';
+import { CANVAS_HEIGHT, CANVAS_WIDTH } from './Game';
+import { useCanvas } from '../hooks/useCanvas';
+import { Point } from '../model';
+import { ToggleGroup, ToggleGroupItem } from './ui/toggle-group';
+import { RiDesignPaintFill } from 'solid-icons/ri';
 
 const PALETTE = [
     '#000000',
@@ -50,55 +49,142 @@ interface WhiteboardProps {
 
 const defaultBrushThickness = 9;
 
-const Whiteboard: Component<WhiteboardProps> = ({ height, width }) => {
-    let canvasRef: SVGSVGElement | undefined;
+const Whiteboard: Component<WhiteboardProps> = () => {
+    let canvasRef!: HTMLCanvasElement;
+    let canvasCtx!: CanvasRenderingContext2D;
+    let canvas: ReturnType<typeof useCanvas>;
+
+    const [lastCoord, setLastCoord] = createSignal<Point | null>(null);
+    const [isDrawing, setIsDrawing] = createSignal(false);
+
+    onMount(() => {
+        const ctx = canvasRef.getContext('2d', { willReadFrequently: true });
+        if (ctx === null) {
+            throw new Error('Null canvas context');
+        }
+        canvasCtx = ctx;
+
+        canvas = useCanvas({ canvasCtx });
+
+        // Canvas is empty by default so need to make it white
+        canvas.clear();
+    });
 
     const [selectedColour, setSelectedColour] =
         createSignal<PaletteColor>('#000000');
     const [selectedThickness, setSelectedThickness] = createSignal(
         defaultBrushThickness
     );
-    const [isDrawing, setIsDrawing] = createSignal(false);
-    const [isFill, setIsFill] = createSignal(false);
+    const [tool, setTool] = createSignal<'pen' | 'fill'>('pen');
 
     const isDrawer = () =>
         store.gameState.localPlayerId === store.gameState.currentDrawerId;
+
+    // This system relies on the websocket messages being processed synchronously.
+    // If this changes we will need something like a queue system.
+    createEffect(() => {
+        const drawEvent = store.gameState.pendingDrawEvent;
+        if (!drawEvent) return;
+        actions.clearPendingDrawEvent();
+
+        if (drawEvent.eventType === 'clear') {
+            canvas.clear();
+            return;
+        }
+
+        if (drawEvent.eventType === 'end') {
+            setLastCoord(null);
+            return;
+        }
+
+        if (drawEvent.eventType === 'undo') return;
+
+        if (drawEvent.eventType === 'fill') {
+            canvas.fill(
+                Math.round(drawEvent.x),
+                Math.round(drawEvent.y),
+                drawEvent.color
+            );
+            return;
+        }
+
+        let prev = lastCoord();
+
+        canvas.drawBetween(
+            prev?.x ?? drawEvent.x,
+            prev?.y ?? drawEvent.y,
+            drawEvent.x,
+            drawEvent.y,
+            drawEvent.lineWidth,
+            drawEvent.color
+        );
+
+        setLastCoord({ x: drawEvent.x, y: drawEvent.y });
+    });
 
     const handlePointerDown = (e: PointerEvent) => {
         e.preventDefault();
         if (!canvasRef || !isDrawer()) return;
 
-        if (isFill()) {
+        if (tool() === 'fill') {
             const [x, y, _] = translatePointerToCanvas(e, canvasRef);
-            store.sendMessage({ 
-                type: 'fill', 
-                payload: { 
-                    x: x, 
-                    y: y, 
-                    color: selectedColour() 
-                } 
-            });
+            canvas.fill(Math.round(x), Math.round(y), selectedColour());
+
+            const fillEvent = {
+                eventType: 'fill' as const,
+                x: x,
+                y: y,
+                color: selectedColour(),
+            };
+
+            actions.handleClientDraw(fillEvent);
             return;
         }
 
         setIsDrawing(true);
-        actions.startPath(
-            translatePointerToCanvas(e, canvasRef),
-            selectedColour(),
-            selectedThickness()
-        );
+
+        const [x, y, _] = translatePointerToCanvas(e, canvasRef);
+        canvas.drawBetween(x, y, x, y, selectedThickness(), selectedColour());
+        setLastCoord({ x, y });
+
+        const startEvent = {
+            eventType: 'start' as const,
+            x: x,
+            y: y,
+            color: selectedColour(),
+            lineWidth: selectedThickness(),
+        };
+
+        actions.handleClientDraw(startEvent);
     };
 
     const handlePointerUp = (e: PointerEvent) => {
         e.preventDefault();
-        if (!canvasRef || !isDrawer() || isFill()) return;
+        if (!isDrawer() || tool() === 'fill') return;
+
         setIsDrawing(false);
-        actions.finishPath();
+
+        const [x, y, _] = translatePointerToCanvas(e, canvasRef);
+        const prev = lastCoord();
+        canvas.drawBetween(
+            prev?.x ?? x,
+            prev?.y ?? y,
+            x,
+            y,
+            selectedThickness(),
+            selectedColour()
+        );
+        setLastCoord(null);
+
+        const endEvent = {
+            eventType: 'end' as const,
+        };
+
+        actions.handleClientDraw(endEvent);
     };
 
     const handlePointerLeave = (e: PointerEvent) => {
         if (!isDrawing()) return;
-        if (!canvasRef) return;
         handlePointerUp(e);
     };
 
@@ -110,80 +196,54 @@ const Whiteboard: Component<WhiteboardProps> = ({ height, width }) => {
 
     const handlePointerMove = (e: PointerEvent) => {
         if (!isDrawing() || !isDrawer()) return;
-        if (isFill()) return;
-        if (!canvasRef) return;
+        if (tool() === 'fill') return;
         e.preventDefault();
-        actions.continuePath(translatePointerToCanvas(e, canvasRef));
+
+        const [x, y, _] = translatePointerToCanvas(e, canvasRef);
+        const prev = lastCoord();
+        canvas.drawBetween(
+            prev?.x ?? x,
+            prev?.y ?? y,
+            x,
+            y,
+            selectedThickness(),
+            selectedColour()
+        );
+        setLastCoord({ x, y });
+
+        const drawEvent = {
+            eventType: 'draw' as const,
+            x: x,
+            y: y,
+            color: selectedColour(),
+            lineWidth: selectedThickness(),
+        };
+
+        actions.handleClientDraw(drawEvent);
     };
 
-    const renderedFinishedPaths = createMemo(() => {
-        return store.whiteboardState.finishedPaths.map((path) => {
-            const settings = {
-                size: path.thickness,
-            } as StrokeOptions;
-
-            return {
-                colour: path.colour,
-                points: getSvgPathFromStroke(getStroke(path.points, settings)),
-            };
+    const handleClear = () => {
+        canvas.clear();
+        store.sendMessage({
+            type: 'drawEvent',
+            payload: {
+                eventType: 'clear',
+            },
         });
-    });
-
-    const renderedCurrentPath = createMemo(() => {
-        if (
-            !store.whiteboardState.currentPath ||
-            !store.whiteboardState.currentPath.points.length
-        )
-            return null;
-
-        const settings = {
-            size: store.whiteboardState.currentPath.thickness,
-        } as StrokeOptions;
-
-        return getSvgPathFromStroke(
-            getStroke(store.whiteboardState.currentPath.points, settings)
-        );
-    });
+    };
 
     return (
         <div class="flex flex-col">
-            <svg
+            <canvas
+                width={CANVAS_WIDTH}
+                height={CANVAS_HEIGHT}
                 ref={canvasRef}
-                class="block bg-white"
-                style={{
-                    width: `${width}px`,
-                    height: `${height}px`,
-                }}
-                onPointerDown={handlePointerDown}
-                onPointerMove={handlePointerMove}
-                onPointerUp={handlePointerUp}
-                onPointerLeave={handlePointerLeave}
                 onPointerEnter={handlePointerEnter}
-            >
-                <Show when={store.whiteboardState.rasterData}>
-                    <image
-                        href={store.whiteboardState.rasterData!}
-                        width={width}
-                        height={height}
-                        x={0}
-                        y={0}
-                    />
-                </Show>
-                <For each={renderedFinishedPaths()}>
-                    {(path) => <path d={path.points} fill={path.colour} />}
-                </For>
-                <Show when={renderedCurrentPath()}>
-                    {(path) => (
-                        <path
-                            d={path()}
-                            fill={
-                                store.whiteboardState.currentPath?.colour ||
-                                selectedColour()
-                            }
-                        />
-                    )}
-                </Show>
-            </svg>
+                onPointerUp={handlePointerUp}
+                onPointerMove={handlePointerMove}
+                onPointerLeave={handlePointerLeave}
+                onPointerDown={handlePointerDown}
+            />
             <Separator />
             <Show when={isDrawer()}>
                 <div class="flex w-full flex-row justify-between gap-2 p-2">
@@ -205,7 +265,7 @@ const Whiteboard: Component<WhiteboardProps> = ({ height, width }) => {
                         ))}
                     </div>
                     <div class="flex flex-row items-center space-x-2">
-                        {[6, 9, 12].map((thickness) => (
+                        {[6, 9, 15].map((thickness) => (
                             <div
                                 class={classNames(
                                     'flex h-8 w-8 cursor-pointer items-center justify-center rounded-full border border-gray-400 bg-white hover:ring-2 hover:ring-blue-500',
@@ -226,37 +286,30 @@ const Whiteboard: Component<WhiteboardProps> = ({ height, width }) => {
                             </div>
                         ))}
                     </div>
-                    <div class="flex flex-row items-center space-x-2 p-2">
-                        <button
-                            class="p-1"
-                            onClick={() =>
-                                store.sendMessage({
-                                    type: 'drawPathUndo',
-                                    payload: {},
-                                })
-                            }
-                        >
-                            <FaSolidArrowRotateLeft />
-                        </button>
-                        <button
-                            class="p-1"
-                            onClick={() =>
-                                store.sendMessage({
-                                    type: 'clearDrawing',
-                                    payload: {},
-                                })
-                            }
-                        >
+                    <div class="flex flex-row items-center space-x-2 gap-2 p-2">
+                        {/* <button */}
+                        {/*     class="p-1" */}
+                        {/*     onClick={() => { */}
+                        {/*         const undoEvent = { */}
+                        {/*             eventType: 'undo' as const, */}
+                        {/*         }; */}
+                        {/**/}
+                        {/*         actions.handleClientDraw(undoEvent); */}
+                        {/*     }} */}
+                        {/* > */}
+                        {/*     <FaSolidArrowRotateLeft /> */}
+                        {/* </button> */}
+                        <button class="p-1" onClick={handleClear}>
                             <FiTrash2 />
                         </button>
-                        <button
-                            class="p-1"
-                            onClick={() => setIsFill((prev) => !prev)}
-                        >
-                            <Show when={isFill()} fallback={<FaSolidBucket />}>
+                        <ToggleGroup value={tool()} onChange={setTool}>
+                            <ToggleGroupItem value="pen">
                                 <FaSolidPen />
-                            </Show>
-                        </button>
+                            </ToggleGroupItem>
+                            <ToggleGroupItem value="fill">
+                                <RiDesignPaintFill />
+                            </ToggleGroupItem>
+                        </ToggleGroup>
                     </div>
                 </div>
             </Show>

@@ -2,7 +2,6 @@ import { createStore, produce } from 'solid-js/store';
 import { createEffect } from 'solid-js';
 import {
     ChatMessage,
-    DrawEventMsg,
     GameInfoMsg,
     Player,
     PlayerScoreGain,
@@ -17,8 +16,9 @@ import {
     GameFinishedMsg,
     WordRevealMsg,
     CanvasUpdateMsg,
+    DrawEvent,
 } from './messages';
-import { GamePhase, Path, PathPoint } from './model';
+import { GamePhase, Path } from './model';
 
 // Map backend phase names to frontend phase names
 const mapBackendPhaseToFrontend = (backendPhase: string): GamePhase => {
@@ -66,6 +66,9 @@ export interface GameState {
     } | null;
     totalRounds: number | null;
     currentRound: number | null;
+
+    pendingDrawEvent: DrawEvent | null;
+    drawEventsStack: DrawEvent[];
 }
 
 const initialWhiteboardState: WhiteboardState = {
@@ -88,6 +91,8 @@ const initialGameState: GameState = {
     scoreDisplay: null,
     totalRounds: null,
     currentRound: null,
+    pendingDrawEvent: null,
+    drawEventsStack: [],
 };
 
 export interface AppState {
@@ -363,36 +368,6 @@ export const actions = {
         );
     },
 
-    handleDrawPayload: ({ payload }: DrawEventMsg) => {
-        console.log(payload);
-        setStore(
-            produce((state) => {
-                if (payload.eventType === 'start') {
-                    state.whiteboardState.currentPath = {
-                        points: [[payload.x, payload.y, 0.5]],
-                        colour: payload.color,
-                        thickness: payload.lineWidth,
-                    };
-                } else if (payload.eventType === 'draw') {
-                    if (state.whiteboardState.currentPath) {
-                        state.whiteboardState.currentPath.points.push([
-                            payload.x,
-                            payload.y,
-                            0.5,
-                        ]);
-                    }
-                } else if (payload.eventType === 'end') {
-                    if (state.whiteboardState.currentPath) {
-                        state.whiteboardState.finishedPaths.push(
-                            state.whiteboardState.currentPath
-                        );
-                        state.whiteboardState.currentPath = null;
-                    }
-                }
-            })
-        );
-    },
-
     handleCanvasUpdate: ({ payload }: CanvasUpdateMsg) => {
         setStore(
             produce((state) => {
@@ -429,69 +404,33 @@ export const actions = {
         );
     },
 
-    startPath: (point: PathPoint, colour: string, thickness: number) => {
+    handleClientDraw: (message: DrawEvent) => {
         setStore(
             produce((state) => {
-                state.whiteboardState.currentPath = {
-                    points: [point],
-                    colour,
-                    thickness,
-                };
+                state.gameState.drawEventsStack.push(message);
             })
         );
 
         store.sendMessage({
             type: 'drawEvent',
-            payload: {
-                eventType: 'start',
-                x: point[0],
-                y: point[1],
-                color: colour,
-                lineWidth: thickness,
-            },
+            payload: message,
         });
     },
 
-    continuePath: (point: PathPoint) => {
+    handleDrawPayload: (message: DrawEvent) => {
         setStore(
             produce((state) => {
-                if (state.whiteboardState.currentPath) {
-                    state.whiteboardState.currentPath.points.push(point);
-                }
+                state.gameState.pendingDrawEvent = message;
+                state.gameState.drawEventsStack.push(message);
             })
         );
-
-        if (store.whiteboardState.currentPath) {
-            store.sendMessage({
-                type: 'drawEvent',
-                payload: {
-                    eventType: 'draw',
-                    x: point[0],
-                    y: point[1],
-                    color: store.whiteboardState.currentPath.colour,
-                    lineWidth: store.whiteboardState.currentPath.thickness,
-                },
-            });
-        }
     },
 
-    finishPath: () => {
+    clearPendingDrawEvent: () => {
         setStore(
             produce((state) => {
-                if (state.whiteboardState.currentPath) {
-                    state.whiteboardState.finishedPaths.push(
-                        state.whiteboardState.currentPath
-                    );
-                    state.whiteboardState.currentPath = null;
-                }
+                state.gameState.pendingDrawEvent = null;
             })
         );
-
-        store.sendMessage({
-            type: 'drawEvent',
-            payload: {
-                eventType: 'end',
-            },
-        });
     },
 };

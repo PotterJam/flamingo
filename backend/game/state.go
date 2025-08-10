@@ -76,8 +76,6 @@ type GameState struct {
 
 	PrevX int
 	PrevY int
-
-	Canvas CanvasState
 }
 
 func (gs *GameState) broadcastPlayerUpdate() {

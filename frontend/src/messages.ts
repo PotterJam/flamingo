@@ -120,6 +120,18 @@ export type DrawEvent =
           y: number;
           color: string;
           lineWidth: number;
+      }
+    | {
+          eventType: 'fill';
+          x: number;
+          y: number;
+          color: string;
+      }
+    | {
+          eventType: 'clear';
+      }
+    | {
+          eventType: 'undo';
       };
 
 export interface CanvasUpdate {
@@ -130,17 +142,6 @@ export interface CanvasUpdate {
 export interface DrawEventMsg {
     type: 'drawEvent';
     payload: DrawEvent;
-}
-
-export interface FillEvent {
-    x: number;
-    y: number;
-    color: string;
-}
-
-export interface FillMsg {
-    type: 'fill';
-    payload: FillEvent;
 }
 
 export interface CanvasUpdateMsg {
@@ -239,11 +240,6 @@ export interface StartGameMsg {
     };
 }
 
-export interface DrawPathUndoMsg {
-    type: 'drawPathUndo';
-    payload: {};
-}
-
 export interface ClearDrawingMsg {
     type: 'clearDrawing';
     payload: {};
@@ -257,6 +253,4 @@ export type SendMsg =
     | SelectRoundWordMsg
     | StartGameMsg
     | PhaseChangeAckMsg
-    | DrawPathUndoMsg
-    | ClearDrawingMsg
-    | FillMsg;
+    | ClearDrawingMsg;
