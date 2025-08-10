@@ -3,8 +3,6 @@ import { actions, store } from '../store';
 import classNames from 'classnames';
 import { Separator } from './ui/separator';
 import {
-    FaSolidArrowRotateLeft,
-    FaSolidBucket,
     FaSolidPen,
 } from 'solid-icons/fa';
 import { translatePointerToCanvas } from '../lib/utils/canvas';
@@ -12,6 +10,8 @@ import { FiTrash2 } from 'solid-icons/fi';
 import { CANVAS_HEIGHT, CANVAS_WIDTH } from './Game';
 import { useCanvas } from '../hooks/useCanvas';
 import { Point } from '../model';
+import { ToggleGroup, ToggleGroupItem } from './ui/toggle-group';
+import { RiDesignPaintFill } from 'solid-icons/ri';
 
 const PALETTE = [
     '#000000',
@@ -75,7 +75,7 @@ const Whiteboard: Component<WhiteboardProps> = () => {
     const [selectedThickness, setSelectedThickness] = createSignal(
         defaultBrushThickness
     );
-    const [isFill, setIsFill] = createSignal(false);
+    const [tool, setTool] = createSignal<'pen' | 'fill'>('pen');
 
     const isDrawer = () =>
         store.gameState.localPlayerId === store.gameState.currentDrawerId;
@@ -126,7 +126,7 @@ const Whiteboard: Component<WhiteboardProps> = () => {
         e.preventDefault();
         if (!canvasRef || !isDrawer()) return;
 
-        if (isFill()) {
+        if (tool() === 'fill') {
             const [x, y, _] = translatePointerToCanvas(e, canvasRef);
             canvas.fill(Math.round(x), Math.round(y), selectedColour());
 
@@ -160,7 +160,7 @@ const Whiteboard: Component<WhiteboardProps> = () => {
 
     const handlePointerUp = (e: PointerEvent) => {
         e.preventDefault();
-        if (!isDrawer() || isFill()) return;
+        if (!isDrawer() || tool() === 'fill') return;
 
         setIsDrawing(false);
 
@@ -196,7 +196,7 @@ const Whiteboard: Component<WhiteboardProps> = () => {
 
     const handlePointerMove = (e: PointerEvent) => {
         if (!isDrawing() || !isDrawer()) return;
-        if (isFill()) return;
+        if (tool() === 'fill') return;
         e.preventDefault();
 
         const [x, y, _] = translatePointerToCanvas(e, canvasRef);
@@ -286,7 +286,7 @@ const Whiteboard: Component<WhiteboardProps> = () => {
                             </div>
                         ))}
                     </div>
-                    <div class="flex flex-row items-center space-x-2 p-2">
+                    <div class="flex flex-row items-center space-x-2 gap-2 p-2">
                         {/* <button */}
                         {/*     class="p-1" */}
                         {/*     onClick={() => { */}
@@ -302,14 +302,14 @@ const Whiteboard: Component<WhiteboardProps> = () => {
                         <button class="p-1" onClick={handleClear}>
                             <FiTrash2 />
                         </button>
-                        <button
-                            class="p-1"
-                            onClick={() => setIsFill((prev) => !prev)}
-                        >
-                            <Show when={isFill()} fallback={<FaSolidBucket />}>
+                        <ToggleGroup value={tool()} onChange={setTool}>
+                            <ToggleGroupItem value="pen">
                                 <FaSolidPen />
-                            </Show>
-                        </button>
+                            </ToggleGroupItem>
+                            <ToggleGroupItem value="fill">
+                                <RiDesignPaintFill />
+                            </ToggleGroupItem>
+                        </ToggleGroup>
                     </div>
                 </div>
             </Show>
