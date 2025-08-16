@@ -105,19 +105,16 @@ export const useCanvas = ({ canvasCtx }: UseCanvasProps) => {
             image.data[rootIndex + 2],
         ];
 
+        const visited = new Array(CANVAS_WIDTH * CANVAS_HEIGHT).fill(false);
         const stack: Point[] = [];
         stack.push({ x: rootX, y: rootY });
 
-        const visited = new Set([{ x: rootX, y: rootY }]);
-
         while (stack.length > 0) {
             const { x, y } = stack.pop()!;
-            visited.add({ x, y });
 
-            if (visited.has({ x, y })) continue;
-
-            if (x >= CANVAS_WIDTH || y >= CANVAS_HEIGHT || x < 0 || y < 0)
+            if (x < 0 || x >= CANVAS_WIDTH || y < 0 || y >= CANVAS_HEIGHT) {
                 continue;
+            }
 
             const index = (y * CANVAS_WIDTH + x) * 4;
             const currentColor = [
@@ -126,7 +123,9 @@ export const useCanvas = ({ canvasCtx }: UseCanvasProps) => {
                 image.data[index + 2],
             ];
 
+            const pixelIndex = y * CANVAS_WIDTH + x;
             if (
+                visited[pixelIndex] ||
                 currentColor[0] !== originalColor[0] ||
                 currentColor[1] !== originalColor[1] ||
                 currentColor[2] !== originalColor[2]
@@ -134,6 +133,7 @@ export const useCanvas = ({ canvasCtx }: UseCanvasProps) => {
                 continue;
             }
 
+            visited[pixelIndex] = true;
             image.data[index] = fillRgb[0];
             image.data[index + 1] = fillRgb[1];
             image.data[index + 2] = fillRgb[2];
@@ -147,7 +147,6 @@ export const useCanvas = ({ canvasCtx }: UseCanvasProps) => {
 
         canvasCtx.putImageData(image, 0, 0);
     };
-
     return {
         drawBetween,
         clear,
