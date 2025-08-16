@@ -76,10 +76,6 @@ func (p *RoundInProgressHandler) HandleMessage(gs *GameState, player *Player, ms
 		return p.handleDrawEvent(gs, player, msg)
 	}
 
-	if msg.Type == messages.ClientClearDrawing && gs.isDrawer(player) {
-		return p.handleClearDrawing(gs)
-	}
-
 	return p
 }
 
@@ -160,15 +156,5 @@ func (p *RoundInProgressHandler) handleGuessMessage(gs *GameState, player *Playe
 
 func (p *RoundInProgressHandler) handleDrawEvent(gs *GameState, player *Player, msg messages.Message) GamePhaseHandler {
 	go gs.Broadcaster.BroadcastToPlayers(messages.DrawEventBroadcastResponse, msg.Payload, gs.allOtherPlayers(player))
-	return p
-}
-
-func (p *RoundInProgressHandler) handleClearDrawing(gs *GameState) GamePhaseHandler {
-	// TODO: send all blank pixels or just send clear event
-	// go gs.Broadcaster.Broadcast(messages.CanvasUpdateBroadcastResponse, messages.CanvasUpdatePayload{
-	// 	DrawPaths:  make([]messages.DrawEventPayload, 0),
-	// 	RasterData: CanvasToPNGDataURL(BlankCanvas()),
-	// })
-
 	return p
 }
