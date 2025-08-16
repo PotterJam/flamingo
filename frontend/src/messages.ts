@@ -108,11 +108,17 @@ export type DrawEvent =
           color: string;
           eventType: 'draw';
           lineWidth: number;
-          x: number;
-          y: number;
+          startX: number;
+          startY: number;
+          endX: number;
+          endY: number;
       }
     | {
           eventType: 'end';
+          x: number;
+          y: number;
+          color: string;
+          lineWidth: number;
       }
     | {
           eventType: 'start';

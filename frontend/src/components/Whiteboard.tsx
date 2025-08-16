@@ -2,9 +2,7 @@ import { createSignal, createEffect, Component, Show, onMount } from 'solid-js';
 import { actions, store } from '../store';
 import classNames from 'classnames';
 import { Separator } from './ui/separator';
-import {
-    FaSolidPen,
-} from 'solid-icons/fa';
+import { FaSolidPen } from 'solid-icons/fa';
 import { translatePointerToCanvas } from '../lib/utils/canvas';
 import { FiTrash2 } from 'solid-icons/fi';
 import { CANVAS_HEIGHT, CANVAS_WIDTH } from './Game';
@@ -92,11 +90,6 @@ const Whiteboard: Component<WhiteboardProps> = () => {
             return;
         }
 
-        if (drawEvent.eventType === 'end') {
-            setLastCoord(null);
-            return;
-        }
-
         if (drawEvent.eventType === 'undo') return;
 
         if (drawEvent.eventType === 'fill') {
@@ -108,18 +101,26 @@ const Whiteboard: Component<WhiteboardProps> = () => {
             return;
         }
 
-        let prev = lastCoord();
+        if (drawEvent.eventType === 'start' || drawEvent.eventType === 'end') {
+            canvas.drawBetween(
+                drawEvent.x,
+                drawEvent.y,
+                drawEvent.x,
+                drawEvent.y,
+                drawEvent.lineWidth,
+                drawEvent.color
+            );
+            return;
+        }
 
         canvas.drawBetween(
-            prev?.x ?? drawEvent.x,
-            prev?.y ?? drawEvent.y,
-            drawEvent.x,
-            drawEvent.y,
+            drawEvent.startX,
+            drawEvent.startY,
+            drawEvent.endX,
+            drawEvent.endY,
             drawEvent.lineWidth,
             drawEvent.color
         );
-
-        setLastCoord({ x: drawEvent.x, y: drawEvent.y });
     });
 
     const handlePointerDown = (e: PointerEvent) => {
@@ -178,6 +179,10 @@ const Whiteboard: Component<WhiteboardProps> = () => {
 
         const endEvent = {
             eventType: 'end' as const,
+            x: x,
+            y: y,
+            color: selectedColour(),
+            lineWidth: selectedThickness(),
         };
 
         actions.handleClientDraw(endEvent);
@@ -213,8 +218,10 @@ const Whiteboard: Component<WhiteboardProps> = () => {
 
         const drawEvent = {
             eventType: 'draw' as const,
-            x: x,
-            y: y,
+            startX: prev?.x ?? x,
+            startY: prev?.y ?? y,
+            endX: x,
+            endY: y,
             color: selectedColour(),
             lineWidth: selectedThickness(),
         };
@@ -286,7 +293,7 @@ const Whiteboard: Component<WhiteboardProps> = () => {
                             </div>
                         ))}
                     </div>
-                    <div class="flex flex-row items-center space-x-2 gap-2 p-2">
+                    <div class="flex flex-row items-center gap-2 space-x-2 p-2">
                         {/* <button */}
                         {/*     class="p-1" */}
                         {/*     onClick={() => { */}
