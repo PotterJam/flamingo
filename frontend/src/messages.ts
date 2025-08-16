@@ -115,8 +115,10 @@ export type DrawEvent =
       }
     | {
           eventType: 'end';
-          x: number;
-          y: number;
+          startX: number;
+          startY: number;
+          endX: number;
+          endY: number;
           color: string;
           lineWidth: number;
       }

@@ -101,7 +101,7 @@ const Whiteboard: Component<WhiteboardProps> = () => {
             return;
         }
 
-        if (drawEvent.eventType === 'start' || drawEvent.eventType === 'end') {
+        if (drawEvent.eventType === 'start') {
             canvas.drawBetween(
                 drawEvent.x,
                 drawEvent.y,
@@ -179,8 +179,10 @@ const Whiteboard: Component<WhiteboardProps> = () => {
 
         const endEvent = {
             eventType: 'end' as const,
-            x: x,
-            y: y,
+            startX: prev?.x ?? x,
+            startY: prev?.y ?? y,
+            endX: x,
+            endY: y,
             color: selectedColour(),
             lineWidth: selectedThickness(),
         };
