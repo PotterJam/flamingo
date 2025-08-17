@@ -2,7 +2,7 @@ import { Component } from 'solid-js';
 import { CANVAS_HEIGHT, CANVAS_WIDTH } from '../Game';
 import PlayerList from '../PlayerList';
 import ChatBox from '../ChatBox';
-import Whiteboard from '../Whiteboard';
+import { Whiteboard  }from '../Whiteboard';
 import GuessInput from '../GuessInput';
 import { store } from '../../store';
 import { GameHeader } from '../GameHeader';

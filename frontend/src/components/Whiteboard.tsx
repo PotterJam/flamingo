@@ -7,6 +7,13 @@ import { translatePointerToCanvas } from '../lib/utils/canvas';
 import { FiTrash2 } from 'solid-icons/fi';
 import { CANVAS_HEIGHT, CANVAS_WIDTH } from './Game';
 import { ToggleGroup, ToggleGroupItem } from './ui/toggle-group';
+import {
+    DropdownMenu,
+    DropdownMenuContent,
+    DropdownMenuRadioGroup,
+    DropdownMenuRadioItem,
+    DropdownMenuTrigger,
+} from './ui/dropdown-menu';
 import { RiDesignPaintFill } from 'solid-icons/ri';
 import { clear, drawBetween, fill } from '~/lib/canvas';
 import { DrawEvent } from '~/messages';
@@ -25,6 +32,8 @@ const PALETTE = [
     '#08C202',
     '#00461A',
     '#00FF91',
+    '#04785E',
+    '#00B2FF',
     '#02569E',
     '#2220D3',
     '#0E0865',
@@ -102,7 +111,7 @@ function handleEvent(imageData: ImageData, drawEvent: DrawEvent) {
     }
 }
 
-const Whiteboard: Component<WhiteboardProps> = () => {
+export const Whiteboard: Component<WhiteboardProps> = () => {
     let canvasRef!: HTMLCanvasElement;
     let canvasCtx!: CanvasRenderingContext2D;
 
@@ -277,6 +286,7 @@ const Whiteboard: Component<WhiteboardProps> = () => {
                 width={CANVAS_WIDTH}
                 height={CANVAS_HEIGHT}
                 ref={canvasRef}
+                class={isDrawer() ? 'cursor-crosshair' : ''}
                 onPointerEnter={handlePointerEnter}
                 onPointerUp={handlePointerUp}
                 onPointerMove={handlePointerMove}
@@ -285,53 +295,62 @@ const Whiteboard: Component<WhiteboardProps> = () => {
             />
             <Separator />
             <Show when={isDrawer()}>
-                <div class="flex w-full flex-row justify-between gap-2 p-2">
-                    <div class="my-2 h-12 w-12 border-2 border-gray-500 border-t-gray-300 border-l-gray-300">
-                        <div
-                            class="h-full w-full border-2 border-gray-300 border-t-gray-100 border-l-gray-300"
-                            style={{
-                                'background-color': selectedColour(),
-                            }}
-                        />
-                    </div>
-                    <div class="grid h-14 grid-cols-12 grid-rows-2 items-center justify-center">
+                <div class="flex w-full flex-row items-center justify-between gap-2 p-2">
+                    <div class="border-border box-content grid h-14 w-91 grid-flow-col grid-cols-12 grid-rows-2 items-center justify-center border-2">
                         {PALETTE.map((hex) => (
                             <div
-                                class="h-7 w-7 cursor-pointer transition-transform duration-150 ease-in-out hover:scale-130"
+                                class="h-7 w-7 cursor-pointer"
                                 style={{ 'background-color': hex }}
                                 onClick={() => setSelectedColour(hex)}
-                            />
-                        ))}
-                    </div>
-                    <div class="flex flex-row items-center space-x-2">
-                        {[6, 9, 15].map((thickness) => (
-                            <div
-                                class={classNames(
-                                    'flex h-8 w-8 cursor-pointer items-center justify-center rounded-full border border-gray-400 bg-white hover:ring-2 hover:ring-blue-500',
-                                    {
-                                        'ring-2 ring-blue-500 ring-offset-1':
-                                            selectedThickness() === thickness,
-                                    }
-                                )}
-                                onClick={() => setSelectedThickness(thickness)}
                             >
-                                <div
-                                    class="rounded-full bg-black"
-                                    style={{
-                                        width: `${thickness * 2}px`,
-                                        height: `${thickness * 2}px`,
-                                    }}
-                                />
+                                {selectedColour() === hex && (
+                                    <div class="h-full w-full border-2 border-white">
+                                        <div class="border-border h-full w-full border-2" />
+                                    </div>
+                                )}
                             </div>
                         ))}
                     </div>
-                    <div class="flex flex-row items-center gap-2 space-x-2 p-2">
-                        <button class="p-1" onClick={handleUndo}>
-                            <FaSolidArrowRotateLeft />
-                        </button>
-                        <button class="p-1" onClick={handleClear}>
-                            <FiTrash2 />
-                        </button>
+                    <DropdownMenu>
+                        <DropdownMenuTrigger class="border-border flex h-10 w-10 cursor-pointer items-center justify-center border-2 bg-white">
+                            <div
+                                class="rounded-full bg-black"
+                                style={{
+                                    width: `${selectedThickness() * 2}px`,
+                                    height: `${selectedThickness() * 2}px`,
+                                }}
+                            />
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent class="p-0">
+                            <DropdownMenuRadioGroup
+                                value={selectedThickness().toString()}
+                                onChange={(value) =>
+                                    setSelectedThickness(parseInt(value))
+                                }
+                            >
+                                {[6, 9, 15].map((thickness) => (
+                                    <DropdownMenuRadioItem
+                                        closeOnSelect
+                                        value={thickness.toString()}
+                                    >
+                                        <div class="flex h-8 items-center gap-0">
+                                            <div class="flex h-8 w-8 items-center justify-center">
+                                                <div
+                                                    class="rounded-full bg-black"
+                                                    style={{
+                                                        width: `${thickness * 1.5}px`,
+                                                        height: `${thickness * 1.5}px`,
+                                                    }}
+                                                />
+                                            </div>
+                                            <span>{thickness}px</span>
+                                        </div>
+                                    </DropdownMenuRadioItem>
+                                ))}
+                            </DropdownMenuRadioGroup>
+                        </DropdownMenuContent>
+                    </DropdownMenu>
+                    <div class="flex flex-row items-center gap-1 space-x-2 p-2">
                         <ToggleGroup value={tool()} onChange={setTool}>
                             <ToggleGroupItem value="pen">
                                 <FaSolidPen />
@@ -340,11 +359,15 @@ const Whiteboard: Component<WhiteboardProps> = () => {
                                 <RiDesignPaintFill />
                             </ToggleGroupItem>
                         </ToggleGroup>
+                        <button class="p-1" onClick={handleUndo}>
+                            <FaSolidArrowRotateLeft />
+                        </button>
+                        <button class="p-1" onClick={handleClear}>
+                            <FiTrash2 />
+                        </button>
                     </div>
                 </div>
             </Show>
         </div>
     );
 };
-
-export default Whiteboard;
