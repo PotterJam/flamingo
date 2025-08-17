@@ -326,13 +326,7 @@ export const Whiteboard: Component<WhiteboardProps> = () => {
                             </div>
                         ))}
                     </div>
-                    <div class="flex flex-row items-center gap-2 space-x-2 p-2">
-                        <button class="p-1" onClick={handleUndo}>
-                            <FaSolidArrowRotateLeft />
-                        </button>
-                        <button class="p-1" onClick={handleClear}>
-                            <FiTrash2 />
-                        </button>
+                    <div class="flex flex-row items-center gap-1 space-x-2 p-2">
                         <ToggleGroup value={tool()} onChange={setTool}>
                             <ToggleGroupItem value="pen">
                                 <FaSolidPen />
@@ -341,6 +335,12 @@ export const Whiteboard: Component<WhiteboardProps> = () => {
                                 <RiDesignPaintFill />
                             </ToggleGroupItem>
                         </ToggleGroup>
+                            <button class="p-1" onClick={handleUndo}>
+                                <FaSolidArrowRotateLeft />
+                            </button>
+                            <button class="p-1" onClick={handleClear}>
+                                <FiTrash2 />
+                            </button>
                     </div>
                 </div>
             </Show>
