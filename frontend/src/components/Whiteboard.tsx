@@ -6,7 +6,6 @@ import { FaSolidPen } from 'solid-icons/fa';
 import { translatePointerToCanvas } from '../lib/utils/canvas';
 import { FiTrash2 } from 'solid-icons/fi';
 import { CANVAS_HEIGHT, CANVAS_WIDTH } from './Game';
-import { Point } from '../model';
 import { ToggleGroup, ToggleGroupItem } from './ui/toggle-group';
 import { RiDesignPaintFill } from 'solid-icons/ri';
 import { clear, drawBetween, fill } from '~/lib/canvas';
@@ -40,12 +39,30 @@ const PALETTE = [
 
 type PaletteColor = (typeof PALETTE)[number];
 
+interface Point {
+    x: number;
+    y: number;
+}
+
 interface WhiteboardProps {
     width: number;
     height: number;
 }
 
 const defaultBrushThickness = 9;
+
+function getData(canvasCtx: CanvasRenderingContext2D) {
+    return canvasCtx.getImageData(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
+}
+
+function canvasEffect(
+    canvasCtx: CanvasRenderingContext2D,
+    func: (imageData: ImageData, canvasCtx: CanvasRenderingContext2D) => void
+) {
+    const imageData = getData(canvasCtx);
+    func(imageData, canvasCtx);
+    canvasCtx.putImageData(imageData, 0, 0);
+}
 
 const Whiteboard: Component<WhiteboardProps> = () => {
     let canvasRef!: HTMLCanvasElement;
@@ -82,107 +99,92 @@ const Whiteboard: Component<WhiteboardProps> = () => {
         if (!drawEvent) return;
         actions.clearPendingDrawEvent();
 
-        const imageData = canvasCtx.getImageData(
-            0,
-            0,
-            CANVAS_WIDTH,
-            CANVAS_HEIGHT
-        );
-        if (drawEvent.eventType === 'clear') {
-            clear(canvasCtx);
-            return;
-        }
+        canvasEffect(canvasCtx, (imageData, _) => {
+            if (drawEvent.eventType === 'clear') {
+                clear(canvasCtx);
+                return;
+            }
 
-        if (drawEvent.eventType === 'undo') return;
+            if (drawEvent.eventType === 'undo') return;
 
-        if (drawEvent.eventType === 'fill') {
-            fill(
-                Math.round(drawEvent.x),
-                Math.round(drawEvent.y),
-                drawEvent.color,
-                imageData
-            );
-            canvasCtx.putImageData(imageData, 0, 0);
-            return;
-        }
+            if (drawEvent.eventType === 'fill') {
+                fill(
+                    Math.round(drawEvent.x),
+                    Math.round(drawEvent.y),
+                    drawEvent.color,
+                    imageData
+                );
+                return;
+            }
 
-        if (drawEvent.eventType === 'start') {
+            if (drawEvent.eventType === 'start') {
+                drawBetween(
+                    drawEvent.x,
+                    drawEvent.y,
+                    drawEvent.x,
+                    drawEvent.y,
+                    drawEvent.lineWidth,
+                    drawEvent.color,
+                    imageData
+                );
+                return;
+            }
+
             drawBetween(
-                drawEvent.x,
-                drawEvent.y,
-                drawEvent.x,
-                drawEvent.y,
+                drawEvent.startX,
+                drawEvent.startY,
+                drawEvent.endX,
+                drawEvent.endY,
                 drawEvent.lineWidth,
                 drawEvent.color,
                 imageData
             );
-            canvasCtx.putImageData(imageData, 0, 0);
-            return;
-        }
-
-        drawBetween(
-            drawEvent.startX,
-            drawEvent.startY,
-            drawEvent.endX,
-            drawEvent.endY,
-            drawEvent.lineWidth,
-            drawEvent.color,
-            imageData
-        );
-        canvasCtx.putImageData(imageData, 0, 0);
+        });
     });
 
     const handlePointerDown = (e: PointerEvent) => {
         e.preventDefault();
         if (!canvasRef || !isDrawer()) return;
 
-        const imageData = canvasCtx.getImageData(
-            0,
-            0,
-            CANVAS_WIDTH,
-            CANVAS_HEIGHT
-        );
-
         if (tool() === 'fill') {
-            const [x, y, _] = translatePointerToCanvas(e, canvasRef);
-            fill(Math.round(x), Math.round(y), selectedColour(), imageData);
+            const [x, y] = translatePointerToCanvas(e, canvasRef);
 
-            const fillEvent = {
-                eventType: 'fill' as const,
+            canvasEffect(canvasCtx, (imageData, _) => {
+                fill(Math.round(x), Math.round(y), selectedColour(), imageData);
+            });
+
+            actions.handleClientDraw({
+                eventType: 'fill',
                 x: x,
                 y: y,
                 color: selectedColour(),
-            };
-
-            actions.handleClientDraw(fillEvent);
-            canvasCtx.putImageData(imageData, 0, 0);
+            });
             return;
         }
 
         setIsDrawing(true);
-
-        const [x, y, _] = translatePointerToCanvas(e, canvasRef);
-        drawBetween(
-            x,
-            y,
-            x,
-            y,
-            selectedThickness(),
-            selectedColour(),
-            imageData
-        );
-        canvasCtx.putImageData(imageData, 0, 0);
+        const [x, y] = translatePointerToCanvas(e, canvasRef);
         setLastCoord({ x, y });
 
-        const startEvent = {
-            eventType: 'start' as const,
+        canvasEffect(canvasCtx, (imageData, _) => {
+            drawBetween(
+                x,
+                y,
+                x,
+                y,
+                selectedThickness(),
+                selectedColour(),
+                imageData
+            );
+        });
+
+        actions.handleClientDraw({
+            eventType: 'start',
             x: x,
             y: y,
             color: selectedColour(),
             lineWidth: selectedThickness(),
-        };
-
-        actions.handleClientDraw(startEvent);
+        });
     };
 
     const handlePointerUp = (e: PointerEvent) => {
@@ -190,38 +192,32 @@ const Whiteboard: Component<WhiteboardProps> = () => {
         if (!isDrawer() || tool() === 'fill') return;
 
         setIsDrawing(false);
-        const imageData = canvasCtx.getImageData(
-            0,
-            0,
-            CANVAS_WIDTH,
-            CANVAS_HEIGHT
-        );
 
-        const [x, y, _] = translatePointerToCanvas(e, canvasRef);
+        const [x, y] = translatePointerToCanvas(e, canvasRef);
         const prev = lastCoord();
-        drawBetween(
-            prev?.x ?? x,
-            prev?.y ?? y,
-            x,
-            y,
-            selectedThickness(),
-            selectedColour(),
-            imageData
-        );
-        canvasCtx.putImageData(imageData, 0, 0);
         setLastCoord(null);
 
-        const endEvent = {
-            eventType: 'end' as const,
+        canvasEffect(canvasCtx, (imageData, _) => {
+            drawBetween(
+                prev?.x ?? x,
+                prev?.y ?? y,
+                x,
+                y,
+                selectedThickness(),
+                selectedColour(),
+                imageData
+            );
+        });
+
+        actions.handleClientDraw({
+            eventType: 'end',
             startX: prev?.x ?? x,
             startY: prev?.y ?? y,
             endX: x,
             endY: y,
             color: selectedColour(),
             lineWidth: selectedThickness(),
-        };
-
-        actions.handleClientDraw(endEvent);
+        });
     };
 
     const handlePointerLeave = (e: PointerEvent) => {
@@ -240,37 +236,31 @@ const Whiteboard: Component<WhiteboardProps> = () => {
         if (tool() === 'fill') return;
         e.preventDefault();
 
-        const imageData = canvasCtx.getImageData(
-            0,
-            0,
-            CANVAS_WIDTH,
-            CANVAS_HEIGHT
-        );
-        const [x, y, _] = translatePointerToCanvas(e, canvasRef);
+        const [x, y] = translatePointerToCanvas(e, canvasRef);
         const prev = lastCoord();
-        drawBetween(
-            prev?.x ?? x,
-            prev?.y ?? y,
-            x,
-            y,
-            selectedThickness(),
-            selectedColour(),
-            imageData
-        );
-        canvasCtx.putImageData(imageData, 0, 0);
         setLastCoord({ x, y });
 
-        const drawEvent = {
-            eventType: 'draw' as const,
+        canvasEffect(canvasCtx, (imageData, _) => {
+            drawBetween(
+                prev?.x ?? x,
+                prev?.y ?? y,
+                x,
+                y,
+                selectedThickness(),
+                selectedColour(),
+                imageData
+            );
+        });
+
+        actions.handleClientDraw({
+            eventType: 'draw',
             startX: prev?.x ?? x,
             startY: prev?.y ?? y,
             endX: x,
             endY: y,
             color: selectedColour(),
             lineWidth: selectedThickness(),
-        };
-
-        actions.handleClientDraw(drawEvent);
+        });
     };
 
     const handleClear = () => {
