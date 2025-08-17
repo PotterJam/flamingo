@@ -142,16 +142,16 @@ const Whiteboard: Component<WhiteboardProps> = () => {
         if (tool() === 'fill') {
             const [x, y] = translatePointerToCanvas(e, canvasRef);
 
-            canvasEffect(canvasCtx, (imageData) => {
-                fill(Math.round(x), Math.round(y), selectedColour(), imageData);
-            });
-
-            actions.handleClientDraw({
-                eventType: 'fill',
+            const fillEvent = {
+                eventType: 'fill' as const,
                 x: x,
                 y: y,
                 color: selectedColour(),
+            };
+            canvasEffect(canvasCtx, (imageData) => {
+                handleEvent(imageData, fillEvent);
             });
+            actions.handleClientDraw(fillEvent);
             return;
         }
 
@@ -159,25 +159,17 @@ const Whiteboard: Component<WhiteboardProps> = () => {
         const [x, y] = translatePointerToCanvas(e, canvasRef);
         setLastCoord({ x, y });
 
-        canvasEffect(canvasCtx, (imageData) => {
-            drawBetween(
-                x,
-                y,
-                x,
-                y,
-                selectedThickness(),
-                selectedColour(),
-                imageData
-            );
-        });
-
-        actions.handleClientDraw({
-            eventType: 'start',
+        const startEvent = {
+            eventType: 'start' as const,
             x: x,
             y: y,
             color: selectedColour(),
             lineWidth: selectedThickness(),
+        };
+        canvasEffect(canvasCtx, (imageData) => {
+            handleEvent(imageData, startEvent);
         });
+        actions.handleClientDraw(startEvent);
     };
 
     const handlePointerUp = (e: PointerEvent) => {
@@ -190,27 +182,19 @@ const Whiteboard: Component<WhiteboardProps> = () => {
         const prev = lastCoord();
         setLastCoord(null);
 
-        canvasEffect(canvasCtx, (imageData) => {
-            drawBetween(
-                prev?.x ?? x,
-                prev?.y ?? y,
-                x,
-                y,
-                selectedThickness(),
-                selectedColour(),
-                imageData
-            );
-        });
-
-        actions.handleClientDraw({
-            eventType: 'end',
+        const endEvent = {
+            eventType: 'end' as const,
             startX: prev?.x ?? x,
             startY: prev?.y ?? y,
             endX: x,
             endY: y,
             color: selectedColour(),
             lineWidth: selectedThickness(),
+        };
+        canvasEffect(canvasCtx, (imageData) => {
+            handleEvent(imageData, endEvent);
         });
+        actions.handleClientDraw(endEvent);
     };
 
     const handlePointerLeave = (e: PointerEvent) => {
@@ -233,36 +217,31 @@ const Whiteboard: Component<WhiteboardProps> = () => {
         const prev = lastCoord();
         setLastCoord({ x, y });
 
-        canvasEffect(canvasCtx, (imageData) => {
-            drawBetween(
-                prev?.x ?? x,
-                prev?.y ?? y,
-                x,
-                y,
-                selectedThickness(),
-                selectedColour(),
-                imageData
-            );
-        });
-
-        actions.handleClientDraw({
-            eventType: 'draw',
+        const drawEvent = {
+            eventType: 'draw' as const,
             startX: prev?.x ?? x,
             startY: prev?.y ?? y,
             endX: x,
             endY: y,
             color: selectedColour(),
             lineWidth: selectedThickness(),
+        };
+        canvasEffect(canvasCtx, (imageData) => {
+            handleEvent(imageData, drawEvent);
         });
+        actions.handleClientDraw(drawEvent);
     };
 
     const handleClear = () => {
-        canvasEffect(canvasCtx, (imageData) => clear(imageData));
+        const clearEvent = { eventType: 'clear' as const };
+
+        canvasEffect(canvasCtx, (imageData) => {
+            handleEvent(imageData, clearEvent);
+        });
+
         store.sendMessage({
             type: 'drawEvent',
-            payload: {
-                eventType: 'clear',
-            },
+            payload: clearEvent,
         });
     };
 
