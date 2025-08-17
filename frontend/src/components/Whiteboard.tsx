@@ -277,6 +277,7 @@ export const Whiteboard: Component<WhiteboardProps> = () => {
                 width={CANVAS_WIDTH}
                 height={CANVAS_HEIGHT}
                 ref={canvasRef}
+                class={isDrawer() ? 'cursor-crosshair' : ''}
                 onPointerEnter={handlePointerEnter}
                 onPointerUp={handlePointerUp}
                 onPointerMove={handlePointerMove}
