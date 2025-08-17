@@ -2,7 +2,7 @@ import { createSignal, createEffect, Component, Show, onMount } from 'solid-js';
 import { actions, store } from '../store';
 import classNames from 'classnames';
 import { Separator } from './ui/separator';
-import { FaSolidPen } from 'solid-icons/fa';
+import { FaSolidArrowRotateLeft, FaSolidPen } from 'solid-icons/fa';
 import { translatePointerToCanvas } from '../lib/utils/canvas';
 import { FiTrash2 } from 'solid-icons/fi';
 import { CANVAS_HEIGHT, CANVAS_WIDTH } from './Game';
@@ -130,8 +130,20 @@ const Whiteboard: Component<WhiteboardProps> = () => {
         const drawEvent = store.gameState.pendingDrawEvent;
         if (!drawEvent) return;
         actions.clearPendingDrawEvent();
+
+        if (drawEvent.eventType !== 'undo') {
+            canvasEffect(canvasCtx, (imageData) => {
+                handleEvent(imageData, drawEvent);
+            });
+            return;
+        }
+
+        const events = store.gameState.drawEventsStack;
         canvasEffect(canvasCtx, (imageData) => {
-            handleEvent(imageData, drawEvent);
+            clear(imageData);
+            for (const e of events) {
+                handleEvent(imageData, e);
+            }
         });
     });
 
@@ -300,18 +312,16 @@ const Whiteboard: Component<WhiteboardProps> = () => {
                         ))}
                     </div>
                     <div class="flex flex-row items-center gap-2 space-x-2 p-2">
-                        {/* <button */}
-                        {/*     class="p-1" */}
-                        {/*     onClick={() => { */}
-                        {/*         const undoEvent = { */}
-                        {/*             eventType: 'undo' as const, */}
-                        {/*         }; */}
-                        {/**/}
-                        {/*         actions.handleClientDraw(undoEvent); */}
-                        {/*     }} */}
-                        {/* > */}
-                        {/*     <FaSolidArrowRotateLeft /> */}
-                        {/* </button> */}
+                        <button
+                            class="p-1"
+                            onClick={() => {
+                                actions.handleClientDraw({
+                                    eventType: 'undo',
+                                });
+                            }}
+                        >
+                            <FaSolidArrowRotateLeft />
+                        </button>
                         <button class="p-1" onClick={handleClear}>
                             <FiTrash2 />
                         </button>

@@ -15,10 +15,9 @@ import {
     TurnStartMsg,
     GameFinishedMsg,
     WordRevealMsg,
-    CanvasUpdateMsg,
     DrawEvent,
 } from './messages';
-import { GamePhase, Path } from './model';
+import { GamePhase } from './model';
 
 // Map backend phase names to frontend phase names
 const mapBackendPhaseToFrontend = (backendPhase: string): GamePhase => {
@@ -43,12 +42,6 @@ const mapBackendPhaseToFrontend = (backendPhase: string): GamePhase => {
     }
 };
 
-export interface WhiteboardState {
-    finishedPaths: Path[];
-    currentPath: Path | null;
-    rasterData: string | null;
-}
-
 export interface GameState {
     gamePhase: GamePhase;
     players: Player[];
@@ -70,12 +63,6 @@ export interface GameState {
     pendingDrawEvent: DrawEvent | null;
     drawEventsStack: DrawEvent[];
 }
-
-const initialWhiteboardState: WhiteboardState = {
-    finishedPaths: [],
-    currentPath: null,
-    rasterData: null,
-};
 
 const initialGameState: GameState = {
     gamePhase: 'Lobby',
@@ -102,7 +89,6 @@ export interface AppState {
     selfId: string;
     launchAsHost: boolean;
     gameState: GameState;
-    whiteboardState: WhiteboardState;
     roomId: string | null;
 
     roundCount: number;
@@ -118,7 +104,6 @@ const initialAppState: AppState = {
     selfId: '',
     launchAsHost: false,
     gameState: initialGameState,
-    whiteboardState: initialWhiteboardState,
     roomId: null,
     roundCount: 3,
     roundLength: 45,
@@ -269,9 +254,6 @@ export const actions = {
                 state.gameState.wordChoices = payload.wordChoices ?? null;
                 state.gameState.players = payload.players;
                 state.gameState.turnEndTime = payload.turnEndTime;
-                state.whiteboardState.finishedPaths = [];
-                state.whiteboardState.currentPath = null;
-                state.whiteboardState.rasterData = null;
             })
         );
     },
@@ -369,12 +351,7 @@ export const actions = {
     },
 
     handleClientDraw: (message: DrawEvent) => {
-        setStore(
-            produce((state) => {
-                state.gameState.drawEventsStack.push(message);
-            })
-        );
-
+        actions.manageStackEvent(message);
         store.sendMessage({
             type: 'drawEvent',
             payload: message,
@@ -382,10 +359,10 @@ export const actions = {
     },
 
     handleDrawPayload: (message: DrawEvent) => {
+        actions.manageStackEvent(message);
         setStore(
             produce((state) => {
                 state.gameState.pendingDrawEvent = message;
-                state.gameState.drawEventsStack.push(message);
             })
         );
     },
@@ -394,6 +371,33 @@ export const actions = {
         setStore(
             produce((state) => {
                 state.gameState.pendingDrawEvent = null;
+            })
+        );
+    },
+
+    manageStackEvent: (event: DrawEvent) => {
+        if (event.eventType !== 'undo') {
+            setStore(
+                produce((state) => {
+                    state.gameState.drawEventsStack.push(event);
+                })
+            );
+            return;
+        }
+
+        setStore(
+            produce((state) => {
+                const stack = state.gameState.drawEventsStack;
+                const lastFullAction = stack.findLast(
+                    (event) =>
+                        event.eventType === 'fill' ||
+                        event.eventType === 'start' ||
+                        event.eventType === 'clear'
+                );
+                if (lastFullAction) {
+                    const lastActionIndex = stack.lastIndexOf(lastFullAction);
+                    stack.splice(lastActionIndex);
+                }
             })
         );
     },
