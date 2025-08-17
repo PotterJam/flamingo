@@ -289,10 +289,16 @@ export const Whiteboard: Component<WhiteboardProps> = () => {
                     <div class="border-border box-content grid h-14 w-84 grid-flow-col grid-cols-12 grid-rows-2 items-center justify-center border-2">
                         {PALETTE.map((hex) => (
                             <div
-                                class="h-7 w-7 cursor-pointer transition-transform duration-150 ease-in-out hover:scale-130"
+                                class="h-7 w-7 cursor-pointer"
                                 style={{ 'background-color': hex }}
                                 onClick={() => setSelectedColour(hex)}
-                            />
+                            >
+                                {selectedColour() === hex && (
+                                    <div class="h-full w-full border-2 border-white">
+                                        <div class="border-border h-full w-full border-2" />
+                                    </div>
+                                )}
+                            </div>
                         ))}
                     </div>
                     <div class="flex flex-row items-center space-x-2">
