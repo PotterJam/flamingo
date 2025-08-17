@@ -298,6 +298,7 @@ export const actions = {
                 state.gameState.wordOutline = null;
                 state.gameState.wordChoices = null;
                 state.gameState.currentDrawerId = null;
+                state.gameState.drawEventsStack = [];
             })
         );
     },
