@@ -1,5 +1,4 @@
 import { CANVAS_HEIGHT, CANVAS_WIDTH } from '../components/Game';
-import { Point } from '../model';
 
 const hexToRgb = (hex: string): [number, number, number] => {
     const r = parseInt(hex.substring(1, 3), 16);
@@ -8,9 +7,8 @@ const hexToRgb = (hex: string): [number, number, number] => {
     return [r, g, b];
 };
 
-export const clear = (canvasCtx: CanvasRenderingContext2D) => {
-    canvasCtx.fillStyle = '#ffffff';
-    canvasCtx.fillRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
+export const clear = (imageData: ImageData) => {
+    imageData.data.fill(255);
 };
 
 export const drawBetween = (
@@ -98,7 +96,7 @@ export const fill = (
     ];
 
     const visited = new Array(CANVAS_WIDTH * CANVAS_HEIGHT).fill(false);
-    const stack: Point[] = [];
+    const stack: { x: number; y: number }[] = [];
     stack.push({ x: rootX, y: rootY });
 
     while (stack.length > 0) {

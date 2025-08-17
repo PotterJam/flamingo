@@ -51,16 +51,12 @@ interface WhiteboardProps {
 
 const defaultBrushThickness = 9;
 
-function getData(canvasCtx: CanvasRenderingContext2D) {
-    return canvasCtx.getImageData(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
-}
-
 function canvasEffect(
     canvasCtx: CanvasRenderingContext2D,
-    func: (imageData: ImageData, canvasCtx: CanvasRenderingContext2D) => void
+    func: (imageData: ImageData) => void
 ) {
-    const imageData = getData(canvasCtx);
-    func(imageData, canvasCtx);
+    const imageData = canvasCtx.getImageData(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
+    func(imageData);
     canvasCtx.putImageData(imageData, 0, 0);
 }
 
@@ -79,7 +75,7 @@ const Whiteboard: Component<WhiteboardProps> = () => {
         canvasCtx = ctx;
 
         // Canvas is empty by default so need to make it white
-        clear(canvasCtx);
+        canvasEffect(canvasCtx, (imageData) => clear(imageData));
     });
 
     const [selectedColour, setSelectedColour] =
@@ -99,9 +95,9 @@ const Whiteboard: Component<WhiteboardProps> = () => {
         if (!drawEvent) return;
         actions.clearPendingDrawEvent();
 
-        canvasEffect(canvasCtx, (imageData, _) => {
+        canvasEffect(canvasCtx, (imageData) => {
             if (drawEvent.eventType === 'clear') {
-                clear(canvasCtx);
+                clear(imageData);
                 return;
             }
 
@@ -149,7 +145,7 @@ const Whiteboard: Component<WhiteboardProps> = () => {
         if (tool() === 'fill') {
             const [x, y] = translatePointerToCanvas(e, canvasRef);
 
-            canvasEffect(canvasCtx, (imageData, _) => {
+            canvasEffect(canvasCtx, (imageData) => {
                 fill(Math.round(x), Math.round(y), selectedColour(), imageData);
             });
 
@@ -166,7 +162,7 @@ const Whiteboard: Component<WhiteboardProps> = () => {
         const [x, y] = translatePointerToCanvas(e, canvasRef);
         setLastCoord({ x, y });
 
-        canvasEffect(canvasCtx, (imageData, _) => {
+        canvasEffect(canvasCtx, (imageData) => {
             drawBetween(
                 x,
                 y,
@@ -197,7 +193,7 @@ const Whiteboard: Component<WhiteboardProps> = () => {
         const prev = lastCoord();
         setLastCoord(null);
 
-        canvasEffect(canvasCtx, (imageData, _) => {
+        canvasEffect(canvasCtx, (imageData) => {
             drawBetween(
                 prev?.x ?? x,
                 prev?.y ?? y,
@@ -240,7 +236,7 @@ const Whiteboard: Component<WhiteboardProps> = () => {
         const prev = lastCoord();
         setLastCoord({ x, y });
 
-        canvasEffect(canvasCtx, (imageData, _) => {
+        canvasEffect(canvasCtx, (imageData) => {
             drawBetween(
                 prev?.x ?? x,
                 prev?.y ?? y,
@@ -264,7 +260,7 @@ const Whiteboard: Component<WhiteboardProps> = () => {
     };
 
     const handleClear = () => {
-        clear(canvasCtx);
+        canvasEffect(canvasCtx, (imageData) => clear(imageData));
         store.sendMessage({
             type: 'drawEvent',
             payload: {
