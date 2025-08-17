@@ -257,6 +257,20 @@ const Whiteboard: Component<WhiteboardProps> = () => {
         });
     };
 
+    const handleUndo = () => {
+        actions.handleClientDraw({
+            eventType: 'undo',
+        });
+
+        const events = store.gameState.drawEventsStack;
+        canvasEffect(canvasCtx, (imageData) => {
+            clear(imageData);
+            for (const e of events) {
+                handleEvent(imageData, e);
+            }
+        });
+    };
+
     return (
         <div class="flex flex-col">
             <canvas
@@ -312,14 +326,7 @@ const Whiteboard: Component<WhiteboardProps> = () => {
                         ))}
                     </div>
                     <div class="flex flex-row items-center gap-2 space-x-2 p-2">
-                        <button
-                            class="p-1"
-                            onClick={() => {
-                                actions.handleClientDraw({
-                                    eventType: 'undo',
-                                });
-                            }}
-                        >
+                        <button class="p-1" onClick={handleUndo}>
                             <FaSolidArrowRotateLeft />
                         </button>
                         <button class="p-1" onClick={handleClear}>
