@@ -102,7 +102,7 @@ function handleEvent(imageData: ImageData, drawEvent: DrawEvent) {
     }
 }
 
-const Whiteboard: Component<WhiteboardProps> = () => {
+export const Whiteboard: Component<WhiteboardProps> = () => {
     let canvasRef!: HTMLCanvasElement;
     let canvasCtx!: CanvasRenderingContext2D;
 
@@ -346,5 +346,3 @@ const Whiteboard: Component<WhiteboardProps> = () => {
         </div>
     );
 };
-
-export default Whiteboard;
