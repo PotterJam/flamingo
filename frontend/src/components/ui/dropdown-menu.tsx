@@ -298,7 +298,7 @@ const DropdownMenuRadioItem = <T extends ValidComponent = 'div'>(
         >
             <span class="absolute left-2 flex size-3.5 items-center justify-center">
                 <DropdownMenuPrimitive.ItemIndicator>
-                    <BsDot class="size-10" />
+                    <FiCheck class="size-4" />
                 </DropdownMenuPrimitive.ItemIndicator>
             </span>
             {props.children}
