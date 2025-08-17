@@ -62,7 +62,7 @@ const Whiteboard: Component<WhiteboardProps> = () => {
         }
         canvasCtx = ctx;
 
-        canvas = useCanvas({ canvasCtx });
+        canvas = useCanvas();
 
         // Canvas is empty by default so need to make it white
         canvas.clear();
@@ -85,8 +85,15 @@ const Whiteboard: Component<WhiteboardProps> = () => {
         if (!drawEvent) return;
         actions.clearPendingDrawEvent();
 
+        const imageData = canvasCtx.getImageData(
+            0,
+            0,
+            CANVAS_WIDTH,
+            CANVAS_HEIGHT
+        );
         if (drawEvent.eventType === 'clear') {
             canvas.clear();
+            canvasCtx.putImageData(imageData, 0, 0);
             return;
         }
 
@@ -96,8 +103,10 @@ const Whiteboard: Component<WhiteboardProps> = () => {
             canvas.fill(
                 Math.round(drawEvent.x),
                 Math.round(drawEvent.y),
-                drawEvent.color
+                drawEvent.color,
+                imageData
             );
+            canvasCtx.putImageData(imageData, 0, 0);
             return;
         }
 
@@ -108,8 +117,10 @@ const Whiteboard: Component<WhiteboardProps> = () => {
                 drawEvent.x,
                 drawEvent.y,
                 drawEvent.lineWidth,
-                drawEvent.color
+                drawEvent.color,
+                imageData
             );
+            canvasCtx.putImageData(imageData, 0, 0);
             return;
         }
 
@@ -119,17 +130,31 @@ const Whiteboard: Component<WhiteboardProps> = () => {
             drawEvent.endX,
             drawEvent.endY,
             drawEvent.lineWidth,
-            drawEvent.color
+            drawEvent.color,
+            imageData
         );
+        canvasCtx.putImageData(imageData, 0, 0);
     });
 
     const handlePointerDown = (e: PointerEvent) => {
         e.preventDefault();
         if (!canvasRef || !isDrawer()) return;
 
+        const imageData = canvasCtx.getImageData(
+            0,
+            0,
+            CANVAS_WIDTH,
+            CANVAS_HEIGHT
+        );
+
         if (tool() === 'fill') {
             const [x, y, _] = translatePointerToCanvas(e, canvasRef);
-            canvas.fill(Math.round(x), Math.round(y), selectedColour());
+            canvas.fill(
+                Math.round(x),
+                Math.round(y),
+                selectedColour(),
+                imageData
+            );
 
             const fillEvent = {
                 eventType: 'fill' as const,
@@ -139,13 +164,23 @@ const Whiteboard: Component<WhiteboardProps> = () => {
             };
 
             actions.handleClientDraw(fillEvent);
+            canvasCtx.putImageData(imageData, 0, 0);
             return;
         }
 
         setIsDrawing(true);
 
         const [x, y, _] = translatePointerToCanvas(e, canvasRef);
-        canvas.drawBetween(x, y, x, y, selectedThickness(), selectedColour());
+        canvas.drawBetween(
+            x,
+            y,
+            x,
+            y,
+            selectedThickness(),
+            selectedColour(),
+            imageData
+        );
+        canvasCtx.putImageData(imageData, 0, 0);
         setLastCoord({ x, y });
 
         const startEvent = {
@@ -164,6 +199,12 @@ const Whiteboard: Component<WhiteboardProps> = () => {
         if (!isDrawer() || tool() === 'fill') return;
 
         setIsDrawing(false);
+        const imageData = canvasCtx.getImageData(
+            0,
+            0,
+            CANVAS_WIDTH,
+            CANVAS_HEIGHT
+        );
 
         const [x, y, _] = translatePointerToCanvas(e, canvasRef);
         const prev = lastCoord();
@@ -173,8 +214,10 @@ const Whiteboard: Component<WhiteboardProps> = () => {
             x,
             y,
             selectedThickness(),
-            selectedColour()
+            selectedColour(),
+            imageData
         );
+        canvasCtx.putImageData(imageData, 0, 0);
         setLastCoord(null);
 
         const endEvent = {
@@ -206,6 +249,12 @@ const Whiteboard: Component<WhiteboardProps> = () => {
         if (tool() === 'fill') return;
         e.preventDefault();
 
+        const imageData = canvasCtx.getImageData(
+            0,
+            0,
+            CANVAS_WIDTH,
+            CANVAS_HEIGHT
+        );
         const [x, y, _] = translatePointerToCanvas(e, canvasRef);
         const prev = lastCoord();
         canvas.drawBetween(
@@ -214,8 +263,10 @@ const Whiteboard: Component<WhiteboardProps> = () => {
             x,
             y,
             selectedThickness(),
-            selectedColour()
+            selectedColour(),
+            imageData
         );
+        canvasCtx.putImageData(imageData, 0, 0);
         setLastCoord({ x, y });
 
         const drawEvent = {

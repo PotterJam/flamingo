@@ -1,11 +1,7 @@
 import { CANVAS_HEIGHT, CANVAS_WIDTH } from '../components/Game';
 import { Point } from '../model';
 
-interface UseCanvasProps {
-    canvasCtx: CanvasRenderingContext2D;
-}
-
-export const useCanvas = ({ canvasCtx }: UseCanvasProps) => {
+export const useCanvas = () => {
     const hexToRgb = (hex: string): [number, number, number] => {
         const r = parseInt(hex.substring(1, 3), 16);
         const g = parseInt(hex.substring(3, 5), 16);
@@ -14,8 +10,8 @@ export const useCanvas = ({ canvasCtx }: UseCanvasProps) => {
     };
 
     const clear = () => {
-        canvasCtx.fillStyle = '#ffffff';
-        canvasCtx.fillRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
+        // canvasCtx.fillStyle = '#ffffff';
+        // canvasCtx.fillRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
     };
 
     const drawBetween = (
@@ -24,17 +20,12 @@ export const useCanvas = ({ canvasCtx }: UseCanvasProps) => {
         endX: number,
         endY: number,
         thickness: number,
-        hexColour: string
+        hexColour: string,
+        imageData: ImageData
     ) => {
         const radius = thickness / 2;
         const fillRgb = hexToRgb(hexColour);
 
-        const imageData = canvasCtx.getImageData(
-            0,
-            0,
-            CANVAS_WIDTH,
-            CANVAS_HEIGHT
-        );
         const data = imageData.data;
 
         // This algo is generally called Line Segment SDF and uses the "distance to line segment"
@@ -90,19 +81,23 @@ export const useCanvas = ({ canvasCtx }: UseCanvasProps) => {
             }
         }
 
-        canvasCtx.putImageData(imageData, 0, 0);
+        // canvasCtx.putImageData(imageData, 0, 0);
     };
 
-    const fill = (rootX: number, rootY: number, colour: string) => {
+    const fill = (
+        rootX: number,
+        rootY: number,
+        colour: string,
+        imageData: ImageData
+    ) => {
+        const data = imageData.data;
         const fillRgb = hexToRgb(colour);
-
-        const image = canvasCtx.getImageData(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
 
         const rootIndex = (rootY * CANVAS_WIDTH + rootX) * 4;
         const originalColor = [
-            image.data[rootIndex],
-            image.data[rootIndex + 1],
-            image.data[rootIndex + 2],
+            data[rootIndex],
+            data[rootIndex + 1],
+            data[rootIndex + 2],
         ];
 
         const visited = new Array(CANVAS_WIDTH * CANVAS_HEIGHT).fill(false);
@@ -118,9 +113,9 @@ export const useCanvas = ({ canvasCtx }: UseCanvasProps) => {
 
             const index = (y * CANVAS_WIDTH + x) * 4;
             const currentColor = [
-                image.data[index],
-                image.data[index + 1],
-                image.data[index + 2],
+                data[index],
+                data[index + 1],
+                data[index + 2],
             ];
 
             const pixelIndex = y * CANVAS_WIDTH + x;
@@ -134,19 +129,18 @@ export const useCanvas = ({ canvasCtx }: UseCanvasProps) => {
             }
 
             visited[pixelIndex] = true;
-            image.data[index] = fillRgb[0];
-            image.data[index + 1] = fillRgb[1];
-            image.data[index + 2] = fillRgb[2];
-            image.data[index + 3] = 255;
+            data[index] = fillRgb[0];
+            data[index + 1] = fillRgb[1];
+            data[index + 2] = fillRgb[2];
+            data[index + 3] = 255;
 
             stack.push({ x: x, y: y + 1 });
             stack.push({ x: x, y: y - 1 });
             stack.push({ x: x + 1, y: y });
             stack.push({ x: x - 1, y: y });
         }
-
-        canvasCtx.putImageData(image, 0, 0);
     };
+
     return {
         drawBetween,
         clear,
