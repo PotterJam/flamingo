@@ -9,6 +9,7 @@ import { CANVAS_HEIGHT, CANVAS_WIDTH } from './Game';
 import { ToggleGroup, ToggleGroupItem } from './ui/toggle-group';
 import { RiDesignPaintFill } from 'solid-icons/ri';
 import { clear, drawBetween, fill } from '~/lib/canvas';
+import { DrawEvent } from '~/messages';
 
 const PALETTE = [
     '#000000',
@@ -60,6 +61,47 @@ function canvasEffect(
     canvasCtx.putImageData(imageData, 0, 0);
 }
 
+function handleEvent(imageData: ImageData, drawEvent: DrawEvent) {
+    switch (drawEvent.eventType) {
+        case 'clear':
+            clear(imageData);
+            break;
+        case 'undo':
+            break;
+        case 'fill':
+            fill(
+                Math.round(drawEvent.x),
+                Math.round(drawEvent.y),
+                drawEvent.color,
+                imageData
+            );
+            break;
+        case 'start':
+            drawBetween(
+                drawEvent.x,
+                drawEvent.y,
+                drawEvent.x,
+                drawEvent.y,
+                drawEvent.lineWidth,
+                drawEvent.color,
+                imageData
+            );
+            break;
+        case 'draw':
+        case 'end':
+            drawBetween(
+                drawEvent.startX,
+                drawEvent.startY,
+                drawEvent.endX,
+                drawEvent.endY,
+                drawEvent.lineWidth,
+                drawEvent.color,
+                imageData
+            );
+            break;
+    }
+}
+
 const Whiteboard: Component<WhiteboardProps> = () => {
     let canvasRef!: HTMLCanvasElement;
     let canvasCtx!: CanvasRenderingContext2D;
@@ -88,47 +130,8 @@ const Whiteboard: Component<WhiteboardProps> = () => {
         const drawEvent = store.gameState.pendingDrawEvent;
         if (!drawEvent) return;
         actions.clearPendingDrawEvent();
-
         canvasEffect(canvasCtx, (imageData) => {
-            if (drawEvent.eventType === 'clear') {
-                clear(imageData);
-                return;
-            }
-
-            if (drawEvent.eventType === 'undo') return;
-
-            if (drawEvent.eventType === 'fill') {
-                fill(
-                    Math.round(drawEvent.x),
-                    Math.round(drawEvent.y),
-                    drawEvent.color,
-                    imageData
-                );
-                return;
-            }
-
-            if (drawEvent.eventType === 'start') {
-                drawBetween(
-                    drawEvent.x,
-                    drawEvent.y,
-                    drawEvent.x,
-                    drawEvent.y,
-                    drawEvent.lineWidth,
-                    drawEvent.color,
-                    imageData
-                );
-                return;
-            }
-
-            drawBetween(
-                drawEvent.startX,
-                drawEvent.startY,
-                drawEvent.endX,
-                drawEvent.endY,
-                drawEvent.lineWidth,
-                drawEvent.color,
-                imageData
-            );
+            handleEvent(imageData, drawEvent);
         });
     });
 
