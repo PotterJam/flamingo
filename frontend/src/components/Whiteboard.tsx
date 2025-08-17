@@ -25,6 +25,8 @@ const PALETTE = [
     '#08C202',
     '#00461A',
     '#00FF91',
+    '#04785E',
+    '#00B2FF',
     '#02569E',
     '#2220D3',
     '#0E0865',
@@ -287,7 +289,7 @@ export const Whiteboard: Component<WhiteboardProps> = () => {
             <Separator />
             <Show when={isDrawer()}>
                 <div class="flex w-full flex-row justify-between gap-2 p-2">
-                    <div class="border-border box-content grid h-14 w-84 grid-flow-col grid-cols-12 grid-rows-2 items-center justify-center border-2">
+                    <div class="border-border box-content grid h-14 w-91 grid-flow-col grid-cols-12 grid-rows-2 items-center justify-center border-2">
                         {PALETTE.map((hex) => (
                             <div
                                 class="h-7 w-7 cursor-pointer"
