@@ -6,10 +6,10 @@ import { FaSolidPen } from 'solid-icons/fa';
 import { translatePointerToCanvas } from '../lib/utils/canvas';
 import { FiTrash2 } from 'solid-icons/fi';
 import { CANVAS_HEIGHT, CANVAS_WIDTH } from './Game';
-import { useCanvas } from '../hooks/useCanvas';
 import { Point } from '../model';
 import { ToggleGroup, ToggleGroupItem } from './ui/toggle-group';
 import { RiDesignPaintFill } from 'solid-icons/ri';
+import { clear, drawBetween, fill } from '~/lib/canvas';
 
 const PALETTE = [
     '#000000',
@@ -50,7 +50,6 @@ const defaultBrushThickness = 9;
 const Whiteboard: Component<WhiteboardProps> = () => {
     let canvasRef!: HTMLCanvasElement;
     let canvasCtx!: CanvasRenderingContext2D;
-    let canvas: ReturnType<typeof useCanvas>;
 
     const [lastCoord, setLastCoord] = createSignal<Point | null>(null);
     const [isDrawing, setIsDrawing] = createSignal(false);
@@ -62,10 +61,8 @@ const Whiteboard: Component<WhiteboardProps> = () => {
         }
         canvasCtx = ctx;
 
-        canvas = useCanvas();
-
         // Canvas is empty by default so need to make it white
-        canvas.clear();
+        clear(canvasCtx);
     });
 
     const [selectedColour, setSelectedColour] =
@@ -92,15 +89,14 @@ const Whiteboard: Component<WhiteboardProps> = () => {
             CANVAS_HEIGHT
         );
         if (drawEvent.eventType === 'clear') {
-            canvas.clear();
-            canvasCtx.putImageData(imageData, 0, 0);
+            clear(canvasCtx);
             return;
         }
 
         if (drawEvent.eventType === 'undo') return;
 
         if (drawEvent.eventType === 'fill') {
-            canvas.fill(
+            fill(
                 Math.round(drawEvent.x),
                 Math.round(drawEvent.y),
                 drawEvent.color,
@@ -111,7 +107,7 @@ const Whiteboard: Component<WhiteboardProps> = () => {
         }
 
         if (drawEvent.eventType === 'start') {
-            canvas.drawBetween(
+            drawBetween(
                 drawEvent.x,
                 drawEvent.y,
                 drawEvent.x,
@@ -124,7 +120,7 @@ const Whiteboard: Component<WhiteboardProps> = () => {
             return;
         }
 
-        canvas.drawBetween(
+        drawBetween(
             drawEvent.startX,
             drawEvent.startY,
             drawEvent.endX,
@@ -149,12 +145,7 @@ const Whiteboard: Component<WhiteboardProps> = () => {
 
         if (tool() === 'fill') {
             const [x, y, _] = translatePointerToCanvas(e, canvasRef);
-            canvas.fill(
-                Math.round(x),
-                Math.round(y),
-                selectedColour(),
-                imageData
-            );
+            fill(Math.round(x), Math.round(y), selectedColour(), imageData);
 
             const fillEvent = {
                 eventType: 'fill' as const,
@@ -171,7 +162,7 @@ const Whiteboard: Component<WhiteboardProps> = () => {
         setIsDrawing(true);
 
         const [x, y, _] = translatePointerToCanvas(e, canvasRef);
-        canvas.drawBetween(
+        drawBetween(
             x,
             y,
             x,
@@ -208,7 +199,7 @@ const Whiteboard: Component<WhiteboardProps> = () => {
 
         const [x, y, _] = translatePointerToCanvas(e, canvasRef);
         const prev = lastCoord();
-        canvas.drawBetween(
+        drawBetween(
             prev?.x ?? x,
             prev?.y ?? y,
             x,
@@ -257,7 +248,7 @@ const Whiteboard: Component<WhiteboardProps> = () => {
         );
         const [x, y, _] = translatePointerToCanvas(e, canvasRef);
         const prev = lastCoord();
-        canvas.drawBetween(
+        drawBetween(
             prev?.x ?? x,
             prev?.y ?? y,
             x,
@@ -283,7 +274,7 @@ const Whiteboard: Component<WhiteboardProps> = () => {
     };
 
     const handleClear = () => {
-        canvas.clear();
+        clear(canvasCtx);
         store.sendMessage({
             type: 'drawEvent',
             payload: {
