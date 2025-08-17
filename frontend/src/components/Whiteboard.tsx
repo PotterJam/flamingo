@@ -7,6 +7,13 @@ import { translatePointerToCanvas } from '../lib/utils/canvas';
 import { FiTrash2 } from 'solid-icons/fi';
 import { CANVAS_HEIGHT, CANVAS_WIDTH } from './Game';
 import { ToggleGroup, ToggleGroupItem } from './ui/toggle-group';
+import {
+    DropdownMenu,
+    DropdownMenuContent,
+    DropdownMenuRadioGroup,
+    DropdownMenuRadioItem,
+    DropdownMenuTrigger,
+} from './ui/dropdown-menu';
 import { RiDesignPaintFill } from 'solid-icons/ri';
 import { clear, drawBetween, fill } from '~/lib/canvas';
 import { DrawEvent } from '~/messages';
@@ -288,7 +295,7 @@ export const Whiteboard: Component<WhiteboardProps> = () => {
             />
             <Separator />
             <Show when={isDrawer()}>
-                <div class="flex w-full flex-row justify-between gap-2 p-2">
+                <div class="flex w-full flex-row items-center justify-between gap-2 p-2">
                     <div class="border-border box-content grid h-14 w-91 grid-flow-col grid-cols-12 grid-rows-2 items-center justify-center border-2">
                         {PALETTE.map((hex) => (
                             <div
@@ -304,28 +311,45 @@ export const Whiteboard: Component<WhiteboardProps> = () => {
                             </div>
                         ))}
                     </div>
-                    <div class="flex flex-row items-center space-x-2">
-                        {[6, 9, 15].map((thickness) => (
+                    <DropdownMenu>
+                        <DropdownMenuTrigger class="border-border flex h-10 w-10 cursor-pointer items-center justify-center border-2 bg-white">
                             <div
-                                class={classNames(
-                                    'flex h-8 w-8 cursor-pointer items-center justify-center rounded-full border border-gray-400 bg-white hover:ring-2 hover:ring-blue-500',
-                                    {
-                                        'ring-2 ring-blue-500 ring-offset-1':
-                                            selectedThickness() === thickness,
-                                    }
-                                )}
-                                onClick={() => setSelectedThickness(thickness)}
+                                class="rounded-full bg-black"
+                                style={{
+                                    width: `${selectedThickness() * 2}px`,
+                                    height: `${selectedThickness() * 2}px`,
+                                }}
+                            />
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent class="p-0">
+                            <DropdownMenuRadioGroup
+                                value={selectedThickness().toString()}
+                                onChange={(value) =>
+                                    setSelectedThickness(parseInt(value))
+                                }
                             >
-                                <div
-                                    class="rounded-full bg-black"
-                                    style={{
-                                        width: `${thickness * 2}px`,
-                                        height: `${thickness * 2}px`,
-                                    }}
-                                />
-                            </div>
-                        ))}
-                    </div>
+                                {[6, 9, 15].map((thickness) => (
+                                    <DropdownMenuRadioItem
+                                        closeOnSelect
+                                        value={thickness.toString()}
+                                    >
+                                        <div class="flex h-8 items-center gap-0">
+                                            <div class="flex h-8 w-8 items-center justify-center">
+                                                <div
+                                                    class="rounded-full bg-black"
+                                                    style={{
+                                                        width: `${thickness * 1.5}px`,
+                                                        height: `${thickness * 1.5}px`,
+                                                    }}
+                                                />
+                                            </div>
+                                            <span>{thickness}px</span>
+                                        </div>
+                                    </DropdownMenuRadioItem>
+                                ))}
+                            </DropdownMenuRadioGroup>
+                        </DropdownMenuContent>
+                    </DropdownMenu>
                     <div class="flex flex-row items-center gap-1 space-x-2 p-2">
                         <ToggleGroup value={tool()} onChange={setTool}>
                             <ToggleGroupItem value="pen">
@@ -335,12 +359,12 @@ export const Whiteboard: Component<WhiteboardProps> = () => {
                                 <RiDesignPaintFill />
                             </ToggleGroupItem>
                         </ToggleGroup>
-                            <button class="p-1" onClick={handleUndo}>
-                                <FaSolidArrowRotateLeft />
-                            </button>
-                            <button class="p-1" onClick={handleClear}>
-                                <FiTrash2 />
-                            </button>
+                        <button class="p-1" onClick={handleUndo}>
+                            <FaSolidArrowRotateLeft />
+                        </button>
+                        <button class="p-1" onClick={handleClear}>
+                            <FiTrash2 />
+                        </button>
                     </div>
                 </div>
             </Show>
