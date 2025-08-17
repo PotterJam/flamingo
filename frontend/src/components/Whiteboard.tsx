@@ -2,14 +2,14 @@ import { createSignal, createEffect, Component, Show, onMount } from 'solid-js';
 import { actions, store } from '../store';
 import classNames from 'classnames';
 import { Separator } from './ui/separator';
-import { FaSolidPen } from 'solid-icons/fa';
+import { FaSolidArrowRotateLeft, FaSolidPen } from 'solid-icons/fa';
 import { translatePointerToCanvas } from '../lib/utils/canvas';
 import { FiTrash2 } from 'solid-icons/fi';
 import { CANVAS_HEIGHT, CANVAS_WIDTH } from './Game';
-import { useCanvas } from '../hooks/useCanvas';
-import { Point } from '../model';
 import { ToggleGroup, ToggleGroupItem } from './ui/toggle-group';
 import { RiDesignPaintFill } from 'solid-icons/ri';
+import { clear, drawBetween, fill } from '~/lib/canvas';
+import { DrawEvent } from '~/messages';
 
 const PALETTE = [
     '#000000',
@@ -40,6 +40,11 @@ const PALETTE = [
 
 type PaletteColor = (typeof PALETTE)[number];
 
+interface Point {
+    x: number;
+    y: number;
+}
+
 interface WhiteboardProps {
     width: number;
     height: number;
@@ -47,36 +52,77 @@ interface WhiteboardProps {
 
 const defaultBrushThickness = 9;
 
+function canvasEffect(
+    canvasCtx: CanvasRenderingContext2D,
+    func: (imageData: ImageData) => void
+) {
+    const imageData = canvasCtx.getImageData(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
+    func(imageData);
+    canvasCtx.putImageData(imageData, 0, 0);
+}
+
+function handleEvent(imageData: ImageData, drawEvent: DrawEvent) {
+    switch (drawEvent.eventType) {
+        case 'clear':
+            clear(imageData);
+            break;
+        case 'undo':
+            break;
+        case 'fill':
+            fill(
+                Math.round(drawEvent.x),
+                Math.round(drawEvent.y),
+                drawEvent.color,
+                imageData
+            );
+            break;
+        case 'start':
+            drawBetween(
+                drawEvent.x,
+                drawEvent.y,
+                drawEvent.x,
+                drawEvent.y,
+                drawEvent.lineWidth,
+                drawEvent.color,
+                imageData
+            );
+            break;
+        case 'draw':
+        case 'end':
+            drawBetween(
+                drawEvent.startX,
+                drawEvent.startY,
+                drawEvent.endX,
+                drawEvent.endY,
+                drawEvent.lineWidth,
+                drawEvent.color,
+                imageData
+            );
+            break;
+    }
+}
+
 const Whiteboard: Component<WhiteboardProps> = () => {
     let canvasRef!: HTMLCanvasElement;
     let canvasCtx!: CanvasRenderingContext2D;
-    let canvas: ReturnType<typeof useCanvas>;
 
     const [lastCoord, setLastCoord] = createSignal<Point | null>(null);
     const [isDrawing, setIsDrawing] = createSignal(false);
-
-    onMount(() => {
-        const ctx = canvasRef.getContext('2d', { willReadFrequently: true });
-        if (ctx === null) {
-            throw new Error('Null canvas context');
-        }
-        canvasCtx = ctx;
-
-        canvas = useCanvas({ canvasCtx });
-
-        // Canvas is empty by default so need to make it white
-        canvas.clear();
-    });
-
     const [selectedColour, setSelectedColour] =
         createSignal<PaletteColor>('#000000');
     const [selectedThickness, setSelectedThickness] = createSignal(
         defaultBrushThickness
     );
     const [tool, setTool] = createSignal<'pen' | 'fill'>('pen');
-
     const isDrawer = () =>
         store.gameState.localPlayerId === store.gameState.currentDrawerId;
+
+    onMount(() => {
+        const ctx = canvasRef.getContext('2d', { willReadFrequently: true });
+        if (ctx === null) throw new Error('Null canvas context');
+        canvasCtx = ctx;
+        canvasEffect(canvasCtx, (imageData) => clear(imageData));
+    });
 
     // This system relies on the websocket messages being processed synchronously.
     // If this changes we will need something like a queue system.
@@ -85,42 +131,20 @@ const Whiteboard: Component<WhiteboardProps> = () => {
         if (!drawEvent) return;
         actions.clearPendingDrawEvent();
 
-        if (drawEvent.eventType === 'clear') {
-            canvas.clear();
+        if (drawEvent.eventType !== 'undo') {
+            canvasEffect(canvasCtx, (imageData) => {
+                handleEvent(imageData, drawEvent);
+            });
             return;
         }
 
-        if (drawEvent.eventType === 'undo') return;
-
-        if (drawEvent.eventType === 'fill') {
-            canvas.fill(
-                Math.round(drawEvent.x),
-                Math.round(drawEvent.y),
-                drawEvent.color
-            );
-            return;
-        }
-
-        if (drawEvent.eventType === 'start') {
-            canvas.drawBetween(
-                drawEvent.x,
-                drawEvent.y,
-                drawEvent.x,
-                drawEvent.y,
-                drawEvent.lineWidth,
-                drawEvent.color
-            );
-            return;
-        }
-
-        canvas.drawBetween(
-            drawEvent.startX,
-            drawEvent.startY,
-            drawEvent.endX,
-            drawEvent.endY,
-            drawEvent.lineWidth,
-            drawEvent.color
-        );
+        const events = store.gameState.drawEventsStack;
+        canvasEffect(canvasCtx, (imageData) => {
+            clear(imageData);
+            for (const e of events) {
+                handleEvent(imageData, e);
+            }
+        });
     });
 
     const handlePointerDown = (e: PointerEvent) => {
@@ -128,8 +152,7 @@ const Whiteboard: Component<WhiteboardProps> = () => {
         if (!canvasRef || !isDrawer()) return;
 
         if (tool() === 'fill') {
-            const [x, y, _] = translatePointerToCanvas(e, canvasRef);
-            canvas.fill(Math.round(x), Math.round(y), selectedColour());
+            const [x, y] = translatePointerToCanvas(e, canvasRef);
 
             const fillEvent = {
                 eventType: 'fill' as const,
@@ -137,15 +160,15 @@ const Whiteboard: Component<WhiteboardProps> = () => {
                 y: y,
                 color: selectedColour(),
             };
-
+            canvasEffect(canvasCtx, (imageData) => {
+                handleEvent(imageData, fillEvent);
+            });
             actions.handleClientDraw(fillEvent);
             return;
         }
 
         setIsDrawing(true);
-
-        const [x, y, _] = translatePointerToCanvas(e, canvasRef);
-        canvas.drawBetween(x, y, x, y, selectedThickness(), selectedColour());
+        const [x, y] = translatePointerToCanvas(e, canvasRef);
         setLastCoord({ x, y });
 
         const startEvent = {
@@ -155,7 +178,9 @@ const Whiteboard: Component<WhiteboardProps> = () => {
             color: selectedColour(),
             lineWidth: selectedThickness(),
         };
-
+        canvasEffect(canvasCtx, (imageData) => {
+            handleEvent(imageData, startEvent);
+        });
         actions.handleClientDraw(startEvent);
     };
 
@@ -165,16 +190,8 @@ const Whiteboard: Component<WhiteboardProps> = () => {
 
         setIsDrawing(false);
 
-        const [x, y, _] = translatePointerToCanvas(e, canvasRef);
+        const [x, y] = translatePointerToCanvas(e, canvasRef);
         const prev = lastCoord();
-        canvas.drawBetween(
-            prev?.x ?? x,
-            prev?.y ?? y,
-            x,
-            y,
-            selectedThickness(),
-            selectedColour()
-        );
         setLastCoord(null);
 
         const endEvent = {
@@ -186,7 +203,9 @@ const Whiteboard: Component<WhiteboardProps> = () => {
             color: selectedColour(),
             lineWidth: selectedThickness(),
         };
-
+        canvasEffect(canvasCtx, (imageData) => {
+            handleEvent(imageData, endEvent);
+        });
         actions.handleClientDraw(endEvent);
     };
 
@@ -206,16 +225,8 @@ const Whiteboard: Component<WhiteboardProps> = () => {
         if (tool() === 'fill') return;
         e.preventDefault();
 
-        const [x, y, _] = translatePointerToCanvas(e, canvasRef);
+        const [x, y] = translatePointerToCanvas(e, canvasRef);
         const prev = lastCoord();
-        canvas.drawBetween(
-            prev?.x ?? x,
-            prev?.y ?? y,
-            x,
-            y,
-            selectedThickness(),
-            selectedColour()
-        );
         setLastCoord({ x, y });
 
         const drawEvent = {
@@ -227,17 +238,36 @@ const Whiteboard: Component<WhiteboardProps> = () => {
             color: selectedColour(),
             lineWidth: selectedThickness(),
         };
-
+        canvasEffect(canvasCtx, (imageData) => {
+            handleEvent(imageData, drawEvent);
+        });
         actions.handleClientDraw(drawEvent);
     };
 
     const handleClear = () => {
-        canvas.clear();
+        const clearEvent = { eventType: 'clear' as const };
+
+        canvasEffect(canvasCtx, (imageData) => {
+            handleEvent(imageData, clearEvent);
+        });
+
         store.sendMessage({
             type: 'drawEvent',
-            payload: {
-                eventType: 'clear',
-            },
+            payload: clearEvent,
+        });
+    };
+
+    const handleUndo = () => {
+        actions.handleClientDraw({
+            eventType: 'undo',
+        });
+
+        const events = store.gameState.drawEventsStack;
+        canvasEffect(canvasCtx, (imageData) => {
+            clear(imageData);
+            for (const e of events) {
+                handleEvent(imageData, e);
+            }
         });
     };
 
@@ -296,18 +326,9 @@ const Whiteboard: Component<WhiteboardProps> = () => {
                         ))}
                     </div>
                     <div class="flex flex-row items-center gap-2 space-x-2 p-2">
-                        {/* <button */}
-                        {/*     class="p-1" */}
-                        {/*     onClick={() => { */}
-                        {/*         const undoEvent = { */}
-                        {/*             eventType: 'undo' as const, */}
-                        {/*         }; */}
-                        {/**/}
-                        {/*         actions.handleClientDraw(undoEvent); */}
-                        {/*     }} */}
-                        {/* > */}
-                        {/*     <FaSolidArrowRotateLeft /> */}
-                        {/* </button> */}
+                        <button class="p-1" onClick={handleUndo}>
+                            <FaSolidArrowRotateLeft />
+                        </button>
                         <button class="p-1" onClick={handleClear}>
                             <FiTrash2 />
                         </button>

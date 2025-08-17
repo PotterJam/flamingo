@@ -1,11 +1,9 @@
-import { PathPoint } from '../../model';
-
 export const translatePointerToCanvas = (
     e: PointerEvent,
     canvas: HTMLCanvasElement
-): PathPoint => {
+): [number, number] => {
     const rect = canvas.getBoundingClientRect();
-    return [e.clientX - rect.left, e.clientY - rect.top, e.pressure];
+    return [e.clientX - rect.left, e.clientY - rect.top];
 };
 
 export function getSvgPathFromStroke(stroke: number[][]) {
