@@ -66,27 +66,21 @@ const Whiteboard: Component<WhiteboardProps> = () => {
 
     const [lastCoord, setLastCoord] = createSignal<Point | null>(null);
     const [isDrawing, setIsDrawing] = createSignal(false);
-
-    onMount(() => {
-        const ctx = canvasRef.getContext('2d', { willReadFrequently: true });
-        if (ctx === null) {
-            throw new Error('Null canvas context');
-        }
-        canvasCtx = ctx;
-
-        // Canvas is empty by default so need to make it white
-        canvasEffect(canvasCtx, (imageData) => clear(imageData));
-    });
-
     const [selectedColour, setSelectedColour] =
         createSignal<PaletteColor>('#000000');
     const [selectedThickness, setSelectedThickness] = createSignal(
         defaultBrushThickness
     );
     const [tool, setTool] = createSignal<'pen' | 'fill'>('pen');
-
     const isDrawer = () =>
         store.gameState.localPlayerId === store.gameState.currentDrawerId;
+
+    onMount(() => {
+        const ctx = canvasRef.getContext('2d', { willReadFrequently: true });
+        if (ctx === null) throw new Error('Null canvas context');
+        canvasCtx = ctx;
+        canvasEffect(canvasCtx, (imageData) => clear(imageData));
+    });
 
     // This system relies on the websocket messages being processed synchronously.
     // If this changes we will need something like a queue system.
