@@ -286,15 +286,7 @@ export const Whiteboard: Component<WhiteboardProps> = () => {
             <Separator />
             <Show when={isDrawer()}>
                 <div class="flex w-full flex-row justify-between gap-2 p-2">
-                    <div class="my-2 h-12 w-12 border-2 border-gray-500 border-t-gray-300 border-l-gray-300">
-                        <div
-                            class="h-full w-full border-2 border-gray-300 border-t-gray-100 border-l-gray-300"
-                            style={{
-                                'background-color': selectedColour(),
-                            }}
-                        />
-                    </div>
-                    <div class="grid h-14 grid-flow-col grid-cols-12 grid-rows-2 items-center justify-center">
+                    <div class="border-border box-content grid h-14 w-84 grid-flow-col grid-cols-12 grid-rows-2 items-center justify-center border-2">
                         {PALETTE.map((hex) => (
                             <div
                                 class="h-7 w-7 cursor-pointer transition-transform duration-150 ease-in-out hover:scale-130"
