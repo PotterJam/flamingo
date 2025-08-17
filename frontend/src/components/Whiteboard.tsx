@@ -294,7 +294,7 @@ export const Whiteboard: Component<WhiteboardProps> = () => {
                             }}
                         />
                     </div>
-                    <div class="grid h-14 grid-cols-12 grid-rows-2 items-center justify-center">
+                    <div class="grid h-14 grid-flow-col grid-cols-12 grid-rows-2 items-center justify-center">
                         {PALETTE.map((hex) => (
                             <div
                                 class="h-7 w-7 cursor-pointer transition-transform duration-150 ease-in-out hover:scale-130"
