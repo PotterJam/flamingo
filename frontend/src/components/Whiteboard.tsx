@@ -1,6 +1,5 @@
 import { createSignal, createEffect, Component, Show, onMount } from 'solid-js';
 import { actions, store } from '../store';
-import classNames from 'classnames';
 import { Separator } from './ui/separator';
 import { FaSolidArrowRotateLeft, FaSolidPen } from 'solid-icons/fa';
 import { translatePointerToCanvas } from '../lib/utils/canvas';
@@ -116,7 +115,7 @@ export const Whiteboard: Component<WhiteboardProps> = () => {
     let canvasCtx!: CanvasRenderingContext2D;
 
     const [lastCoord, setLastCoord] = createSignal<Point | null>(null);
-    const [isDrawing, setIsDrawing] = createSignal(false);
+    const [isPainting, setIsPainting] = createSignal(false);
     const [selectedColour, setSelectedColour] =
         createSignal<PaletteColor>('#000000');
     const [selectedThickness, setSelectedThickness] = createSignal(
@@ -156,6 +155,11 @@ export const Whiteboard: Component<WhiteboardProps> = () => {
         });
     });
 
+    createEffect(() => {
+       isDrawer();
+       setIsPainting(false);
+    });
+
     const handlePointerDown = (e: PointerEvent) => {
         e.preventDefault();
         if (!canvasRef || !isDrawer()) return;
@@ -176,7 +180,7 @@ export const Whiteboard: Component<WhiteboardProps> = () => {
             return;
         }
 
-        setIsDrawing(true);
+        setIsPainting(true);
         const [x, y] = translatePointerToCanvas(e, canvasRef);
         setLastCoord({ x, y });
 
@@ -195,9 +199,9 @@ export const Whiteboard: Component<WhiteboardProps> = () => {
 
     const handlePointerUp = (e: PointerEvent) => {
         e.preventDefault();
-        if (!isDrawer() || tool() === 'fill') return;
+        if (!isPainting() || !isDrawer() || tool() === 'fill') return;
 
-        setIsDrawing(false);
+        setIsPainting(false);
 
         const [x, y] = translatePointerToCanvas(e, canvasRef);
         const prev = lastCoord();
@@ -219,7 +223,7 @@ export const Whiteboard: Component<WhiteboardProps> = () => {
     };
 
     const handlePointerLeave = (e: PointerEvent) => {
-        if (!isDrawing()) return;
+        if (!isPainting()) return;
         handlePointerUp(e);
     };
 
@@ -230,7 +234,7 @@ export const Whiteboard: Component<WhiteboardProps> = () => {
     };
 
     const handlePointerMove = (e: PointerEvent) => {
-        if (!isDrawing() || !isDrawer()) return;
+        if (!isPainting() || !isDrawer()) return;
         if (tool() === 'fill') return;
         e.preventDefault();
 
