@@ -1,5 +1,5 @@
 import { createEffect, Show } from 'solid-js';
-import { actions, store } from '../store';
+import { actions, setSendMessageFn, store } from '../store';
 import { Game } from './Game';
 import { useHandleMessage } from '../hooks/useHandleMessage';
 import { useWebSocket } from '../hooks/useWebSocket';
@@ -15,7 +15,7 @@ export const Flamingo = (props: FlamingoProps) => {
     useHandleMessage(receivedMessage);
 
     createEffect(() => {
-        actions.assignSendMessage(sendMessage);
+        setSendMessageFn(sendMessage);
     });
 
     createEffect(() => {

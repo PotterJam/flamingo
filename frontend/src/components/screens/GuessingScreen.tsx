@@ -4,13 +4,12 @@ import PlayerList from '../PlayerList';
 import ChatBox from '../ChatBox';
 import { Whiteboard  }from '../Whiteboard';
 import GuessInput from '../GuessInput';
-import { store } from '../../store';
+import { actions, store } from '~/store.ts';
 import { GameHeader } from '../GameHeader';
 import { Card, CardContent } from '../ui/card';
 import { Separator } from '../ui/separator';
 
 export const GuessingScreen: Component = () => {
-    const sendMessage = () => store.sendMessage;
     const players = () => store.gameState.players;
     const currentDrawerId = () => store.gameState.currentDrawerId;
     const localPlayerId = () => store.gameState.localPlayerId;
@@ -20,9 +19,9 @@ export const GuessingScreen: Component = () => {
 
     const handleGuess = (message: string) => {
         if (isLocalPlayerDrawer() || localPlayer()?.hasGuessedCorrectly) {
-            sendMessage()({ type: 'chat', payload: { message: message } });
+            actions.handleClientMessage(message);
         } else {
-            sendMessage()({ type: 'guess', payload: { guess: message } });
+            actions.handleClientGuess(message);
         }
     };
 

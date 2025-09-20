@@ -1,6 +1,6 @@
 import { createEffect, Accessor } from 'solid-js';
 import { ReceivedMsg } from '../messages';
-import { actions, store } from '../store';
+import { actions } from '../store';
 import { soundManager } from '../sound-manager';
 
 export const useHandleMessage = (message: Accessor<ReceivedMsg | null>) => {
@@ -61,11 +61,7 @@ export const useHandleMessage = (message: Accessor<ReceivedMsg | null>) => {
                     break;
                 }
                 case 'phaseChangeAck': {
-                    store.sendMessage(msg);
-                    break;
-                }
-                case 'canvasUpdate': {
-                    actions.handleCanvasUpdate(msg);
+                    actions.passThroughMessage(msg);
                     break;
                 }
                 case 'error': {

@@ -8,14 +8,13 @@ import {
     PlayerUpdateMsg,
     ReceivedMsg,
     RoundScoreDisplayMsg,
-    SendMsg,
     TurnEndMsg,
     TurnHelpMsg,
     TurnSetupMsg,
     TurnStartMsg,
     GameFinishedMsg,
     WordRevealMsg,
-    DrawEvent,
+    DrawEvent, SendMsg, PhaseChangeAckMsg,
 } from './messages';
 import { GamePhase } from './model';
 
@@ -83,7 +82,6 @@ const initialGameState: GameState = {
 };
 
 export interface AppState {
-    sendMessage: (message: SendMsg) => void;
     lastMessage: ReceivedMsg | null;
     selfName: string;
     selfId: string;
@@ -96,9 +94,6 @@ export interface AppState {
 }
 
 const initialAppState: AppState = {
-    sendMessage: (_) => {
-        throw new Error('sending message without sender configured');
-    },
     lastMessage: null,
     selfName: '',
     selfId: '',
@@ -110,18 +105,11 @@ const initialAppState: AppState = {
 };
 
 const getStoredState = (): Partial<AppState> => {
-    try {
-        const stored = sessionStorage.getItem('flamingo-store');
-        if (stored) {
-            const parsed = JSON.parse(stored);
-            // Don't restore sendMessage from session storage as it should be assigned dynamically
-            const { sendMessage, ...rest } = parsed;
-            return rest;
-        }
-        return {};
-    } catch {
-        return {};
+    const stored = sessionStorage.getItem('flamingo-store');
+    if (stored) {
+        return JSON.parse(stored);
     }
+    return {};
 };
 
 export const [store, setStore] = createStore<AppState>({
@@ -130,23 +118,18 @@ export const [store, setStore] = createStore<AppState>({
 });
 
 createEffect(() => {
-    // Don't save sendMessage to session storage as it should be assigned dynamically
-    const { sendMessage, ...storeWithoutSendMessage } = store;
-    sessionStorage.setItem(
-        'flamingo-store',
-        JSON.stringify(storeWithoutSendMessage)
-    );
+    sessionStorage.setItem('flamingo-store', JSON.stringify(store));
 });
 
-export const actions = {
-    assignSendMessage: (func: (message: SendMsg) => void) => {
-        setStore(
-            produce((state) => {
-                state.sendMessage = func;
-            })
-        );
-    },
+let websocketSend: (message: SendMsg) => void = () => {
+    throw new Error('Send message must be set to send websocket events');
+};
 
+export const setSendMessageFn = (sendMessage:((message: SendMsg) => void)) => {
+    websocketSend = sendMessage;
+}
+
+export const actions = {
     setLastMessage: (message: ReceivedMsg) => {
         setStore(
             produce((state) => {
@@ -353,12 +336,17 @@ export const actions = {
 
     handleClientDraw: (message: DrawEvent) => {
         actions.manageStackEvent(message);
-        store.sendMessage({
+        websocketSend({
             type: 'drawEvent',
             payload: message,
         });
     },
-
+    handleClientMessage: (message: string) => {
+        websocketSend({ type: 'chat', payload: { message: message } })
+    },
+    handleClientGuess: (message: string) => {
+        websocketSend({ type: 'guess', payload: { guess: message } })
+    },
     handleDrawPayload: (message: DrawEvent) => {
         actions.manageStackEvent(message);
         setStore(
@@ -401,5 +389,23 @@ export const actions = {
                 }
             })
         );
+    },
+    handleSelectRoundWord(chosenWord: string) {
+        websocketSend({
+            type: 'selectRoundWord',
+            payload: { word: chosenWord },
+        });
+    },
+    handleStartGame() {
+        websocketSend({
+            type: 'startGame',
+            payload: {
+                roundCount: store.roundCount,
+                roundLength: store.roundLength,
+            },
+        });
+    },
+    passThroughMessage(msg: PhaseChangeAckMsg) {
+        websocketSend(msg);
     },
 };

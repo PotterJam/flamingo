@@ -1,5 +1,5 @@
 import { For, Show, createSignal } from 'solid-js';
-import { actions, store } from '../../store';
+import { actions, store } from '~/store.ts';
 import { MIN_PLAYERS } from '../../App';
 import { Card } from '../ui/card';
 import { Button } from '../ui/button';
@@ -48,13 +48,7 @@ export const LobbyScreen = () => {
 
     const handleStartGame = () => {
         if (canHostStartGame()) {
-            store.sendMessage({
-                type: 'startGame',
-                payload: {
-                    roundCount: store.roundCount,
-                    roundLength: store.roundLength,
-                },
-            });
+            actions.handleStartGame();
         } else {
             console.warn('Start game attempted but conditions not met.');
         }
