@@ -1,7 +1,7 @@
 import { Show } from 'solid-js';
 import { GuessingScreen } from './GuessingScreen';
 import { WordChoiceModal } from '../WordChoiceModal';
-import { store } from '../../store';
+import { actions, store } from '../../store';
 
 export const WordChoiceScreen = () => {
     const isLocalPlayerDrawer = () =>
@@ -13,10 +13,7 @@ export const WordChoiceScreen = () => {
         store.gameState.turnEndTime;
 
     const handleWordChosen = (chosenWord: string) => {
-        store.sendMessage({
-            type: 'selectRoundWord',
-            payload: { word: chosenWord },
-        });
+        actions.handleSelectRoundWord(chosenWord);
     };
 
     return (
