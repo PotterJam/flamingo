@@ -260,10 +260,7 @@ export const Whiteboard: Component<WhiteboardProps> = () => {
             handleEvent(imageData, clearEvent);
         });
 
-        store.sendMessage({
-            type: 'drawEvent',
-            payload: clearEvent,
-        });
+        actions.handleClientDraw(clearEvent);
     };
 
     const handleUndo = () => {
