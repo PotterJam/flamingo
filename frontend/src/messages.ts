@@ -142,19 +142,9 @@ export type DrawEvent =
           eventType: 'undo';
       };
 
-export interface CanvasUpdate {
-    drawPaths: DrawEvent[];
-    rasterData: string;
-}
-
 export interface DrawEventMsg {
     type: 'drawEvent';
     payload: DrawEvent;
-}
-
-export interface CanvasUpdateMsg {
-    type: 'canvasUpdate';
-    payload: CanvasUpdate;
 }
 
 export interface ErrorMsg {
@@ -209,8 +199,7 @@ export type ReceivedMsg =
     | WordRevealMsg
     | TurnHelpMsg
     | PlayerCorrectMsg
-    | PhaseChangeAckMsg
-    | CanvasUpdateMsg;
+    | PhaseChangeAckMsg;
 
 export interface SetNameMsg {
     type: 'setName';
