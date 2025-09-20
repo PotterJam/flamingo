@@ -83,7 +83,6 @@ const initialGameState: GameState = {
 };
 
 export interface AppState {
-    sendMessage: (message: SendMsg) => void;
     lastMessage: ReceivedMsg | null;
     selfName: string;
     selfId: string;
@@ -96,9 +95,6 @@ export interface AppState {
 }
 
 const initialAppState: AppState = {
-    sendMessage: (_) => {
-        throw new Error('sending message without sender configured');
-    },
     lastMessage: null,
     selfName: '',
     selfId: '',
@@ -110,18 +106,11 @@ const initialAppState: AppState = {
 };
 
 const getStoredState = (): Partial<AppState> => {
-    try {
-        const stored = sessionStorage.getItem('flamingo-store');
-        if (stored) {
-            const parsed = JSON.parse(stored);
-            // Don't restore sendMessage from session storage as it should be assigned dynamically
-            const { sendMessage, ...rest } = parsed;
-            return rest;
-        }
-        return {};
-    } catch {
-        return {};
+    const stored = sessionStorage.getItem('flamingo-store');
+    if (stored) {
+        return JSON.parse(stored);
     }
+    return {};
 };
 
 export const [store, setStore] = createStore<AppState>({
@@ -146,6 +135,13 @@ export const actions = {
             })
         );
     },
+let websocketSend: (message: SendMsg) => void = () => {
+    throw new Error('Send message must be set to send websocket events');
+};
+
+export const setSendMessageFn = (sendMessage:((message: SendMsg) => void)) => {
+    websocketSend = sendMessage;
+}
 
     setLastMessage: (message: ReceivedMsg) => {
         setStore(
