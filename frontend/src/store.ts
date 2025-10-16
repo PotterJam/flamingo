@@ -41,6 +41,12 @@ const mapBackendPhaseToFrontend = (backendPhase: string): GamePhase => {
     }
 };
 
+export interface PlayerDrawingHistory {
+    playerId: string;
+    playerName: string;
+    drawingSteps: DrawEvent[];
+}
+
 export interface GameState {
     gamePhase: GamePhase;
     players: Player[];
@@ -61,6 +67,7 @@ export interface GameState {
 
     pendingDrawEvent: DrawEvent | null;
     drawEventsStack: DrawEvent[];
+    drawingHistories: PlayerDrawingHistory[];
 }
 
 const initialGameState: GameState = {
@@ -79,6 +86,7 @@ const initialGameState: GameState = {
     currentRound: null,
     pendingDrawEvent: null,
     drawEventsStack: [],
+    drawingHistories: [],
 };
 
 export interface AppState {
@@ -314,6 +322,7 @@ export const actions = {
                 state.gameState.wordChoices = null;
                 state.gameState.turnEndTime = null;
                 state.gameState.scoreDisplay = null;
+                state.gameState.drawingHistories = payload.drawingHistories || [];
             })
         );
     },

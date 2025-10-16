@@ -154,11 +154,18 @@ export interface ErrorMsg {
     };
 }
 
+export interface PlayerDrawingHistory {
+    playerId: string;
+    playerName: string;
+    drawingSteps: DrawEvent[];
+}
+
 export interface GameFinishedMsg {
     type: 'gameFinished';
     payload: {
         gamePhase: string;
         players: Player[];
+        drawingHistories: PlayerDrawingHistory[];
     };
 }
 
