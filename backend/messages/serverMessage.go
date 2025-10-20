@@ -106,9 +106,16 @@ type RoundScoreDisplayPayload struct {
 	Players     []PlayerInfo      `json:"players"`
 }
 
+type PlayerDrawingHistory struct {
+	PlayerID     string        `json:"playerId"`
+	PlayerName   string        `json:"playerName"`
+	DrawingSteps []interface{} `json:"drawingSteps"`
+}
+
 type GameFinishedPayload struct {
-	GamePhase string       `json:"gamePhase"`
-	Players   []PlayerInfo `json:"players"`
+	GamePhase        string                 `json:"gamePhase"`
+	Players          []PlayerInfo           `json:"players"`
+	DrawingHistories []PlayerDrawingHistory `json:"drawingHistories"`
 }
 
 type WordRevealPayload struct {

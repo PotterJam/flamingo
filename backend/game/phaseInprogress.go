@@ -32,6 +32,9 @@ func (p *RoundInProgressHandler) StartPhase(gs *GameState) {
 	gs.turnEndTime = now.Add(gs.RoundDuration)
 	gs.timerForTimeout = time.NewTimer(gs.RoundDuration)
 
+	// Initialize drawing storage for this round
+	gs.CurrentRoundDrawings = make([]interface{}, 0)
+
 	gs.setupHintTimers()
 
 	turnPayloadBase := messages.TurnStartPayload{
@@ -155,6 +158,12 @@ func (p *RoundInProgressHandler) handleGuessMessage(gs *GameState, player *Playe
 }
 
 func (p *RoundInProgressHandler) handleDrawEvent(gs *GameState, player *Player, msg messages.Message) GamePhaseHandler {
+	// Store the draw event for this player
+	var drawEvent map[string]interface{}
+	if err := json.Unmarshal(msg.Payload, &drawEvent); err == nil {
+		gs.CurrentRoundDrawings = append(gs.CurrentRoundDrawings, drawEvent)
+	}
+
 	go gs.Broadcaster.BroadcastToPlayers(messages.DrawEventBroadcastResponse, msg.Payload, gs.allOtherPlayers(player))
 	return p
 }

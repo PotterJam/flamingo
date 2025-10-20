@@ -101,6 +101,8 @@ func NewGame(b Broadcaster) *Game {
 			TotalRounds:                  1, // Default to 1 round (each player draws once)
 			CurrentRound:                 0,
 			PlayersWhoHaveDrawnThisRound: make([]string, 0),
+			PlayerDrawingHistories:       make(map[string][][]interface{}),
+			CurrentRoundDrawings:         make([]interface{}, 0),
 			PlayerOperations:             make(chan PlayerOperation, 5),
 		},
 		GameHandler: handler,

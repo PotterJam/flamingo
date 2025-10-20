@@ -22,6 +22,17 @@ func (p *RoundFinishedHandler) StartPhase(gs *GameState) {
 		}
 	}
 
+	// Save the drawing history for the current drawer
+	if gs.CurrentDrawerIdx >= 0 && gs.CurrentDrawerIdx < len(gs.Players) {
+		drawer := gs.Players[gs.CurrentDrawerIdx]
+		// Append this round's drawings as a new entry
+		if _, exists := gs.PlayerDrawingHistories[drawer.Id]; !exists {
+			gs.PlayerDrawingHistories[drawer.Id] = make([][]interface{}, 0)
+		}
+		gs.PlayerDrawingHistories[drawer.Id] = append(gs.PlayerDrawingHistories[drawer.Id], gs.CurrentRoundDrawings)
+		log.Printf("GameState: Saved %d draw events for player %s (total rounds drawn: %d)", len(gs.CurrentRoundDrawings), drawer.Name, len(gs.PlayerDrawingHistories[drawer.Id]))
+	}
+
 	gs.PlayersWhoHaveDrawnThisRound = append(gs.PlayersWhoHaveDrawnThisRound, gs.Players[gs.CurrentDrawerIdx].Id)
 
 	// Use very short timeout to immediately proceed to next phase

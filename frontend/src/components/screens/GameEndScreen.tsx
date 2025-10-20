@@ -1,6 +1,7 @@
-import { For } from 'solid-js';
+import { For, createMemo } from 'solid-js';
 import { store } from '../../store';
 import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
+import { DrawingCarousel } from '../DrawingCarousel';
 
 const getMedal = (index: number): string => {
     switch (index) {
@@ -18,9 +19,24 @@ const getMedal = (index: number): string => {
 export const GameEndScreen = () => {
     const finalPlayers = [...store.gameState.players].sort((a, b) => b.score - a.score);
 
+    // Split drawings into left and right side (alternating)
+    const leftDrawings = createMemo(() =>
+        store.gameState.drawingHistories.filter((_, index) => index % 2 === 0)
+    );
+
+    const rightDrawings = createMemo(() =>
+        store.gameState.drawingHistories.filter((_, index) => index % 2 === 1)
+    );
+
     return (
-        <div class="fixed inset-0 z-50 flex items-center justify-center">
-            <Card class="w-sm gap-2 bg-white">
+        <div class="fixed inset-0 z-50 flex items-center justify-center gap-6 p-6">
+            {/* Left carousel */}
+            <div class="flex-shrink-0">
+                <DrawingCarousel drawings={leftDrawings()} side="left" />
+            </div>
+
+            {/* Center scoreboard */}
+            <Card class="w-sm gap-2 bg-white flex-shrink-0">
                 <CardHeader>
                     <CardTitle class="text-2xl">Game complete</CardTitle>
                 </CardHeader>
@@ -46,6 +62,11 @@ export const GameEndScreen = () => {
                     </ul>
                 </CardContent>
             </Card>
+
+            {/* Right carousel */}
+            <div class="flex-shrink-0">
+                <DrawingCarousel drawings={rightDrawings()} side="right" />
+            </div>
         </div>
     );
 };

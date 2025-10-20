@@ -62,6 +62,10 @@ type GameState struct {
 	CurrentRound                 int
 	PlayersWhoHaveDrawnThisRound []string
 
+	// Drawing history storage: map[playerID][][]DrawEvent (array of arrays - one per round they drew)
+	PlayerDrawingHistories map[string][][]interface{}
+	CurrentRoundDrawings   []interface{} // Temporary storage for current round
+
 	// Channel for handlers to request player operations (add, remove, etc.)
 	PlayerOperations chan PlayerOperation
 }
