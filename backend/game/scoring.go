@@ -7,51 +7,80 @@ import (
 )
 
 const (
-	baseScore                = 300
-	subsequentGuesserPenalty = 25
-	minGuesserScore          = 50
-	maxTimePenalty           = 225
-	firstGuessBonus          = 100
+	baseScore                      = 300
+	subsequentGuesserMinDifference = 25
+	minGuesserScore                = 50
+	maxTimePenalty                 = 250
+	firstGuessBonus                = 100
 )
 
-func calculateGuesserScoreAtTime(
-	guessTime time.Time,
-	turnDuration time.Duration,
-	guesserNumber int,
-	firstGuessTime *time.Time,
-) int {
+type GuesserScore struct {
+	PlayerId string
+	Score    int
+}
+
+func calculateGuesserScores(correctGuessTimes map[string]time.Time, turnDuration time.Duration) []GuesserScore {
+	numGuessers := len(correctGuessTimes)
+
+	guessTimeSlice := make([]GuessTime, 0, len(correctGuessTimes))
+	for id, t := range correctGuessTimes {
+		guessTimeSlice = append(guessTimeSlice, GuessTime{
+			playerId: id,
+			Time:     t,
+		})
+	}
+
+	sort.Slice(guessTimeSlice, func(i, j int) bool {
+		return guessTimeSlice[i].Time.Before(guessTimeSlice[j].Time)
+	})
+
+	var firstGuessTime *time.Time = nil
+	if numGuessers > 0 {
+		firstGuessTime = &guessTimeSlice[0].Time
+	}
+
+	guesserScores := make([]GuesserScore, 0, numGuessers)
+
 	if firstGuessTime == nil {
-		return 0
+		return guesserScores
 	}
 
-	timeTaken := guessTime.Sub(*firstGuessTime)
+	for guessNumber, guess := range guessTimeSlice {
 
-	timeRatio := float64(timeTaken) / float64(turnDuration)
+		timeTaken := guess.Time.Sub(*firstGuessTime)
 
-	if timeRatio < 0 {
-		timeRatio = 0
-	} else if timeRatio > 1.0 {
-		timeRatio = 1.0
+		timeRatio := float64(timeTaken) / float64(turnDuration)
+
+		if timeRatio < 0 {
+			timeRatio = 0
+		} else if timeRatio > 1.0 {
+			timeRatio = 1.0
+		}
+
+		score := baseScore - int(float64(maxTimePenalty)*timeRatio)
+
+		if guessNumber == 0 {
+			score += firstGuessBonus
+		} else {
+			previousGuesserScore := guesserScores[guessNumber-1]
+			if (previousGuesserScore.Score - score) < subsequentGuesserMinDifference {
+				score = previousGuesserScore.Score - subsequentGuesserMinDifference
+			}
+		}
+
+		if score < minGuesserScore {
+			score = minGuesserScore
+		}
+
+		guesserScores = append(guesserScores, GuesserScore{guess.playerId, score})
 	}
 
-	score := baseScore - int(float64(maxTimePenalty)*timeRatio)
-
-	if guesserNumber == 0 {
-		score += firstGuessBonus
-	} else {
-		score -= subsequentGuesserPenalty * (guesserNumber - 1)
-	}
-
-	if score < minGuesserScore {
-		return minGuesserScore
-	}
-
-	return score
+	return guesserScores
 }
 
 type GuessTime struct {
-	playerId  string
-	guessTime time.Time
+	playerId string
+	Time     time.Time
 }
 
 func calculateRoundScores(gs *GameState) map[string]int {
@@ -65,25 +94,10 @@ func calculateRoundScores(gs *GameState) map[string]int {
 
 	numGuessers := len(gs.CorrectGuessTimes)
 
-	guessTimeSlice := make([]GuessTime, 0, len(gs.CorrectGuessTimes))
-	for id, t := range gs.CorrectGuessTimes {
-		guessTimeSlice = append(guessTimeSlice, GuessTime{
-			playerId:  id,
-			guessTime: t,
-		})
-	}
+	guesserScores := calculateGuesserScores(gs.CorrectGuessTimes, gs.RoundDuration)
 
-	sort.Slice(guessTimeSlice, func(i, j int) bool {
-		return guessTimeSlice[i].guessTime.Before(guessTimeSlice[j].guessTime)
-	})
-
-	var firstGuessTime *time.Time = nil
-	if numGuessers > 0 {
-		firstGuessTime = &guessTimeSlice[0].guessTime
-	}
-
-	for i, guess := range guessTimeSlice {
-		roundScores[guess.playerId] = calculateGuesserScoreAtTime(guess.guessTime, gs.RoundDuration, i, firstGuessTime)
+	for _, guess := range guesserScores {
+		roundScores[guess.PlayerId] = guess.Score
 	}
 
 	if gs.CurrentDrawerIdx >= 0 && gs.CurrentDrawerIdx < len(gs.Players) {
