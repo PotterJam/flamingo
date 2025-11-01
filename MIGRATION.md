@@ -17,7 +17,7 @@ This document outlines a phased approach to migrate the Flamingo backend from Go
 - Document build, run, and test processes
 
 ### Deliverables
-- [ ] New Phoenix project with `mix new` or generator
+- [ x ] New Phoenix project with `mix new` or generator
 - [ ] WebSocket endpoint configured with Phoenix.Socket
 - [ ] Basic HTTP handler for room creation
 - [ ] Development environment setup (environment config, hot reload)
