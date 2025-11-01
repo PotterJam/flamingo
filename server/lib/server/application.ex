@@ -3,7 +3,12 @@ defmodule Server.Application do
 
   @impl true
   def start(_type, _args) do
-    children = [ServerWeb.Endpoint]
+    children = [
+      {Registry, keys: :unique, name: Server.RoomRegistry},
+      {DynamicSupervisor, name: Server.RoomSupervisor, strategy: :one_for_one},
+      ServerWeb.Endpoint
+    ]
+
     Supervisor.start_link(children, strategy: :one_for_one, name: Server.Supervisor)
   end
 end
