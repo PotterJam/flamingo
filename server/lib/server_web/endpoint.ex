@@ -12,5 +12,5 @@ defmodule ServerWeb.Endpoint do
 
   socket("/ws", ServerWeb.GameSocket, websocket: true, longpoll: false)
 
-  plug(SeverWeb.Router)
+  plug(ServerWeb.Router)
 end
