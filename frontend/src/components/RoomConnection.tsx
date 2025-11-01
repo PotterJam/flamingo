@@ -17,6 +17,7 @@ export const RoomConnection = () => {
         const path = window.location.pathname;
         if (path.startsWith('/join/')) {
             const lobbyName = path.substring(6);
+            // TODO: this doesn't go to the server to verify the room exists like the join button does
             if (lobbyName && !lobbyName.includes('/')) {
                 setRoomName(lobbyName);
             }
