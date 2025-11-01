@@ -19,8 +19,11 @@ func main() {
 	router := mux.NewRouter()
 
 	router.PathPrefix("/assets/").Handler(fileServer)
+
+	// Players can arrive on the site from a join link, so server the SPA from that route as well
 	router.Path("/").HandlerFunc(func(w http.ResponseWriter, r *http.Request) { api.HandleIndex(staticDir, fileServer, w, r) })
 	router.PathPrefix("/join/{roomId}").Methods(http.MethodGet).HandlerFunc(func(w http.ResponseWriter, r *http.Request) { api.HandleIndex(staticDir, fileServer, w, r) })
+
 	router.PathPrefix("/create-room").Methods(http.MethodPost).HandlerFunc(func(w http.ResponseWriter, r *http.Request) { api.HandleCreateRoom(rm, w, r) })
 	router.HandleFunc("/ws/{roomId}", func(w http.ResponseWriter, r *http.Request) { api.ServeWS(rm, w, r) })
 	router.PathPrefix("/{roomId}").Methods(http.MethodGet).HandlerFunc(func(w http.ResponseWriter, r *http.Request) { api.HandleGetRoom(rm, w, r) })
