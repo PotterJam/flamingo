@@ -5,9 +5,14 @@ defmodule ServerWeb.Router do
     plug(:accepts, ["json"])
   end
 
+  # TODO: might need to namespace these behind /api so they don't get served html
+  # scope "/", ServerWeb do
+  #   pipe_through(:api)
+  #   post("/create-room", RoomController, :create)
+  #   get("/:room_id", RoomController, :get)
+  # end
+
   scope "/", ServerWeb do
-    pipe_through(:api)
-    post("/create-room", RoomController, :create)
-    get("/:room_id", RoomController, :get)
+    get("/*path", PageController, :index)
   end
 end
