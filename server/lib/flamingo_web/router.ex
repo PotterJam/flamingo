@@ -3,6 +3,7 @@ defmodule FlamingoWeb.Router do
 
   pipeline :api do
     plug(:accepts, ["json"])
+    plug(ProperCase.Plug.SnakeCaseParams)
   end
 
   # TODO: might need to namespace these behind /api so they don't get served html
