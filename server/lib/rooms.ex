@@ -7,6 +7,7 @@ defmodule Flamingo.Rooms do
            |> File.read!()
            |> String.split("\n", trim: true)
 
+  @spec create_room() :: {:ok, String.t()} | {:error, :room_exists | term()}
   def create_room() do
     room_id = generate_room_id()
 
@@ -14,7 +15,7 @@ defmodule Flamingo.Rooms do
     case DynamicSupervisor.start_child(Flamingo.RoomSupervisor, {Flamingo.Room, room_id}) do
       {:ok, _pid} -> {:ok, room_id}
       {:error, {:already_started, _pid}} -> {:error, :room_exists}
-      error -> error
+      {:error, error} -> {:error, error}
     end
   end
 

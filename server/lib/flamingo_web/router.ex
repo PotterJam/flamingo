@@ -13,6 +13,7 @@ defmodule FlamingoWeb.Router do
   # end
 
   scope "/", FlamingoWeb do
+    post("/create-room", RoomController, :create)
     get("/*path", PageController, :index)
   end
 end
