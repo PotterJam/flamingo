@@ -1,6 +1,6 @@
 import Config
 
-config :server, ServerWeb.Endpoint,
+config :flamingo, FlamingoWeb.Endpoint,
   http: [ip: {127, 0, 0, 1}, port: 8080],
   debug_errors: true,
   code_reloader: true,

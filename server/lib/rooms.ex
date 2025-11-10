@@ -1,4 +1,4 @@
-defmodule Server.Rooms do
+defmodule Flamingo.Rooms do
   @adjectives "priv/adjectives.txt"
               |> File.read!()
               |> String.split("\n", trim: true)
@@ -11,7 +11,7 @@ defmodule Server.Rooms do
     room_id = generate_room_id()
 
     # TODO: what patterns exist for logging these errors ergonomically?
-    case DynamicSupervisor.start_child(Server.RoomSupervisor, {Server.Room, room_id}) do
+    case DynamicSupervisor.start_child(Flamingo.RoomSupervisor, {Flamingo.Room, room_id}) do
       {:ok, _pid} -> {:ok, room_id}
       {:error, {:already_started, _pid}} -> {:error, :room_exists}
       error -> error

@@ -1,4 +1,4 @@
-defmodule ServerWeb.Router do
+defmodule FlamingoWeb.Router do
   use Phoenix.Router
 
   pipeline :api do
@@ -12,7 +12,7 @@ defmodule ServerWeb.Router do
   #   get("/:room_id", RoomController, :get)
   # end
 
-  scope "/", ServerWeb do
+  scope "/", FlamingoWeb do
     get("/*path", PageController, :index)
   end
 end

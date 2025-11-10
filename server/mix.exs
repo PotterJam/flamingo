@@ -1,9 +1,9 @@
-defmodule Server.MixProject do
+defmodule Flamingo.MixProject do
   use Mix.Project
 
   def project do
     [
-      app: :server,
+      app: :flamingo,
       version: "0.1.0",
       elixir: "~> 1.19",
       start_permanent: Mix.env() == :prod,
@@ -14,7 +14,7 @@ defmodule Server.MixProject do
   # Run "mix help compile.app" to learn about applications.
   def application do
     [
-      mod: {Server.Application, []},
+      mod: {Flamingo.Application, []},
       extra_applications: [:logger]
     ]
   end

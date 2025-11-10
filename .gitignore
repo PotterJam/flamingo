@@ -10,3 +10,6 @@ scriblio_server
 backend/tmp
 .idea
 backend/backend
+
+# expert lsp logs
+.expert/

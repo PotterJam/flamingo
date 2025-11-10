@@ -1,10 +1,10 @@
-defmodule ServerWeb.Endpoint do
-  use Phoenix.Endpoint, otp_app: :server
+defmodule FlamingoWeb.Endpoint do
+  use Phoenix.Endpoint, otp_app: :flamingo
 
   # TODO: not sure what files to whitelist yet
   plug(Plug.Static,
     at: "/",
-    from: :server,
+    from: :flamingo,
     gzip: false,
     only: ~w(assets)
   )
@@ -18,7 +18,7 @@ defmodule ServerWeb.Endpoint do
     json_decoder: Jason
   )
 
-  # socket("/ws", ServerWeb.GameSocket, websocket: true, longpoll: false)
+  # socket("/ws", FlamingoWeb.GameSocket, websocket: true, longpoll: false)
 
-  plug(ServerWeb.Router)
+  plug(FlamingoWeb.Router)
 end

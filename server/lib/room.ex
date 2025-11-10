@@ -1,4 +1,4 @@
-defmodule Server.Room do
+defmodule Flamingo.Room do
   use GenServer
 
   @impl true
@@ -11,5 +11,5 @@ defmodule Server.Room do
     GenServer.start_link(__MODULE__, room_id, name: via(room_id))
   end
 
-  defp via(room_id), do: {:via, Registry, {Server.RoomRegistry, room_id}}
+  defp via(room_id), do: {:via, :global, {Flamingo.RoomRegistry, room_id}}
 end

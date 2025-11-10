@@ -1,4 +1,4 @@
-defmodule ServerWeb do
+defmodule FlamingoWeb do
   def controller do
     quote do
       use Phoenix.Controller, formats: [:json]
