@@ -8,6 +8,7 @@ defmodule Flamingo.Game.Player do
         }
 
   @spec new(String.t(), String.t()) :: t()
+
   def new(name, id) do
     %__MODULE__{name: name, id: id}
   end
@@ -26,16 +27,25 @@ defmodule Flamingo.Game do
           word_list: list(String.t())
         }
 
-  # Actions will come in the form `{ :guess, { "player_id", "blah" }`
-  # This function will then respond with an array of mutations that have happened, and the updated state
-  # Mutations will look like `[{:send_to, {:incorrect_guess, "player_id"}}]`
+  # Input actions
+  @type joined_action :: {:joined, {String.t(), String.t()}}
+  @type start_action :: {:start}
+  @type choose_word_action :: {:choose_word, String.t()}
+  @type action :: joined_action | start_action | choose_word_action
+
+  # Result actions
+  @type players_update :: {:players_update, {:new, Player.t()}}
+  @type word_choices :: {:word_choices, {Player.t(), list(String.t())}}
+  @type start_round :: {:start_round}
+  @type mutation :: players_update | word_choices | start_round
 
   @spec new(list(String.t())) :: t()
   def new(word_list) do
     %__MODULE__{word_list: word_list}
   end
 
-  @spec run(t(), {atom(), dynamic()}, non_neg_integer()) :: {list(dynamic()), t()}
+  @spec run(t(), action(), non_neg_integer()) ::
+          {list(mutation()), t()} | {:error, :unknown_action}
 
   def run(state, {:joined, {player_id, player_name}}, _elapsed) do
     player = Player.new(player_name, player_id)
