@@ -1,7 +1,8 @@
 defmodule FlamingoWeb.Endpoint do
   use Phoenix.Endpoint, otp_app: :flamingo
 
-  # TODO: not sure what files to whitelist yet
+  socket("/ws", FlamingoWeb.GameSocket, websocket: true, longpoll: false)
+
   plug(Plug.Static,
     at: "/",
     from: :flamingo,
@@ -17,8 +18,6 @@ defmodule FlamingoWeb.Endpoint do
     pass: ["*/*"],
     json_decoder: Jason
   )
-
-  # socket("/ws", FlamingoWeb.GameSocket, websocket: true, longpoll: false)
 
   plug(FlamingoWeb.Router)
 end
