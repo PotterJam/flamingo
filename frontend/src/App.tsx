@@ -9,7 +9,7 @@ export const MIN_PLAYERS = 2;
 
 function App() {
     const wsUrl = () =>
-        `${WS_ROOT}/${store.roomId}?playerName=${store.selfName}`;
+        `${WS_ROOT}/websocket?roomId=${store.roomId}&playerName=${store.selfName}`;
 
     onMount(() => {
         soundManager.loadSounds();
