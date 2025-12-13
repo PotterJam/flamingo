@@ -34,9 +34,18 @@ defmodule Flamingo.Game.Context do
   @spec remove_player(t(), String.t()) :: t()
   def remove_player(ctx, player_id) do
     new_players = Enum.reject(ctx.players, &(&1.id == player_id))
-    # TOOD: switching host probably needs more than just this
-    new_host = if ctx.host_id == player_id, do: List.first(new_players), else: ctx.host_id
-    %{ctx | players: new_players, host_id: new_host && new_host.id}
+
+    new_host_id =
+      if ctx.host_id == player_id do
+        case List.first(new_players) do
+          nil -> nil
+          player -> player.id
+        end
+      else
+        ctx.host_id
+      end
+
+    %{ctx | players: new_players, host_id: new_host_id}
   end
 
   @spec get_player(t(), String.t()) :: Player.t() | nil
