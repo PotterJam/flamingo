@@ -1,7 +1,7 @@
 import { createSignal, createEffect, onCleanup } from 'solid-js';
 import { ReceivedMsg, SendMsg } from '../messages';
 
-export const WS_ROOT = '/ws';
+export const WS_ROOT = '/game';
 
 export function useWebSocket(url: string) {
     const [isConnected, setIsConnected] = createSignal(false);

@@ -1,7 +1,7 @@
 defmodule FlamingoWeb.Endpoint do
   use Phoenix.Endpoint, otp_app: :flamingo
 
-  socket("/ws", FlamingoWeb.GameSocket, websocket: true, longpoll: false)
+  socket("/game", FlamingoWeb.GameSocket, websocket: true, longpoll: false)
 
   plug(Plug.Static,
     at: "/",

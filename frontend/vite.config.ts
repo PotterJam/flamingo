@@ -19,7 +19,7 @@ export default defineConfig({
                 changeOrigin: true,
                 secure: false,
             },
-            '/ws': {
+            '/game': {
                 target: 'ws://localhost:8080',
                 ws: true,
                 changeOrigin: true,
