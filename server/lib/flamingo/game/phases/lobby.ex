@@ -21,7 +21,7 @@ defmodule Flamingo.Game.Phases.Lobby do
 
     effects = [
       {:send_to, player_id, :game_info, game_info(new_ctx, player_id)},
-      {:broadcast_all, :player_update, player_list(new_ctx)}
+      {:broadcast_all, :player_update, player_update(new_ctx)}
     ]
 
     {:continue, state, new_ctx, effects}
@@ -31,7 +31,7 @@ defmodule Flamingo.Game.Phases.Lobby do
     new_ctx = Context.remove_player(ctx, player_id)
 
     effects = [
-      {:broadcast_all, :player_update, player_list(new_ctx)}
+      {:broadcast_all, :player_update, player_update(new_ctx)}
     ]
 
     {:continue, state, new_ctx, effects}
@@ -58,9 +58,18 @@ defmodule Flamingo.Game.Phases.Lobby do
 
   defp game_info(ctx, player_id) do
     %{
+      game_phase: "WaitingInLobby",
       host_id: ctx.host_id,
-      is_host: Context.is_host?(ctx, player_id),
+      is_game_active: false,
+      your_id: player_id,
       players: player_list(ctx)
+    }
+  end
+
+  defp player_update(ctx) do
+    %{
+      players: player_list(ctx),
+      host_id: ctx.host_id
     }
   end
 

@@ -12,7 +12,11 @@ defmodule Flamingo.Rooms do
     room_id = generate_room_id()
 
     # TODO: what patterns exist for logging these errors ergonomically?
-    case DynamicSupervisor.start_child(Flamingo.RoomSupervisor, {Flamingo.Room, room_id}) do
+    # TODO: Room needs renaming to Game in a lot of places
+    case DynamicSupervisor.start_child(
+           Flamingo.RoomSupervisor,
+           {Flamingo.Game.GameServer, room_id}
+         ) do
       {:ok, _pid} -> {:ok, room_id}
       {:error, {:already_started, _pid}} -> {:error, :room_exists}
       {:error, error} -> {:error, error}
