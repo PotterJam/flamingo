@@ -16,7 +16,7 @@ defmodule Flamingo.MixProject do
   def application do
     [
       mod: {Flamingo.Application, []},
-      extra_applications: [:logger]
+      extra_applications: [:logger, :observer, :wx]
     ]
   end
 

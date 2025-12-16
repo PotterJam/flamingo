@@ -1,5 +1,7 @@
 # Server
 
+To run do: `mix phx.server`
+
 **TODO: Add description**
 
 ## Installation
