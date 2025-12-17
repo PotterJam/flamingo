@@ -4,11 +4,9 @@ defmodule Flamingo.Game.GameServer do
   require Logger
 
   alias Flamingo.Game.{
-    Context,
     EffectExecutor,
     Settings,
     Player,
-    Phases.Lobby,
     GameState,
     RoundState
   }
@@ -81,7 +79,7 @@ defmodule Flamingo.Game.GameServer do
     state = %{state | players: players, game_state: game_state}
 
     # TODO: tell other players about new player
-
+    # TODO: if in drawing phase add them to yet_to_draw
     {:reply, {:ok, player_id}, state}
   end
 
@@ -91,13 +89,14 @@ defmodule Flamingo.Game.GameServer do
       nil ->
         {:noreply, state}
 
-      %{monitor_ref: ref} ->
+      %{ref: ref} ->
         Process.demonitor(ref, [:flush])
-        new_players = Map.delete(state.players, player_id)
-        state = %{state | players: new_players}
+        players = Map.delete(state.players, player_id)
+        state = %{state | players: players}
 
-        action = {:player_left, player_id}
-        {:noreply, dispatch_action(state, action)}
+        # TODO: tell other players about lost player
+        # TODO: if in drawing phase then remove from yet_to_draw
+        {:noreply, state}
     end
   end
 
@@ -107,12 +106,13 @@ defmodule Flamingo.Game.GameServer do
 
   @impl true
   def handle_info({:DOWN, ref, :process, _pid, _reason}, state) do
-    case Enum.find(state.players, fn {_id, %{monitor_ref: r}} -> r == ref end) do
+    case Enum.find(state.players, fn {_id, %{ref: r}} -> r == ref end) do
       {player_id, _} ->
-        new_players = Map.delete(state.players, player_id)
-        state = %{state | players: new_players}
-        action = {:player_left, player_id}
-        {:noreply, dispatch_action(state, action)}
+        players = Map.delete(state.players, player_id)
+        state = %{state | players: players}
+        # TODO: tell other players about lost player
+        # TODO: if in drawing phase then remove from yet_to_draw
+        {:noreply, state}
 
       nil ->
         {:noreply, state}
