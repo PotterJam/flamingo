@@ -4,6 +4,7 @@ defmodule Flamingo.Game.Phases.Lobby do
   require Logger
 
   alias Flamingo.Game.{Context, Player}
+  alias Flamingo.Game.Phases.InProgress
 
   defstruct []
 
@@ -47,7 +48,7 @@ defmodule Flamingo.Game.Phases.Lobby do
 
       true ->
         new_ctx = %{ctx | total_rounds: config.round_count, round_duration: config.round_duration}
-        {:transition, Flamingo.Game.Phases.WordSelection, %{}, new_ctx, []}
+        {:transition, InProgress, %{}, new_ctx, []}
     end
   end
 

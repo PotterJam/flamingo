@@ -106,7 +106,7 @@ defmodule Flamingo.Game.Phases.LobbyTest do
       {state, ctx, []} = Lobby.init(ctx)
       config = %{round_count: 3, round_duration: 60_000}
 
-      {:transition, Flamingo.Game.Phases.WordSelection, _phase_state, new_ctx, []} =
+      {:transition, Flamingo.Game.Phases.InProgress, _phase_state, new_ctx, []} =
         Lobby.handle_action(state, ctx, {:start_game, "p1", config}, 0)
 
       assert new_ctx.total_rounds == 3

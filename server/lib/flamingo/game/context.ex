@@ -4,6 +4,7 @@ defmodule Flamingo.Game.Context do
   defstruct [
     :host_id,
     :round_duration,
+    :current_drawer_id,
     players: [],
     total_rounds: 1,
     current_round: 0,
@@ -13,6 +14,7 @@ defmodule Flamingo.Game.Context do
   @type t :: %__MODULE__{
           host_id: String.t() | nil,
           round_duration: pos_integer() | nil,
+          current_drawer_id: String.t() | nil,
           players: list(Player.t()),
           total_rounds: pos_integer(),
           current_round: non_neg_integer(),

@@ -95,6 +95,11 @@ defmodule FlamingoWeb.GameSocket do
     {:ok, state}
   end
 
+  defp handle_message(%{"type" => "selectRoundWord", "payload" => payload}, state) do
+    GameServer.dispatch(state.room_id, {:select_word, {state.player_id, payload["word"]}})
+    {:ok, state}
+  end
+
   defp handle_message(%{"type" => _type, "payload" => _payload}, state) do
     {:ok, state}
   end
