@@ -3,31 +3,34 @@ defmodule Flamingo.Game.GameServer do
 
   require Logger
 
-  alias Flamingo.Game.{Context, EffectExecutor}
-  alias Flamingo.Game.Phases.Lobby
+  alias Flamingo.Game.{
+    Context,
+    EffectExecutor,
+    Settings,
+    Player,
+    Phases.Lobby,
+    GameState,
+    RoundState
+  }
 
-  @type player_id :: String.t()
   @type room_id :: String.t()
-  @type player_entry :: %{pid: pid(), monitor_ref: reference()}
 
   @type t :: %__MODULE__{
           room_id: room_id(),
-          phase_module: module(),
-          phase_state: term(),
-          context: Context.t(),
-          started_at: integer(),
-          timeout_ref: reference() | nil,
-          players: %{player_id() => player_entry()}
+          phase: atom(),
+          settings: Settings.t(),
+          game_state: GameState.t(),
+          round_state: RoundState.t() | nil,
+          players: %{Player.id() => Player.t()}
         }
 
   defstruct [
     :room_id,
-    :phase_module,
-    :phase_state,
-    :context,
-    :started_at,
-    :timeout_ref,
-    players: %{}
+    :phase,
+    :settings,
+    :game_state,
+    :round_state,
+    players: []
   ]
 
   @spec start_link(room_id()) :: GenServer.on_start()
@@ -35,12 +38,12 @@ defmodule Flamingo.Game.GameServer do
     GenServer.start_link(__MODULE__, room_id, name: via_tuple(room_id))
   end
 
-  @spec register_player(room_id(), String.t(), pid()) :: {:ok, player_id()} | {:error, term()}
+  @spec register_player(room_id(), String.t(), pid()) :: {:ok, Player.id()} | {:error, term()}
   def register_player(room_id, player_name, socket_pid) do
     GenServer.call(via_tuple(room_id), {:register_player, player_name, socket_pid})
   end
 
-  @spec unregister_player(room_id(), player_id()) :: :ok
+  @spec unregister_player(room_id(), Player.id()) :: :ok
   def unregister_player(room_id, player_id) do
     GenServer.cast(via_tuple(room_id), {:unregister_player, player_id})
   end
@@ -58,20 +61,9 @@ defmodule Flamingo.Game.GameServer do
   def init(room_id) do
     Logger.info("GameServer starting for room #{room_id}")
 
-    ctx = Context.new()
-    {phase_state, ctx, effects} = Lobby.init(ctx)
-
     state = %__MODULE__{
-      room_id: room_id,
-      phase_module: Lobby,
-      phase_state: phase_state,
-      context: ctx,
-      started_at: System.monotonic_time(:millisecond),
-      players: %{}
+      room_id: room_id
     }
-
-    state = maybe_set_timeout(state, effects)
-    EffectExecutor.execute_all(effects, state)
 
     {:ok, state}
   end
@@ -81,33 +73,16 @@ defmodule Flamingo.Game.GameServer do
     player_id = UUID.uuid4()
     ref = Process.monitor(socket_pid)
 
-    new_players = Map.put(state.players, player_id, %{pid: socket_pid, monitor_ref: ref})
-    state = %{state | players: new_players}
+    players =
+      Map.put(state.players, player_id, Player.new(player_name, player_id, socket_pid, ref))
 
-    action = {:player_joined, {player_id, player_name}}
-    elapsed = elapsed_time(state.started_at)
+    game_state = GameState.new_player(state.game_state, player_id)
 
-    case apply(state.phase_module, :handle_action, [
-           state.phase_state,
-           state.context,
-           action,
-           elapsed
-         ]) do
-      {:continue, phase_state, ctx, effects} ->
-        state = %{state | phase_state: phase_state, context: ctx}
-        state = maybe_set_timeout(state, effects)
-        EffectExecutor.execute_all(effects, state)
-        {:reply, {:ok, player_id}, state}
+    state = %{state | players: players, game_state: game_state}
 
-      {:transition, new_module, phase_state, ctx, effects} ->
-        state = handle_transition(state, new_module, phase_state, ctx, effects)
-        {:reply, {:ok, player_id}, state}
+    # TODO: tell other players about new player
 
-      {:error, reason} ->
-        Process.demonitor(ref, [:flush])
-        new_players = Map.delete(state.players, player_id)
-        {:reply, {:error, reason}, %{state | players: new_players}}
-    end
+    {:reply, {:ok, player_id}, state}
   end
 
   @impl true
