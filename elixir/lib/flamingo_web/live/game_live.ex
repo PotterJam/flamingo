@@ -54,37 +54,39 @@ defmodule FlamingoWeb.GameLive do
 
   def render(assigns) do
     ~H"""
-    <div :if={@phase == :lobby}>
-      <h1>Room: {@room_id}</h1>
+    <Layouts.app flash={@flash}>
+      <div :if={@phase == :lobby}>
+        <h1>Room: {@room_id}</h1>
 
-      <h2>Players</h2>
-      <ul>
-        <li :for={pid <- @player_order}>
-          {Map.get(@players, pid).name}
-          <span :if={pid == @host_id}>(host)</span>
-        </li>
-      </ul>
+        <h2>Players</h2>
+        <ul>
+          <li :for={pid <- @player_order}>
+            {Map.get(@players, pid).name}
+            <span :if={pid == @host_id}>(host)</span>
+          </li>
+        </ul>
 
-      <form :if={@player_id == @host_id} phx-submit="start_game">
-        <div>
-          <label>Rounds:</label>
-          <input type="range" min="1" max="5" value={@round_count} name="round_count" />
-        </div>
+        <form :if={@player_id == @host_id} phx-submit="start_game">
+          <div>
+            <label>Rounds:</label>
+            <input type="range" min="1" max="5" value={@round_count} name="round_count" />
+          </div>
 
-        <div>
-          <label>Round length (seconds):</label>
-          <input type="number" min="30" value={@round_length} name="round_length" />
-        </div>
+          <div>
+            <label>Round length (seconds):</label>
+            <input type="number" min="30" value={@round_length} name="round_length" />
+          </div>
 
-        <button type="submit" disabled={map_size(@players) < 2}>
-          Start Game
-        </button>
-      </form>
-    </div>
+          <button type="submit" disabled={map_size(@players) < 2}>
+            Start Game
+          </button>
+        </form>
+      </div>
 
-    <div :if={@phase == :playing}>
-      Game started!
-    </div>
+      <div :if={@phase == :playing}>
+        Game started!
+      </div>
+    </Layouts.app>
     """
   end
 

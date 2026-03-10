@@ -9,7 +9,7 @@ defmodule FlamingoWeb.HomeLive do
 
   def render(assigns) do
     ~H"""
-    <div>
+    <Layouts.app flash={@flash}>
       <h1>Flamingo</h1>
 
       <div>
@@ -30,7 +30,7 @@ defmodule FlamingoWeb.HomeLive do
       </div>
 
       <p :if={@error} style="color: red;">{@error}</p>
-    </div>
+    </Layouts.app>
     """
   end
 
