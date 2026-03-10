@@ -11,9 +11,8 @@ defmodule Flamingo.Application do
       FlamingoWeb.Telemetry,
       {DNSCluster, query: Application.get_env(:flamingo, :dns_cluster_query) || :ignore},
       {Phoenix.PubSub, name: Flamingo.PubSub},
-      # Start a worker by calling: Flamingo.Worker.start_link(arg)
-      # {Flamingo.Worker, arg},
-      # Start to serve requests, typically the last entry
+      {Registry, keys: :unique, name: Flamingo.GameRegistry},
+      {Flamingo.GameSupervisor, []},
       FlamingoWeb.Endpoint
     ]
 
