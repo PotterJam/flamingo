@@ -17,7 +17,8 @@ defmodule FlamingoWeb.Router do
   scope "/", FlamingoWeb do
     pipe_through :browser
 
-    get "/", PageController, :home
+    live "/", HomeLive
+    live "/game/:room_id", GameLive
   end
 
   # Other scopes may use custom stacks.
