@@ -4,39 +4,52 @@ defmodule FlamingoWeb.GameLive do
   alias Flamingo.Games
 
   def mount(%{"room_id" => room_id} = _params, _session, socket) do
-    player_id = socket.assigns[:player_id] || get_connect_params(socket)["player_id"]
-
-    case Games.get_state(room_id) do
-      {:ok, state} ->
-        if Map.has_key?(state.players, player_id) do
-          if connected?(socket), do: Games.subscribe(room_id)
-
-          {:ok,
-           assign(socket,
-             room_id: room_id,
-             player_id: player_id,
-             phase: state.phase,
-             players: state.players,
-             player_order: state.player_order,
-             host_id: state.host_id,
-             round_count: state.round_count,
-             round_length: state.round_length
-           )}
-        else
-          {:ok, push_navigate(assign(socket, :flash, %{}), to: ~p"/")}
-        end
-
-      {:error, :not_found} ->
-        {:ok, push_navigate(assign(socket, :flash, %{}), to: ~p"/")}
-    end
+    {:ok,
+     assign(socket,
+       room_id: room_id,
+       player_id: nil,
+       phase: :lobby,
+       players: %{},
+       player_order: [],
+       host_id: nil,
+       round_count: 3,
+       round_length: 30
+     )}
   end
 
   def handle_params(%{"player_id" => player_id}, _uri, socket) do
-    {:noreply, assign(socket, player_id: player_id)}
+    room_id = socket.assigns.room_id
+
+    if connected?(socket) do
+      case Games.get_state(room_id) do
+        {:ok, state} ->
+          if Map.has_key?(state.players, player_id) do
+            Games.subscribe(room_id)
+
+            {:noreply,
+             assign(socket,
+               player_id: player_id,
+               phase: state.phase,
+               players: state.players,
+               player_order: state.player_order,
+               host_id: state.host_id,
+               round_count: state.round_count,
+               round_length: state.round_length
+             )}
+          else
+            {:noreply, push_navigate(socket, to: ~p"/")}
+          end
+
+        {:error, :not_found} ->
+          {:noreply, push_navigate(socket, to: ~p"/")}
+      end
+    else
+      {:noreply, assign(socket, player_id: player_id)}
+    end
   end
 
   def handle_params(_params, _uri, socket) do
-    {:noreply, socket}
+    {:noreply, push_navigate(socket, to: ~p"/")}
   end
 
   def render(assigns) do
