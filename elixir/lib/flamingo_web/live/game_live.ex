@@ -188,7 +188,12 @@ defmodule FlamingoWeb.GameLive do
 
   def handle_event("update_settings", %{"settings" => params}, socket) do
     round_count = String.to_integer(params["round_count"])
-    round_length = max(String.to_integer(params["round_length"]), 30)
+
+    round_length =
+      case Integer.parse(params["round_length"]) do
+        {val, _} -> max(val, 30)
+        :error -> socket.assigns.round_length
+      end
 
     {:noreply, assign(socket, round_count: round_count, round_length: round_length)}
   end

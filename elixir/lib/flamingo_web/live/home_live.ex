@@ -18,67 +18,66 @@ defmodule FlamingoWeb.HomeLive do
         </.card>
 
         <.card class="w-full max-w-xs p-6 text-center">
-          <div class="flex flex-col gap-6">
-            <input
-              type="text"
-              value={@name}
-              phx-keyup="update_name"
-              phx-key=""
-              name="name"
-              placeholder="Enter your name"
-              maxlength="20"
-              class="rounded-base border-2 border-border bg-white px-3 py-2 text-sm placeholder:text-gray-400 focus:ring-2 focus:ring-ring focus:ring-offset-2 focus:outline-none"
-              id="name-input"
-            />
+          <.form for={%{}} as={:lobby} phx-change="update_fields" id="lobby-form">
+            <div class="flex flex-col gap-6">
+              <input
+                type="text"
+                value={@name}
+                name="lobby[name]"
+                placeholder="Enter your name"
+                maxlength="20"
+                class="rounded-base border-2 border-border bg-white px-3 py-2 text-sm placeholder:text-gray-400 focus:ring-2 focus:ring-ring focus:ring-offset-2 focus:outline-none"
+                id="name-input"
+              />
 
-            <.separator />
+              <.separator />
 
-            <div>
-              <p :if={@error} class="mb-2 text-sm text-red-400">{@error}</p>
-              <div class="flex flex-row items-start gap-2">
-                <input
-                  type="text"
-                  value={@room_code}
-                  phx-keyup="update_room_code"
-                  phx-key=""
-                  name="code"
-                  placeholder="Room name"
-                  class="min-w-0 flex-1 rounded-base border-2 border-border bg-white px-3 py-2 text-sm placeholder:text-gray-400 focus:ring-2 focus:ring-ring focus:ring-offset-2 focus:outline-none"
-                  id="room-code-input"
-                />
+              <div>
+                <p :if={@error} class="mb-2 text-sm text-red-400">{@error}</p>
+                <div class="flex flex-row items-start gap-2">
+                  <input
+                    type="text"
+                    value={@room_code}
+                    name="lobby[room_code]"
+                    placeholder="Room name"
+                    class="min-w-0 flex-1 rounded-base border-2 border-border bg-white px-3 py-2 text-sm placeholder:text-gray-400 focus:ring-2 focus:ring-ring focus:ring-offset-2 focus:outline-none"
+                    id="room-code-input"
+                  />
+                  <.button
+                    variant="neutral"
+                    phx-click="join_room"
+                    disabled={String.trim(@name) == "" || String.trim(@room_code) == ""}
+                    id="join-button"
+                  >
+                    Join
+                  </.button>
+                </div>
+                <p class="p-2 text-gray-700">or</p>
                 <.button
-                  variant="neutral"
-                  phx-click="join_room"
-                  disabled={String.trim(@name) == "" || String.trim(@room_code) == ""}
-                  id="join-button"
+                  variant="default"
+                  class="w-full"
+                  phx-click="create_room"
+                  disabled={String.trim(@name) == "" || String.trim(@room_code) != ""}
+                  id="create-room-button"
                 >
-                  Join
+                  Create room
                 </.button>
               </div>
-              <p class="p-2 text-gray-700">or</p>
-              <.button
-                variant="default"
-                class="w-full"
-                phx-click="create_room"
-                disabled={String.trim(@name) == "" || String.trim(@room_code) != ""}
-                id="create-room-button"
-              >
-                Create room
-              </.button>
             </div>
-          </div>
+          </.form>
         </.card>
       </div>
     </Layouts.app>
     """
   end
 
-  def handle_event("update_name", %{"value" => value}, socket) do
-    {:noreply, assign(socket, name: value)}
-  end
-
-  def handle_event("update_room_code", %{"value" => value}, socket) do
-    {:noreply, assign(socket, room_code: value, error: nil)}
+  def handle_event("update_fields", %{"lobby" => params}, socket) do
+    {:noreply,
+     assign(socket,
+       name: params["name"] || "",
+       room_code: params["room_code"] || "",
+       error: nil
+     )}
   end
 
   def handle_event("create_room", _params, socket) do
