@@ -97,8 +97,7 @@ defmodule FlamingoWeb.CoreComponents do
     assigns =
       assign(assigns, :computed_class, [
         "rounded-base border-2 border-border px-4 py-2 text-sm font-bold transition-all cursor-pointer",
-        "active:translate-x-box-shadow-x active:translate-y-box-shadow-y active:shadow-none",
-        "disabled:opacity-50 disabled:cursor-not-allowed disabled:active:translate-x-0 disabled:active:translate-y-0",
+        "disabled:opacity-50 disabled:cursor-not-allowed",
         button_variant_classes(assigns.variant),
         assigns.class
       ])
@@ -118,10 +117,15 @@ defmodule FlamingoWeb.CoreComponents do
     end
   end
 
-  defp button_variant_classes("default"), do: "bg-primary text-primary-foreground shadow-shadow"
-  defp button_variant_classes("neutral"), do: "bg-white text-foreground shadow-destructive"
+  defp button_variant_classes("default"),
+    do:
+      "bg-primary text-primary-foreground shadow-shadow active:translate-x-box-shadow-x active:translate-y-box-shadow-y active:shadow-none disabled:active:translate-x-0 disabled:active:translate-y-0"
+
+  defp button_variant_classes("neutral"),
+    do:
+      "bg-white text-foreground shadow-destructive active:translate-x-box-shadow-x active:translate-y-box-shadow-y active:shadow-none disabled:active:translate-x-0 disabled:active:translate-y-0"
   defp button_variant_classes("ghost"), do: "border-transparent shadow-none hover:bg-primary/20"
-  defp button_variant_classes("outline"), do: "bg-transparent text-foreground shadow-shadow"
+  defp button_variant_classes("outline"), do: "bg-transparent text-foreground shadow-none"
 
   @doc """
   Renders an input with label and error messages.

@@ -55,9 +55,9 @@ defmodule FlamingoWeb.GameLive do
   def render(assigns) do
     ~H"""
     <Layouts.app flash={@flash}>
-      <div class="flex h-full min-h-screen w-full items-center justify-center">
+      <div class="flex h-screen w-full items-center justify-center">
         <%= if @phase == :lobby do %>
-          <.card class="flex h-3/5 min-h-96 w-full max-w-2xl flex-row gap-0 bg-white p-0">
+          <.card class="flex h-3/5 w-full max-w-2xl flex-row gap-0 bg-white p-0">
             <div class="flex flex-1 flex-col gap-4 border-r-2 border-border p-4">
               <h2 class="text-xl font-bold">Players</h2>
               <ul class="space-y-2">
@@ -71,8 +71,8 @@ defmodule FlamingoWeb.GameLive do
               <div class="flex h-full w-full flex-[3] flex-col gap-4 p-4">
                 <div class="space-y-3">
                   <div class="flex w-full justify-between">
-                    <label class="text-sm font-bold">Rounds</label>
-                    <span class="text-sm font-bold">{@round_count}</span>
+                    <label class="text-sm">Rounds</label>
+                    <span class="text-sm">{@round_count}</span>
                   </div>
                   <input
                     type="range"
@@ -81,13 +81,14 @@ defmodule FlamingoWeb.GameLive do
                     value={@round_count}
                     phx-change="update_round_count"
                     name="round_count"
-                    class="w-full accent-pink-300"
+                    class="nb-slider w-full"
+                    style={"--slider-progress: #{(@round_count - 1) / 4 * 100}%"}
                     id="round-count-slider"
                   />
                 </div>
 
                 <div>
-                  <label class="text-sm font-bold">Round length(s)</label>
+                  <label class="text-sm">Round length(s)</label>
                   <div class="mt-1 flex w-48 items-center">
                     <input
                       type="number"
@@ -104,9 +105,9 @@ defmodule FlamingoWeb.GameLive do
 
                 <div class="mt-auto flex w-full flex-col gap-4">
                   <div>
-                    <label class="text-sm font-bold">Room name</label>
+                    <label class="text-sm">Room name</label>
                     <div class="flex flex-row items-center justify-between">
-                      <p class="text-lg font-bold">{@room_id}</p>
+                      <p class="font-bold">{@room_id}</p>
                       <div class="flex gap-1">
                         <.button
                           variant="ghost"
