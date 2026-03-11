@@ -4,11 +4,13 @@ defmodule Flamingo.GameServer do
   defstruct [
     :room_id,
     :host_id,
+    :drawer_id,
     phase: :lobby,
     players: %{},
     player_order: [],
     round_count: 3,
-    round_length: 30
+    round_length: 30,
+    current_drawing: []
   ]
 
   def start_link(room_id) do
@@ -37,6 +39,10 @@ defmodule Flamingo.GameServer do
     GenServer.call(via(room_id), {:start_game, player_id, settings})
   end
 
+  def draw_event(room_id, player_id, event) do
+    GenServer.cast(via(room_id), {:draw_event, player_id, event})
+  end
+
   def get_state(room_id) do
     GenServer.call(via(room_id), :get_state)
   catch
@@ -62,7 +68,11 @@ defmodule Flamingo.GameServer do
     host_id = state.host_id || player_id
 
     new_state = %{state | players: players, player_order: player_order, host_id: host_id}
-    broadcast(state.room_id, {:players_updated, new_state.players, new_state.player_order, new_state.host_id})
+
+    broadcast(
+      state.room_id,
+      {:players_updated, new_state.players, new_state.player_order, new_state.host_id}
+    )
 
     {:reply, {:ok, player_id, new_state}, new_state}
   end
@@ -87,8 +97,17 @@ defmodule Flamingo.GameServer do
          :ok <- validate_player_count(state),
          :ok <- validate_round_count(round_count),
          :ok <- validate_round_length(round_length) do
-      new_state = %{state | phase: :playing, round_count: round_count, round_length: round_length}
-      broadcast(state.room_id, {:game_started, round_count, round_length})
+      drawer_id = List.first(state.player_order)
+
+      new_state = %{
+        state
+        | phase: :playing,
+          round_count: round_count,
+          round_length: round_length,
+          drawer_id: drawer_id
+      }
+
+      broadcast(state.room_id, {:game_started, round_count, round_length, drawer_id})
       {:reply, :ok, new_state}
     else
       {:error, _} = error -> {:reply, error, state}
@@ -108,10 +127,47 @@ defmodule Flamingo.GameServer do
           else: state.host_id
 
       new_state = %{state | players: players, player_order: player_order, host_id: host_id}
-      broadcast(state.room_id, {:players_updated, new_state.players, new_state.player_order, new_state.host_id})
+
+      broadcast(
+        state.room_id,
+        {:players_updated, new_state.players, new_state.player_order, new_state.host_id}
+      )
 
       {:reply, :ok, new_state}
     end
+  end
+
+  @impl true
+  def handle_cast(
+        {:draw_event, player_id, %{"event_type" => "undo"}},
+        %{drawer_id: player_id} = state
+      ) do
+    boundary_types = MapSet.new(["start", "fill", "clear"])
+
+    idx =
+      state.current_drawing
+      |> Enum.reverse()
+      |> Enum.find_index(fn e -> MapSet.member?(boundary_types, e["event_type"]) end)
+
+    new_drawing =
+      case idx do
+        nil -> state.current_drawing
+        n -> Enum.take(state.current_drawing, length(state.current_drawing) - n - 1)
+      end
+
+    new_state = %{state | current_drawing: new_drawing}
+    broadcast(state.room_id, {:draw_event, player_id, %{"event_type" => "undo"}})
+    {:noreply, new_state}
+  end
+
+  def handle_cast({:draw_event, player_id, event}, %{drawer_id: player_id} = state) do
+    new_state = %{state | current_drawing: state.current_drawing ++ [event]}
+    broadcast(state.room_id, {:draw_event, player_id, event})
+    {:noreply, new_state}
+  end
+
+  def handle_cast({:draw_event, _player_id, _event}, state) do
+    {:noreply, state}
   end
 
   defp validate_host(state, player_id) do

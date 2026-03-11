@@ -25,6 +25,10 @@ defmodule Flamingo.Games do
     GameServer.start_game(room_id, player_id, settings)
   end
 
+  def draw_event(room_id, player_id, event) do
+    GameServer.draw_event(room_id, player_id, event)
+  end
+
   def subscribe(room_id) do
     Phoenix.PubSub.subscribe(Flamingo.PubSub, "game:#{room_id}")
   end
