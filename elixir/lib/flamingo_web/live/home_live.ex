@@ -60,7 +60,7 @@ defmodule FlamingoWeb.HomeLive do
                 variant="default"
                 class="w-full"
                 phx-click="create_room"
-                disabled={String.trim(@name) == ""}
+                disabled={String.trim(@name) == "" || String.trim(@room_code) != ""}
                 id="create-room-button"
               >
                 Create room
