@@ -69,39 +69,40 @@ defmodule FlamingoWeb.GameLive do
 
             <%= if @player_id == @host_id do %>
               <div class="flex h-full w-full flex-[3] flex-col gap-4 p-4">
-                <div class="space-y-3">
-                  <div class="flex w-full justify-between">
-                    <label class="text-sm">Rounds</label>
-                    <span class="text-sm">{@round_count}</span>
-                  </div>
-                  <input
-                    type="range"
-                    min="1"
-                    max="5"
-                    value={@round_count}
-                    phx-change="update_round_count"
-                    name="round_count"
-                    class="nb-slider w-full"
-                    style={"--slider-progress: #{(@round_count - 1) / 4 * 100}%"}
-                    id="round-count-slider"
-                  />
-                </div>
-
-                <div>
-                  <label class="text-sm">Round length(s)</label>
-                  <div class="mt-1 flex w-48 items-center">
+                <.form for={%{}} as={:settings} phx-change="update_settings" id="settings-form">
+                  <div class="space-y-1">
+                    <div class="flex w-full justify-between">
+                      <label class="text-sm">Rounds</label>
+                      <span class="text-sm">{@round_count}</span>
+                    </div>
                     <input
-                      type="number"
-                      min="30"
-                      max="120"
-                      value={@round_length}
-                      phx-change="update_round_length"
-                      name="round_length"
-                      class="w-full rounded-base border-2 border-border bg-white px-3 py-2 text-sm focus:ring-2 focus:ring-ring focus:ring-offset-2 focus:outline-none"
-                      id="round-length-input"
+                      type="range"
+                      min="1"
+                      max="5"
+                      value={@round_count}
+                      name="settings[round_count]"
+                      class="nb-slider w-full"
+                      style={"--slider-progress: #{(@round_count - 1) / 4 * 100}%"}
+                      phx-hook=".RoundSlider"
+                      id="round-count-slider"
                     />
                   </div>
-                </div>
+
+                  <div class="mt-4">
+                    <label class="text-sm">Round length(s)</label>
+                    <div class="mt-1 flex w-48 items-center">
+                      <input
+                        type="number"
+                        min="30"
+                        max="120"
+                        value={@round_length}
+                        name="settings[round_length]"
+                        class="w-full rounded-base border-2 border-border bg-white px-3 py-2 text-sm focus:ring-2 focus:ring-ring focus:ring-offset-2 focus:outline-none"
+                        id="round-length-input"
+                      />
+                    </div>
+                  </div>
+                </.form>
 
                 <div class="mt-auto flex w-full flex-col gap-4">
                   <div>
@@ -166,17 +167,30 @@ defmodule FlamingoWeb.GameLive do
           }
         }
       </script>
+      <script :type={Phoenix.LiveView.ColocatedHook} name=".RoundSlider">
+        export default {
+          mounted() {
+            const update = () => {
+              const min = parseInt(this.el.min)
+              const max = parseInt(this.el.max)
+              const val = parseInt(this.el.value)
+              const progress = ((val - min) / (max - min)) * 100
+              this.el.style.setProperty("--slider-progress", progress + "%")
+            }
+            update()
+            this.el.addEventListener("input", () => update())
+          }
+        }
+      </script>
     </Layouts.app>
     """
   end
 
-  def handle_event("update_round_count", %{"round_count" => count}, socket) do
-    {:noreply, assign(socket, round_count: String.to_integer(count))}
-  end
+  def handle_event("update_settings", %{"settings" => params}, socket) do
+    round_count = String.to_integer(params["round_count"])
+    round_length = max(String.to_integer(params["round_length"]), 30)
 
-  def handle_event("update_round_length", %{"round_length" => length}, socket) do
-    value = max(String.to_integer(length), 30)
-    {:noreply, assign(socket, round_length: value)}
+    {:noreply, assign(socket, round_count: round_count, round_length: round_length)}
   end
 
   def handle_event("start_game", _params, socket) do
