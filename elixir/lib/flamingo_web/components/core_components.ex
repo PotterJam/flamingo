@@ -96,7 +96,7 @@ defmodule FlamingoWeb.CoreComponents do
   def button(%{rest: rest} = assigns) do
     assigns =
       assign(assigns, :computed_class, [
-        "rounded-base border-2 border-border px-4 py-2 text-sm font-bold transition-all cursor-pointer",
+        "rounded-base border-2 border-border px-4 py-2 text-sm transition-all cursor-pointer",
         "disabled:opacity-50 disabled:cursor-not-allowed",
         button_variant_classes(assigns.variant),
         assigns.class
