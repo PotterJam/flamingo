@@ -127,7 +127,7 @@ const DrawingCanvas = {
 
       if (this.activeTool === "fill") {
         const fillEvent: DrawEvent = {
-          event_type: "fill", x, y, color: this.selectedColor,
+          event_type: "fill", x: Math.round(x), y: Math.round(y), color: this.selectedColor,
         };
         pushDrawEvent(fillEvent);
         return;

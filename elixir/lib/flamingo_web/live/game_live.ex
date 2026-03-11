@@ -158,7 +158,7 @@ defmodule FlamingoWeb.GameLive do
                   data-tool="fill"
                   class="flex h-10 w-10 cursor-pointer items-center justify-center rounded border border-gray-300 bg-white text-sm"
                 >
-                  <.icon name="hero-paint-brush" class="h-5 w-5" />
+                  <.icon name="hero-swatch" class="h-5 w-5" />
                 </button>
               </div>
 
