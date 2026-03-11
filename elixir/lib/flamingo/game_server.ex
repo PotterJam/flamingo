@@ -62,7 +62,11 @@ defmodule Flamingo.GameServer do
     host_id = state.host_id || player_id
 
     new_state = %{state | players: players, player_order: player_order, host_id: host_id}
-    broadcast(state.room_id, {:players_updated, new_state.players, new_state.player_order, new_state.host_id})
+
+    broadcast(
+      state.room_id,
+      {:players_updated, new_state.players, new_state.player_order, new_state.host_id}
+    )
 
     {:reply, {:ok, player_id, new_state}, new_state}
   end
@@ -108,7 +112,11 @@ defmodule Flamingo.GameServer do
           else: state.host_id
 
       new_state = %{state | players: players, player_order: player_order, host_id: host_id}
-      broadcast(state.room_id, {:players_updated, new_state.players, new_state.player_order, new_state.host_id})
+
+      broadcast(
+        state.room_id,
+        {:players_updated, new_state.players, new_state.player_order, new_state.host_id}
+      )
 
       {:reply, :ok, new_state}
     end

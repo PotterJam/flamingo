@@ -86,6 +86,7 @@ defmodule FlamingoWeb do
       import Phoenix.HTML
       # Core UI components
       import FlamingoWeb.CoreComponents
+      import FlamingoWeb.GameComponents
 
       # Common modules used in templates
       alias Phoenix.LiveView.JS

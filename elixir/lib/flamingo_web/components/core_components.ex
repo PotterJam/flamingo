@@ -89,32 +89,39 @@ defmodule FlamingoWeb.CoreComponents do
       <.button navigate={~p"/"}>Home</.button>
   """
   attr :rest, :global, include: ~w(href navigate patch method download name value disabled)
-  attr :class, :any
-  attr :variant, :string, values: ~w(primary)
+  attr :class, :any, default: nil
+  attr :variant, :string, default: "default", values: ~w(default neutral ghost outline)
   slot :inner_block, required: true
 
   def button(%{rest: rest} = assigns) do
-    variants = %{"primary" => "btn-primary", nil => "btn-primary btn-soft"}
-
     assigns =
-      assign_new(assigns, :class, fn ->
-        ["btn", Map.fetch!(variants, assigns[:variant])]
-      end)
+      assign(assigns, :computed_class, [
+        "rounded-base border-2 border-border px-4 py-2 text-sm font-bold transition-all cursor-pointer",
+        "active:translate-x-box-shadow-x active:translate-y-box-shadow-y active:shadow-none",
+        "disabled:opacity-50 disabled:cursor-not-allowed disabled:active:translate-x-0 disabled:active:translate-y-0",
+        button_variant_classes(assigns.variant),
+        assigns.class
+      ])
 
     if rest[:href] || rest[:navigate] || rest[:patch] do
       ~H"""
-      <.link class={@class} {@rest}>
+      <.link class={@computed_class} {@rest}>
         {render_slot(@inner_block)}
       </.link>
       """
     else
       ~H"""
-      <button class={@class} {@rest}>
+      <button class={@computed_class} {@rest}>
         {render_slot(@inner_block)}
       </button>
       """
     end
   end
+
+  defp button_variant_classes("default"), do: "bg-primary text-primary-foreground shadow-shadow"
+  defp button_variant_classes("neutral"), do: "bg-white text-foreground shadow-destructive"
+  defp button_variant_classes("ghost"), do: "border-transparent shadow-none hover:bg-primary/20"
+  defp button_variant_classes("outline"), do: "bg-transparent text-foreground shadow-shadow"
 
   @doc """
   Renders an input with label and error messages.
@@ -284,8 +291,9 @@ defmodule FlamingoWeb.CoreComponents do
           id={@id}
           value={Phoenix.HTML.Form.normalize_value(@type, @value)}
           class={[
-            @class || "w-full input",
-            @errors != [] && (@error_class || "input-error")
+            @class ||
+              "w-full rounded-base border-2 border-border bg-white px-3 py-2 text-sm placeholder:text-gray-400 focus:ring-2 focus:ring-ring focus:ring-offset-2 focus:outline-none",
+            @errors != [] && (@error_class || "border-red-500")
           ]}
           {@rest}
         />
