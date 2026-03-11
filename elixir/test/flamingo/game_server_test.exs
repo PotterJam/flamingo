@@ -84,7 +84,7 @@ defmodule Flamingo.GameServerTest do
     {:ok, _p2, _} = GameServer.join(room_id, "Bob")
 
     assert :ok = GameServer.start_game(room_id, p1, %{round_count: 2, round_length: 45})
-    assert_receive {:game_started, 2, 45}
+    assert_receive {:game_started, 2, 45, _drawer_id}
 
     {:ok, state} = GameServer.get_state(room_id)
     assert state.phase == :playing
