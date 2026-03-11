@@ -138,6 +138,28 @@ defmodule Flamingo.GameServer do
   end
 
   @impl true
+  def handle_cast(
+        {:draw_event, player_id, %{"event_type" => "undo"}},
+        %{drawer_id: player_id} = state
+      ) do
+    boundary_types = MapSet.new(["start", "fill", "clear"])
+
+    idx =
+      state.current_drawing
+      |> Enum.reverse()
+      |> Enum.find_index(fn e -> MapSet.member?(boundary_types, e["event_type"]) end)
+
+    new_drawing =
+      case idx do
+        nil -> state.current_drawing
+        n -> Enum.take(state.current_drawing, length(state.current_drawing) - n - 1)
+      end
+
+    new_state = %{state | current_drawing: new_drawing}
+    broadcast(state.room_id, {:draw_event, player_id, %{"event_type" => "undo"}})
+    {:noreply, new_state}
+  end
+
   def handle_cast({:draw_event, player_id, event}, %{drawer_id: player_id} = state) do
     new_state = %{state | current_drawing: state.current_drawing ++ [event]}
     broadcast(state.room_id, {:draw_event, player_id, event})

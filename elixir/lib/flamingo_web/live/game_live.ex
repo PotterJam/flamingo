@@ -146,6 +146,42 @@ defmodule FlamingoWeb.GameLive do
                   </div>
                 </button>
               </div>
+
+              <div class="flex gap-1">
+                <button
+                  data-tool="pen"
+                  class="flex h-10 w-10 cursor-pointer items-center justify-center rounded border border-gray-300 bg-white text-sm"
+                >
+                  <.icon name="hero-pencil" class="h-5 w-5" />
+                </button>
+                <button
+                  data-tool="fill"
+                  class="flex h-10 w-10 cursor-pointer items-center justify-center rounded border border-gray-300 bg-white text-sm"
+                >
+                  <.icon name="hero-paint-brush" class="h-5 w-5" />
+                </button>
+              </div>
+
+              <div class="flex gap-1">
+                <button
+                  data-action="undo"
+                  class="flex h-10 w-10 cursor-pointer items-center justify-center rounded border border-gray-300 bg-white text-sm"
+                >
+                  <.icon name="hero-arrow-uturn-left" class="h-5 w-5" />
+                </button>
+                <button
+                  data-action="redo"
+                  class="flex h-10 w-10 cursor-pointer items-center justify-center rounded border border-gray-300 bg-white text-sm"
+                >
+                  <.icon name="hero-arrow-uturn-right" class="h-5 w-5" />
+                </button>
+                <button
+                  data-action="clear"
+                  class="flex h-10 w-10 cursor-pointer items-center justify-center rounded border border-gray-300 bg-white text-sm"
+                >
+                  <.icon name="hero-trash" class="h-5 w-5" />
+                </button>
+              </div>
             </div>
           <% end %>
         </div>
