@@ -35,7 +35,7 @@ defmodule FlamingoWeb.HomeLive do
 
             <div>
               <p :if={@error} class="mb-2 text-sm text-red-400">{@error}</p>
-              <div class="flex flex-row gap-1">
+              <div class="flex flex-row items-start gap-2">
                 <input
                   type="text"
                   value={@room_code}
@@ -43,12 +43,11 @@ defmodule FlamingoWeb.HomeLive do
                   phx-key=""
                   name="code"
                   placeholder="Room name"
-                  class="flex-1 rounded-base border-2 border-border bg-white px-3 py-2 text-sm placeholder:text-gray-400 focus:ring-2 focus:ring-ring focus:ring-offset-2 focus:outline-none"
+                  class="min-w-0 flex-1 rounded-base border-2 border-border bg-white px-3 py-2 text-sm placeholder:text-gray-400 focus:ring-2 focus:ring-ring focus:ring-offset-2 focus:outline-none"
                   id="room-code-input"
                 />
                 <.button
                   variant="neutral"
-                  class="ml-1"
                   phx-click="join_room"
                   disabled={String.trim(@name) == "" || String.trim(@room_code) == ""}
                   id="join-button"
