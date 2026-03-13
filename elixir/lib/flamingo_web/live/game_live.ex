@@ -187,7 +187,7 @@ defmodule FlamingoWeb.GameLive do
                 phx-hook="DrawingCanvas"
                 phx-update="ignore"
                 data-is-drawer={to_string(@player_id == @drawer_id)}
-                class="flex w-[700px] shrink-0 flex-col gap-2"
+                class="flex w-[704px] shrink-0 flex-col gap-2"
               >
                 <.box class="bg-white p-0">
                   <canvas
