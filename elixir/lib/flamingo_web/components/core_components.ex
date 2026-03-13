@@ -89,32 +89,72 @@ defmodule FlamingoWeb.CoreComponents do
       <.button navigate={~p"/"}>Home</.button>
   """
   attr :rest, :global, include: ~w(href navigate patch method download name value disabled)
-  attr :class, :any
-  attr :variant, :string, values: ~w(primary)
+  attr :class, :any, default: nil
+  attr :variant, :string, default: "default", values: ~w(default neutral ghost outline)
+  attr :on_confirm_click, :any, default: nil
   slot :inner_block, required: true
 
-  def button(%{rest: rest} = assigns) do
-    variants = %{"primary" => "btn-primary", nil => "btn-primary btn-soft"}
-
+  def button(%{rest: _rest, on_confirm_click: on_confirm_click} = assigns)
+      when not is_nil(on_confirm_click) do
     assigns =
-      assign_new(assigns, :class, fn ->
-        ["btn", Map.fetch!(variants, assigns[:variant])]
-      end)
+      assigns
+      |> assign(:confirm_click, JS.transition(on_confirm_click, "confirmed", time: 1000))
+      |> assign(:computed_class, [
+        "rounded-base border-2 border-border px-4 py-2 text-sm transition-all cursor-pointer",
+        "disabled:opacity-50 disabled:cursor-not-allowed",
+        "group/confirm",
+        button_variant_classes(assigns.variant),
+        assigns.class
+      ])
+
+    ~H"""
+    <button class={@computed_class} phx-click={@confirm_click} {@rest}>
+      <span class="grid [&>*]:col-start-1 [&>*]:row-start-1 [&>*]:place-self-center">
+        <span class="transition-opacity duration-200 group-[.confirmed]/confirm:opacity-0">
+          {render_slot(@inner_block)}
+        </span>
+        <.icon
+          name="hero-check-badge"
+          class="h-5 w-5 opacity-0 transition-opacity duration-200 group-[.confirmed]/confirm:opacity-100"
+        />
+      </span>
+    </button>
+    """
+  end
+
+  def button(%{rest: rest} = assigns) do
+    assigns =
+      assign(assigns, :computed_class, [
+        "rounded-base border-2 border-border px-4 py-2 text-sm transition-all cursor-pointer",
+        "disabled:opacity-50 disabled:cursor-not-allowed",
+        button_variant_classes(assigns.variant),
+        assigns.class
+      ])
 
     if rest[:href] || rest[:navigate] || rest[:patch] do
       ~H"""
-      <.link class={@class} {@rest}>
+      <.link class={@computed_class} {@rest}>
         {render_slot(@inner_block)}
       </.link>
       """
     else
       ~H"""
-      <button class={@class} {@rest}>
+      <button class={@computed_class} {@rest}>
         {render_slot(@inner_block)}
       </button>
       """
     end
   end
+
+  defp button_variant_classes("default"),
+    do:
+      "bg-primary text-primary-foreground shadow-shadow active:translate-x-box-shadow-x active:translate-y-box-shadow-y active:shadow-none disabled:active:translate-x-0 disabled:active:translate-y-0"
+
+  defp button_variant_classes("neutral"),
+    do:
+      "bg-white text-foreground shadow-destructive active:translate-x-box-shadow-x active:translate-y-box-shadow-y active:shadow-none disabled:active:translate-x-0 disabled:active:translate-y-0"
+  defp button_variant_classes("ghost"), do: "border-transparent shadow-none hover:bg-primary/20"
+  defp button_variant_classes("outline"), do: "bg-transparent text-foreground shadow-none"
 
   @doc """
   Renders an input with label and error messages.
@@ -284,8 +324,9 @@ defmodule FlamingoWeb.CoreComponents do
           id={@id}
           value={Phoenix.HTML.Form.normalize_value(@type, @value)}
           class={[
-            @class || "w-full input",
-            @errors != [] && (@error_class || "input-error")
+            @class ||
+              "w-full rounded-base border-2 border-border bg-white px-3 py-2 text-sm placeholder:text-gray-400 focus:ring-2 focus:ring-ring focus:ring-offset-2 focus:outline-none",
+            @errors != [] && (@error_class || "border-red-500")
           ]}
           {@rest}
         />

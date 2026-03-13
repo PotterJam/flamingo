@@ -22,7 +22,7 @@ defmodule FlamingoWeb.GameLive do
        host_id: nil,
        drawer_id: nil,
        round_count: 3,
-       round_length: 30
+       round_length: 45
      )}
   end
 
@@ -76,32 +76,106 @@ defmodule FlamingoWeb.GameLive do
   def render(assigns) do
     ~H"""
     <Layouts.app flash={@flash}>
-      <div :if={@phase == :lobby}>
-        <h1>Room: {@room_id}</h1>
+      <div class="flex h-screen w-full items-center justify-center">
+        <%= if @phase == :lobby do %>
+          <.card class="flex h-3/5 w-full max-w-2xl flex-row gap-0 bg-white p-0">
+            <div class="flex flex-1 flex-col gap-4 border-r-2 border-border p-4">
+              <h2 class="text-xl font-bold">Players</h2>
+              <ul class="space-y-2">
+                <%= for pid <- @player_order do %>
+                  <li>{Map.get(@players, pid).name}</li>
+                <% end %>
+              </ul>
+            </div>
 
-        <h2>Players</h2>
-        <ul>
-          <li :for={pid <- @player_order}>
-            {Map.get(@players, pid).name}
-            <span :if={pid == @host_id}>(host)</span>
-          </li>
-        </ul>
+            <%= if @player_id == @host_id do %>
+              <div class="flex h-full w-full flex-[3] flex-col gap-4 p-4">
+                <.form for={%{}} as={:settings} phx-change="update_settings" id="settings-form">
+                  <div class="space-y-1">
+                    <div class="flex w-full justify-between">
+                      <label class="text-sm">Rounds</label>
+                      <span class="text-sm">{@round_count}</span>
+                    </div>
+                    <input
+                      type="range"
+                      min="1"
+                      max="5"
+                      value={@round_count}
+                      name="settings[round_count]"
+                      class="nb-slider w-full"
+                      style={"--slider-progress: #{(@round_count - 1) / 4 * 100}%"}
+                      phx-hook=".RoundSlider"
+                      id="round-count-slider"
+                    />
+                  </div>
 
-        <form :if={@player_id == @host_id} phx-submit="start_game">
+                  <div class="mt-4">
+                    <label class="text-sm">Round length(s)</label>
+                    <div class="mt-1 flex w-48 items-center">
+                      <input
+                        type="number"
+                        min="30"
+                        max="120"
+                        value={@round_length}
+                        name="settings[round_length]"
+                        class="w-full rounded-base border-2 border-border bg-white px-3 py-2 text-sm focus:ring-2 focus:ring-ring focus:ring-offset-2 focus:outline-none"
+                        id="round-length-input"
+                      />
+                    </div>
+                  </div>
+                </.form>
+
+                <div class="mt-auto flex w-full flex-col gap-4">
+                  <div>
+                    <label class="text-sm">Room name</label>
+                    <div class="flex flex-row items-center justify-between">
+                      <p class="font-bold">{@room_id}</p>
+                      <div class="flex gap-1">
+                        <.button
+                          variant="ghost"
+                          class="text-xs"
+                          on_confirm_click={
+                            JS.dispatch("phx:copy", detail: %{text: @room_id})
+                          }
+                          id="copy-name-button"
+                        >
+                          Copy name
+                        </.button>
+                        <.button
+                          variant="outline"
+                          class="text-xs"
+                          on_confirm_click={
+                            JS.dispatch("phx:copy", detail: %{text: url(~p"/game/#{@room_id}")})
+                          }
+                          id="copy-link-button"
+                        >
+                          Copy link
+                        </.button>
+                      </div>
+                    </div>
+                  </div>
+
+                  <.button
+                    variant="default"
+                    phx-click="start_game"
+                    disabled={map_size(@players) < 2}
+                    id="start-game-button"
+                  >
+                    Start Game
+                  </.button>
+                </div>
+              </div>
+            <% else %>
+              <div class="my-auto flex-[3] text-center">
+                The host is configuring the game
+              </div>
+            <% end %>
+          </.card>
+        <% else %>
           <div>
-            <label>Rounds:</label>
-            <input type="range" min="1" max="5" value={@round_count} name="round_count" />
+            Game started!
           </div>
-
-          <div>
-            <label>Round length (seconds):</label>
-            <input type="number" min="30" value={@round_length} name="round_length" />
-          </div>
-
-          <button type="submit" disabled={map_size(@players) < 2}>
-            Start Game
-          </button>
-        </form>
+        <% end %>
       </div>
 
       <div :if={@phase == :playing}>
@@ -186,14 +260,54 @@ defmodule FlamingoWeb.GameLive do
           <% end %>
         </div>
       </div>
+
+      <div id="clipboard-handler" phx-hook=".Clipboard" phx-update="ignore"></div>
+      <script :type={Phoenix.LiveView.ColocatedHook} name=".Clipboard">
+        export default {
+          mounted() {
+            window.addEventListener("phx:copy", (event) => {
+              if (event.detail && event.detail.text) {
+                navigator.clipboard.writeText(event.detail.text)
+              }
+            })
+          }
+        }
+      </script>
+      <script :type={Phoenix.LiveView.ColocatedHook} name=".RoundSlider">
+        export default {
+          mounted() {
+            const update = () => {
+              const min = parseInt(this.el.min)
+              const max = parseInt(this.el.max)
+              const val = parseInt(this.el.value)
+              const progress = ((val - min) / (max - min)) * 100
+              this.el.style.setProperty("--slider-progress", progress + "%")
+            }
+            update()
+            this.el.addEventListener("input", () => update())
+          }
+        }
+      </script>
     </Layouts.app>
     """
   end
 
-  def handle_event("start_game", %{"round_count" => count, "round_length" => length}, socket) do
+  def handle_event("update_settings", %{"settings" => params}, socket) do
+    round_count = String.to_integer(params["round_count"])
+
+    round_length =
+      case Integer.parse(params["round_length"]) do
+        {val, _} -> max(val, 30)
+        :error -> socket.assigns.round_length
+      end
+
+    {:noreply, assign(socket, round_count: round_count, round_length: round_length)}
+  end
+
+  def handle_event("start_game", _params, socket) do
     settings = %{
-      round_count: String.to_integer(count),
-      round_length: max(String.to_integer(length), 30)
+      round_count: socket.assigns.round_count,
+      round_length: socket.assigns.round_length
     }
 
     case Games.start_game(socket.assigns.room_id, socket.assigns.player_id, settings) do

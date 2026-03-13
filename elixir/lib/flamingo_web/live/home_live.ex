@@ -4,38 +4,86 @@ defmodule FlamingoWeb.HomeLive do
   alias Flamingo.Games
 
   def mount(_params, _session, socket) do
-    {:ok, assign(socket, create_name: "", join_name: "", join_code: "", error: nil)}
+    {:ok, assign(socket, name: "", room_code: "", error: nil)}
   end
 
   def render(assigns) do
     ~H"""
     <Layouts.app flash={@flash}>
-      <h1>Flamingo</h1>
+      <div class="flex h-full min-h-screen w-full flex-col items-center justify-center gap-4">
+        <.card class="w-full max-w-xs bg-white px-6 py-4">
+          <div class="flex justify-center">
+            <.logo />
+          </div>
+        </.card>
 
-      <div>
-        <h2>Create Room</h2>
-        <form phx-submit="create_room">
-          <input type="text" name="name" value={@create_name} placeholder="Your name" required />
-          <button type="submit">Create Room</button>
-        </form>
+        <.card class="w-full max-w-xs p-6 text-center">
+          <.form for={%{}} as={:lobby} phx-change="update_fields" id="lobby-form">
+            <div class="flex flex-col gap-6">
+              <input
+                type="text"
+                value={@name}
+                name="lobby[name]"
+                placeholder="Enter your name"
+                maxlength="20"
+                class="rounded-base border-2 border-border bg-white px-3 py-2 text-sm placeholder:text-gray-400 focus:ring-2 focus:ring-ring focus:ring-offset-2 focus:outline-none"
+                id="name-input"
+              />
+
+              <.separator />
+
+              <div>
+                <p :if={@error} class="mb-2 text-sm text-red-400">{@error}</p>
+                <div class="flex flex-row items-start gap-2">
+                  <input
+                    type="text"
+                    value={@room_code}
+                    name="lobby[room_code]"
+                    placeholder="Room name"
+                    class="min-w-0 flex-1 rounded-base border-2 border-border bg-white px-3 py-2 text-sm placeholder:text-gray-400 focus:ring-2 focus:ring-ring focus:ring-offset-2 focus:outline-none"
+                    id="room-code-input"
+                  />
+                  <.button
+                    type="button"
+                    variant="neutral"
+                    phx-click="join_room"
+                    disabled={String.trim(@name) == "" || String.trim(@room_code) == ""}
+                    id="join-button"
+                  >
+                    Join
+                  </.button>
+                </div>
+                <p class="p-2 text-gray-700">or</p>
+                <.button
+                  type="button"
+                  variant="default"
+                  class="w-full"
+                  phx-click="create_room"
+                  disabled={String.trim(@name) == "" || String.trim(@room_code) != ""}
+                  id="create-room-button"
+                >
+                  Create room
+                </.button>
+              </div>
+            </div>
+          </.form>
+        </.card>
       </div>
-
-      <div>
-        <h2>Join Room</h2>
-        <form phx-submit="join_room">
-          <input type="text" name="name" value={@join_name} placeholder="Your name" required />
-          <input type="text" name="code" value={@join_code} placeholder="Room code" required />
-          <button type="submit">Join Room</button>
-        </form>
-      </div>
-
-      <p :if={@error} style="color: red;">{@error}</p>
     </Layouts.app>
     """
   end
 
-  def handle_event("create_room", %{"name" => name}, socket) do
-    name = String.trim(name)
+  def handle_event("update_fields", %{"lobby" => params}, socket) do
+    {:noreply,
+     assign(socket,
+       name: params["name"] || "",
+       room_code: params["room_code"] || "",
+       error: nil
+     )}
+  end
+
+  def handle_event("create_room", _params, socket) do
+    name = String.trim(socket.assigns.name)
 
     if name == "" do
       {:noreply, assign(socket, error: "Name cannot be empty")}
@@ -49,9 +97,9 @@ defmodule FlamingoWeb.HomeLive do
     end
   end
 
-  def handle_event("join_room", %{"name" => name, "code" => code}, socket) do
-    name = String.trim(name)
-    code = String.trim(code)
+  def handle_event("join_room", _params, socket) do
+    name = String.trim(socket.assigns.name)
+    code = String.trim(socket.assigns.room_code)
 
     cond do
       name == "" ->
