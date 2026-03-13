@@ -91,7 +91,36 @@ defmodule FlamingoWeb.CoreComponents do
   attr :rest, :global, include: ~w(href navigate patch method download name value disabled)
   attr :class, :any, default: nil
   attr :variant, :string, default: "default", values: ~w(default neutral ghost outline)
+  attr :on_confirm_click, :any, default: nil
   slot :inner_block, required: true
+
+  def button(%{rest: _rest, on_confirm_click: on_confirm_click} = assigns)
+      when not is_nil(on_confirm_click) do
+    assigns =
+      assigns
+      |> assign(:confirm_click, JS.transition(on_confirm_click, "confirmed", time: 1000))
+      |> assign(:computed_class, [
+        "rounded-base border-2 border-border px-4 py-2 text-sm transition-all cursor-pointer",
+        "disabled:opacity-50 disabled:cursor-not-allowed",
+        "group/confirm",
+        button_variant_classes(assigns.variant),
+        assigns.class
+      ])
+
+    ~H"""
+    <button class={@computed_class} phx-click={@confirm_click} {@rest}>
+      <span class="grid [&>*]:col-start-1 [&>*]:row-start-1 [&>*]:place-self-center">
+        <span class="transition-opacity duration-200 group-[.confirmed]/confirm:opacity-0">
+          {render_slot(@inner_block)}
+        </span>
+        <.icon
+          name="hero-check-badge"
+          class="h-5 w-5 opacity-0 transition-opacity duration-200 group-[.confirmed]/confirm:opacity-100"
+        />
+      </span>
+    </button>
+    """
+  end
 
   def button(%{rest: rest} = assigns) do
     assigns =

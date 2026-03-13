@@ -134,7 +134,9 @@ defmodule FlamingoWeb.GameLive do
                         <.button
                           variant="ghost"
                           class="text-xs"
-                          phx-click={JS.dispatch("phx:copy", detail: %{text: @room_id})}
+                          on_confirm_click={
+                            JS.dispatch("phx:copy", detail: %{text: @room_id})
+                          }
                           id="copy-name-button"
                         >
                           Copy name
@@ -142,7 +144,7 @@ defmodule FlamingoWeb.GameLive do
                         <.button
                           variant="outline"
                           class="text-xs"
-                          phx-click={
+                          on_confirm_click={
                             JS.dispatch("phx:copy", detail: %{text: url(~p"/game/#{@room_id}")})
                           }
                           id="copy-link-button"
