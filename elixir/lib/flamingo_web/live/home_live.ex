@@ -3,8 +3,9 @@ defmodule FlamingoWeb.HomeLive do
 
   alias Flamingo.Games
 
-  def mount(_params, _session, socket) do
-    {:ok, assign(socket, name: "", room_code: "", error: nil)}
+  def mount(params, _session, socket) do
+    room_code = params["room"] || ""
+    {:ok, assign(socket, name: "", room_code: room_code, error: nil)}
   end
 
   def render(assigns) do
