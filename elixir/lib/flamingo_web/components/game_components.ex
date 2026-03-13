@@ -84,6 +84,20 @@ defmodule FlamingoWeb.GameComponents do
     """
   end
 
+  attr :class, :any, default: nil
+  slot :inner_block, required: true
+
+  def button_group(assigns) do
+    ~H"""
+    <div class={[
+      "flex border-2 border-border bg-white shadow-shadow",
+      @class
+    ]}>
+      {render_slot(@inner_block)}
+    </div>
+    """
+  end
+
   attr :palette, :list, required: true
 
   def drawing_toolbar(assigns) do
@@ -99,11 +113,11 @@ defmodule FlamingoWeb.GameComponents do
         </button>
       </div>
 
-      <div class="flex gap-1">
+      <.button_group>
         <button
           :for={size <- [6, 9, 15]}
           data-size={size}
-          class="flex h-10 w-10 cursor-pointer items-center justify-center border-2 border-border bg-white shadow-shadow active:translate-x-box-shadow-x active:translate-y-box-shadow-y active:shadow-none"
+          class="flex h-10 w-10 cursor-pointer items-center justify-center border-r-2 border-border bg-white last:border-r-0"
         >
           <div
             class="rounded-full bg-black"
@@ -111,39 +125,39 @@ defmodule FlamingoWeb.GameComponents do
           >
           </div>
         </button>
-      </div>
+      </.button_group>
 
-      <div class="flex gap-1">
+      <.button_group>
         <button
           data-tool="pen"
-          class="flex h-10 w-10 cursor-pointer items-center justify-center border-2 border-border bg-white shadow-shadow active:translate-x-box-shadow-x active:translate-y-box-shadow-y active:shadow-none"
+          class="flex h-10 w-10 cursor-pointer items-center justify-center border-r-2 border-border bg-white"
         >
           <.icon name="hero-paint-brush" class="h-5 w-5" />
         </button>
         <button
           data-tool="fill"
-          class="flex h-10 w-10 cursor-pointer items-center justify-center border-2 border-border bg-white shadow-shadow active:translate-x-box-shadow-x active:translate-y-box-shadow-y active:shadow-none"
+          class="flex h-10 w-10 cursor-pointer items-center justify-center bg-white"
         >
           <.icon name="hero-arrows-pointing-in" class="h-5 w-5" />
         </button>
-      </div>
+      </.button_group>
 
       <div class="flex gap-1">
         <button
           data-action="undo"
-          class="flex h-10 w-10 cursor-pointer items-center justify-center border-2 border-border bg-white shadow-shadow active:translate-x-box-shadow-x active:translate-y-box-shadow-y active:shadow-none"
+          class="flex h-10 w-10 cursor-pointer items-center justify-center hover:bg-pink-100"
         >
           <.icon name="hero-arrow-uturn-left" class="h-5 w-5" />
         </button>
         <button
           data-action="redo"
-          class="flex h-10 w-10 cursor-pointer items-center justify-center border-2 border-border bg-white shadow-shadow active:translate-x-box-shadow-x active:translate-y-box-shadow-y active:shadow-none"
+          class="flex h-10 w-10 cursor-pointer items-center justify-center hover:bg-pink-100"
         >
           <.icon name="hero-arrow-uturn-right" class="h-5 w-5" />
         </button>
         <button
           data-action="clear"
-          class="flex h-10 w-10 cursor-pointer items-center justify-center border-2 border-border bg-white shadow-shadow active:translate-x-box-shadow-x active:translate-y-box-shadow-y active:shadow-none"
+          class="flex h-10 w-10 cursor-pointer items-center justify-center hover:bg-pink-100"
         >
           <.icon name="hero-trash" class="h-5 w-5" />
         </button>

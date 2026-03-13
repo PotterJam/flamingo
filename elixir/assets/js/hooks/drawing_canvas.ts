@@ -235,8 +235,8 @@ const DrawingCanvas = {
     };
 
     selectGroup("data-color", ["ring-2", "ring-offset-1"], (v) => { this.selectedColor = v; });
-    selectGroup("data-size", ["ring-2"], (v) => { this.selectedThickness = parseInt(v, 10); });
-    selectGroup("data-tool", ["ring-2"], (v) => { this.activeTool = v; });
+    selectGroup("data-size", ["bg-pink-300"], (v) => { this.selectedThickness = parseInt(v, 10); });
+    selectGroup("data-tool", ["bg-pink-300"], (v) => { this.activeTool = v; });
 
     this.el.querySelector("[data-action='undo']")?.addEventListener("click", () => {
       this.performUndo();
@@ -251,8 +251,8 @@ const DrawingCanvas = {
     });
 
     this.el.querySelector(`[data-color="#000000"]`)?.classList.add("ring-2", "ring-offset-1");
-    this.el.querySelector(`[data-size="9"]`)?.classList.add("ring-2");
-    this.el.querySelector(`[data-tool="pen"]`)?.classList.add("ring-2");
+    this.el.querySelector(`[data-size="9"]`)?.classList.add("bg-pink-300");
+    this.el.querySelector(`[data-tool="pen"]`)?.classList.add("bg-pink-300");
   },
 };
 
