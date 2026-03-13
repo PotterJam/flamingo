@@ -6,14 +6,25 @@ defmodule FlamingoWeb.GameComponents do
   attr :class, :any, default: nil
   slot :inner_block, required: true
 
-  def card(assigns) do
+  def box(assigns) do
     ~H"""
     <div class={[
-      "rounded-base border-2 border-border bg-background shadow-shadow",
+      "rounded-base border-2 border-border shadow-shadow",
       @class
     ]}>
       {render_slot(@inner_block)}
     </div>
+    """
+  end
+
+  attr :class, :any, default: nil
+  slot :inner_block, required: true
+
+  def card(assigns) do
+    ~H"""
+    <.box class={["bg-background", @class]}>
+      {render_slot(@inner_block)}
+    </.box>
     """
   end
 
@@ -37,11 +48,11 @@ defmodule FlamingoWeb.GameComponents do
 
   def game_header(assigns) do
     ~H"""
-    <.card class="bg-pink-400 p-3">
+    <.box class="bg-pink-400 p-3">
       <div class="flex items-center justify-center">
-        <p class="font-retro-display text-xl tracking-widest text-white">{@word}</p>
+        <p class="text-xl font-bold tracking-widest text-white">{@word}</p>
       </div>
-    </.card>
+    </.box>
     """
   end
 
@@ -51,9 +62,7 @@ defmodule FlamingoWeb.GameComponents do
 
   def player_list_panel(assigns) do
     ~H"""
-    <.card class="flex w-full flex-1 flex-col bg-white p-0">
-      <h2 class="p-3 text-lg font-bold">Players</h2>
-      <.separator />
+    <.box class="flex w-full flex-1 flex-col bg-white p-0">
       <div class="min-h-0 flex-grow overflow-y-auto">
         <ul>
           <%= for pid <- @player_order do %>
@@ -63,7 +72,7 @@ defmodule FlamingoWeb.GameComponents do
             ]}>
               <span class="inline-flex h-5 w-5 shrink-0 items-center justify-center">
                 <%= if pid == @drawer_id do %>
-                  <.icon name="hero-pencil" class="h-4 w-4" />
+                  <.icon name="hero-paint-brush" class="h-4 w-4" />
                 <% end %>
               </span>
               <span class="truncate">{Map.get(@players, pid).name}</span>
@@ -71,7 +80,7 @@ defmodule FlamingoWeb.GameComponents do
           <% end %>
         </ul>
       </div>
-    </.card>
+    </.box>
     """
   end
 
@@ -79,7 +88,6 @@ defmodule FlamingoWeb.GameComponents do
 
   def drawing_toolbar(assigns) do
     ~H"""
-    <.separator />
     <div class="flex w-full flex-row items-center justify-between gap-2 p-2">
       <div class="grid grid-cols-13 grid-rows-2 border-2 border-border">
         <button
@@ -110,13 +118,13 @@ defmodule FlamingoWeb.GameComponents do
           data-tool="pen"
           class="flex h-10 w-10 cursor-pointer items-center justify-center border-2 border-border bg-white shadow-shadow active:translate-x-box-shadow-x active:translate-y-box-shadow-y active:shadow-none"
         >
-          <.icon name="hero-pencil" class="h-5 w-5" />
+          <.icon name="hero-paint-brush" class="h-5 w-5" />
         </button>
         <button
           data-tool="fill"
           class="flex h-10 w-10 cursor-pointer items-center justify-center border-2 border-border bg-white shadow-shadow active:translate-x-box-shadow-x active:translate-y-box-shadow-y active:shadow-none"
         >
-          <.icon name="hero-paint-brush" class="h-5 w-5" />
+          <.icon name="hero-arrows-pointing-in" class="h-5 w-5" />
         </button>
       </div>
 
