@@ -50,12 +50,12 @@
 
 :root {
   --background: var(--color-pink-200);
-  --foreground: oklch(0.28 0.09 268);
+  --foreground: oklch(0 0 0);
   --primary: var(--color-pink-300);
-  --primary-foreground: oklch(0.28 0.09 268);
+  --primary-foreground: oklch(0 0 0);
   --secondary-background: oklch(100% 0 0);
-  --border: oklch(0.28 0.09 268);
-  --ring: oklch(0.28 0.09 268);
+  --border: oklch(0 0 0);
+  --ring: oklch(0 0 0);
   --shadow: 4px 4px 0px 0px var(--border);
   --shadow-destructive: 4px 4px 0px 0px oklch(0 0 0);
 }
