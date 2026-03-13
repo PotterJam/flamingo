@@ -44,6 +44,7 @@ defmodule FlamingoWeb.HomeLive do
                     id="room-code-input"
                   />
                   <.button
+                    type="button"
                     variant="neutral"
                     phx-click="join_room"
                     disabled={String.trim(@name) == "" || String.trim(@room_code) == ""}
@@ -54,6 +55,7 @@ defmodule FlamingoWeb.HomeLive do
                 </div>
                 <p class="p-2 text-gray-700">or</p>
                 <.button
+                  type="button"
                   variant="default"
                   class="w-full"
                   phx-click="create_room"
