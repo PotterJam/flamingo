@@ -171,47 +171,46 @@ defmodule FlamingoWeb.GameLive do
           </.card>
         </div>
       <% else %>
-        <div class="flex h-screen w-full items-center justify-center p-4">
-          <div class="flex h-[675px] w-full max-w-[1200px] flex-col gap-4">
+        <div class="flex h-screen w-full items-center justify-center p-6">
+          <div class="flex h-[675px] w-full max-w-[1200px] flex-col gap-3">
             <.game_header />
 
-            <div class="flex w-full flex-1 flex-row gap-4 overflow-hidden">
+            <div class="flex w-full flex-1 flex-row gap-3 pb-1 pr-1">
               <.player_list_panel
                 players={@players}
                 player_order={@player_order}
                 drawer_id={@drawer_id}
               />
 
-              <div class="flex w-[700px] shrink-0 flex-col">
-                <.card class="bg-white p-0">
-                  <div
-                    id="drawing-canvas"
-                    phx-hook="DrawingCanvas"
-                    phx-update="ignore"
-                    data-is-drawer={to_string(@player_id == @drawer_id)}
+              <div
+                id="drawing-canvas"
+                phx-hook="DrawingCanvas"
+                phx-update="ignore"
+                data-is-drawer={to_string(@player_id == @drawer_id)}
+                class="flex w-[700px] shrink-0 flex-col gap-2"
+              >
+                <.box class="bg-white p-0">
+                  <canvas
+                    width="700"
+                    height="500"
+                    class={[
+                      "bg-white",
+                      if(@player_id == @drawer_id, do: "cursor-crosshair", else: "cursor-default")
+                    ]}
                   >
-                    <canvas
-                      width="700"
-                      height="500"
-                      class={[
-                        "bg-white",
-                        if(@player_id == @drawer_id, do: "cursor-crosshair", else: "cursor-default")
-                      ]}
-                    >
-                    </canvas>
+                  </canvas>
+                </.box>
 
-                    <%= if @player_id == @drawer_id do %>
-                      <.drawing_toolbar palette={palette()} />
-                    <% end %>
-                  </div>
-                </.card>
+                <%= if @player_id == @drawer_id do %>
+                  <.box class="bg-white p-0">
+                    <.drawing_toolbar palette={palette()} />
+                  </.box>
+                <% end %>
               </div>
 
-              <.card class="flex w-full flex-1 flex-col bg-white p-0">
-                <h2 class="p-3 text-lg font-bold">Feed</h2>
-                <.separator />
+              <.box class="flex w-full flex-1 flex-col bg-white p-0">
                 <div class="flex-1" />
-              </.card>
+              </.box>
             </div>
           </div>
         </div>
