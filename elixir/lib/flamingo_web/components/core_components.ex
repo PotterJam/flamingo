@@ -91,6 +91,7 @@ defmodule FlamingoWeb.CoreComponents do
   attr :rest, :global, include: ~w(href navigate patch method download name value disabled)
   attr :class, :any, default: nil
   attr :variant, :string, default: "default", values: ~w(default neutral ghost outline)
+  attr :size, :string, default: "default", values: ~w(default sm)
   attr :on_confirm_click, :any, default: nil
   slot :inner_block, required: true
 
@@ -100,9 +101,10 @@ defmodule FlamingoWeb.CoreComponents do
       assigns
       |> assign(:confirm_click, JS.transition(on_confirm_click, "confirmed", time: 1000))
       |> assign(:computed_class, [
-        "rounded-base border-2 border-border px-4 py-2 text-sm transition-all cursor-pointer",
+        "rounded-base border-2 border-border transition-all cursor-pointer",
         "disabled:opacity-50 disabled:cursor-not-allowed",
         "group/confirm",
+        button_size_classes(assigns.size),
         button_variant_classes(assigns.variant),
         assigns.class
       ])
@@ -125,8 +127,9 @@ defmodule FlamingoWeb.CoreComponents do
   def button(%{rest: rest} = assigns) do
     assigns =
       assign(assigns, :computed_class, [
-        "rounded-base border-2 border-border px-4 py-2 text-sm transition-all cursor-pointer",
+        "rounded-base border-2 border-border transition-all cursor-pointer",
         "disabled:opacity-50 disabled:cursor-not-allowed",
+        button_size_classes(assigns.size),
         button_variant_classes(assigns.variant),
         assigns.class
       ])
@@ -146,6 +149,9 @@ defmodule FlamingoWeb.CoreComponents do
     end
   end
 
+  defp button_size_classes("default"), do: "px-4 py-2 text-sm"
+  defp button_size_classes("sm"), do: "px-2 py-1 text-xs"
+
   defp button_variant_classes("default"),
     do:
       "bg-primary text-primary-foreground shadow-shadow active:translate-x-box-shadow-x active:translate-y-box-shadow-y active:shadow-none disabled:active:translate-x-0 disabled:active:translate-y-0"
@@ -153,8 +159,23 @@ defmodule FlamingoWeb.CoreComponents do
   defp button_variant_classes("neutral"),
     do:
       "bg-white text-foreground shadow-destructive active:translate-x-box-shadow-x active:translate-y-box-shadow-y active:shadow-none disabled:active:translate-x-0 disabled:active:translate-y-0"
+
   defp button_variant_classes("ghost"), do: "border-transparent shadow-none hover:bg-primary/20"
   defp button_variant_classes("outline"), do: "bg-transparent text-foreground shadow-none"
+
+  attr :class, :any, default: nil
+  slot :inner_block, required: true
+
+  def button_group(assigns) do
+    ~H"""
+    <div class={[
+      "flex border-2 border-border bg-white",
+      @class
+    ]}>
+      {render_slot(@inner_block)}
+    </div>
+    """
+  end
 
   @doc """
   Renders an input with label and error messages.

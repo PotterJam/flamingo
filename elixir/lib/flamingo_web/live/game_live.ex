@@ -76,8 +76,8 @@ defmodule FlamingoWeb.GameLive do
   def render(assigns) do
     ~H"""
     <Layouts.app flash={@flash}>
-      <div class="flex h-screen w-full items-center justify-center">
-        <%= if @phase == :lobby do %>
+      <%= if @phase == :lobby do %>
+        <div class="flex h-screen w-full items-center justify-center">
           <.card class="flex h-3/5 w-full max-w-2xl flex-row gap-0 bg-white p-0">
             <div class="flex flex-1 flex-col gap-4 border-r-2 border-border p-4">
               <h2 class="text-xl font-bold">Players</h2>
@@ -134,9 +134,7 @@ defmodule FlamingoWeb.GameLive do
                         <.button
                           variant="ghost"
                           class="text-xs"
-                          on_confirm_click={
-                            JS.dispatch("phx:copy", detail: %{text: @room_id})
-                          }
+                          on_confirm_click={JS.dispatch("phx:copy", detail: %{text: @room_id})}
                           id="copy-name-button"
                         >
                           Copy name
@@ -171,95 +169,52 @@ defmodule FlamingoWeb.GameLive do
               </div>
             <% end %>
           </.card>
-        <% else %>
-          <div>
-            Game started!
-          </div>
-        <% end %>
-      </div>
-
-      <div :if={@phase == :playing}>
-        <div
-          id="drawing-canvas"
-          phx-hook="DrawingCanvas"
-          phx-update="ignore"
-          data-is-drawer={to_string(@player_id == @drawer_id)}
-        >
-          <canvas
-            width="700"
-            height="500"
-            class={[
-              "border-2 border-gray-800 bg-white",
-              if(@player_id == @drawer_id, do: "cursor-crosshair", else: "cursor-default")
-            ]}
-          >
-          </canvas>
-
-          <%= if @player_id == @drawer_id do %>
-            <div class="mt-2 flex items-center gap-3">
-              <div class="grid grid-cols-13 grid-rows-2 border border-gray-300">
-                <button
-                  :for={color <- palette()}
-                  data-color={color}
-                  class="h-7 w-7 cursor-pointer border border-gray-200"
-                  style={"background-color: #{color}"}
-                >
-                </button>
-              </div>
-
-              <div class="flex gap-1">
-                <button
-                  :for={size <- [6, 9, 15]}
-                  data-size={size}
-                  class="flex h-10 w-10 cursor-pointer items-center justify-center rounded border border-gray-300 bg-white"
-                >
-                  <div
-                    class="rounded-full bg-black"
-                    style={"width: #{size * 2}px; height: #{size * 2}px"}
-                  >
-                  </div>
-                </button>
-              </div>
-
-              <div class="flex gap-1">
-                <button
-                  data-tool="pen"
-                  class="flex h-10 w-10 cursor-pointer items-center justify-center rounded border border-gray-300 bg-white text-sm"
-                >
-                  <.icon name="hero-pencil" class="h-5 w-5" />
-                </button>
-                <button
-                  data-tool="fill"
-                  class="flex h-10 w-10 cursor-pointer items-center justify-center rounded border border-gray-300 bg-white text-sm"
-                >
-                  <.icon name="hero-arrows-pointing-out" class="h-5 w-5" />
-                </button>
-              </div>
-
-              <div class="flex gap-1">
-                <button
-                  data-action="undo"
-                  class="flex h-10 w-10 cursor-pointer items-center justify-center rounded border border-gray-300 bg-white text-sm"
-                >
-                  <.icon name="hero-arrow-uturn-left" class="h-5 w-5" />
-                </button>
-                <button
-                  data-action="redo"
-                  class="flex h-10 w-10 cursor-pointer items-center justify-center rounded border border-gray-300 bg-white text-sm"
-                >
-                  <.icon name="hero-arrow-uturn-right" class="h-5 w-5" />
-                </button>
-                <button
-                  data-action="clear"
-                  class="flex h-10 w-10 cursor-pointer items-center justify-center rounded border border-gray-300 bg-white text-sm"
-                >
-                  <.icon name="hero-trash" class="h-5 w-5" />
-                </button>
-              </div>
-            </div>
-          <% end %>
         </div>
-      </div>
+      <% else %>
+        <div class="flex h-screen w-full items-center justify-center p-6">
+          <div class="flex h-[675px] w-full max-w-[1200px] flex-col gap-3">
+            <.game_header />
+
+            <div class="flex w-full flex-1 flex-row gap-3 pb-1 pr-1">
+              <.player_list_panel
+                players={@players}
+                player_order={@player_order}
+                drawer_id={@drawer_id}
+              />
+
+              <div
+                id="drawing-canvas"
+                phx-hook="DrawingCanvas"
+                phx-update="ignore"
+                data-is-drawer={to_string(@player_id == @drawer_id)}
+                class="flex w-[704px] shrink-0 flex-col gap-2"
+              >
+                <.box class="bg-white p-0">
+                  <canvas
+                    width="700"
+                    height="500"
+                    class={[
+                      "bg-white",
+                      if(@player_id == @drawer_id, do: "cursor-crosshair", else: "cursor-default")
+                    ]}
+                  >
+                  </canvas>
+                </.box>
+
+                <%= if @player_id == @drawer_id do %>
+                  <.box class="bg-white p-0">
+                    <.drawing_toolbar palette={palette()} />
+                  </.box>
+                <% end %>
+              </div>
+
+              <.box class="flex w-full flex-1 flex-col bg-white p-0">
+                <div class="flex-1" />
+              </.box>
+            </div>
+          </div>
+        </div>
+      <% end %>
 
       <div id="clipboard-handler" phx-hook=".Clipboard" phx-update="ignore"></div>
       <script :type={Phoenix.LiveView.ColocatedHook} name=".Clipboard">
