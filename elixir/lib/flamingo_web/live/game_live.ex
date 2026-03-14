@@ -29,6 +29,7 @@ defmodule FlamingoWeb.GameLive do
        show_word: false,
        current_round: 0,
        correct_guesses: MapSet.new(),
+       revealed_indices: [],
        guess_form: to_form(%{"guess" => ""}, as: :guess_form)
      )}
   end
@@ -65,7 +66,8 @@ defmodule FlamingoWeb.GameLive do
                 turn_end_time: state.turn_end_time,
                 word: state.word,
                 show_word: show_word,
-                correct_guesses: MapSet.new(Map.keys(state.correct_guesses))
+                correct_guesses: MapSet.new(Map.keys(state.correct_guesses)),
+                revealed_indices: state.revealed_indices
               )
 
             socket =
@@ -210,6 +212,7 @@ defmodule FlamingoWeb.GameLive do
             <.game_header
               word={@word}
               show_word={@show_word or MapSet.member?(@correct_guesses, @player_id)}
+              revealed_indices={@revealed_indices}
             />
 
             <div class="flex w-full flex-1 flex-row gap-3 pb-1 pr-1">
@@ -511,7 +514,8 @@ defmodule FlamingoWeb.GameLive do
         turn_end_time: turn_end_time,
         word: word,
         show_word: is_drawer,
-        correct_guesses: MapSet.new()
+        correct_guesses: MapSet.new(),
+        revealed_indices: []
       )
 
     socket = push_event(socket, "set_timer", %{end_time: DateTime.to_iso8601(turn_end_time)})
@@ -538,6 +542,15 @@ defmodule FlamingoWeb.GameLive do
        players: players,
        turn_end_time: nil
      )}
+  end
+
+  def handle_info({:hint_revealed, revealed_indices}, socket) do
+    if socket.assigns.show_word or
+         MapSet.member?(socket.assigns.correct_guesses, socket.assigns.player_id) do
+      {:noreply, socket}
+    else
+      {:noreply, assign(socket, revealed_indices: revealed_indices)}
+    end
   end
 
   def handle_info({:correct_guess, player_id}, socket) do

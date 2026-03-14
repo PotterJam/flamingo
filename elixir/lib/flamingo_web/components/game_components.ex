@@ -83,6 +83,7 @@ defmodule FlamingoWeb.GameComponents do
 
   attr :word, :string, default: nil
   attr :show_word, :boolean, default: false
+  attr :revealed_indices, :list, default: []
 
   def game_header(assigns) do
     {display, letter_count} =
@@ -94,7 +95,16 @@ defmodule FlamingoWeb.GameComponents do
           {word, nil}
 
         {word, false} ->
-          hint = String.replace(word, ~r/[^ ]/, "_")
+          revealed = MapSet.new(assigns.revealed_indices)
+
+          hint =
+            word
+            |> String.graphemes()
+            |> Enum.with_index()
+            |> Enum.map(fn {ch, idx} ->
+              if ch == " " or MapSet.member?(revealed, idx), do: ch, else: "_"
+            end)
+            |> Enum.join()
 
           count =
             word
