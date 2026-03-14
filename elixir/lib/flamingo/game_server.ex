@@ -13,6 +13,8 @@ defmodule Flamingo.GameServer do
     player_order: [],
     round_count: 3,
     turn_length: 30,
+    current_round: 0,
+    drawn_this_round: MapSet.new(),
     current_drawing: [],
     word_choices: [],
     correct_guesses: %{}
@@ -113,7 +115,14 @@ defmodule Flamingo.GameServer do
       drawer_id = List.first(state.player_order)
 
       new_state =
-        %{state | round_count: round_count, turn_length: turn_length, drawer_id: drawer_id}
+        %{
+          state
+          | round_count: round_count,
+            turn_length: turn_length,
+            drawer_id: drawer_id,
+            current_round: 0,
+            drawn_this_round: MapSet.new()
+        }
         |> enter_word_choice()
 
       {:reply, :ok, new_state}
@@ -154,6 +163,11 @@ defmodule Flamingo.GameServer do
         correct_guesses = Map.put(state.correct_guesses, player_id, DateTime.utc_now())
         new_state = %{state | correct_guesses: correct_guesses}
         broadcast(state.room_id, {:correct_guess, player_id})
+
+        non_drawer_count = length(state.player_order) - 1
+        all_guessed? = map_size(correct_guesses) >= non_drawer_count
+
+        new_state = if all_guessed?, do: enter_turn_reveal(new_state), else: new_state
         {:reply, :correct, new_state}
 
       true ->
@@ -196,6 +210,22 @@ defmodule Flamingo.GameServer do
   end
 
   def handle_info({:word_choice_timeout, _stale_ref}, state) do
+    {:noreply, state}
+  end
+
+  def handle_info({:playing_timeout, ref}, %{phase_timer_ref: ref} = state) do
+    {:noreply, enter_turn_reveal(state)}
+  end
+
+  def handle_info({:playing_timeout, _stale_ref}, state) do
+    {:noreply, state}
+  end
+
+  def handle_info({:turn_reveal_timeout, ref}, %{phase_timer_ref: ref} = state) do
+    {:noreply, enter_next_turn(state)}
+  end
+
+  def handle_info({:turn_reveal_timeout, _stale_ref}, state) do
     {:noreply, state}
   end
 
@@ -251,25 +281,84 @@ defmodule Flamingo.GameServer do
     broadcast(
       new_state.room_id,
       {:word_choice_started, new_state.drawer_id, word_choices, turn_end_time,
-       new_state.round_count, new_state.turn_length}
+       new_state.round_count, new_state.turn_length, new_state.current_round}
     )
 
     new_state
   end
 
   defp enter_playing(state, word) do
+    ref = make_ref()
+    Process.send_after(self(), {:playing_timeout, ref}, state.turn_length * 1000)
+    turn_end_time = DateTime.add(DateTime.utc_now(), state.turn_length, :second)
+
     new_state = %{
       state
       | phase: :playing,
         word: word,
         word_choices: [],
-        phase_timer_ref: nil,
-        turn_end_time: nil,
+        phase_timer_ref: ref,
+        turn_end_time: turn_end_time,
         current_drawing: [],
         correct_guesses: %{}
     }
 
-    broadcast(state.room_id, {:turn_started, state.drawer_id, word})
+    broadcast(state.room_id, {:turn_started, state.drawer_id, word, turn_end_time})
+    new_state
+  end
+
+  defp enter_turn_reveal(state) do
+    ref = make_ref()
+    Process.send_after(self(), {:turn_reveal_timeout, ref}, 5_000)
+    turn_end_time = DateTime.add(DateTime.utc_now(), 5, :second)
+
+    new_state = %{
+      state
+      | phase: :turn_reveal,
+        phase_timer_ref: ref,
+        turn_end_time: turn_end_time,
+        drawn_this_round: MapSet.put(state.drawn_this_round, state.drawer_id)
+    }
+
+    broadcast(state.room_id, {:turn_reveal, state.word, turn_end_time})
+    new_state
+  end
+
+  defp enter_next_turn(state) do
+    next_drawer =
+      Enum.find(state.player_order, fn pid ->
+        not MapSet.member?(state.drawn_this_round, pid)
+      end)
+
+    if next_drawer do
+      %{state | drawer_id: next_drawer}
+      |> enter_word_choice()
+    else
+      new_round = state.current_round + 1
+
+      if new_round >= state.round_count do
+        enter_game_ended(state)
+      else
+        %{
+          state
+          | current_round: new_round,
+            drawn_this_round: MapSet.new(),
+            drawer_id: List.first(state.player_order)
+        }
+        |> enter_word_choice()
+      end
+    end
+  end
+
+  defp enter_game_ended(state) do
+    new_state = %{
+      state
+      | phase: :game_ended,
+        phase_timer_ref: nil,
+        turn_end_time: nil
+    }
+
+    broadcast(state.room_id, {:game_ended, state.players})
     new_state
   end
 

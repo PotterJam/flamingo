@@ -27,6 +27,7 @@ defmodule FlamingoWeb.GameLive do
        turn_end_time: nil,
        word: nil,
        show_word: false,
+       current_round: 0,
        correct_guesses: MapSet.new(),
        guess_form: to_form(%{"guess" => ""}, as: :guess_form)
      )}
@@ -47,6 +48,7 @@ defmodule FlamingoWeb.GameLive do
                 else: nil
 
             is_drawer = player_id == state.drawer_id
+            show_word = is_drawer or state.phase == :turn_reveal or state.phase == :game_ended
 
             socket =
               assign(socket,
@@ -58,15 +60,16 @@ defmodule FlamingoWeb.GameLive do
                 drawer_id: state.drawer_id,
                 round_count: state.round_count,
                 turn_length: state.turn_length,
+                current_round: state.current_round,
                 word_choices: word_choices,
                 turn_end_time: state.turn_end_time,
                 word: state.word,
-                show_word: is_drawer,
+                show_word: show_word,
                 correct_guesses: MapSet.new(Map.keys(state.correct_guesses))
               )
 
             socket =
-              if state.phase == :word_choice and state.turn_end_time do
+              if state.phase in [:word_choice, :playing, :turn_reveal] and state.turn_end_time do
                 push_event(socket, "set_timer", %{
                   end_time: DateTime.to_iso8601(state.turn_end_time)
                 })
@@ -200,7 +203,7 @@ defmodule FlamingoWeb.GameLive do
           </.card>
         </div>
       <% end %>
-      <%= if @phase in [:word_choice, :playing] do %>
+      <%= if @phase in [:word_choice, :playing, :turn_reveal] do %>
         <.flamingo_background />
         <div class="flex h-screen w-full items-center justify-center p-6">
           <div class="flex h-[675px] w-full max-w-[1200px] flex-col gap-6">
@@ -217,103 +220,120 @@ defmodule FlamingoWeb.GameLive do
                 correct_guesses={@correct_guesses}
               />
 
-              <%= if @phase == :word_choice do %>
-                <.box class="flex w-[704px] shrink-0 items-center justify-center bg-white">
-                  <%= if @player_id == @drawer_id do %>
-                    <div class="relative flex flex-col items-center gap-8">
-                      <.starburst_timer
-                        position_class="absolute -top-36 -right-16"
-                        timer_id="word-choice-timer"
-                        timer_hook="FlamingoWeb.GameLive.Timer"
-                        end_time={@turn_end_time && DateTime.to_iso8601(@turn_end_time)}
-                      />
-                      <h2 class="font-timer text-3xl font-black">Choose a word</h2>
-                      <div class="flex gap-3">
-                        <.button
-                          :for={word <- @word_choices}
-                          phx-click="select_word"
-                          phx-value-word={word}
-                          class="px-6 py-3 text-base font-bold"
-                        >
-                          {word}
-                        </.button>
-                      </div>
-                    </div>
-                  <% else %>
-                    <div class="relative flex flex-col items-center gap-3">
-                      <.starburst_timer
-                        position_class="absolute -bottom-32 -right-20"
-                        size_class="h-28 w-28"
-                        text_class="text-2xl"
-                        timer_id="word-choice-timer"
-                        timer_hook="FlamingoWeb.GameLive.Timer"
-                        end_time={@turn_end_time && DateTime.to_iso8601(@turn_end_time)}
-                      />
-                      <p class="font-timer text-3xl font-black">
-                        <span class="text-pink-400">{Map.get(@players, @drawer_id).name}</span>{" "}is picking a word
-                      </p>
-                    </div>
-                  <% end %>
-                </.box>
-              <% else %>
-                <div class="flex w-[704px] shrink-0 flex-col gap-4">
-                  <div
-                    id="drawing-canvas"
-                    phx-hook="DrawingCanvas"
-                    phx-update="ignore"
-                    data-is-drawer={to_string(@player_id == @drawer_id)}
-                    class="flex flex-col gap-2"
-                  >
-                    <.box class="bg-white p-0">
-                      <canvas
-                        width="700"
-                        height="500"
-                        class={[
-                          "bg-white",
-                          if(@player_id == @drawer_id, do: "cursor-crosshair", else: "cursor-default")
-                        ]}
-                      >
-                      </canvas>
-                    </.box>
-
+              <%= cond do %>
+                <% @phase == :word_choice -> %>
+                  <.box class="flex w-[704px] shrink-0 items-center justify-center bg-white">
                     <%= if @player_id == @drawer_id do %>
+                      <div class="relative flex flex-col items-center gap-8">
+                        <.starburst_timer
+                          position_class="absolute -top-36 -right-16"
+                          timer_id="word-choice-timer"
+                          timer_hook="FlamingoWeb.GameLive.Timer"
+                          end_time={@turn_end_time && DateTime.to_iso8601(@turn_end_time)}
+                        />
+                        <h2 class="font-timer text-3xl font-black">Choose a word</h2>
+                        <div class="flex gap-3">
+                          <.button
+                            :for={word <- @word_choices}
+                            phx-click="select_word"
+                            phx-value-word={word}
+                            class="px-6 py-3 text-base font-bold"
+                          >
+                            {word}
+                          </.button>
+                        </div>
+                      </div>
+                    <% else %>
+                      <div class="relative flex flex-col items-center gap-3">
+                        <.starburst_timer
+                          position_class="absolute -bottom-32 -right-20"
+                          size_class="h-28 w-28"
+                          text_class="text-2xl"
+                          timer_id="word-choice-timer"
+                          timer_hook="FlamingoWeb.GameLive.Timer"
+                          end_time={@turn_end_time && DateTime.to_iso8601(@turn_end_time)}
+                        />
+                        <p class="font-timer text-3xl font-black">
+                          <span class="text-pink-400">{Map.get(@players, @drawer_id).name}</span>{" "}is picking a word
+                        </p>
+                      </div>
+                    <% end %>
+                  </.box>
+                <% @phase == :turn_reveal -> %>
+                  <.box class="flex w-[704px] shrink-0 flex-col items-center justify-center gap-6 bg-white">
+                    <p class="font-timer text-2xl font-black text-gray-500">The word was</p>
+                    <p class="font-timer text-5xl font-black text-pink-400">{@word}</p>
+                    <.starburst_timer
+                      position_class=""
+                      size_class="h-20 w-20"
+                      text_class="text-xl"
+                      timer_id="turn-reveal-timer"
+                      timer_hook="FlamingoWeb.GameLive.Timer"
+                      end_time={@turn_end_time && DateTime.to_iso8601(@turn_end_time)}
+                    />
+                  </.box>
+                <% true -> %>
+                  <div class="flex w-[704px] shrink-0 flex-col gap-4">
+                    <div
+                      id="drawing-canvas"
+                      phx-hook="DrawingCanvas"
+                      phx-update="ignore"
+                      data-is-drawer={to_string(@player_id == @drawer_id)}
+                      class="flex flex-col gap-2"
+                    >
                       <.box class="bg-white p-0">
-                        <.drawing_toolbar palette={palette()} />
+                        <canvas
+                          width="700"
+                          height="500"
+                          class={[
+                            "bg-white",
+                            if(@player_id == @drawer_id,
+                              do: "cursor-crosshair",
+                              else: "cursor-default"
+                            )
+                          ]}
+                        >
+                        </canvas>
                       </.box>
+
+                      <%= if @player_id == @drawer_id do %>
+                        <.box class="bg-white p-0">
+                          <.drawing_toolbar palette={palette()} />
+                        </.box>
+                      <% end %>
+                    </div>
+
+                    <%= if @player_id != @drawer_id do %>
+                      <%= if MapSet.member?(@correct_guesses, @player_id) do %>
+                        <.box class="bg-green-100 p-3 text-center font-bold text-green-800">
+                          You guessed it!
+                        </.box>
+                      <% else %>
+                        <.form
+                          for={@guess_form}
+                          phx-submit="guess"
+                          phx-hook=".GuessForm"
+                          id="guess-form"
+                          class="mx-auto flex w-96 gap-2"
+                        >
+                          <div class="min-w-0 flex-1">
+                            <.input
+                              field={@guess_form[:guess]}
+                              type="text"
+                              placeholder="Type your guess..."
+                              autocomplete="off"
+                              phx-mounted={JS.focus()}
+                              class="w-full rounded-base border-2 border-border bg-white px-3 py-2 text-sm placeholder:text-gray-400 focus:ring-2 focus:ring-ring focus:ring-offset-2 focus:outline-none"
+                              id="guess-input"
+                            />
+                          </div>
+                          <.button type="submit" variant="default" id="guess-button">
+                            Guess
+                          </.button>
+                        </.form>
+                      <% end %>
                     <% end %>
                   </div>
-
-                  <%= if @player_id != @drawer_id do %>
-                    <%= if MapSet.member?(@correct_guesses, @player_id) do %>
-                      <.box class="bg-green-100 p-3 text-center font-bold text-green-800">
-                        You guessed it!
-                      </.box>
-                    <% else %>
-                      <.form
-                        for={@guess_form}
-                        phx-submit="guess"
-                        phx-hook=".GuessForm"
-                        id="guess-form"
-                        class="mx-auto flex w-96 gap-2"
-                      >
-                        <div class="min-w-0 flex-1">
-                          <.input
-                            field={@guess_form[:guess]}
-                            type="text"
-                            placeholder="Type your guess..."
-                            autocomplete="off"
-                            phx-mounted={JS.focus()}
-                            class="w-full rounded-base border-2 border-border bg-white px-3 py-2 text-sm placeholder:text-gray-400 focus:ring-2 focus:ring-ring focus:ring-offset-2 focus:outline-none"
-                            id="guess-input"
-                          />
-                        </div>
-                        <.button type="submit" variant="default" id="guess-button">
-                          Guess
-                        </.button>
-                      </.form>
-                    <% end %>
-                  <% end %>
-                </div>
               <% end %>
 
               <.box class="flex w-full flex-1 flex-col bg-white p-0">
@@ -321,6 +341,21 @@ defmodule FlamingoWeb.GameLive do
               </.box>
             </div>
           </div>
+        </div>
+      <% end %>
+      <%= if @phase == :game_ended do %>
+        <.flamingo_background />
+        <div class="flex h-screen w-full items-center justify-center p-6">
+          <.card class="flex w-full max-w-md flex-col items-center gap-6 bg-white p-8">
+            <h2 class="font-timer text-4xl font-black text-pink-400">Game Over</h2>
+            <ul class="w-full space-y-2">
+              <%= for pid <- @player_order do %>
+                <li class="flex items-center gap-2 rounded-base border-2 border-border px-4 py-2">
+                  <span class="font-bold">{Map.get(@players, pid).name}</span>
+                </li>
+              <% end %>
+            </ul>
+          </.card>
         </div>
       <% end %>
 
@@ -441,7 +476,8 @@ defmodule FlamingoWeb.GameLive do
   end
 
   def handle_info(
-        {:word_choice_started, drawer_id, word_choices, turn_end_time, round_count, turn_length},
+        {:word_choice_started, drawer_id, word_choices, turn_end_time, round_count, turn_length,
+         current_round},
         socket
       ) do
     is_drawer = socket.assigns.player_id == drawer_id
@@ -453,7 +489,10 @@ defmodule FlamingoWeb.GameLive do
         turn_end_time: turn_end_time,
         round_count: round_count,
         turn_length: turn_length,
+        current_round: current_round,
         word_choices: if(is_drawer, do: word_choices, else: nil),
+        word: nil,
+        show_word: false,
         correct_guesses: MapSet.new()
       )
 
@@ -461,18 +500,43 @@ defmodule FlamingoWeb.GameLive do
     {:noreply, socket}
   end
 
-  def handle_info({:turn_started, drawer_id, word}, socket) do
+  def handle_info({:turn_started, drawer_id, word, turn_end_time}, socket) do
     is_drawer = socket.assigns.player_id == drawer_id
 
+    socket =
+      assign(socket,
+        phase: :playing,
+        drawer_id: drawer_id,
+        word_choices: nil,
+        turn_end_time: turn_end_time,
+        word: word,
+        show_word: is_drawer,
+        correct_guesses: MapSet.new()
+      )
+
+    socket = push_event(socket, "set_timer", %{end_time: DateTime.to_iso8601(turn_end_time)})
+    {:noreply, socket}
+  end
+
+  def handle_info({:turn_reveal, word, turn_end_time}, socket) do
+    socket =
+      assign(socket,
+        phase: :turn_reveal,
+        word: word,
+        show_word: true,
+        turn_end_time: turn_end_time
+      )
+
+    socket = push_event(socket, "set_timer", %{end_time: DateTime.to_iso8601(turn_end_time)})
+    {:noreply, socket}
+  end
+
+  def handle_info({:game_ended, players}, socket) do
     {:noreply,
      assign(socket,
-       phase: :playing,
-       drawer_id: drawer_id,
-       word_choices: nil,
-       turn_end_time: nil,
-       word: word,
-       show_word: is_drawer,
-       correct_guesses: MapSet.new()
+       phase: :game_ended,
+       players: players,
+       turn_end_time: nil
      )}
   end
 
