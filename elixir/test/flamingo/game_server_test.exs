@@ -164,7 +164,7 @@ defmodule Flamingo.GameServerTest do
 
     {:ok, state} = GameServer.get_state(room_id)
     assert state.phase == :turn_reveal
-    assert_receive {:turn_reveal, ^word, _turn_end_time}
+    assert_receive {:turn_reveal, ^word, _turn_end_time, _score_gains, _players}
   end
 
   test "turn_reveal tracks drawn_this_round", %{room_id: room_id} do
