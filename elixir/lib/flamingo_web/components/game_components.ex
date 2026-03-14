@@ -96,6 +96,7 @@ defmodule FlamingoWeb.GameComponents do
   attr :players, :map, required: true
   attr :player_order, :list, required: true
   attr :drawer_id, :string, default: nil
+  attr :correct_guesses, :any, default: MapSet.new()
 
   def player_list_panel(assigns) do
     ~H"""
@@ -105,11 +106,16 @@ defmodule FlamingoWeb.GameComponents do
           <%= for pid <- @player_order do %>
             <li class={[
               "flex items-center gap-2 px-3 py-2",
-              pid == @drawer_id && "bg-pink-100 font-semibold"
+              pid == @drawer_id && "bg-pink-100 font-semibold",
+              pid != @drawer_id && MapSet.member?(@correct_guesses, pid) && "bg-green-100"
             ]}>
               <span class="inline-flex h-5 w-5 shrink-0 items-center justify-center">
-                <%= if pid == @drawer_id do %>
-                  <.icon name="hero-paint-brush" class="h-4 w-4" />
+                <%= cond do %>
+                  <% pid == @drawer_id -> %>
+                    <.icon name="hero-paint-brush" class="h-4 w-4" />
+                  <% MapSet.member?(@correct_guesses, pid) -> %>
+                    <.icon name="hero-check" class="h-4 w-4 text-green-600" />
+                  <% true -> %>
                 <% end %>
               </span>
               <span class="truncate">{Map.get(@players, pid).name}</span>
