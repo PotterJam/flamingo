@@ -169,7 +169,7 @@ defmodule FlamingoWeb.CoreComponents do
   def button_group(assigns) do
     ~H"""
     <div class={[
-      "flex border-2 border-border bg-white",
+      "flex border-2 border-border bg-white [&>button]:transition-colors [&>button:not(.bg-pink-300):hover]:bg-pink-100",
       @class
     ]}>
       {render_slot(@inner_block)}

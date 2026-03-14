@@ -221,7 +221,7 @@ defmodule FlamingoWeb.GameComponents do
           data-tool="fill"
           class="flex h-10 w-10 cursor-pointer items-center justify-center"
         >
-          <.icon name="arrows_out" class="h-5 w-5" />
+          <.icon name="paint_bucket" class="h-5 w-5" />
         </button>
       </.button_group>
 
