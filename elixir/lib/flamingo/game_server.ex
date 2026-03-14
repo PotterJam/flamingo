@@ -203,8 +203,8 @@ defmodule Flamingo.GameServer do
   defp enter_word_choice(state) do
     word_choices = Flamingo.Words.random_choices()
     ref = make_ref()
-    Process.send_after(self(), {:word_choice_timeout, ref}, 500_000)
-    turn_end_time = DateTime.add(DateTime.utc_now(), 500, :second)
+    Process.send_after(self(), {:word_choice_timeout, ref}, 10_000)
+    turn_end_time = DateTime.add(DateTime.utc_now(), 10, :second)
 
     new_state = %{
       state
