@@ -121,6 +121,32 @@ defmodule FlamingoWeb.GameComponents do
     """
   end
 
+  attr :position_class, :string, required: true
+  attr :size_class, :string, default: "h-32 w-32"
+  attr :text_class, :string, default: "text-3xl"
+  attr :timer_id, :string, required: true
+  attr :timer_hook, :string, required: true
+  attr :end_time, :string, default: nil
+
+  def starburst_timer(assigns) do
+    ~H"""
+    <div class={@position_class}>
+      <div class="relative flex items-center justify-center">
+        <img src="/images/starburst.svg" class={["starburst", @size_class]} />
+        <span
+          id={@timer_id}
+          phx-hook={@timer_hook}
+          phx-update="ignore"
+          data-end-time={@end_time}
+          class={["absolute font-timer font-black", @text_class]}
+          style="font-variant-numeric: tabular-nums; letter-spacing: 0.05em; min-width: 3ch; text-align: center;"
+        >
+        </span>
+      </div>
+    </div>
+    """
+  end
+
   attr :palette, :list, required: true
 
   def drawing_toolbar(assigns) do

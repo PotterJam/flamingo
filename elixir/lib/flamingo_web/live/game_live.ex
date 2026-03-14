@@ -208,40 +208,38 @@ defmodule FlamingoWeb.GameLive do
               <%= if @phase == :word_choice do %>
                 <.box class="flex w-[704px] shrink-0 items-center justify-center bg-white">
                   <%= if @player_id == @drawer_id do %>
-                    <div class="flex flex-col items-center gap-6">
-                      <div class="flex items-center gap-3">
-                        <h2 class="text-xl font-bold">Choose a word</h2>
-                        <span
-                          id="word-choice-timer"
-                          phx-hook=".Timer"
-                          phx-update="ignore"
-                          class="text-lg font-bold tabular-nums"
-                        >
-                        </span>
-                      </div>
+                    <div class="relative flex flex-col items-center gap-8">
+                      <.starburst_timer
+                        position_class="absolute -top-36 -right-16"
+                        timer_id="word-choice-timer"
+                        timer_hook="FlamingoWeb.GameLive.Timer"
+                        end_time={@turn_end_time && DateTime.to_iso8601(@turn_end_time)}
+                      />
+                      <h2 class="font-timer text-3xl font-black">Choose a word</h2>
                       <div class="flex gap-3">
-                        <button
+                        <.button
                           :for={word <- @word_choices}
                           phx-click="select_word"
                           phx-value-word={word}
-                          class="rounded-base border-2 border-border bg-main px-6 py-3 font-bold shadow-shadow transition-all hover:-translate-y-0.5 hover:shadow-lg"
+                          class="px-6 py-3 text-base font-bold"
                         >
                           {word}
-                        </button>
+                        </.button>
                       </div>
                     </div>
                   <% else %>
-                    <div class="flex flex-col items-center gap-3">
-                      <p class="text-lg font-bold">
-                        {Map.get(@players, @drawer_id).name} is picking a word...
+                    <div class="relative flex flex-col items-center gap-3">
+                      <.starburst_timer
+                        position_class="absolute -bottom-32 -right-20"
+                        size_class="h-28 w-28"
+                        text_class="text-2xl"
+                        timer_id="word-choice-timer"
+                        timer_hook="FlamingoWeb.GameLive.Timer"
+                        end_time={@turn_end_time && DateTime.to_iso8601(@turn_end_time)}
+                      />
+                      <p class="font-timer text-3xl font-black">
+                        <span class="text-pink-400">{Map.get(@players, @drawer_id).name}</span>{" "}is picking a word
                       </p>
-                      <span
-                        id="word-choice-timer"
-                        phx-hook=".Timer"
-                        phx-update="ignore"
-                        class="text-2xl font-bold tabular-nums"
-                      >
-                      </span>
                     </div>
                   <% end %>
                 </.box>
@@ -296,15 +294,18 @@ defmodule FlamingoWeb.GameLive do
       <script :type={Phoenix.LiveView.ColocatedHook} name=".Timer">
         export default {
           mounted() {
-            this.handleEvent("set_timer", ({end_time}) => {
-              const endMs = new Date(end_time).getTime()
+            const startTimer = (endTime) => {
+              const endMs = new Date(endTime).getTime()
               const update = () => {
                 const remaining = Math.max(0, Math.ceil((endMs - Date.now()) / 1000))
-                this.el.innerText = remaining
+                this.el.innerText = String(remaining).padStart(2, '0')
                 if (remaining > 0) requestAnimationFrame(update)
               }
               update()
-            })
+            }
+            const initial = this.el.dataset.endTime
+            if (initial) startTimer(initial)
+            this.handleEvent("set_timer", ({end_time}) => startTimer(end_time))
           }
         }
       </script>
