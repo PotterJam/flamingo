@@ -108,16 +108,19 @@ defmodule FlamingoWeb.GameComponents do
     assigns = assign(assigns, display: display, letter_count: letter_count)
 
     ~H"""
-    <.box class="bg-pink-400 p-3">
+    <div class={[
+      "self-center rounded-full border-2 border-border bg-pink-400 px-10 py-3 shadow-rounded",
+      if(!@display, do: "invisible")
+    ]}>
       <div class="flex items-center justify-center gap-4">
-        <%= if @display do %>
-          <p class="text-3xl font-black tracking-widest text-white">{@display}</p>
-          <%= if @letter_count do %>
-            <p class="text-md text-white">{@letter_count}</p>
-          <% end %>
+        <p class="text-3xl font-black tracking-widest text-white">
+          {if(@display, do: @display, else: Phoenix.HTML.raw("&nbsp;"))}
+        </p>
+        <%= if @display && @letter_count do %>
+          <p class="text-md text-white">{@letter_count}</p>
         <% end %>
       </div>
-    </.box>
+    </div>
     """
   end
 
