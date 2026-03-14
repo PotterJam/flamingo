@@ -236,7 +236,7 @@ defmodule FlamingoWeb.GameLive do
                           timer_hook="FlamingoWeb.GameLive.Timer"
                           end_time={@turn_end_time && DateTime.to_iso8601(@turn_end_time)}
                         />
-                        <h2 class="font-timer text-3xl font-black">Choose a word</h2>
+                        <h2 class="text-3xl font-black">Choose a word</h2>
                         <div class="flex gap-3">
                           <.button
                             :for={word <- @word_choices}
@@ -258,16 +258,16 @@ defmodule FlamingoWeb.GameLive do
                           timer_hook="FlamingoWeb.GameLive.Timer"
                           end_time={@turn_end_time && DateTime.to_iso8601(@turn_end_time)}
                         />
-                        <p class="font-timer text-3xl font-black">
-                          <span class="text-pink-400">{Map.get(@players, @drawer_id).name}</span>{" "}is picking a word
+                        <p class="text-3xl font-black">
+                          <span class="font-hero text-5xl text-pink-400">{Map.get(@players, @drawer_id).name}</span>{" "}is picking a word
                         </p>
                       </div>
                     <% end %>
                   </.box>
                 <% @phase == :turn_reveal -> %>
                   <.box class="flex w-[704px] shrink-0 flex-col items-center justify-center gap-6 bg-white">
-                    <p class="font-timer text-2xl font-black text-gray-500">The word was</p>
-                    <p class="font-timer text-5xl font-black text-pink-400">{@word}</p>
+                    <p class="text-2xl font-black">The word was</p>
+                    <p class="font-hero text-5xl font-black text-pink-400">{@word}</p>
                   </.box>
                 <% true -> %>
                   <div class="flex w-[704px] shrink-0 flex-col gap-4">
@@ -344,7 +344,7 @@ defmodule FlamingoWeb.GameLive do
         <.flamingo_background />
         <div class="flex h-screen w-full items-center justify-center p-6">
           <.card class="flex w-full max-w-md flex-col items-center gap-6 bg-white p-8">
-            <h2 class="font-timer text-4xl font-black text-pink-400">Game Over</h2>
+            <h2 class="font-hero text-4xl font-black text-pink-400">Game Over</h2>
             <ul class="w-full space-y-2">
               <%= for pid <- @player_order do %>
                 <li class="flex items-center gap-2 rounded-base border-2 border-border px-4 py-2">
