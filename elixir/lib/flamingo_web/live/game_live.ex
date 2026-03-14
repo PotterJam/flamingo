@@ -26,6 +26,7 @@ defmodule FlamingoWeb.GameLive do
        word_choices: nil,
        turn_end_time: nil,
        word: nil,
+       show_word: false,
        correct_guesses: MapSet.new()
      )}
   end
@@ -44,6 +45,8 @@ defmodule FlamingoWeb.GameLive do
                 do: state.word_choices,
                 else: nil
 
+            is_drawer = player_id == state.drawer_id
+
             socket =
               assign(socket,
                 player_id: player_id,
@@ -56,6 +59,8 @@ defmodule FlamingoWeb.GameLive do
                 round_length: state.round_length,
                 word_choices: word_choices,
                 turn_end_time: state.turn_end_time,
+                word: state.word,
+                show_word: is_drawer,
                 correct_guesses: MapSet.new(Map.keys(state.correct_guesses))
               )
 
@@ -199,7 +204,7 @@ defmodule FlamingoWeb.GameLive do
         <.flamingo_background />
         <div class="flex h-screen w-full items-center justify-center p-6">
           <div class="flex h-[675px] w-full max-w-[1200px] flex-col gap-3">
-            <.game_header />
+            <.game_header word={@word} show_word={@show_word} />
 
             <div class="flex w-full flex-1 flex-row gap-3 pb-1 pr-1">
               <.player_list_panel
@@ -443,13 +448,17 @@ defmodule FlamingoWeb.GameLive do
     {:noreply, socket}
   end
 
-  def handle_info({:round_started, drawer_id}, socket) do
+  def handle_info({:round_started, drawer_id, word}, socket) do
+    is_drawer = socket.assigns.player_id == drawer_id
+
     {:noreply,
      assign(socket,
        phase: :playing,
        drawer_id: drawer_id,
        word_choices: nil,
        turn_end_time: nil,
+       word: word,
+       show_word: is_drawer,
        correct_guesses: MapSet.new()
      )}
   end

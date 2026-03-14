@@ -265,7 +265,7 @@ defmodule Flamingo.GameServer do
         correct_guesses: %{}
     }
 
-    broadcast(state.room_id, {:round_started, state.drawer_id})
+    broadcast(state.room_id, {:round_started, state.drawer_id, word})
     new_state
   end
 

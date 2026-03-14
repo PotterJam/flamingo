@@ -81,13 +81,41 @@ defmodule FlamingoWeb.GameComponents do
     """
   end
 
-  attr :word, :string, default: "_ _ _ _ _"
+  attr :word, :string, default: nil
+  attr :show_word, :boolean, default: false
 
   def game_header(assigns) do
+    {display, letter_count} =
+      case {assigns.word, assigns.show_word} do
+        {nil, _} ->
+          {nil, nil}
+
+        {word, true} ->
+          {String.upcase(word), nil}
+
+        {word, false} ->
+          hint = String.replace(word, ~r/[^ ]/, "_")
+
+          count =
+            word
+            |> String.split(" ")
+            |> Enum.map(&String.length/1)
+            |> Enum.join("-")
+
+          {String.upcase(hint), count}
+      end
+
+    assigns = assign(assigns, display: display, letter_count: letter_count)
+
     ~H"""
     <.box class="bg-pink-400 p-3">
-      <div class="flex items-center justify-center">
-        <p class="text-xl font-bold tracking-widest text-white">{@word}</p>
+      <div class="flex items-center justify-center gap-4">
+        <%= if @display do %>
+          <p class="text-3xl font-black tracking-widest text-white">{@display}</p>
+          <%= if @letter_count do %>
+            <p class="text-md text-white">{@letter_count}</p>
+          <% end %>
+        <% end %>
       </div>
     </.box>
     """
