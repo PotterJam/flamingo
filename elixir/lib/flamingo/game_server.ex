@@ -5,12 +5,16 @@ defmodule Flamingo.GameServer do
     :room_id,
     :host_id,
     :drawer_id,
+    :word,
+    :phase_timer_ref,
+    :turn_end_time,
     phase: :lobby,
     players: %{},
     player_order: [],
     round_count: 3,
     round_length: 30,
-    current_drawing: []
+    current_drawing: [],
+    word_choices: []
   ]
 
   def start_link(room_id) do
@@ -37,6 +41,10 @@ defmodule Flamingo.GameServer do
 
   def start_game(room_id, player_id, settings) do
     GenServer.call(via(room_id), {:start_game, player_id, settings})
+  end
+
+  def select_word(room_id, player_id, word) do
+    GenServer.call(via(room_id), {:select_word, player_id, word})
   end
 
   def draw_event(room_id, player_id, event) do
@@ -99,18 +107,30 @@ defmodule Flamingo.GameServer do
          :ok <- validate_round_length(round_length) do
       drawer_id = List.first(state.player_order)
 
-      new_state = %{
-        state
-        | phase: :playing,
-          round_count: round_count,
-          round_length: round_length,
-          drawer_id: drawer_id
-      }
+      new_state =
+        %{state | round_count: round_count, round_length: round_length, drawer_id: drawer_id}
+        |> enter_word_choice()
 
-      broadcast(state.room_id, {:game_started, round_count, round_length, drawer_id})
       {:reply, :ok, new_state}
     else
       {:error, _} = error -> {:reply, error, state}
+    end
+  end
+
+  def handle_call({:select_word, player_id, word}, _from, state) do
+    cond do
+      state.phase != :word_choice ->
+        {:reply, {:error, :not_word_choice}, state}
+
+      player_id != state.drawer_id ->
+        {:reply, {:error, :not_drawer}, state}
+
+      word not in state.word_choices ->
+        {:reply, {:error, :invalid_word}, state}
+
+      true ->
+        new_state = enter_playing(state, word)
+        {:reply, :ok, new_state}
     end
   end
 
@@ -135,6 +155,16 @@ defmodule Flamingo.GameServer do
 
       {:reply, :ok, new_state}
     end
+  end
+
+  @impl true
+  def handle_info({:word_choice_timeout, ref}, %{phase_timer_ref: ref} = state) do
+    word = Enum.random(state.word_choices)
+    {:noreply, enter_playing(state, word)}
+  end
+
+  def handle_info({:word_choice_timeout, _stale_ref}, state) do
+    {:noreply, state}
   end
 
   @impl true
@@ -168,6 +198,45 @@ defmodule Flamingo.GameServer do
 
   def handle_cast({:draw_event, _player_id, _event}, state) do
     {:noreply, state}
+  end
+
+  defp enter_word_choice(state) do
+    word_choices = Flamingo.Words.random_choices()
+    ref = make_ref()
+    Process.send_after(self(), {:word_choice_timeout, ref}, 10_000)
+    turn_end_time = DateTime.add(DateTime.utc_now(), 10, :second)
+
+    new_state = %{
+      state
+      | phase: :word_choice,
+        word_choices: word_choices,
+        phase_timer_ref: ref,
+        turn_end_time: turn_end_time,
+        word: nil
+    }
+
+    broadcast(
+      new_state.room_id,
+      {:word_choice_started, new_state.drawer_id, word_choices, turn_end_time,
+       new_state.round_count, new_state.round_length}
+    )
+
+    new_state
+  end
+
+  defp enter_playing(state, word) do
+    new_state = %{
+      state
+      | phase: :playing,
+        word: word,
+        word_choices: [],
+        phase_timer_ref: nil,
+        turn_end_time: nil,
+        current_drawing: []
+    }
+
+    broadcast(state.room_id, {:round_started, state.drawer_id})
+    new_state
   end
 
   defp validate_host(state, player_id) do
