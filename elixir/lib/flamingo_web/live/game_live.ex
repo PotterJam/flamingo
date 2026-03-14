@@ -296,16 +296,17 @@ defmodule FlamingoWeb.GameLive do
                         id="guess-form"
                         class="mx-auto flex w-96 gap-2"
                       >
-                        <input
-                          type="text"
-                          name={@guess_form[:guess].name}
-                          value={@guess_form[:guess].value}
-                          placeholder="Type your guess..."
-                          autocomplete="off"
-                          phx-mounted={JS.focus()}
-                          class="min-w-0 flex-1 rounded-base border-2 border-border bg-white px-3 py-2 text-sm placeholder:text-gray-400 focus:ring-2 focus:ring-ring focus:ring-offset-2 focus:outline-none"
-                          id="guess-input"
-                        />
+                        <div class="min-w-0 flex-1">
+                          <.input
+                            field={@guess_form[:guess]}
+                            type="text"
+                            placeholder="Type your guess..."
+                            autocomplete="off"
+                            phx-mounted={JS.focus()}
+                            class="w-full rounded-base border-2 border-border bg-white px-3 py-2 text-sm placeholder:text-gray-400 focus:ring-2 focus:ring-ring focus:ring-offset-2 focus:outline-none"
+                            id="guess-input"
+                          />
+                        </div>
                         <.button type="submit" variant="default" id="guess-button">
                           Guess
                         </.button>
