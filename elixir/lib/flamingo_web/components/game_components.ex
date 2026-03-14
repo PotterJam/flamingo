@@ -91,7 +91,7 @@ defmodule FlamingoWeb.GameComponents do
           {nil, nil}
 
         {word, true} ->
-          {String.upcase(word), nil}
+          {word, nil}
 
         {word, false} ->
           hint = String.replace(word, ~r/[^ ]/, "_")
@@ -102,22 +102,22 @@ defmodule FlamingoWeb.GameComponents do
             |> Enum.map(&String.length/1)
             |> Enum.join("-")
 
-          {String.upcase(hint), count}
+          {hint, count}
       end
 
     assigns = assign(assigns, display: display, letter_count: letter_count)
 
     ~H"""
     <div class={[
-      "self-center rounded-full border-2 border-border bg-pink-400 px-10 py-3 shadow-rounded",
+      "self-center rounded-full border-2 border-border bg-pink-400 px-10 pt-1 pb-4 shadow-rounded",
       if(!@display, do: "invisible")
     ]}>
       <div class="flex items-center justify-center gap-4">
-        <p class="text-3xl font-black tracking-widest text-white">
+        <p class="font-timer text-5xl leading-none font-black tracking-widest text-white">
           {if(@display, do: @display, else: Phoenix.HTML.raw("&nbsp;"))}
         </p>
         <%= if @display && @letter_count do %>
-          <p class="text-md text-white">{@letter_count}</p>
+          <p class="font-timer text-2xl leading-none font-bold text-white">{@letter_count}</p>
         <% end %>
       </div>
     </div>
