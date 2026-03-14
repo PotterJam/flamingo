@@ -32,9 +32,8 @@ defmodule FlamingoWeb.GameLive do
        revealed_indices: [],
        guess_form: to_form(%{"guess" => ""}, as: :guess_form),
        score_gains: %{},
-       feed_counter: 0
-     )
-     |> stream(:feed, [])}
+       feed: []
+     )}
   end
 
   def handle_params(%{"player_id" => player_id}, _uri, socket) do
@@ -75,18 +74,8 @@ defmodule FlamingoWeb.GameLive do
                 correct_guesses: MapSet.new(Map.keys(state.correct_guesses)),
                 revealed_indices: state.revealed_indices,
                 score_gains: score_gains,
-                feed_counter: length(state.feed.events)
+                feed: Enum.map(state.feed.events, &Feed.format(&1, player_id))
               )
-
-            feed_items =
-              state.feed.events
-              |> Enum.with_index()
-              |> Enum.map(fn {event, i} ->
-                {type, text} = Feed.format(event, player_id)
-                %{id: "feed-#{i}", type: type, text: text}
-              end)
-
-            socket = stream(socket, :feed, feed_items, reset: true)
 
             socket =
               if state.phase in [:word_choice, :playing, :turn_reveal] and state.turn_end_time do
@@ -378,21 +367,19 @@ defmodule FlamingoWeb.GameLive do
                 <div
                   id="game-feed"
                   phx-hook=".ScrollFeed"
-                  phx-update="stream"
                   class="flex min-h-0 flex-1 flex-col gap-0 overflow-y-auto"
                 >
                   <p
-                    :for={{dom_id, item} <- @streams.feed}
-                    id={dom_id}
+                    :for={{type, text} <- @feed}
                     class={[
                       "p-1 text-xs",
-                      item.type == :system && "font-semibold text-pink-600",
-                      item.type == :correct && "font-semibold text-green-600",
-                      item.type == :guess && "text-foreground",
-                      item.type == :info && "text-gray-500"
+                      type == :system && "font-semibold text-pink-600",
+                      type == :correct && "font-semibold text-green-600",
+                      type == :guess && "text-foreground",
+                      type == :info && "text-gray-500"
                     ]}
                   >
-                    {item.text}
+                    {text}
                   </p>
                 </div>
               </.box>
@@ -663,14 +650,11 @@ defmodule FlamingoWeb.GameLive do
   end
 
   def handle_info({:feed_event, event}, socket) do
-    {type, text} = Feed.format(event, socket.assigns.player_id)
-    counter = socket.assigns.feed_counter
-    item = %{id: "feed-#{counter}", type: type, text: text}
+    formatted = Feed.format(event, socket.assigns.player_id)
 
     {:noreply,
      socket
-     |> assign(:feed_counter, counter + 1)
-     |> stream_insert(:feed, item)
+     |> assign(:feed, socket.assigns.feed ++ [formatted])
      |> push_event("scroll_feed", %{})}
   end
 
