@@ -84,10 +84,11 @@ defmodule Flamingo.GameServerTest do
     {:ok, _p2, _} = GameServer.join(room_id, "Bob")
 
     assert :ok = GameServer.start_game(room_id, p1, %{round_count: 2, round_length: 45})
-    assert_receive {:game_started, 2, 45, _drawer_id}
+    assert_receive {:word_choice_started, _drawer_id, word_choices, _turn_end_time, 2, 45}
+    assert length(word_choices) == 3
 
     {:ok, state} = GameServer.get_state(room_id)
-    assert state.phase == :playing
+    assert state.phase == :word_choice
   end
 
   test "join returns not_found for nonexistent room" do

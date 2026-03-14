@@ -59,10 +59,15 @@ defmodule FlamingoWeb.GameComponents do
       <div class="relative h-full w-full">
         <span
           :for={cell <- @cells}
-          class={["font-retro-display absolute text-lg font-extrabold whitespace-nowrap text-pink-300 opacity-30 select-none", cell.row_class]}
+          class={[
+            "font-retro-display absolute text-lg font-extrabold whitespace-nowrap text-pink-300 opacity-30 select-none",
+            cell.row_class
+          ]}
           style={"top: #{cell.top}rem; left: #{cell.left}rem"}
           aria-hidden="true"
-        >flamingo</span>
+        >
+          flamingo
+        </span>
       </div>
     </div>
     """

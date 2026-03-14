@@ -25,6 +25,10 @@ defmodule Flamingo.Games do
     GameServer.start_game(room_id, player_id, settings)
   end
 
+  def select_word(room_id, player_id, word) do
+    GameServer.select_word(room_id, player_id, word)
+  end
+
   def draw_event(room_id, player_id, event) do
     GameServer.draw_event(room_id, player_id, event)
   end
