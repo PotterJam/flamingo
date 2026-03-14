@@ -558,14 +558,15 @@ defmodule FlamingoWeb.GameLive do
     {:noreply, socket}
   end
 
-  def handle_info({:turn_reveal, word, turn_end_time, score_gains}, socket) do
+  def handle_info({:turn_reveal, word, turn_end_time, score_gains, players}, socket) do
     socket =
       assign(socket,
         phase: :turn_reveal,
         word: word,
         show_word: true,
         turn_end_time: turn_end_time,
-        score_gains: score_gains
+        score_gains: score_gains,
+        players: players
       )
 
     socket = push_event(socket, "set_timer", %{end_time: DateTime.to_iso8601(turn_end_time)})

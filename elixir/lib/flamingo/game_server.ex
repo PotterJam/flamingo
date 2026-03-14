@@ -371,28 +371,28 @@ defmodule Flamingo.GameServer do
         state.turn_length
       )
 
+    players =
+      Map.new(state.players, fn {pid, player} ->
+        gain = Map.get(score_gains, pid, 0)
+        {pid, %{player | score: player.score + gain}}
+      end)
+
     new_state = %{
       state
       | phase: :turn_reveal,
         phase_timer_ref: ref,
         turn_end_time: turn_end_time,
         drawn_this_round: MapSet.put(state.drawn_this_round, state.drawer_id),
-        score_gains: score_gains
+        score_gains: score_gains,
+        players: players
     }
 
-    broadcast(state.room_id, {:turn_reveal, state.word, turn_end_time, score_gains})
+    broadcast(state.room_id, {:turn_reveal, state.word, turn_end_time, score_gains, players})
     new_state
   end
 
   defp enter_next_turn(state) do
-    players =
-      Map.new(state.players, fn {pid, player} ->
-        gain = Map.get(state.score_gains, pid, 0)
-        {pid, %{player | score: player.score + gain}}
-      end)
-
-    state = %{state | players: players, score_gains: %{}}
-    broadcast(state.room_id, {:players_updated, players, state.player_order, state.host_id})
+    state = %{state | score_gains: %{}}
 
     next_drawer =
       Enum.find(state.player_order, fn pid ->
