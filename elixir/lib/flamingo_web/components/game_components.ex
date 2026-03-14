@@ -81,13 +81,41 @@ defmodule FlamingoWeb.GameComponents do
     """
   end
 
-  attr :word, :string, default: "_ _ _ _ _"
+  attr :word, :string, default: nil
+  attr :show_word, :boolean, default: false
 
   def game_header(assigns) do
+    {display, letter_count} =
+      case {assigns.word, assigns.show_word} do
+        {nil, _} ->
+          {nil, nil}
+
+        {word, true} ->
+          {String.upcase(word), nil}
+
+        {word, false} ->
+          hint = String.replace(word, ~r/[^ ]/, "_")
+
+          count =
+            word
+            |> String.split(" ")
+            |> Enum.map(&String.length/1)
+            |> Enum.join("-")
+
+          {String.upcase(hint), count}
+      end
+
+    assigns = assign(assigns, display: display, letter_count: letter_count)
+
     ~H"""
     <.box class="bg-pink-400 p-3">
-      <div class="flex items-center justify-center">
-        <p class="text-xl font-bold tracking-widest text-white">{@word}</p>
+      <div class="flex items-center justify-center gap-4">
+        <%= if @display do %>
+          <p class="text-3xl font-black tracking-widest text-white">{@display}</p>
+          <%= if @letter_count do %>
+            <p class="text-md text-white">{@letter_count}</p>
+          <% end %>
+        <% end %>
       </div>
     </.box>
     """
@@ -96,6 +124,7 @@ defmodule FlamingoWeb.GameComponents do
   attr :players, :map, required: true
   attr :player_order, :list, required: true
   attr :drawer_id, :string, default: nil
+  attr :correct_guesses, :any, default: MapSet.new()
 
   def player_list_panel(assigns) do
     ~H"""
@@ -105,11 +134,16 @@ defmodule FlamingoWeb.GameComponents do
           <%= for pid <- @player_order do %>
             <li class={[
               "flex items-center gap-2 px-3 py-2",
-              pid == @drawer_id && "bg-pink-100 font-semibold"
+              pid == @drawer_id && "bg-pink-100 font-semibold",
+              pid != @drawer_id && MapSet.member?(@correct_guesses, pid) && "bg-green-100"
             ]}>
               <span class="inline-flex h-5 w-5 shrink-0 items-center justify-center">
-                <%= if pid == @drawer_id do %>
-                  <.icon name="hero-paint-brush" class="h-4 w-4" />
+                <%= cond do %>
+                  <% pid == @drawer_id -> %>
+                    <.icon name="hero-paint-brush" class="h-4 w-4" />
+                  <% MapSet.member?(@correct_guesses, pid) -> %>
+                    <.icon name="hero-check" class="h-4 w-4 text-green-600" />
+                  <% true -> %>
                 <% end %>
               </span>
               <span class="truncate">{Map.get(@players, pid).name}</span>
