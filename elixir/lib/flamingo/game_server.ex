@@ -349,7 +349,7 @@ defmodule Flamingo.GameServer do
     }
 
     drawer_name = Map.get(new_state.players, new_state.drawer_id).name
-    {feed, event} = Feed.choosing_word(new_state.feed, new_state.drawer_id, drawer_name)
+    {feed, event} = Feed.new_turn(new_state.feed, new_state.drawer_id, drawer_name)
     new_state = %{new_state | feed: feed}
 
     broadcast(
@@ -382,12 +382,7 @@ defmodule Flamingo.GameServer do
         hint_timer_ref: hint_ref
     }
 
-    drawer_name = Map.get(state.players, state.drawer_id).name
-    {feed, event} = Feed.turn_started(new_state.feed, state.drawer_id, drawer_name)
-    new_state = %{new_state | feed: feed}
-
     broadcast(state.room_id, {:turn_started, state.drawer_id, word, turn_end_time})
-    broadcast(state.room_id, {:feed_event, event})
     new_state
   end
 
