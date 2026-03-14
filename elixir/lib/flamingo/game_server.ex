@@ -153,6 +153,9 @@ defmodule Flamingo.GameServer do
       state.phase != :playing ->
         {:reply, {:error, :not_playing}, state}
 
+      not Map.has_key?(state.players, player_id) ->
+        {:reply, {:error, :not_found}, state}
+
       player_id == state.drawer_id ->
         {:reply, {:error, :drawer_cannot_guess}, state}
 
@@ -164,8 +167,11 @@ defmodule Flamingo.GameServer do
         new_state = %{state | correct_guesses: correct_guesses}
         broadcast(state.room_id, {:correct_guess, player_id})
 
-        non_drawer_count = length(state.player_order) - 1
-        all_guessed? = map_size(correct_guesses) >= non_drawer_count
+        non_drawers =
+          Enum.reject(state.player_order, &(&1 == state.drawer_id))
+
+        all_guessed? =
+          Enum.all?(non_drawers, &Map.has_key?(correct_guesses, &1))
 
         new_state = if all_guessed?, do: enter_turn_reveal(new_state), else: new_state
         {:reply, :correct, new_state}
@@ -192,12 +198,34 @@ defmodule Flamingo.GameServer do
           do: List.first(player_order),
           else: state.host_id
 
-      new_state = %{state | players: players, player_order: player_order, host_id: host_id}
+      correct_guesses = Map.delete(state.correct_guesses, player_id)
+
+      new_state = %{
+        state
+        | players: players,
+          player_order: player_order,
+          host_id: host_id,
+          correct_guesses: correct_guesses
+      }
 
       broadcast(
         state.room_id,
         {:players_updated, new_state.players, new_state.player_order, new_state.host_id}
       )
+
+      new_state =
+        if state.phase == :playing and player_id != state.drawer_id do
+          non_drawers = Enum.reject(player_order, &(&1 == state.drawer_id))
+
+          if non_drawers != [] and
+               Enum.all?(non_drawers, &Map.has_key?(correct_guesses, &1)) do
+            enter_turn_reveal(new_state)
+          else
+            new_state
+          end
+        else
+          new_state
+        end
 
       {:reply, :ok, new_state}
     end
