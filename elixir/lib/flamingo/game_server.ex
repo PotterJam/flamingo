@@ -392,6 +392,7 @@ defmodule Flamingo.GameServer do
       end)
 
     state = %{state | players: players, score_gains: %{}}
+    broadcast(state.room_id, {:players_updated, players, state.player_order, state.host_id})
 
     next_drawer =
       Enum.find(state.player_order, fn pid ->
