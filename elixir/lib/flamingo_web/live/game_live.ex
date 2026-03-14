@@ -54,6 +54,8 @@ defmodule FlamingoWeb.GameLive do
                 socket
               end
 
+            socket = push_event(socket, "play_sound", %{sound: "join"})
+
             {:noreply, socket}
           else
             {:noreply, push_navigate(socket, to: ~p"/")}
