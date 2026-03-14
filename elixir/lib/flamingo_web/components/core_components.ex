@@ -177,6 +177,20 @@ defmodule FlamingoWeb.CoreComponents do
     """
   end
 
+  attr :class, :any, default: nil
+  slot :inner_block, required: true
+
+  def rounded_box(assigns) do
+    ~H"""
+    <div class={[
+      "rounded-rounded border-2 border-border shadow-rounded",
+      @class
+    ]}>
+      {render_slot(@inner_block)}
+    </div>
+    """
+  end
+
   @doc """
   Renders an input with label and error messages.
 

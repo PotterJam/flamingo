@@ -77,7 +77,9 @@
   --spacing-box-shadow-x: 4px;
   --spacing-box-shadow-y: 4px;
   --radius-base: 0px;
+  --radius-rounded: 15px;
   --shadow-shadow: var(--shadow);
+  --shadow-rounded: 0px 4px 0px 0px var(--border);
   --shadow-destructive: var(--shadow-destructive);
   --font-weight-base: 500;
   --font-weight-heading: 700;

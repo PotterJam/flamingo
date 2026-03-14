@@ -203,8 +203,11 @@ defmodule FlamingoWeb.GameLive do
       <%= if @phase in [:word_choice, :playing] do %>
         <.flamingo_background />
         <div class="flex h-screen w-full items-center justify-center p-6">
-          <div class="flex h-[675px] w-full max-w-[1200px] flex-col gap-3">
-            <.game_header word={@word} show_word={@show_word} />
+          <div class="flex h-[675px] w-full max-w-[1200px] flex-col gap-6">
+            <.game_header
+              word={@word}
+              show_word={@show_word or MapSet.member?(@correct_guesses, @player_id)}
+            />
 
             <div class="flex w-full flex-1 flex-row gap-3 pb-1 pr-1">
               <.player_list_panel
@@ -253,7 +256,7 @@ defmodule FlamingoWeb.GameLive do
                   <% end %>
                 </.box>
               <% else %>
-                <div class="flex w-[704px] shrink-0 flex-col gap-2">
+                <div class="flex w-[704px] shrink-0 flex-col gap-4">
                   <div
                     id="drawing-canvas"
                     phx-hook="DrawingCanvas"
@@ -291,21 +294,22 @@ defmodule FlamingoWeb.GameLive do
                         phx-submit="guess"
                         phx-hook=".GuessForm"
                         id="guess-form"
-                        class="flex gap-2"
+                        class="mx-auto flex w-96 gap-2"
                       >
-                        <.input
-                          field={@guess_form[:guess]}
-                          type="text"
-                          placeholder="Type your guess..."
-                          autocomplete="off"
-                          class="flex-1 rounded-base border-2 border-border bg-white px-3 py-2 text-sm focus:ring-2 focus:ring-ring focus:ring-offset-2 focus:outline-none"
-                        />
-                        <button
-                          type="submit"
-                          class="rounded-base border-2 border-border bg-main px-4 py-2 text-sm font-bold shadow-shadow transition-all hover:-translate-y-0.5 hover:shadow-lg"
-                        >
+                        <div class="min-w-0 flex-1">
+                          <.input
+                            field={@guess_form[:guess]}
+                            type="text"
+                            placeholder="Type your guess..."
+                            autocomplete="off"
+                            phx-mounted={JS.focus()}
+                            class="w-full rounded-base border-2 border-border bg-white px-3 py-2 text-sm placeholder:text-gray-400 focus:ring-2 focus:ring-ring focus:ring-offset-2 focus:outline-none"
+                            id="guess-input"
+                          />
+                        </div>
+                        <.button type="submit" variant="default" id="guess-button">
                           Guess
-                        </button>
+                        </.button>
                       </.form>
                     <% end %>
                   <% end %>
