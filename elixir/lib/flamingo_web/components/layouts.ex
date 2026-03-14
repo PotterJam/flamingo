@@ -14,6 +14,7 @@ defmodule FlamingoWeb.Layouts do
       {render_slot(@inner_block)}
     </main>
     <.flash_group flash={@flash} />
+    <div id="sound-manager" phx-hook="SoundManager" phx-update="ignore"></div>
     <div
       id="sound-toggle"
       phx-hook=".SoundToggle"
