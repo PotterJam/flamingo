@@ -121,6 +121,42 @@ defmodule FlamingoWeb.GameComponents do
     """
   end
 
+  @starburst_path "M96.4,8.1 L96.4,8.1 Q100.0,5.0 103.6,8.1 L120.5,22.7 Q124.1,25.8 128.9,25.4 L151.0,23.5 Q155.8,23.1 156.9,27.8 L162.0,49.5 Q163.1,54.2 167.2,56.7 L186.3,68.1 Q190.4,70.6 188.5,75.0 L179.9,95.6 Q178.0,100.0 179.9,104.4 L188.5,125.0 Q190.4,129.4 186.3,131.9 L167.2,143.3 Q163.1,145.8 162.0,150.5 L156.9,172.2 Q155.8,176.9 151.0,176.5 L128.9,174.6 Q124.1,174.2 120.5,177.3 L103.6,191.9 Q100.0,195.0 96.4,191.9 L79.5,177.3 Q75.9,174.2 71.1,174.6 L49.0,176.5 Q44.2,176.9 43.1,172.2 L38.0,150.5 Q36.9,145.8 32.8,143.3 L13.7,131.9 Q9.6,129.4 11.5,125.0 L20.1,104.4 Q22.0,100.0 20.1,95.6 L11.5,75.0 Q9.6,70.6 13.7,68.1 L32.8,56.7 Q36.9,54.2 38.0,49.5 L43.1,27.8 Q44.2,23.1 49.0,23.5 L71.1,25.4 Q75.9,25.8 79.5,22.7 Z"
+
+  attr :position_class, :string, required: true
+  attr :size_class, :string, default: "h-32 w-32"
+  attr :text_class, :string, default: "text-3xl"
+  attr :timer_id, :string, required: true
+  attr :timer_hook, :string, required: true
+  attr :end_time, :string, default: nil
+
+  def starburst_timer(assigns) do
+    assigns = assign(assigns, :path, @starburst_path)
+
+    ~H"""
+    <div class={@position_class}>
+      <div class="relative flex items-center justify-center">
+        <svg
+          viewBox="0 0 200 200"
+          xmlns="http://www.w3.org/2000/svg"
+          class={["starburst", @size_class]}
+        >
+          <path d={@path} fill="#f9a8d4" />
+        </svg>
+        <span
+          id={@timer_id}
+          phx-hook={@timer_hook}
+          phx-update="ignore"
+          data-end-time={@end_time}
+          class={["absolute font-timer font-black", @text_class]}
+          style="font-variant-numeric: tabular-nums; letter-spacing: 0.05em; min-width: 3ch; text-align: center;"
+        >
+        </span>
+      </div>
+    </div>
+    """
+  end
+
   attr :palette, :list, required: true
 
   def drawing_toolbar(assigns) do

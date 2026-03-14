@@ -49,8 +49,6 @@
   font-display: swap;
 }
 
-
-
 :root {
   --background: var(--color-pink-200);
   --foreground: oklch(0 0 0);

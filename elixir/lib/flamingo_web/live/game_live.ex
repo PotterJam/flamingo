@@ -210,28 +210,12 @@ defmodule FlamingoWeb.GameLive do
                 <.box class="flex w-[704px] shrink-0 items-center justify-center bg-white">
                   <%= if @player_id == @drawer_id do %>
                     <div class="relative flex flex-col items-center gap-8">
-                      <div class="absolute -top-36 -right-16">
-                        <div class="relative flex items-center justify-center">
-                          <svg
-                            class="starburst h-32 w-32"
-                            viewBox="0 0 200 200"
-                            xmlns="http://www.w3.org/2000/svg"
-                          >
-                            <path
-                              d={starburst_path()}
-                              fill="var(--color-pink-300)"
-                            />
-                          </svg>
-                          <span
-                            id="word-choice-timer"
-                            phx-hook=".Timer"
-                            phx-update="ignore"
-                            class="absolute font-timer text-3xl font-black"
-                            style="font-variant-numeric: tabular-nums; letter-spacing: 0.05em; min-width: 3ch; text-align: center;"
-                          >
-                          </span>
-                        </div>
-                      </div>
+                      <.starburst_timer
+                        position_class="absolute -top-36 -right-16"
+                        timer_id="word-choice-timer"
+                        timer_hook="FlamingoWeb.GameLive.Timer"
+                        end_time={@turn_end_time && DateTime.to_iso8601(@turn_end_time)}
+                      />
                       <h2 class="font-timer text-3xl font-black">Choose a word</h2>
                       <div class="flex gap-3">
                         <.button
@@ -246,28 +230,14 @@ defmodule FlamingoWeb.GameLive do
                     </div>
                   <% else %>
                     <div class="relative flex flex-col items-center gap-3">
-                      <div class="absolute -bottom-32 -right-20">
-                        <div class="relative flex items-center justify-center">
-                          <svg
-                            class="starburst h-28 w-28"
-                            viewBox="0 0 200 200"
-                            xmlns="http://www.w3.org/2000/svg"
-                          >
-                            <path
-                              d={starburst_path()}
-                              fill="var(--color-pink-300)"
-                            />
-                          </svg>
-                          <span
-                            id="word-choice-timer"
-                            phx-hook=".Timer"
-                            phx-update="ignore"
-                            class="absolute font-timer text-2xl font-black"
-                            style="font-variant-numeric: tabular-nums; letter-spacing: 0.05em; min-width: 3ch; text-align: center;"
-                          >
-                          </span>
-                        </div>
-                      </div>
+                      <.starburst_timer
+                        position_class="absolute -bottom-32 -right-20"
+                        size_class="h-28 w-28"
+                        text_class="text-2xl"
+                        timer_id="word-choice-timer"
+                        timer_hook="FlamingoWeb.GameLive.Timer"
+                        end_time={@turn_end_time && DateTime.to_iso8601(@turn_end_time)}
+                      />
                       <p class="font-timer text-3xl font-black">
                         <span class="text-pink-400">{Map.get(@players, @drawer_id).name}</span>{" "}is picking a word
                       </p>
@@ -325,15 +295,18 @@ defmodule FlamingoWeb.GameLive do
       <script :type={Phoenix.LiveView.ColocatedHook} name=".Timer">
         export default {
           mounted() {
-            this.handleEvent("set_timer", ({end_time}) => {
-              const endMs = new Date(end_time).getTime()
+            const startTimer = (endTime) => {
+              const endMs = new Date(endTime).getTime()
               const update = () => {
                 const remaining = Math.max(0, Math.ceil((endMs - Date.now()) / 1000))
                 this.el.innerText = String(remaining).padStart(2, '0')
                 if (remaining > 0) requestAnimationFrame(update)
               }
               update()
-            })
+            }
+            const initial = this.el.dataset.endTime
+            if (initial) startTimer(initial)
+            this.handleEvent("set_timer", ({end_time}) => startTimer(end_time))
           }
         }
       </script>
@@ -451,46 +424,5 @@ defmodule FlamingoWeb.GameLive do
     if Map.has_key?(socket.assigns, :room_id) and Map.has_key?(socket.assigns, :player_id) do
       Games.leave(socket.assigns.room_id, socket.assigns.player_id)
     end
-  end
-
-  defp starburst_path do
-    points = 10
-    outer_r = 95
-    inner_r = 78
-    cx = 100
-    cy = 100
-
-    all_points =
-      for i <- 0..(points * 2 - 1) do
-        angle = :math.pi() * i / points - :math.pi() / 2
-        r = if rem(i, 2) == 0, do: outer_r, else: inner_r
-        {Float.round(cx + r * :math.cos(angle), 1), Float.round(cy + r * :math.sin(angle), 1)}
-      end
-
-    n = length(all_points)
-    t = 0.15
-
-    segments =
-      for i <- 0..(n - 1) do
-        {x0, y0} = Enum.at(all_points, rem(i - 1 + n, n))
-        {x1, y1} = Enum.at(all_points, i)
-        {x2, y2} = Enum.at(all_points, rem(i + 1, n))
-
-        ax = Float.round(x1 + t * (x0 - x1), 1)
-        ay = Float.round(y1 + t * (y0 - y1), 1)
-        bx = Float.round(x1 + t * (x2 - x1), 1)
-        by = Float.round(y1 + t * (y2 - y1), 1)
-
-        "L#{ax},#{ay} Q#{x1},#{y1} #{bx},#{by}"
-      end
-
-    [{ax0, ay0} | _] =
-      for i <- 0..(n - 1) do
-        {x0, y0} = Enum.at(all_points, rem(i - 1 + n, n))
-        {x1, y1} = Enum.at(all_points, i)
-        {Float.round(x1 + t * (x0 - x1), 1), Float.round(y1 + t * (y0 - y1), 1)}
-      end
-
-    "M#{ax0},#{ay0} " <> Enum.join(segments, " ") <> " Z"
   end
 end
