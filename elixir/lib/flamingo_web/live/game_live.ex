@@ -204,7 +204,10 @@ defmodule FlamingoWeb.GameLive do
         <.flamingo_background />
         <div class="flex h-screen w-full items-center justify-center p-6">
           <div class="flex h-[675px] w-full max-w-[1200px] flex-col gap-6">
-            <.game_header word={@word} show_word={@show_word} />
+            <.game_header
+              word={@word}
+              show_word={@show_word or MapSet.member?(@correct_guesses, @player_id)}
+            />
 
             <div class="flex w-full flex-1 flex-row gap-3 pb-1 pr-1">
               <.player_list_panel
