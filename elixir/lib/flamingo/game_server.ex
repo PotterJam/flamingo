@@ -14,7 +14,8 @@ defmodule Flamingo.GameServer do
     round_count: 3,
     round_length: 30,
     current_drawing: [],
-    word_choices: []
+    word_choices: [],
+    correct_guesses: %{}
   ]
 
   def start_link(room_id) do
@@ -49,6 +50,10 @@ defmodule Flamingo.GameServer do
 
   def draw_event(room_id, player_id, event) do
     GenServer.cast(via(room_id), {:draw_event, player_id, event})
+  end
+
+  def guess(room_id, player_id, text) do
+    GenServer.call(via(room_id), {:guess, player_id, text})
   end
 
   def get_state(room_id) do
@@ -134,6 +139,29 @@ defmodule Flamingo.GameServer do
     end
   end
 
+  def handle_call({:guess, player_id, text}, _from, state) do
+    cond do
+      state.phase != :playing ->
+        {:reply, {:error, :not_playing}, state}
+
+      player_id == state.drawer_id ->
+        {:reply, {:error, :drawer_cannot_guess}, state}
+
+      Map.has_key?(state.correct_guesses, player_id) ->
+        {:reply, {:error, :already_guessed}, state}
+
+      String.downcase(String.trim(text)) == String.downcase(state.word) ->
+        correct_guesses = Map.put(state.correct_guesses, player_id, DateTime.utc_now())
+        new_state = %{state | correct_guesses: correct_guesses}
+        broadcast(state.room_id, {:correct_guess, player_id})
+        {:reply, :correct, new_state}
+
+      true ->
+        broadcast(state.room_id, {:incorrect_guess, player_id, text})
+        {:reply, :incorrect, state}
+    end
+  end
+
   def handle_call({:leave, player_id}, _from, state) do
     if not Map.has_key?(state.players, player_id) do
       {:reply, :ok, state}
@@ -212,7 +240,8 @@ defmodule Flamingo.GameServer do
         word_choices: word_choices,
         phase_timer_ref: ref,
         turn_end_time: turn_end_time,
-        word: nil
+        word: nil,
+        correct_guesses: %{}
     }
 
     broadcast(
@@ -232,7 +261,8 @@ defmodule Flamingo.GameServer do
         word_choices: [],
         phase_timer_ref: nil,
         turn_end_time: nil,
-        current_drawing: []
+        current_drawing: [],
+        correct_guesses: %{}
     }
 
     broadcast(state.room_id, {:round_started, state.drawer_id})
