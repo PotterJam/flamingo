@@ -299,6 +299,7 @@ defmodule FlamingoWeb.GameLive do
                           value={@guess_form[:guess].value}
                           placeholder="Type your guess..."
                           autocomplete="off"
+                          phx-mounted={JS.focus()}
                           class="min-w-0 flex-1 rounded-base border-2 border-border bg-white px-3 py-2 text-sm placeholder:text-gray-400 focus:ring-2 focus:ring-ring focus:ring-offset-2 focus:outline-none"
                           id="guess-input"
                         />
