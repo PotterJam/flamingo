@@ -22,7 +22,7 @@ defmodule FlamingoWeb.GameLive do
        host_id: nil,
        drawer_id: nil,
        round_count: 3,
-       round_length: 45,
+       turn_length: 45,
        word_choices: nil,
        turn_end_time: nil,
        word: nil,
@@ -57,7 +57,7 @@ defmodule FlamingoWeb.GameLive do
                 host_id: state.host_id,
                 drawer_id: state.drawer_id,
                 round_count: state.round_count,
-                round_length: state.round_length,
+                turn_length: state.turn_length,
                 word_choices: word_choices,
                 turn_end_time: state.turn_end_time,
                 word: state.word,
@@ -145,8 +145,8 @@ defmodule FlamingoWeb.GameLive do
                         type="number"
                         min="30"
                         max="120"
-                        value={@round_length}
-                        name="settings[round_length]"
+                        value={@turn_length}
+                        name="settings[turn_length]"
                         class="w-full rounded-base border-2 border-border bg-white px-3 py-2 text-sm focus:ring-2 focus:ring-ring focus:ring-offset-2 focus:outline-none"
                         id="round-length-input"
                       />
@@ -385,19 +385,19 @@ defmodule FlamingoWeb.GameLive do
   def handle_event("update_settings", %{"settings" => params}, socket) do
     round_count = String.to_integer(params["round_count"])
 
-    round_length =
-      case Integer.parse(params["round_length"]) do
+    turn_length =
+      case Integer.parse(params["turn_length"]) do
         {val, _} -> max(val, 30)
-        :error -> socket.assigns.round_length
+        :error -> socket.assigns.turn_length
       end
 
-    {:noreply, assign(socket, round_count: round_count, round_length: round_length)}
+    {:noreply, assign(socket, round_count: round_count, turn_length: turn_length)}
   end
 
   def handle_event("start_game", _params, socket) do
     settings = %{
       round_count: socket.assigns.round_count,
-      round_length: socket.assigns.round_length
+      turn_length: socket.assigns.turn_length
     }
 
     case Games.start_game(socket.assigns.room_id, socket.assigns.player_id, settings) do
@@ -441,7 +441,7 @@ defmodule FlamingoWeb.GameLive do
   end
 
   def handle_info(
-        {:word_choice_started, drawer_id, word_choices, turn_end_time, round_count, round_length},
+        {:word_choice_started, drawer_id, word_choices, turn_end_time, round_count, turn_length},
         socket
       ) do
     is_drawer = socket.assigns.player_id == drawer_id
@@ -452,7 +452,7 @@ defmodule FlamingoWeb.GameLive do
         drawer_id: drawer_id,
         turn_end_time: turn_end_time,
         round_count: round_count,
-        round_length: round_length,
+        turn_length: turn_length,
         word_choices: if(is_drawer, do: word_choices, else: nil),
         correct_guesses: MapSet.new()
       )
@@ -461,7 +461,7 @@ defmodule FlamingoWeb.GameLive do
     {:noreply, socket}
   end
 
-  def handle_info({:round_started, drawer_id, word}, socket) do
+  def handle_info({:turn_started, drawer_id, word}, socket) do
     is_drawer = socket.assigns.player_id == drawer_id
 
     {:noreply,

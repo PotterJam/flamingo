@@ -70,12 +70,12 @@ defmodule Flamingo.GameServerTest do
     assert {:error, :invalid_round_count} = GameServer.start_game(room_id, p1, %{round_count: 6})
   end
 
-  test "start_game fails with invalid round_length", %{room_id: room_id} do
+  test "start_game fails with invalid turn_length", %{room_id: room_id} do
     {:ok, p1, _} = GameServer.join(room_id, "Alice")
     {:ok, _p2, _} = GameServer.join(room_id, "Bob")
 
-    assert {:error, :invalid_round_length} =
-             GameServer.start_game(room_id, p1, %{round_length: 10})
+    assert {:error, :invalid_turn_length} =
+             GameServer.start_game(room_id, p1, %{turn_length: 10})
   end
 
   test "start_game succeeds and broadcasts", %{room_id: room_id} do
@@ -83,7 +83,7 @@ defmodule Flamingo.GameServerTest do
     {:ok, p1, _} = GameServer.join(room_id, "Alice")
     {:ok, _p2, _} = GameServer.join(room_id, "Bob")
 
-    assert :ok = GameServer.start_game(room_id, p1, %{round_count: 2, round_length: 45})
+    assert :ok = GameServer.start_game(room_id, p1, %{round_count: 2, turn_length: 45})
     assert_receive {:word_choice_started, _drawer_id, word_choices, _turn_end_time, 2, 45}
     assert length(word_choices) == 3
 

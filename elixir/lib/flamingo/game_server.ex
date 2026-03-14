@@ -12,7 +12,7 @@ defmodule Flamingo.GameServer do
     players: %{},
     player_order: [],
     round_count: 3,
-    round_length: 30,
+    turn_length: 30,
     current_drawing: [],
     word_choices: [],
     correct_guesses: %{}
@@ -104,16 +104,16 @@ defmodule Flamingo.GameServer do
 
   def handle_call({:start_game, player_id, settings}, _from, state) do
     round_count = Map.get(settings, :round_count, state.round_count)
-    round_length = Map.get(settings, :round_length, state.round_length)
+    turn_length = Map.get(settings, :turn_length, state.turn_length)
 
     with :ok <- validate_host(state, player_id),
          :ok <- validate_player_count(state),
          :ok <- validate_round_count(round_count),
-         :ok <- validate_round_length(round_length) do
+         :ok <- validate_turn_length(turn_length) do
       drawer_id = List.first(state.player_order)
 
       new_state =
-        %{state | round_count: round_count, round_length: round_length, drawer_id: drawer_id}
+        %{state | round_count: round_count, turn_length: turn_length, drawer_id: drawer_id}
         |> enter_word_choice()
 
       {:reply, :ok, new_state}
@@ -251,7 +251,7 @@ defmodule Flamingo.GameServer do
     broadcast(
       new_state.room_id,
       {:word_choice_started, new_state.drawer_id, word_choices, turn_end_time,
-       new_state.round_count, new_state.round_length}
+       new_state.round_count, new_state.turn_length}
     )
 
     new_state
@@ -269,7 +269,7 @@ defmodule Flamingo.GameServer do
         correct_guesses: %{}
     }
 
-    broadcast(state.room_id, {:round_started, state.drawer_id, word})
+    broadcast(state.room_id, {:turn_started, state.drawer_id, word})
     new_state
   end
 
@@ -284,8 +284,8 @@ defmodule Flamingo.GameServer do
   defp validate_round_count(count) when count >= 1 and count <= 5, do: :ok
   defp validate_round_count(_), do: {:error, :invalid_round_count}
 
-  defp validate_round_length(length) when length >= 30, do: :ok
-  defp validate_round_length(_), do: {:error, :invalid_round_length}
+  defp validate_turn_length(length) when length >= 30, do: :ok
+  defp validate_turn_length(_), do: {:error, :invalid_turn_length}
 
   defp generate_player_id do
     :crypto.strong_rand_bytes(8) |> Base.url_encode64(padding: false)
