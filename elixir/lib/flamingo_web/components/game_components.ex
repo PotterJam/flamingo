@@ -126,11 +126,11 @@ defmodule FlamingoWeb.GameComponents do
         if(!@display, do: "invisible")
       ]}>
         <div class="flex items-center justify-center gap-4">
-          <p class="font-timer text-5xl leading-none font-black tracking-widest text-white">
+          <p class="font-hero text-5xl leading-none font-black tracking-widest text-white">
             {if(@display, do: @display, else: Phoenix.HTML.raw("&nbsp;"))}
           </p>
           <%= if @display && @letter_count do %>
-            <p class="font-timer text-2xl leading-none font-bold text-white">{@letter_count}</p>
+            <p class="font-hero text-2xl leading-none font-bold text-white">{@letter_count}</p>
           <% end %>
         </div>
       </div>
@@ -214,7 +214,7 @@ defmodule FlamingoWeb.GameComponents do
           phx-hook={@timer_hook}
           phx-update="ignore"
           data-end-time={@end_time}
-          class={["absolute font-timer font-black", @text_class]}
+          class={["absolute font-hero font-black", @text_class]}
           style="font-variant-numeric: tabular-nums; letter-spacing: 0.05em; min-width: 3ch; text-align: center;"
         >
         </span>
