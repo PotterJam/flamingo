@@ -27,7 +27,8 @@ defmodule FlamingoWeb.GameLive do
        turn_end_time: nil,
        word: nil,
        show_word: false,
-       correct_guesses: MapSet.new()
+       correct_guesses: MapSet.new(),
+       guess_form: to_form(%{"guess" => ""}, as: :guess_form)
      )}
   end
 
@@ -289,20 +290,18 @@ defmodule FlamingoWeb.GameLive do
                       </.box>
                     <% else %>
                       <.form
-                        for={%{}}
-                        as={:guess_form}
+                        for={@guess_form}
                         phx-submit="guess"
                         phx-hook=".GuessForm"
                         id="guess-form"
                         class="flex gap-2"
                       >
-                        <input
+                        <.input
+                          field={@guess_form[:guess]}
                           type="text"
-                          name="guess"
                           placeholder="Type your guess..."
                           autocomplete="off"
                           class="flex-1 rounded-base border-2 border-border bg-white px-3 py-2 text-sm focus:ring-2 focus:ring-ring focus:ring-offset-2 focus:outline-none"
-                          id="guess-input"
                         />
                         <button
                           type="submit"
@@ -416,7 +415,7 @@ defmodule FlamingoWeb.GameLive do
     {:noreply, socket}
   end
 
-  def handle_event("guess", %{"guess" => text}, socket) do
+  def handle_event("guess", %{"guess_form" => %{"guess" => text}}, socket) do
     Games.guess(socket.assigns.room_id, socket.assigns.player_id, text)
     {:noreply, socket}
   end
@@ -489,6 +488,7 @@ defmodule FlamingoWeb.GameLive do
     if player_id == socket.assigns.player_id do
       {:noreply,
        socket
+       |> assign(:guess_form, to_form(%{"guess" => ""}, as: :guess_form))
        |> push_event("play_sound", %{sound: "wrongGuess"})
        |> push_event("clear_guess", %{})}
     else

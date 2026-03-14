@@ -139,7 +139,7 @@ defmodule Flamingo.GameServer do
     end
   end
 
-  def handle_call({:guess, player_id, text}, _from, state) do
+  def handle_call({:guess, player_id, text}, _from, state) when is_binary(text) do
     cond do
       state.phase != :playing ->
         {:reply, {:error, :not_playing}, state}
@@ -160,6 +160,10 @@ defmodule Flamingo.GameServer do
         broadcast(state.room_id, {:incorrect_guess, player_id, text})
         {:reply, :incorrect, state}
     end
+  end
+
+  def handle_call({:guess, _player_id, _text}, _from, state) do
+    {:reply, {:error, :invalid_guess}, state}
   end
 
   def handle_call({:leave, player_id}, _from, state) do
