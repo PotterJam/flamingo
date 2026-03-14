@@ -507,6 +507,28 @@ defmodule FlamingoWeb.CoreComponents do
     """
   end
 
+  attr :id, :string, required: true
+  attr :label, :string, required: true
+  attr :class, :any, default: nil
+
+  def switch(assigns) do
+    ~H"""
+    <div class={["flex items-center gap-2", @class]}>
+      <button
+        id={@id}
+        type="button"
+        role="switch"
+        aria-checked="true"
+        class="switch-track inline-flex h-6 w-12 shrink-0 cursor-pointer items-center rounded-full border-2 border-foreground bg-primary transition-colors"
+      >
+        <span class="switch-thumb pointer-events-none block h-4 w-4 rounded-full border-2 border-foreground bg-white ring-0 transition-transform translate-x-6">
+        </span>
+      </button>
+      <span class="text-sm font-bold text-foreground select-none">{@label}</span>
+    </div>
+    """
+  end
+
   ## JS Commands
 
   def show(js \\ %JS{}, selector) do
