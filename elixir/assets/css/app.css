@@ -4,8 +4,6 @@
 @source "../js";
 @source "../../lib/flamingo_web";
 
-@plugin "../vendor/heroicons";
-
 @plugin "../vendor/daisyui" {
   themes: false;
 }
