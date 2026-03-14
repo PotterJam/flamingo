@@ -5,11 +5,12 @@ defmodule FlamingoWeb.Layouts do
 
   attr :flash, :map, required: true
   attr :current_scope, :map, default: nil
+  attr :background, :string, default: "grid-background"
   slot :inner_block, required: true
 
   def app(assigns) do
     ~H"""
-    <main class="grid-background min-h-screen">
+    <main class={[@background, "min-h-screen"]}>
       {render_slot(@inner_block)}
     </main>
     <.flash_group flash={@flash} />

@@ -93,6 +93,24 @@
   background-size: 70px 70px;
 }
 
+@keyframes drift-left {
+  0% { transform: translateX(-100px); }
+  100% { transform: translateX(100px); }
+}
+
+@keyframes drift-right {
+  0% { transform: translateX(100px); }
+  100% { transform: translateX(-100px); }
+}
+
+.bg-row-even {
+  animation: drift-left 45s linear infinite alternate;
+}
+
+.bg-row-odd {
+  animation: drift-right 45s linear infinite alternate;
+}
+
 @layer base {
   body {
     font-family: system-ui, Avenir, Helvetica, Arial, sans-serif;
