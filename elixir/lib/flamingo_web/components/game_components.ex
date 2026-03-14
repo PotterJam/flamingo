@@ -36,6 +36,38 @@ defmodule FlamingoWeb.GameComponents do
     """
   end
 
+  @num_rows 30
+  @num_cols 45
+  @row_height_rem 2.5
+  @col_width_rem 10
+
+  @flamingo_cells (for row <- 0..(@num_rows - 1), col <- 0..(@num_cols - 1) do
+                     offset = if rem(row, 2) != 0, do: @col_width_rem / 2, else: 0
+
+                     %{
+                       top: row * @row_height_rem,
+                       left: col * @col_width_rem - offset - @col_width_rem,
+                       row_class: if(rem(row, 2) == 0, do: "bg-row-even", else: "bg-row-odd")
+                     }
+                   end)
+
+  def flamingo_background(assigns) do
+    assigns = assign(assigns, :cells, @flamingo_cells)
+
+    ~H"""
+    <div class="fixed inset-0 -z-10 overflow-hidden bg-pink-200">
+      <div class="relative h-full w-full">
+        <span
+          :for={cell <- @cells}
+          class={["font-retro-display absolute text-lg font-extrabold whitespace-nowrap text-pink-300 opacity-30 select-none", cell.row_class]}
+          style={"top: #{cell.top}rem; left: #{cell.left}rem"}
+          aria-hidden="true"
+        >flamingo</span>
+      </div>
+    </div>
+    """
+  end
+
   def logo(assigns) do
     ~H"""
     <h1 class="font-retro-display text-2xl font-bold text-pink-400">

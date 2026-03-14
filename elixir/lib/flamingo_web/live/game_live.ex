@@ -77,7 +77,7 @@ defmodule FlamingoWeb.GameLive do
 
   def render(assigns) do
     ~H"""
-    <Layouts.app flash={@flash}>
+    <Layouts.app flash={@flash} background={if(@phase == :lobby, do: "grid-background", else: "")}>
       <div id="sound-manager" phx-hook="SoundManager" phx-update="ignore"></div>
       <%= if @phase == :lobby do %>
         <div class="flex h-screen w-full items-center justify-center">
@@ -174,6 +174,7 @@ defmodule FlamingoWeb.GameLive do
           </.card>
         </div>
       <% else %>
+        <.flamingo_background />
         <div class="flex h-screen w-full items-center justify-center p-6">
           <div class="flex h-[675px] w-full max-w-[1200px] flex-col gap-3">
             <.game_header />
