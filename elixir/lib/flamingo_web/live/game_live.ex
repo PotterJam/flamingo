@@ -213,6 +213,8 @@ defmodule FlamingoWeb.GameLive do
               word={@word}
               show_word={@show_word or MapSet.member?(@correct_guesses, @player_id)}
               revealed_indices={@revealed_indices}
+              turn_end_time={@turn_end_time}
+              show_timer={@phase == :playing}
             />
 
             <div class="flex w-full flex-1 flex-row gap-3 pb-1 pr-1">
