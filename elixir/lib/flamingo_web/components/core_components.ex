@@ -509,23 +509,21 @@ defmodule FlamingoWeb.CoreComponents do
 
   attr :id, :string, required: true
   attr :label, :string, required: true
+  attr :checked, :boolean, default: true
   attr :class, :any, default: nil
 
   def switch(assigns) do
     ~H"""
-    <div class={["flex items-center gap-2", @class]}>
-      <button
+    <label for={@id} class={["flex cursor-pointer items-center gap-2", @class]}>
+      <input
+        type="checkbox"
         id={@id}
-        type="button"
         role="switch"
-        aria-checked="true"
-        class="switch-track inline-flex h-6 w-12 shrink-0 cursor-pointer items-center rounded-full border-2 border-foreground bg-primary transition-colors"
-      >
-        <span class="switch-thumb pointer-events-none block h-4 w-4 rounded-full border-2 border-foreground bg-white ring-0 transition-transform translate-x-6">
-        </span>
-      </button>
+        checked={@checked}
+        class="nb-switch peer"
+      />
       <span class="text-sm font-bold text-foreground select-none">{@label}</span>
-    </div>
+    </label>
     """
   end
 

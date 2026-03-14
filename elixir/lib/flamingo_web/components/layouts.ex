@@ -26,34 +26,18 @@ defmodule FlamingoWeb.Layouts do
     <script :type={Phoenix.LiveView.ColocatedHook} name=".SoundToggle">
       export default {
         mounted() {
-          this.track = this.el.querySelector(".switch-track");
-          this.thumb = this.el.querySelector(".switch-thumb");
+          const checkbox = this.el.querySelector("#sound-toggle-switch");
           const muted = localStorage.getItem("flamingo_sound_muted") === "true";
           window.__soundMuted = muted;
-          this.updateToggle(!muted);
+          checkbox.checked = !muted;
 
-          this.track.addEventListener("click", () => {
-            window.__soundMuted = !window.__soundMuted;
+          checkbox.addEventListener("change", () => {
+            window.__soundMuted = !checkbox.checked;
             localStorage.setItem("flamingo_sound_muted", window.__soundMuted);
-            this.updateToggle(!window.__soundMuted);
             if (window.__soundMuted) {
               window.dispatchEvent(new Event("flamingo:mute"));
             }
           });
-        },
-        updateToggle(on) {
-          this.track.setAttribute("aria-checked", on);
-          if (on) {
-            this.track.classList.remove("bg-secondary-background");
-            this.track.classList.add("bg-primary");
-            this.thumb.classList.remove("translate-x-1");
-            this.thumb.classList.add("translate-x-6");
-          } else {
-            this.track.classList.remove("bg-primary");
-            this.track.classList.add("bg-secondary-background");
-            this.thumb.classList.remove("translate-x-6");
-            this.thumb.classList.add("translate-x-1");
-          }
         }
       }
     </script>
