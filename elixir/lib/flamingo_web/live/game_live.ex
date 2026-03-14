@@ -264,7 +264,7 @@ defmodule FlamingoWeb.GameLive do
                           end_time={@turn_end_time && DateTime.to_iso8601(@turn_end_time)}
                         />
                         <p class="text-3xl font-black">
-                          <span class="font-hero text-5xl text-pink-400">{Map.get(@players, @drawer_id).name}</span>{" "}is picking a word
+                          <span class="font-hero text-[2.5rem] leading-none text-pink-400">{Map.get(@players, @drawer_id).name}</span>{" "}is picking a word
                         </p>
                       </div>
                     <% end %>
@@ -339,7 +339,7 @@ defmodule FlamingoWeb.GameLive do
                           phx-submit="guess"
                           phx-hook=".GuessForm"
                           id="guess-form"
-                          class="mx-auto flex w-96 gap-2"
+                          class="mx-auto flex w-96 items-center gap-2"
                         >
                           <div class="min-w-0 flex-1">
                             <.input
