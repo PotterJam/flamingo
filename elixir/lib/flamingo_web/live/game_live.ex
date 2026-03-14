@@ -369,11 +369,11 @@ defmodule FlamingoWeb.GameLive do
       <%= if @phase == :game_ended do %>
         <.flamingo_background />
         <div class="flex h-screen w-full items-center justify-center p-6">
-          <.card class="flex w-full max-w-md flex-col items-center gap-6 bg-white p-8">
-            <h2 class="font-timer text-4xl font-black text-pink-400">Game Over</h2>
-            <ul class="w-full space-y-2">
+          <.card class="flex w-full max-w-xs flex-col items-center gap-6 bg-white p-8">
+            <h2 class="text-3xl font-bold">Game finished</h2>
+            <ul class="w-full space-y-1">
               <%= for {pid, idx} <- @player_order |> Enum.sort_by(fn pid -> -(Map.get(@players, pid).score) end) |> Enum.with_index() do %>
-                <li class="flex items-center gap-2 rounded-base border-2 border-border px-4 py-2">
+                <li class="flex items-center gap-2 px-3 py-2">
                   <span class="text-lg">
                     <%= case idx do %>
                       <% 0 -> %>
