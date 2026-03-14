@@ -19,7 +19,7 @@ defmodule FlamingoWeb.CoreComponents do
       we build on. You will use it for layout, sizing, flexbox, grid, and
       spacing.
 
-    * [Heroicons](https://heroicons.com) - see `icon/1` for usage.
+    * [Phosphor Icons](https://phosphoricons.com) - see `icon/1` for usage.
 
     * [Phoenix.Component](https://hexdocs.pm/phoenix_live_view/Phoenix.Component.html) -
       the component system used by Phoenix. Some components, such as `<.link>`
@@ -64,15 +64,15 @@ defmodule FlamingoWeb.CoreComponents do
         @kind == :info && "alert-info",
         @kind == :error && "alert-error"
       ]}>
-        <.icon :if={@kind == :info} name="hero-information-circle" class="size-5 shrink-0" />
-        <.icon :if={@kind == :error} name="hero-exclamation-circle" class="size-5 shrink-0" />
+        <.icon :if={@kind == :info} name="info" class="size-5 shrink-0" />
+        <.icon :if={@kind == :error} name="warning_circle" class="size-5 shrink-0" />
         <div>
           <p :if={@title} class="font-semibold">{@title}</p>
           <p>{msg}</p>
         </div>
         <div class="flex-1" />
         <button type="button" class="group self-start cursor-pointer" aria-label={gettext("close")}>
-          <.icon name="hero-x-mark" class="size-5 opacity-40 group-hover:opacity-70" />
+          <.icon name="x" class="size-5 opacity-40 group-hover:opacity-70" />
         </button>
       </div>
     </div>
@@ -116,7 +116,7 @@ defmodule FlamingoWeb.CoreComponents do
           {render_slot(@inner_block)}
         </span>
         <.icon
-          name="hero-check-badge"
+          name="seal_check"
           class="h-5 w-5 opacity-0 transition-opacity duration-200 group-[.confirmed]/confirm:opacity-100"
         />
       </span>
@@ -169,7 +169,7 @@ defmodule FlamingoWeb.CoreComponents do
   def button_group(assigns) do
     ~H"""
     <div class={[
-      "flex border-2 border-border bg-white",
+      "flex border-2 border-border bg-white [&>button]:transition-colors [&>button:not(.bg-pink-300):hover]:bg-pink-100",
       @class
     ]}>
       {render_slot(@inner_block)}
@@ -375,7 +375,7 @@ defmodule FlamingoWeb.CoreComponents do
   defp error(assigns) do
     ~H"""
     <p class="mt-1.5 flex gap-2 items-center text-sm text-error">
-      <.icon name="hero-exclamation-circle" class="size-5" />
+      <.icon name="warning_circle" class="size-5" />
       {render_slot(@inner_block)}
     </p>
     """
@@ -495,29 +495,22 @@ defmodule FlamingoWeb.CoreComponents do
   end
 
   @doc """
-  Renders a [Heroicon](https://heroicons.com).
-
-  Heroicons come in three styles – outline, solid, and mini.
-  By default, the outline style is used, but solid and mini may
-  be applied by using the `-solid` and `-mini` suffix.
-
-  You can customize the size and colors of the icons by setting
-  width, height, and background color classes.
-
-  Icons are extracted from the `deps/heroicons` directory and bundled within
-  your compiled app.css by the plugin in `assets/vendor/heroicons.js`.
+  Renders a [Phosphor icon](https://phosphoricons.com) in bold weight.
 
   ## Examples
 
-      <.icon name="hero-x-mark" />
-      <.icon name="hero-arrow-path" class="ml-1 size-3 motion-safe:animate-spin" />
+      <.icon name="x" />
+      <.icon name="arrows_clockwise" class="ml-1 size-3 motion-safe:animate-spin" />
   """
   attr :name, :string, required: true
   attr :class, :any, default: "size-4"
 
-  def icon(%{name: "hero-" <> _} = assigns) do
+  def icon(assigns) do
+    assigns =
+      assign(assigns, :svg, Phosphoricons.icon(assigns.name, type: "bold", class: assigns.class))
+
     ~H"""
-    <span class={[@name, @class]} />
+    {@svg}
     """
   end
 
