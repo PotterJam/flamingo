@@ -292,6 +292,7 @@ defmodule FlamingoWeb.GameLive do
                         for={%{}}
                         as={:guess_form}
                         phx-submit="guess"
+                        phx-hook=".GuessForm"
                         id="guess-form"
                         class="flex gap-2"
                       >
@@ -346,6 +347,15 @@ defmodule FlamingoWeb.GameLive do
                 if (remaining > 0) requestAnimationFrame(update)
               }
               update()
+            })
+          }
+        }
+      </script>
+      <script :type={Phoenix.LiveView.ColocatedHook} name=".GuessForm">
+        export default {
+          mounted() {
+            this.handleEvent("clear_guess", () => {
+              this.el.reset()
             })
           }
         }
@@ -475,8 +485,15 @@ defmodule FlamingoWeb.GameLive do
      |> push_event("play_sound", %{sound: sound})}
   end
 
-  def handle_info({:incorrect_guess, _player_id, _text}, socket) do
-    {:noreply, socket}
+  def handle_info({:incorrect_guess, player_id, _text}, socket) do
+    if player_id == socket.assigns.player_id do
+      {:noreply,
+       socket
+       |> push_event("play_sound", %{sound: "wrongGuess"})
+       |> push_event("clear_guess", %{})}
+    else
+      {:noreply, socket}
+    end
   end
 
   def handle_info({:draw_event, from_player_id, event}, socket) do
