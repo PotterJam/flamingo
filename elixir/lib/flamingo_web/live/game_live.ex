@@ -193,7 +193,7 @@ defmodule FlamingoWeb.GameLive do
           </.card>
         </div>
       <% end %>
-      <%= if @phase == :word_choice do %>
+      <%= if @phase in [:word_choice, :playing] do %>
         <.flamingo_background />
         <div class="flex h-screen w-full items-center justify-center p-6">
           <div class="flex h-[675px] w-full max-w-[1200px] flex-col gap-3">
@@ -206,91 +206,73 @@ defmodule FlamingoWeb.GameLive do
                 drawer_id={@drawer_id}
               />
 
-              <.box class="flex w-[704px] shrink-0 items-center justify-center bg-white">
-                <%= if @player_id == @drawer_id do %>
-                  <div class="flex flex-col items-center gap-6">
-                    <div class="flex items-center gap-3">
-                      <h2 class="text-xl font-bold">Choose a word</h2>
+              <%= if @phase == :word_choice do %>
+                <.box class="flex w-[704px] shrink-0 items-center justify-center bg-white">
+                  <%= if @player_id == @drawer_id do %>
+                    <div class="flex flex-col items-center gap-6">
+                      <div class="flex items-center gap-3">
+                        <h2 class="text-xl font-bold">Choose a word</h2>
+                        <span
+                          id="word-choice-timer"
+                          phx-hook=".Timer"
+                          phx-update="ignore"
+                          class="text-lg font-bold tabular-nums"
+                        >
+                        </span>
+                      </div>
+                      <div class="flex gap-3">
+                        <button
+                          :for={word <- @word_choices}
+                          phx-click="select_word"
+                          phx-value-word={word}
+                          class="rounded-base border-2 border-border bg-main px-6 py-3 font-bold shadow-shadow transition-all hover:-translate-y-0.5 hover:shadow-lg"
+                        >
+                          {word}
+                        </button>
+                      </div>
+                    </div>
+                  <% else %>
+                    <div class="flex flex-col items-center gap-3">
+                      <p class="text-lg font-bold">
+                        {Map.get(@players, @drawer_id).name} is picking a word...
+                      </p>
                       <span
                         id="word-choice-timer"
                         phx-hook=".Timer"
                         phx-update="ignore"
-                        class="text-lg font-bold tabular-nums"
+                        class="text-2xl font-bold tabular-nums"
                       >
                       </span>
                     </div>
-                    <div class="flex gap-3">
-                      <button
-                        :for={word <- @word_choices}
-                        phx-click="select_word"
-                        phx-value-word={word}
-                        class="rounded-base border-2 border-border bg-main px-6 py-3 font-bold shadow-shadow transition-all hover:-translate-y-0.5 hover:shadow-lg"
-                      >
-                        {word}
-                      </button>
-                    </div>
-                  </div>
-                <% else %>
-                  <div class="flex flex-col items-center gap-3">
-                    <p class="text-lg font-bold">
-                      {Map.get(@players, @drawer_id).name} is picking a word...
-                    </p>
-                    <span
-                      id="word-choice-timer"
-                      phx-hook=".Timer"
-                      phx-update="ignore"
-                      class="text-2xl font-bold tabular-nums"
-                    >
-                    </span>
-                  </div>
-                <% end %>
-              </.box>
-
-              <.box class="flex w-full flex-1 flex-col bg-white p-0">
-                <div class="flex-1" />
-              </.box>
-            </div>
-          </div>
-        </div>
-      <% end %>
-      <%= if @phase == :playing do %>
-        <.flamingo_background />
-        <div class="flex h-screen w-full items-center justify-center p-6">
-          <div class="flex h-[675px] w-full max-w-[1200px] flex-col gap-3">
-            <.game_header />
-
-            <div class="flex w-full flex-1 flex-row gap-3 pb-1 pr-1">
-              <.player_list_panel
-                players={@players}
-                player_order={@player_order}
-                drawer_id={@drawer_id}
-              />
-
-              <div
-                id="drawing-canvas"
-                phx-hook="DrawingCanvas"
-                phx-update="ignore"
-                data-is-drawer={to_string(@player_id == @drawer_id)}
-                class="flex w-[704px] shrink-0 flex-col gap-2"
-              >
-                <.box class="bg-white p-0">
-                  <canvas
-                    width="700"
-                    height="500"
-                    class={[
-                      "bg-white",
-                      if(@player_id == @drawer_id, do: "cursor-crosshair", else: "cursor-default")
-                    ]}
-                  >
-                  </canvas>
+                  <% end %>
                 </.box>
-
-                <%= if @player_id == @drawer_id do %>
+              <% else %>
+                <div
+                  id="drawing-canvas"
+                  phx-hook="DrawingCanvas"
+                  phx-update="ignore"
+                  data-is-drawer={to_string(@player_id == @drawer_id)}
+                  class="flex w-[704px] shrink-0 flex-col gap-2"
+                >
                   <.box class="bg-white p-0">
-                    <.drawing_toolbar palette={palette()} />
+                    <canvas
+                      width="700"
+                      height="500"
+                      class={[
+                        "bg-white",
+                        if(@player_id == @drawer_id, do: "cursor-crosshair", else: "cursor-default")
+                      ]}
+                    >
+                    </canvas>
                   </.box>
-                <% end %>
-              </div>
+
+                  <%= if @player_id == @drawer_id do %>
+                    <.box class="bg-white p-0">
+                      <.drawing_toolbar palette={palette()} />
+                    </.box>
+                  <% end %>
+                </div>
+              <% end %>
 
               <.box class="flex w-full flex-1 flex-col bg-white p-0">
                 <div class="flex-1" />
