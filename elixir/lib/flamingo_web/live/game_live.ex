@@ -269,7 +269,7 @@ defmodule FlamingoWeb.GameLive do
                         </div>
                       </div>
                       <p class="font-timer text-3xl font-black">
-                        <span class="underline decoration-pink-300 decoration-wavy decoration-1 underline-offset-2">{Map.get(@players, @drawer_id).name}</span>{" "}is picking a word
+                        <span class="text-pink-400">{Map.get(@players, @drawer_id).name}</span>{" "}is picking a word
                       </p>
                     </div>
                   <% end %>
