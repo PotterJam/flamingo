@@ -22,7 +22,10 @@ defmodule FlamingoWeb.GameLive do
        host_id: nil,
        drawer_id: nil,
        round_count: 3,
-       round_length: 45
+       round_length: 45,
+       word_choices: nil,
+       turn_end_time: nil,
+       word: nil
      )}
   end
 
@@ -35,6 +38,11 @@ defmodule FlamingoWeb.GameLive do
           if Map.has_key?(state.players, player_id) do
             Games.subscribe(room_id)
 
+            word_choices =
+              if state.phase == :word_choice and player_id == state.drawer_id,
+                do: state.word_choices,
+                else: nil
+
             socket =
               assign(socket,
                 player_id: player_id,
@@ -44,8 +52,19 @@ defmodule FlamingoWeb.GameLive do
                 host_id: state.host_id,
                 drawer_id: state.drawer_id,
                 round_count: state.round_count,
-                round_length: state.round_length
+                round_length: state.round_length,
+                word_choices: word_choices,
+                turn_end_time: state.turn_end_time
               )
+
+            socket =
+              if state.phase == :word_choice and state.turn_end_time do
+                push_event(socket, "set_timer", %{
+                  end_time: DateTime.to_iso8601(state.turn_end_time)
+                })
+              else
+                socket
+              end
 
             socket =
               if state.phase == :playing and state.current_drawing != [] do
@@ -173,7 +192,68 @@ defmodule FlamingoWeb.GameLive do
             <% end %>
           </.card>
         </div>
-      <% else %>
+      <% end %>
+      <%= if @phase == :word_choice do %>
+        <.flamingo_background />
+        <div class="flex h-screen w-full items-center justify-center p-6">
+          <div class="flex h-[675px] w-full max-w-[1200px] flex-col gap-3">
+            <.game_header />
+
+            <div class="flex w-full flex-1 flex-row gap-3 pb-1 pr-1">
+              <.player_list_panel
+                players={@players}
+                player_order={@player_order}
+                drawer_id={@drawer_id}
+              />
+
+              <.box class="flex w-[704px] shrink-0 items-center justify-center bg-white">
+                <%= if @player_id == @drawer_id do %>
+                  <div class="flex flex-col items-center gap-6">
+                    <div class="flex items-center gap-3">
+                      <h2 class="text-xl font-bold">Choose a word</h2>
+                      <span
+                        id="word-choice-timer"
+                        phx-hook=".Timer"
+                        phx-update="ignore"
+                        class="text-lg font-bold tabular-nums"
+                      >
+                      </span>
+                    </div>
+                    <div class="flex gap-3">
+                      <button
+                        :for={word <- @word_choices}
+                        phx-click="select_word"
+                        phx-value-word={word}
+                        class="rounded-base border-2 border-border bg-main px-6 py-3 font-bold shadow-shadow transition-all hover:-translate-y-0.5 hover:shadow-lg"
+                      >
+                        {word}
+                      </button>
+                    </div>
+                  </div>
+                <% else %>
+                  <div class="flex flex-col items-center gap-3">
+                    <p class="text-lg font-bold">
+                      {Map.get(@players, @drawer_id).name} is picking a word...
+                    </p>
+                    <span
+                      id="word-choice-timer"
+                      phx-hook=".Timer"
+                      phx-update="ignore"
+                      class="text-2xl font-bold tabular-nums"
+                    >
+                    </span>
+                  </div>
+                <% end %>
+              </.box>
+
+              <.box class="flex w-full flex-1 flex-col bg-white p-0">
+                <div class="flex-1" />
+              </.box>
+            </div>
+          </div>
+        </div>
+      <% end %>
+      <%= if @phase == :playing do %>
         <.flamingo_background />
         <div class="flex h-screen w-full items-center justify-center p-6">
           <div class="flex h-[675px] w-full max-w-[1200px] flex-col gap-3">
@@ -232,6 +312,21 @@ defmodule FlamingoWeb.GameLive do
           }
         }
       </script>
+      <script :type={Phoenix.LiveView.ColocatedHook} name=".Timer">
+        export default {
+          mounted() {
+            this.handleEvent("set_timer", ({end_time}) => {
+              const endMs = new Date(end_time).getTime()
+              const update = () => {
+                const remaining = Math.max(0, Math.ceil((endMs - Date.now()) / 1000))
+                this.el.innerText = remaining
+                if (remaining > 0) requestAnimationFrame(update)
+              }
+              update()
+            })
+          }
+        }
+      </script>
       <script :type={Phoenix.LiveView.ColocatedHook} name=".RoundSlider">
         export default {
           mounted() {
@@ -278,6 +373,11 @@ defmodule FlamingoWeb.GameLive do
     end
   end
 
+  def handle_event("select_word", %{"word" => word}, socket) do
+    Games.select_word(socket.assigns.room_id, socket.assigns.player_id, word)
+    {:noreply, socket}
+  end
+
   def handle_event("draw_event", event, socket) do
     Games.draw_event(socket.assigns.room_id, socket.assigns.player_id, event)
     {:noreply, socket}
@@ -299,13 +399,33 @@ defmodule FlamingoWeb.GameLive do
     {:noreply, socket}
   end
 
-  def handle_info({:game_started, round_count, round_length, drawer_id}, socket) do
+  def handle_info(
+        {:word_choice_started, drawer_id, word_choices, turn_end_time, round_count, round_length},
+        socket
+      ) do
+    is_drawer = socket.assigns.player_id == drawer_id
+
+    socket =
+      assign(socket,
+        phase: :word_choice,
+        drawer_id: drawer_id,
+        turn_end_time: turn_end_time,
+        round_count: round_count,
+        round_length: round_length,
+        word_choices: if(is_drawer, do: word_choices, else: nil)
+      )
+
+    socket = push_event(socket, "set_timer", %{end_time: DateTime.to_iso8601(turn_end_time)})
+    {:noreply, socket}
+  end
+
+  def handle_info({:round_started, drawer_id}, socket) do
     {:noreply,
      assign(socket,
        phase: :playing,
-       round_count: round_count,
-       round_length: round_length,
-       drawer_id: drawer_id
+       drawer_id: drawer_id,
+       word_choices: nil,
+       turn_end_time: nil
      )}
   end
 
