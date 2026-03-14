@@ -104,4 +104,191 @@ defmodule Flamingo.GameServerTest do
   test "rejoin fails for unknown player", %{room_id: room_id} do
     assert {:error, :not_found} = GameServer.rejoin(room_id, "nonexistent")
   end
+
+  defp start_playing(room_id) do
+    {:ok, p1, _} = GameServer.join(room_id, "Alice")
+    {:ok, p2, _} = GameServer.join(room_id, "Bob")
+    :ok = GameServer.start_game(room_id, p1, %{round_count: 1, turn_length: 30})
+
+    {:ok, state} = GameServer.get_state(room_id)
+    word = List.first(state.word_choices)
+    :ok = GameServer.select_word(room_id, state.drawer_id, word)
+
+    {:ok, state} = GameServer.get_state(room_id)
+    {p1, p2, word, state}
+  end
+
+  test "select_word transitions to playing with timer", %{room_id: room_id} do
+    {_p1, _p2, _word, state} = start_playing(room_id)
+    assert state.phase == :playing
+    assert state.turn_end_time != nil
+    assert state.phase_timer_ref != nil
+  end
+
+  test "correct guess records and broadcasts", %{room_id: room_id} do
+    Phoenix.PubSub.subscribe(Flamingo.PubSub, "game:#{room_id}")
+    {_p1, p2, word, state} = start_playing(room_id)
+
+    guesser = if p2 == state.drawer_id, do: elem(start_playing(room_id), 0), else: p2
+    guesser = if guesser == state.drawer_id, do: p2, else: guesser
+
+    assert :correct = GameServer.guess(room_id, guesser, word)
+    assert_receive {:correct_guess, ^guesser}
+  end
+
+  test "incorrect guess broadcasts", %{room_id: room_id} do
+    Phoenix.PubSub.subscribe(Flamingo.PubSub, "game:#{room_id}")
+    {p1, p2, _word, state} = start_playing(room_id)
+    guesser = if p1 == state.drawer_id, do: p2, else: p1
+
+    assert :incorrect = GameServer.guess(room_id, guesser, "wrong-answer")
+    assert_receive {:incorrect_guess, ^guesser, "wrong-answer"}
+  end
+
+  test "drawer cannot guess", %{room_id: room_id} do
+    {_p1, _p2, word, state} = start_playing(room_id)
+    assert {:error, :drawer_cannot_guess} = GameServer.guess(room_id, state.drawer_id, word)
+  end
+
+  test "non-member cannot guess", %{room_id: room_id} do
+    {_p1, _p2, word, _state} = start_playing(room_id)
+    assert {:error, :not_found} = GameServer.guess(room_id, "not-a-player", word)
+  end
+
+  test "all guessed triggers turn_reveal", %{room_id: room_id} do
+    Phoenix.PubSub.subscribe(Flamingo.PubSub, "game:#{room_id}")
+    {p1, p2, word, state} = start_playing(room_id)
+    guesser = if p1 == state.drawer_id, do: p2, else: p1
+
+    assert :correct = GameServer.guess(room_id, guesser, word)
+
+    {:ok, state} = GameServer.get_state(room_id)
+    assert state.phase == :turn_reveal
+    assert_receive {:turn_reveal, ^word, _turn_end_time}
+  end
+
+  test "turn_reveal tracks drawn_this_round", %{room_id: room_id} do
+    {p1, p2, word, state} = start_playing(room_id)
+    drawer = state.drawer_id
+    guesser = if p1 == drawer, do: p2, else: p1
+
+    GameServer.guess(room_id, guesser, word)
+
+    {:ok, state} = GameServer.get_state(room_id)
+    assert MapSet.member?(state.drawn_this_round, drawer)
+  end
+
+  test "game ends after all players draw in all rounds", %{room_id: room_id} do
+    Phoenix.PubSub.subscribe(Flamingo.PubSub, "game:#{room_id}")
+
+    {:ok, p1, _} = GameServer.join(room_id, "Alice")
+    {:ok, p2, _} = GameServer.join(room_id, "Bob")
+    :ok = GameServer.start_game(room_id, p1, %{round_count: 1, turn_length: 30})
+
+    play_turn = fn ->
+      {:ok, state} = GameServer.get_state(room_id)
+      word = List.first(state.word_choices)
+      :ok = GameServer.select_word(room_id, state.drawer_id, word)
+
+      {:ok, state} = GameServer.get_state(room_id)
+      guesser = if p1 == state.drawer_id, do: p2, else: p1
+      :correct = GameServer.guess(room_id, guesser, word)
+
+      pid = GenServer.whereis({:via, Registry, {Flamingo.GameRegistry, room_id}})
+      _ = :sys.get_state(pid)
+
+      {:ok, state} = GameServer.get_state(room_id)
+      assert state.phase == :turn_reveal
+
+      send(pid, {:turn_reveal_timeout, state.phase_timer_ref})
+      _ = :sys.get_state(pid)
+    end
+
+    play_turn.()
+
+    {:ok, state} = GameServer.get_state(room_id)
+    assert state.phase == :word_choice
+    assert state.current_round == 0
+
+    play_turn.()
+
+    {:ok, state} = GameServer.get_state(room_id)
+    assert state.phase == :game_ended
+    assert_receive {:game_ended, _players}
+  end
+
+  test "round increments after all players draw", %{room_id: room_id} do
+    {:ok, p1, _} = GameServer.join(room_id, "Alice")
+    {:ok, p2, _} = GameServer.join(room_id, "Bob")
+    :ok = GameServer.start_game(room_id, p1, %{round_count: 2, turn_length: 30})
+
+    pid = GenServer.whereis({:via, Registry, {Flamingo.GameRegistry, room_id}})
+
+    play_turn = fn ->
+      {:ok, state} = GameServer.get_state(room_id)
+      word = List.first(state.word_choices)
+      :ok = GameServer.select_word(room_id, state.drawer_id, word)
+
+      {:ok, state} = GameServer.get_state(room_id)
+      guesser = if p1 == state.drawer_id, do: p2, else: p1
+      :correct = GameServer.guess(room_id, guesser, word)
+
+      {:ok, state} = GameServer.get_state(room_id)
+      send(pid, {:turn_reveal_timeout, state.phase_timer_ref})
+      _ = :sys.get_state(pid)
+    end
+
+    play_turn.()
+    play_turn.()
+
+    {:ok, state} = GameServer.get_state(room_id)
+    assert state.phase == :word_choice
+    assert state.current_round == 1
+    assert state.drawn_this_round == MapSet.new()
+  end
+
+  test "leave during playing reconciles turn completion", %{room_id: room_id} do
+    {:ok, p1, _} = GameServer.join(room_id, "Alice")
+    {:ok, p2, _} = GameServer.join(room_id, "Bob")
+    {:ok, p3, _} = GameServer.join(room_id, "Charlie")
+    :ok = GameServer.start_game(room_id, p1, %{round_count: 1, turn_length: 30})
+
+    {:ok, state} = GameServer.get_state(room_id)
+    word = List.first(state.word_choices)
+    :ok = GameServer.select_word(room_id, state.drawer_id, word)
+
+    {:ok, state} = GameServer.get_state(room_id)
+    drawer = state.drawer_id
+    [g1, g2] = Enum.reject([p1, p2, p3], &(&1 == drawer))
+
+    :correct = GameServer.guess(room_id, g1, word)
+
+    {:ok, state} = GameServer.get_state(room_id)
+    assert state.phase == :playing
+
+    :ok = GameServer.leave(room_id, g2)
+
+    {:ok, state} = GameServer.get_state(room_id)
+    assert state.phase == :turn_reveal
+  end
+
+  test "leave during playing does not trigger reveal if guessers remain", %{room_id: room_id} do
+    {:ok, p1, _} = GameServer.join(room_id, "Alice")
+    {:ok, p2, _} = GameServer.join(room_id, "Bob")
+    {:ok, p3, _} = GameServer.join(room_id, "Charlie")
+    :ok = GameServer.start_game(room_id, p1, %{round_count: 1, turn_length: 30})
+
+    {:ok, state} = GameServer.get_state(room_id)
+    word = List.first(state.word_choices)
+    :ok = GameServer.select_word(room_id, state.drawer_id, word)
+
+    {:ok, state} = GameServer.get_state(room_id)
+    drawer = state.drawer_id
+    [g1, _g2] = Enum.reject([p1, p2, p3], &(&1 == drawer))
+
+    :ok = GameServer.leave(room_id, g1)
+
+    {:ok, state} = GameServer.get_state(room_id)
+    assert state.phase == :playing
+  end
 end
