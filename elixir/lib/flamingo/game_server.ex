@@ -322,7 +322,8 @@ defmodule Flamingo.GameServer do
         turn_end_time: turn_end_time,
         word: nil,
         correct_guesses: %{},
-        revealed_indices: []
+        revealed_indices: [],
+        hint_timer_ref: nil
     }
 
     broadcast(
