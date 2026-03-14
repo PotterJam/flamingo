@@ -62,7 +62,7 @@
 @theme inline {
   --font-retro: "Abduction";
   --font-retro-display: "Daydream";
-  --font-timer: "Darker Grotesque", sans-serif;
+  --font-hero: "Darker Grotesque", sans-serif;
 
   --color-background: var(--background);
   --color-foreground: var(--foreground);
