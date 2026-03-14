@@ -25,7 +25,8 @@ defmodule FlamingoWeb.GameLive do
        round_length: 45,
        word_choices: nil,
        turn_end_time: nil,
-       word: nil
+       word: nil,
+       correct_guesses: MapSet.new()
      )}
   end
 
@@ -54,7 +55,8 @@ defmodule FlamingoWeb.GameLive do
                 round_count: state.round_count,
                 round_length: state.round_length,
                 word_choices: word_choices,
-                turn_end_time: state.turn_end_time
+                turn_end_time: state.turn_end_time,
+                correct_guesses: MapSet.new(Map.keys(state.correct_guesses))
               )
 
             socket =
@@ -204,6 +206,7 @@ defmodule FlamingoWeb.GameLive do
                 players={@players}
                 player_order={@player_order}
                 drawer_id={@drawer_id}
+                correct_guesses={@correct_guesses}
               />
 
               <%= if @phase == :word_choice do %>
@@ -247,29 +250,62 @@ defmodule FlamingoWeb.GameLive do
                   <% end %>
                 </.box>
               <% else %>
-                <div
-                  id="drawing-canvas"
-                  phx-hook="DrawingCanvas"
-                  phx-update="ignore"
-                  data-is-drawer={to_string(@player_id == @drawer_id)}
-                  class="flex w-[704px] shrink-0 flex-col gap-2"
-                >
-                  <.box class="bg-white p-0">
-                    <canvas
-                      width="700"
-                      height="500"
-                      class={[
-                        "bg-white",
-                        if(@player_id == @drawer_id, do: "cursor-crosshair", else: "cursor-default")
-                      ]}
-                    >
-                    </canvas>
-                  </.box>
-
-                  <%= if @player_id == @drawer_id do %>
+                <div class="flex w-[704px] shrink-0 flex-col gap-2">
+                  <div
+                    id="drawing-canvas"
+                    phx-hook="DrawingCanvas"
+                    phx-update="ignore"
+                    data-is-drawer={to_string(@player_id == @drawer_id)}
+                    class="flex flex-col gap-2"
+                  >
                     <.box class="bg-white p-0">
-                      <.drawing_toolbar palette={palette()} />
+                      <canvas
+                        width="700"
+                        height="500"
+                        class={[
+                          "bg-white",
+                          if(@player_id == @drawer_id, do: "cursor-crosshair", else: "cursor-default")
+                        ]}
+                      >
+                      </canvas>
                     </.box>
+
+                    <%= if @player_id == @drawer_id do %>
+                      <.box class="bg-white p-0">
+                        <.drawing_toolbar palette={palette()} />
+                      </.box>
+                    <% end %>
+                  </div>
+
+                  <%= if @player_id != @drawer_id do %>
+                    <%= if MapSet.member?(@correct_guesses, @player_id) do %>
+                      <.box class="bg-green-100 p-3 text-center font-bold text-green-800">
+                        You guessed it!
+                      </.box>
+                    <% else %>
+                      <.form
+                        for={%{}}
+                        as={:guess_form}
+                        phx-submit="guess"
+                        id="guess-form"
+                        class="flex gap-2"
+                      >
+                        <input
+                          type="text"
+                          name="guess"
+                          placeholder="Type your guess..."
+                          autocomplete="off"
+                          class="flex-1 rounded-base border-2 border-border bg-white px-3 py-2 text-sm focus:ring-2 focus:ring-ring focus:ring-offset-2 focus:outline-none"
+                          id="guess-input"
+                        />
+                        <button
+                          type="submit"
+                          class="rounded-base border-2 border-border bg-main px-4 py-2 text-sm font-bold shadow-shadow transition-all hover:-translate-y-0.5 hover:shadow-lg"
+                        >
+                          Guess
+                        </button>
+                      </.form>
+                    <% end %>
                   <% end %>
                 </div>
               <% end %>
@@ -365,6 +401,11 @@ defmodule FlamingoWeb.GameLive do
     {:noreply, socket}
   end
 
+  def handle_event("guess", %{"guess" => text}, socket) do
+    Games.guess(socket.assigns.room_id, socket.assigns.player_id, text)
+    {:noreply, socket}
+  end
+
   def handle_info({:players_updated, players, player_order, host_id}, socket) do
     old_count = map_size(socket.assigns.players)
     new_count = map_size(players)
@@ -394,7 +435,8 @@ defmodule FlamingoWeb.GameLive do
         turn_end_time: turn_end_time,
         round_count: round_count,
         round_length: round_length,
-        word_choices: if(is_drawer, do: word_choices, else: nil)
+        word_choices: if(is_drawer, do: word_choices, else: nil),
+        correct_guesses: MapSet.new()
       )
 
     socket = push_event(socket, "set_timer", %{end_time: DateTime.to_iso8601(turn_end_time)})
@@ -407,8 +449,25 @@ defmodule FlamingoWeb.GameLive do
        phase: :playing,
        drawer_id: drawer_id,
        word_choices: nil,
-       turn_end_time: nil
+       turn_end_time: nil,
+       correct_guesses: MapSet.new()
      )}
+  end
+
+  def handle_info({:correct_guess, player_id}, socket) do
+    sound =
+      if player_id == socket.assigns.player_id,
+        do: "correctGuess",
+        else: "otherPlayerCorrect"
+
+    {:noreply,
+     socket
+     |> assign(:correct_guesses, MapSet.put(socket.assigns.correct_guesses, player_id))
+     |> push_event("play_sound", %{sound: sound})}
+  end
+
+  def handle_info({:incorrect_guess, _player_id, _text}, socket) do
+    {:noreply, socket}
   end
 
   def handle_info({:draw_event, from_player_id, event}, socket) do
