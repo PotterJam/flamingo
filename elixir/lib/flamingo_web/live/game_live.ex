@@ -372,10 +372,11 @@ defmodule FlamingoWeb.GameLive do
                   <p
                     :for={{type, text} <- @feed}
                     class={[
-                      "border-b border-gray-100 px-3 py-1.5 text-sm",
-                      type == :system && "font-semibold text-pink-500",
+                      "p-1 text-xs",
+                      type == :system && "font-semibold text-pink-600",
+                      type == :correct && "font-semibold text-green-600",
                       type == :guess && "text-foreground",
-                      type == :info && "italic text-gray-400"
+                      type == :info && "text-gray-500"
                     ]}
                   >
                     {text}
