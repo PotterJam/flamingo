@@ -30,7 +30,8 @@ defmodule FlamingoWeb.GameLive do
        current_round: 0,
        correct_guesses: MapSet.new(),
        revealed_indices: [],
-       guess_form: to_form(%{"guess" => ""}, as: :guess_form)
+       guess_form: to_form(%{"guess" => ""}, as: :guess_form),
+       score_gains: %{}
      )}
   end
 
@@ -51,6 +52,9 @@ defmodule FlamingoWeb.GameLive do
             is_drawer = player_id == state.drawer_id
             show_word = is_drawer or state.phase == :turn_reveal or state.phase == :game_ended
 
+            score_gains =
+              if state.phase == :turn_reveal, do: state.score_gains, else: %{}
+
             socket =
               assign(socket,
                 player_id: player_id,
@@ -67,7 +71,8 @@ defmodule FlamingoWeb.GameLive do
                 word: state.word,
                 show_word: show_word,
                 correct_guesses: MapSet.new(Map.keys(state.correct_guesses)),
-                revealed_indices: state.revealed_indices
+                revealed_indices: state.revealed_indices,
+                score_gains: score_gains
               )
 
             socket =
@@ -266,6 +271,21 @@ defmodule FlamingoWeb.GameLive do
                   <.box class="flex w-[704px] shrink-0 flex-col items-center justify-center gap-6 bg-white">
                     <p class="font-timer text-2xl font-black text-gray-500">The word was</p>
                     <p class="font-timer text-5xl font-black text-pink-400">{@word}</p>
+                    <ul class="w-64 space-y-1">
+                      <%= for {pid, gain} <- Enum.sort_by(@score_gains, fn {_pid, g} -> -g end) do %>
+                        <li class="flex items-center justify-between px-3 py-1">
+                          <span class="truncate">{Map.get(@players, pid).name}</span>
+                          <span class={[
+                            "font-semibold",
+                            if(gain > 0, do: "text-green-600"),
+                            if(gain < 0, do: "text-red-500"),
+                            if(gain == 0, do: "text-gray-400")
+                          ]}>
+                            {if(gain > 0, do: "+#{gain}", else: "#{gain}")}
+                          </span>
+                        </li>
+                      <% end %>
+                    </ul>
                     <.starburst_timer
                       position_class=""
                       size_class="h-20 w-20"
@@ -352,9 +372,24 @@ defmodule FlamingoWeb.GameLive do
           <.card class="flex w-full max-w-md flex-col items-center gap-6 bg-white p-8">
             <h2 class="font-timer text-4xl font-black text-pink-400">Game Over</h2>
             <ul class="w-full space-y-2">
-              <%= for pid <- @player_order do %>
+              <%= for {pid, idx} <- @player_order |> Enum.sort_by(fn pid -> -(Map.get(@players, pid).score) end) |> Enum.with_index() do %>
                 <li class="flex items-center gap-2 rounded-base border-2 border-border px-4 py-2">
+                  <span class="text-lg">
+                    <%= case idx do %>
+                      <% 0 -> %>
+                        🥇
+                      <% 1 -> %>
+                        🥈
+                      <% 2 -> %>
+                        🥉
+                      <% _ -> %>
+                        {idx + 1}
+                    <% end %>
+                  </span>
                   <span class="font-bold">{Map.get(@players, pid).name}</span>
+                  <span class="ml-auto text-pink-500 font-semibold">
+                    {Map.get(@players, pid).score}
+                  </span>
                 </li>
               <% end %>
             </ul>
@@ -496,7 +531,8 @@ defmodule FlamingoWeb.GameLive do
         word_choices: if(is_drawer, do: word_choices, else: nil),
         word: nil,
         show_word: false,
-        correct_guesses: MapSet.new()
+        correct_guesses: MapSet.new(),
+        score_gains: %{}
       )
 
     socket = push_event(socket, "set_timer", %{end_time: DateTime.to_iso8601(turn_end_time)})
@@ -522,13 +558,14 @@ defmodule FlamingoWeb.GameLive do
     {:noreply, socket}
   end
 
-  def handle_info({:turn_reveal, word, turn_end_time}, socket) do
+  def handle_info({:turn_reveal, word, turn_end_time, score_gains}, socket) do
     socket =
       assign(socket,
         phase: :turn_reveal,
         word: word,
         show_word: true,
-        turn_end_time: turn_end_time
+        turn_end_time: turn_end_time,
+        score_gains: score_gains
       )
 
     socket = push_event(socket, "set_timer", %{end_time: DateTime.to_iso8601(turn_end_time)})

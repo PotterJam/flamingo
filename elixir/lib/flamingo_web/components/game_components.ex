@@ -160,6 +160,7 @@ defmodule FlamingoWeb.GameComponents do
                 <% end %>
               </span>
               <span class="truncate">{Map.get(@players, pid).name}</span>
+              <span class="ml-auto text-sm text-gray-500">{Map.get(@players, pid).score}</span>
             </li>
           <% end %>
         </ul>
