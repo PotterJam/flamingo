@@ -251,7 +251,6 @@ defmodule Flamingo.GameServer do
   end
 
   defp enter_word_choice(state) do
-    state = cancel_timers(state)
     word_choices = Flamingo.Words.random_choices()
     ref = make_ref()
     Process.send_after(self(), {:word_choice_timeout, ref}, 10_000)
@@ -278,7 +277,6 @@ defmodule Flamingo.GameServer do
   end
 
   defp enter_playing(state, word) do
-    state = cancel_timers(state)
     hint_ref = schedule_hint_timer()
 
     new_state = %{
@@ -319,12 +317,6 @@ defmodule Flamingo.GameServer do
     ref = make_ref()
     Process.send_after(self(), {:reveal_hint, ref}, 20_000)
     ref
-  end
-
-  defp cancel_timers(state) do
-    if state.phase_timer_ref, do: Process.cancel_timer(state.phase_timer_ref)
-    if state.hint_timer_ref, do: Process.cancel_timer(state.hint_timer_ref)
-    %{state | phase_timer_ref: nil, hint_timer_ref: nil}
   end
 
   defp maybe_reveal_letter(state) do
