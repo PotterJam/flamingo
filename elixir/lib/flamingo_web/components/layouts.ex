@@ -14,6 +14,33 @@ defmodule FlamingoWeb.Layouts do
       {render_slot(@inner_block)}
     </main>
     <.flash_group flash={@flash} />
+    <div id="sound-manager" phx-hook="SoundManager" phx-update="ignore"></div>
+    <div
+      id="sound-toggle"
+      phx-hook=".SoundToggle"
+      phx-update="ignore"
+      class="fixed bottom-4 left-4 z-50"
+    >
+      <.switch id="sound-toggle-switch" label="Play sounds" />
+    </div>
+    <script :type={Phoenix.LiveView.ColocatedHook} name=".SoundToggle">
+      export default {
+        mounted() {
+          const checkbox = this.el.querySelector("#sound-toggle-switch");
+          const muted = localStorage.getItem("flamingo_sound_muted") === "true";
+          window.__soundMuted = muted;
+          checkbox.checked = !muted;
+
+          checkbox.addEventListener("change", () => {
+            window.__soundMuted = !checkbox.checked;
+            localStorage.setItem("flamingo_sound_muted", window.__soundMuted);
+            if (window.__soundMuted) {
+              window.dispatchEvent(new Event("flamingo:mute"));
+            }
+          });
+        }
+      }
+    </script>
     """
   end
 

@@ -27,6 +27,8 @@ import topbar from "../vendor/topbar"
 import DrawingCanvas from "./hooks/drawing_canvas"
 import SoundManager from "./hooks/sound_manager"
 
+window.__soundMuted = localStorage.getItem("flamingo_sound_muted") === "true"
+
 const csrfToken = document.querySelector("meta[name='csrf-token']").getAttribute("content")
 const liveSocket = new LiveSocket("/live", Socket, {
   longPollFallbackMs: 2500,

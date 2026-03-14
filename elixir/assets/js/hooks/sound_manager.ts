@@ -21,7 +21,17 @@ const SoundManager = {
       this.sounds[key] = audio;
     }
 
+    window.addEventListener("flamingo:mute", () => {
+      for (const key of Object.keys(this.sounds)) {
+        const audio = this.sounds[key as SoundKey] as HTMLAudioElement;
+        audio.pause();
+        audio.currentTime = 0;
+        audio.loop = false;
+      }
+    });
+
     this.handleEvent("play_sound", ({ sound }: { sound: SoundKey }) => {
+      if ((window as any).__soundMuted) return;
       const audio = this.sounds[sound];
       if (!audio) return;
 
@@ -30,6 +40,7 @@ const SoundManager = {
     });
 
     this.handleEvent("start_music", ({ sound }: { sound: SoundKey }) => {
+      if ((window as any).__soundMuted) return;
       const audio = this.sounds[sound];
       if (!audio) return;
 
@@ -48,6 +59,7 @@ const SoundManager = {
     });
 
     this.handleEvent("start_countdown", () => {
+      if ((window as any).__soundMuted) return;
       const audio = this.sounds.countdown;
       if (!audio) return;
 

@@ -507,6 +507,26 @@ defmodule FlamingoWeb.CoreComponents do
     """
   end
 
+  attr :id, :string, required: true
+  attr :label, :string, required: true
+  attr :checked, :boolean, default: true
+  attr :class, :any, default: nil
+
+  def switch(assigns) do
+    ~H"""
+    <label for={@id} class={["flex cursor-pointer items-center gap-2", @class]}>
+      <input
+        type="checkbox"
+        id={@id}
+        role="switch"
+        checked={@checked}
+        class="nb-switch peer"
+      />
+      <span class="text-sm font-bold text-foreground select-none">{@label}</span>
+    </label>
+    """
+  end
+
   ## JS Commands
 
   def show(js \\ %JS{}, selector) do
