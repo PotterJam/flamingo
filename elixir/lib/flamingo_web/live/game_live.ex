@@ -1,7 +1,7 @@
 defmodule FlamingoWeb.GameLive do
   use FlamingoWeb, :live_view
 
-  alias Flamingo.Games
+  alias Flamingo.{Feed, Games}
 
   @palette ~w(
     #000000 #FFFFFF #C1C1C1 #505050 #EF120B #740A08
@@ -31,7 +31,8 @@ defmodule FlamingoWeb.GameLive do
        correct_guesses: MapSet.new(),
        revealed_indices: [],
        guess_form: to_form(%{"guess" => ""}, as: :guess_form),
-       score_gains: %{}
+       score_gains: %{},
+       feed: []
      )}
   end
 
@@ -72,7 +73,8 @@ defmodule FlamingoWeb.GameLive do
                 show_word: show_word,
                 correct_guesses: MapSet.new(Map.keys(state.correct_guesses)),
                 revealed_indices: state.revealed_indices,
-                score_gains: score_gains
+                score_gains: score_gains,
+                feed: Enum.map(state.feed.events, &Feed.format(&1, player_id))
               )
 
             socket =
@@ -362,7 +364,23 @@ defmodule FlamingoWeb.GameLive do
               <% end %>
 
               <.box class="flex w-full flex-1 flex-col bg-white p-0">
-                <div class="flex-1" />
+                <div
+                  id="game-feed"
+                  phx-hook=".ScrollFeed"
+                  class="flex min-h-0 flex-1 flex-col gap-0 overflow-y-auto"
+                >
+                  <p
+                    :for={{type, text} <- @feed}
+                    class={[
+                      "border-b border-gray-100 px-3 py-1.5 text-sm",
+                      type == :system && "font-semibold text-pink-500",
+                      type == :guess && "text-foreground",
+                      type == :info && "italic text-gray-400"
+                    ]}
+                  >
+                    {text}
+                  </p>
+                </div>
               </.box>
             </div>
           </div>
@@ -450,6 +468,19 @@ defmodule FlamingoWeb.GameLive do
             }
             update()
             this.el.addEventListener("input", () => update())
+          }
+        }
+      </script>
+      <script :type={Phoenix.LiveView.ColocatedHook} name=".ScrollFeed">
+        export default {
+          mounted() {
+            this.el.scrollTop = this.el.scrollHeight
+            this.handleEvent("scroll_feed", () => {
+              this.el.scrollTop = this.el.scrollHeight
+            })
+          },
+          updated() {
+            this.el.scrollTop = this.el.scrollHeight
           }
         }
       </script>
@@ -615,6 +646,15 @@ defmodule FlamingoWeb.GameLive do
     else
       {:noreply, socket}
     end
+  end
+
+  def handle_info({:feed_event, event}, socket) do
+    formatted = Feed.format(event, socket.assigns.player_id)
+
+    {:noreply,
+     socket
+     |> assign(:feed, socket.assigns.feed ++ [formatted])
+     |> push_event("scroll_feed", %{})}
   end
 
   def handle_info({:draw_event, from_player_id, event}, socket) do
