@@ -15,7 +15,9 @@ defmodule Flamingo.GameServer do
     round_length: 30,
     current_drawing: [],
     word_choices: [],
-    correct_guesses: %{}
+    correct_guesses: %{},
+    revealed_indices: [],
+    hint_timer_ref: nil
   ]
 
   def start_link(room_id) do
@@ -199,6 +201,22 @@ defmodule Flamingo.GameServer do
     {:noreply, state}
   end
 
+  def handle_info({:reveal_hint, ref}, %{hint_timer_ref: ref} = state) do
+    case maybe_reveal_letter(state) do
+      {:ok, new_state} ->
+        broadcast(state.room_id, {:hint_revealed, new_state.revealed_indices})
+        next_ref = schedule_hint_timer()
+        {:noreply, %{new_state | hint_timer_ref: next_ref}}
+
+      :maxed ->
+        {:noreply, %{state | hint_timer_ref: nil}}
+    end
+  end
+
+  def handle_info({:reveal_hint, _stale_ref}, state) do
+    {:noreply, state}
+  end
+
   @impl true
   def handle_cast(
         {:draw_event, player_id, %{"event_type" => "undo"}},
@@ -245,7 +263,8 @@ defmodule Flamingo.GameServer do
         phase_timer_ref: ref,
         turn_end_time: turn_end_time,
         word: nil,
-        correct_guesses: %{}
+        correct_guesses: %{},
+        revealed_indices: []
     }
 
     broadcast(
@@ -258,15 +277,18 @@ defmodule Flamingo.GameServer do
   end
 
   defp enter_playing(state, word) do
+    hint_ref = schedule_hint_timer()
+
     new_state = %{
       state
       | phase: :playing,
         word: word,
         word_choices: [],
-        phase_timer_ref: nil,
         turn_end_time: nil,
         current_drawing: [],
-        correct_guesses: %{}
+        correct_guesses: %{},
+        revealed_indices: [],
+        hint_timer_ref: hint_ref
     }
 
     broadcast(state.room_id, {:round_started, state.drawer_id, word})
@@ -289,6 +311,31 @@ defmodule Flamingo.GameServer do
 
   defp generate_player_id do
     :crypto.strong_rand_bytes(8) |> Base.url_encode64(padding: false)
+  end
+
+  defp schedule_hint_timer do
+    ref = make_ref()
+    Process.send_after(self(), {:reveal_hint, ref}, 20_000)
+    ref
+  end
+
+  defp maybe_reveal_letter(state) do
+    letter_positions =
+      state.word
+      |> String.graphemes()
+      |> Enum.with_index()
+      |> Enum.filter(fn {ch, _idx} -> ch =~ ~r/[a-zA-Z]/ end)
+      |> Enum.map(&elem(&1, 1))
+
+    max_reveals = div(length(letter_positions), 2)
+    available = Enum.reject(letter_positions, &(&1 in state.revealed_indices))
+
+    if length(state.revealed_indices) < max_reveals and available != [] do
+      idx = Enum.random(available)
+      {:ok, %{state | revealed_indices: [idx | state.revealed_indices]}}
+    else
+      :maxed
+    end
   end
 
   defp broadcast(room_id, message) do
