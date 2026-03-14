@@ -225,7 +225,7 @@ defmodule FlamingoWeb.GameComponents do
         </button>
       </.button_group>
 
-      <div class="flex gap-1">
+      <div class="flex">
         <button
           data-action="undo"
           class="flex h-8 w-8 cursor-pointer items-center justify-center hover:bg-pink-100"
