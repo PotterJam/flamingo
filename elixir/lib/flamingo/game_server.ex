@@ -1,6 +1,8 @@
 defmodule Flamingo.GameServer do
   use GenServer
 
+  alias Flamingo.Feed
+
   defstruct [
     :room_id,
     :host_id,
@@ -20,7 +22,8 @@ defmodule Flamingo.GameServer do
     correct_guesses: %{},
     revealed_indices: [],
     hint_timer_ref: nil,
-    score_gains: %{}
+    score_gains: %{},
+    feed: Feed.new()
   ]
 
   def start_link(room_id) do
@@ -87,10 +90,15 @@ defmodule Flamingo.GameServer do
 
     new_state = %{state | players: players, player_order: player_order, host_id: host_id}
 
+    {feed, event} = Feed.player_joined(new_state.feed, player_id, player_name)
+    new_state = %{new_state | feed: feed}
+
     broadcast(
       state.room_id,
       {:players_updated, new_state.players, new_state.player_order, new_state.host_id}
     )
+
+    broadcast(state.room_id, {:feed_event, event})
 
     {:reply, {:ok, player_id, new_state}, new_state}
   end
@@ -166,9 +174,12 @@ defmodule Flamingo.GameServer do
         {:reply, {:error, :already_guessed}, state}
 
       String.downcase(String.trim(text)) == String.downcase(state.word) ->
+        player = Map.get(state.players, player_id)
         correct_guesses = Map.put(state.correct_guesses, player_id, DateTime.utc_now())
-        new_state = %{state | correct_guesses: correct_guesses}
+        {feed, event} = Feed.correct_guess(state.feed, player_id, player.name)
+        new_state = %{state | correct_guesses: correct_guesses, feed: feed}
         broadcast(state.room_id, {:correct_guess, player_id})
+        broadcast(state.room_id, {:feed_event, event})
 
         non_drawers =
           Enum.reject(state.player_order, &(&1 == state.drawer_id))
@@ -180,8 +191,12 @@ defmodule Flamingo.GameServer do
         {:reply, :correct, new_state}
 
       true ->
+        player = Map.get(state.players, player_id)
+        {feed, event} = Feed.guess(state.feed, player_id, player.name, text)
+        new_state = %{state | feed: feed}
         broadcast(state.room_id, {:incorrect_guess, player_id, text})
-        {:reply, :incorrect, state}
+        broadcast(state.room_id, {:feed_event, event})
+        {:reply, :incorrect, new_state}
     end
   end
 
@@ -193,6 +208,7 @@ defmodule Flamingo.GameServer do
     if not Map.has_key?(state.players, player_id) do
       {:reply, :ok, state}
     else
+      player_name = Map.get(state.players, player_id).name
       players = Map.delete(state.players, player_id)
       player_order = List.delete(state.player_order, player_id)
 
@@ -211,10 +227,15 @@ defmodule Flamingo.GameServer do
           correct_guesses: correct_guesses
       }
 
+      {feed, event} = Feed.player_left(new_state.feed, player_id, player_name)
+      new_state = %{new_state | feed: feed}
+
       broadcast(
         state.room_id,
         {:players_updated, new_state.players, new_state.player_order, new_state.host_id}
       )
+
+      broadcast(state.room_id, {:feed_event, event})
 
       new_state =
         if state.phase == :playing and player_id != state.drawer_id do
@@ -327,11 +348,17 @@ defmodule Flamingo.GameServer do
         hint_timer_ref: nil
     }
 
+    drawer_name = Map.get(new_state.players, new_state.drawer_id).name
+    {feed, event} = Feed.choosing_word(new_state.feed, new_state.drawer_id, drawer_name)
+    new_state = %{new_state | feed: feed}
+
     broadcast(
       new_state.room_id,
       {:word_choice_started, new_state.drawer_id, word_choices, turn_end_time,
        new_state.round_count, new_state.turn_length, new_state.current_round}
     )
+
+    broadcast(new_state.room_id, {:feed_event, event})
 
     new_state
   end
@@ -355,7 +382,12 @@ defmodule Flamingo.GameServer do
         hint_timer_ref: hint_ref
     }
 
+    drawer_name = Map.get(state.players, state.drawer_id).name
+    {feed, event} = Feed.turn_started(new_state.feed, state.drawer_id, drawer_name)
+    new_state = %{new_state | feed: feed}
+
     broadcast(state.room_id, {:turn_started, state.drawer_id, word, turn_end_time})
+    broadcast(state.room_id, {:feed_event, event})
     new_state
   end
 
@@ -388,7 +420,11 @@ defmodule Flamingo.GameServer do
         players: players
     }
 
+    {feed, event} = Feed.word_revealed(new_state.feed, state.word)
+    new_state = %{new_state | feed: feed}
+
     broadcast(state.room_id, {:turn_reveal, state.word, turn_end_time, score_gains, players})
+    broadcast(state.room_id, {:feed_event, event})
     new_state
   end
 
