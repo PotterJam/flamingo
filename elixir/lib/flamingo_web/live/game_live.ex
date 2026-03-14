@@ -209,40 +209,68 @@ defmodule FlamingoWeb.GameLive do
               <%= if @phase == :word_choice do %>
                 <.box class="flex w-[704px] shrink-0 items-center justify-center bg-white">
                   <%= if @player_id == @drawer_id do %>
-                    <div class="flex flex-col items-center gap-6">
-                      <div class="flex items-center gap-3">
-                        <h2 class="text-xl font-bold">Choose a word</h2>
-                        <span
-                          id="word-choice-timer"
-                          phx-hook=".Timer"
-                          phx-update="ignore"
-                          class="text-lg font-bold tabular-nums"
-                        >
-                        </span>
+                    <div class="relative flex flex-col items-center gap-8">
+                      <div class="absolute -top-36 -right-16">
+                        <div class="relative flex items-center justify-center">
+                          <svg
+                            class="starburst h-32 w-32"
+                            viewBox="0 0 200 200"
+                            xmlns="http://www.w3.org/2000/svg"
+                          >
+                            <path
+                              d={starburst_path()}
+                              fill="var(--color-pink-300)"
+                            />
+                          </svg>
+                          <span
+                            id="word-choice-timer"
+                            phx-hook=".Timer"
+                            phx-update="ignore"
+                            class="absolute font-timer text-3xl font-black"
+                            style="font-variant-numeric: tabular-nums; letter-spacing: 0.05em; min-width: 3ch; text-align: center;"
+                          >
+                          </span>
+                        </div>
                       </div>
+                      <h2 class="font-timer text-3xl font-black">Choose a word</h2>
                       <div class="flex gap-3">
-                        <button
+                        <.button
                           :for={word <- @word_choices}
                           phx-click="select_word"
                           phx-value-word={word}
-                          class="rounded-base border-2 border-border bg-main px-6 py-3 font-bold shadow-shadow transition-all hover:-translate-y-0.5 hover:shadow-lg"
+                          class="px-6 py-3 text-base font-bold"
                         >
                           {word}
-                        </button>
+                        </.button>
                       </div>
                     </div>
                   <% else %>
-                    <div class="flex flex-col items-center gap-3">
-                      <p class="text-lg font-bold">
-                        {Map.get(@players, @drawer_id).name} is picking a word...
+                    <div class="relative flex flex-col items-center gap-3">
+                      <div class="absolute -bottom-32 -right-20">
+                        <div class="relative flex items-center justify-center">
+                          <svg
+                            class="starburst h-28 w-28"
+                            viewBox="0 0 200 200"
+                            xmlns="http://www.w3.org/2000/svg"
+                          >
+                            <path
+                              d={starburst_path()}
+                              fill="var(--color-pink-300)"
+                            />
+                          </svg>
+                          <span
+                            id="word-choice-timer"
+                            phx-hook=".Timer"
+                            phx-update="ignore"
+                            class="absolute font-timer text-2xl font-black"
+                            style="font-variant-numeric: tabular-nums; letter-spacing: 0.05em; min-width: 3ch; text-align: center;"
+                          >
+                          </span>
+                        </div>
+                      </div>
+                      <p class="font-timer text-3xl font-black">
+                        <span class="underline decoration-pink-300 decoration-wavy decoration-1 underline-offset-2">{Map.get(@players, @drawer_id).name}</span>{" "}is picking a word
                       </p>
-                      <span
-                        id="word-choice-timer"
-                        phx-hook=".Timer"
-                        phx-update="ignore"
-                        class="text-2xl font-bold tabular-nums"
-                      >
-                      </span>
                     </div>
                   <% end %>
                 </.box>
@@ -301,7 +329,7 @@ defmodule FlamingoWeb.GameLive do
               const endMs = new Date(end_time).getTime()
               const update = () => {
                 const remaining = Math.max(0, Math.ceil((endMs - Date.now()) / 1000))
-                this.el.innerText = remaining
+                this.el.innerText = String(remaining).padStart(2, '0')
                 if (remaining > 0) requestAnimationFrame(update)
               }
               update()
@@ -423,5 +451,46 @@ defmodule FlamingoWeb.GameLive do
     if Map.has_key?(socket.assigns, :room_id) and Map.has_key?(socket.assigns, :player_id) do
       Games.leave(socket.assigns.room_id, socket.assigns.player_id)
     end
+  end
+
+  defp starburst_path do
+    points = 10
+    outer_r = 95
+    inner_r = 78
+    cx = 100
+    cy = 100
+
+    all_points =
+      for i <- 0..(points * 2 - 1) do
+        angle = :math.pi() * i / points - :math.pi() / 2
+        r = if rem(i, 2) == 0, do: outer_r, else: inner_r
+        {Float.round(cx + r * :math.cos(angle), 1), Float.round(cy + r * :math.sin(angle), 1)}
+      end
+
+    n = length(all_points)
+    t = 0.15
+
+    segments =
+      for i <- 0..(n - 1) do
+        {x0, y0} = Enum.at(all_points, rem(i - 1 + n, n))
+        {x1, y1} = Enum.at(all_points, i)
+        {x2, y2} = Enum.at(all_points, rem(i + 1, n))
+
+        ax = Float.round(x1 + t * (x0 - x1), 1)
+        ay = Float.round(y1 + t * (y0 - y1), 1)
+        bx = Float.round(x1 + t * (x2 - x1), 1)
+        by = Float.round(y1 + t * (y2 - y1), 1)
+
+        "L#{ax},#{ay} Q#{x1},#{y1} #{bx},#{by}"
+      end
+
+    [{ax0, ay0} | _] =
+      for i <- 0..(n - 1) do
+        {x0, y0} = Enum.at(all_points, rem(i - 1 + n, n))
+        {x1, y1} = Enum.at(all_points, i)
+        {Float.round(x1 + t * (x0 - x1), 1), Float.round(y1 + t * (y0 - y1), 1)}
+      end
+
+    "M#{ax0},#{ay0} " <> Enum.join(segments, " ") <> " Z"
   end
 end
