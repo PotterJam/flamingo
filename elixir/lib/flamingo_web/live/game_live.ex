@@ -76,6 +76,7 @@ defmodule FlamingoWeb.GameLive do
   def render(assigns) do
     ~H"""
     <Layouts.app flash={@flash}>
+      <div id="sound-manager" phx-hook="SoundManager" phx-update="ignore"></div>
       <div class="flex h-screen w-full items-center justify-center">
         <%= if @phase == :lobby do %>
           <.card class="flex h-3/5 w-full max-w-2xl flex-row gap-0 bg-white p-0">
@@ -134,9 +135,7 @@ defmodule FlamingoWeb.GameLive do
                         <.button
                           variant="ghost"
                           class="text-xs"
-                          on_confirm_click={
-                            JS.dispatch("phx:copy", detail: %{text: @room_id})
-                          }
+                          on_confirm_click={JS.dispatch("phx:copy", detail: %{text: @room_id})}
                           id="copy-name-button"
                         >
                           Copy name
@@ -325,7 +324,19 @@ defmodule FlamingoWeb.GameLive do
   end
 
   def handle_info({:players_updated, players, player_order, host_id}, socket) do
-    {:noreply, assign(socket, players: players, player_order: player_order, host_id: host_id)}
+    old_count = map_size(socket.assigns.players)
+    new_count = map_size(players)
+
+    socket = assign(socket, players: players, player_order: player_order, host_id: host_id)
+
+    socket =
+      if new_count > old_count do
+        push_event(socket, "play_sound", %{sound: "join"})
+      else
+        socket
+      end
+
+    {:noreply, socket}
   end
 
   def handle_info({:game_started, round_count, round_length, drawer_id}, socket) do

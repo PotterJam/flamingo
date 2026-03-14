@@ -153,6 +153,7 @@ defmodule FlamingoWeb.CoreComponents do
   defp button_variant_classes("neutral"),
     do:
       "bg-white text-foreground shadow-destructive active:translate-x-box-shadow-x active:translate-y-box-shadow-y active:shadow-none disabled:active:translate-x-0 disabled:active:translate-y-0"
+
   defp button_variant_classes("ghost"), do: "border-transparent shadow-none hover:bg-primary/20"
   defp button_variant_classes("outline"), do: "bg-transparent text-foreground shadow-none"
 
