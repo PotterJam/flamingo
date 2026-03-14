@@ -19,7 +19,8 @@ defmodule Flamingo.GameServer do
     word_choices: [],
     correct_guesses: %{},
     revealed_indices: [],
-    hint_timer_ref: nil
+    hint_timer_ref: nil,
+    score_gains: %{}
   ]
 
   def start_link(room_id) do
@@ -362,19 +363,36 @@ defmodule Flamingo.GameServer do
     Process.send_after(self(), {:turn_reveal_timeout, ref}, 5_000)
     turn_end_time = DateTime.add(DateTime.utc_now(), 5, :second)
 
+    score_gains =
+      Flamingo.Scoring.calculate_round_scores(
+        state.correct_guesses,
+        state.drawer_id,
+        state.player_order,
+        state.turn_length
+      )
+
     new_state = %{
       state
       | phase: :turn_reveal,
         phase_timer_ref: ref,
         turn_end_time: turn_end_time,
-        drawn_this_round: MapSet.put(state.drawn_this_round, state.drawer_id)
+        drawn_this_round: MapSet.put(state.drawn_this_round, state.drawer_id),
+        score_gains: score_gains
     }
 
-    broadcast(state.room_id, {:turn_reveal, state.word, turn_end_time})
+    broadcast(state.room_id, {:turn_reveal, state.word, turn_end_time, score_gains})
     new_state
   end
 
   defp enter_next_turn(state) do
+    players =
+      Map.new(state.players, fn {pid, player} ->
+        gain = Map.get(state.score_gains, pid, 0)
+        {pid, %{player | score: player.score + gain}}
+      end)
+
+    state = %{state | players: players, score_gains: %{}}
+
     next_drawer =
       Enum.find(state.player_order, fn pid ->
         not MapSet.member?(state.drawn_this_round, pid)
