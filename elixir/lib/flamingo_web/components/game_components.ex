@@ -84,6 +84,8 @@ defmodule FlamingoWeb.GameComponents do
   attr :word, :string, default: nil
   attr :show_word, :boolean, default: false
   attr :revealed_indices, :list, default: []
+  attr :turn_end_time, :any, default: nil
+  attr :show_timer, :boolean, default: false
 
   def game_header(assigns) do
     {display, letter_count} =
@@ -118,18 +120,32 @@ defmodule FlamingoWeb.GameComponents do
     assigns = assign(assigns, display: display, letter_count: letter_count)
 
     ~H"""
-    <div class={[
-      "self-center rounded-full border-2 border-border bg-pink-400 px-10 pt-1 pb-4 shadow-rounded",
-      if(!@display, do: "invisible")
-    ]}>
-      <div class="flex items-center justify-center gap-4">
-        <p class="font-timer text-5xl leading-none font-black tracking-widest text-white">
-          {if(@display, do: @display, else: Phoenix.HTML.raw("&nbsp;"))}
-        </p>
-        <%= if @display && @letter_count do %>
-          <p class="font-timer text-2xl leading-none font-bold text-white">{@letter_count}</p>
-        <% end %>
+    <div class="relative self-center">
+      <div class={[
+        "rounded-full border-2 border-border bg-pink-400 px-10 pt-1 pb-4 shadow-rounded",
+        if(!@display, do: "invisible")
+      ]}>
+        <div class="flex items-center justify-center gap-4">
+          <p class="font-timer text-5xl leading-none font-black tracking-widest text-white">
+            {if(@display, do: @display, else: Phoenix.HTML.raw("&nbsp;"))}
+          </p>
+          <%= if @display && @letter_count do %>
+            <p class="font-timer text-2xl leading-none font-bold text-white">{@letter_count}</p>
+          <% end %>
+        </div>
       </div>
+      <%= if @show_timer do %>
+        <.starburst_timer
+          position_class="absolute -top-4 -right-20 rotate-12"
+          size_class="h-24 w-24"
+          text_class="text-2xl"
+          timer_id="turn-timer"
+          timer_hook="FlamingoWeb.GameLive.Timer"
+          end_time={@turn_end_time && DateTime.to_iso8601(@turn_end_time)}
+          stroke="black"
+          stroke_width="6"
+        />
+      <% end %>
     </div>
     """
   end
@@ -174,12 +190,25 @@ defmodule FlamingoWeb.GameComponents do
   attr :timer_id, :string, required: true
   attr :timer_hook, :string, required: true
   attr :end_time, :string, default: nil
+  attr :stroke, :string, default: "none"
+  attr :stroke_width, :string, default: "0"
 
   def starburst_timer(assigns) do
     ~H"""
     <div class={@position_class}>
       <div class="relative flex items-center justify-center">
-        <img src="/images/starburst.svg" class={["starburst", @size_class]} />
+        <svg
+          viewBox="0 0 200 200"
+          xmlns="http://www.w3.org/2000/svg"
+          class={["starburst", @size_class]}
+        >
+          <path
+            d="M96.4,8.1 L96.4,8.1 Q100.0,5.0 103.6,8.1 L120.5,22.7 Q124.1,25.8 128.9,25.4 L151.0,23.5 Q155.8,23.1 156.9,27.8 L162.0,49.5 Q163.1,54.2 167.2,56.7 L186.3,68.1 Q190.4,70.6 188.5,75.0 L179.9,95.6 Q178.0,100.0 179.9,104.4 L188.5,125.0 Q190.4,129.4 186.3,131.9 L167.2,143.3 Q163.1,145.8 162.0,150.5 L156.9,172.2 Q155.8,176.9 151.0,176.5 L128.9,174.6 Q124.1,174.2 120.5,177.3 L103.6,191.9 Q100.0,195.0 96.4,191.9 L79.5,177.3 Q75.9,174.2 71.1,174.6 L49.0,176.5 Q44.2,176.9 43.1,172.2 L38.0,150.5 Q36.9,145.8 32.8,143.3 L13.7,131.9 Q9.6,129.4 11.5,125.0 L20.1,104.4 Q22.0,100.0 20.1,95.6 L11.5,75.0 Q9.6,70.6 13.7,68.1 L32.8,56.7 Q36.9,54.2 38.0,49.5 L43.1,27.8 Q44.2,23.1 49.0,23.5 L71.1,25.4 Q75.9,25.8 79.5,22.7 Z"
+            fill="#f9a8d4"
+            stroke={@stroke}
+            stroke-width={@stroke_width}
+          />
+        </svg>
         <span
           id={@timer_id}
           phx-hook={@timer_hook}
