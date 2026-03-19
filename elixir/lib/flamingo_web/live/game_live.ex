@@ -224,7 +224,7 @@ defmodule FlamingoWeb.GameLive do
               show_timer={@phase == :playing}
             />
 
-            <div class="flex w-full flex-1 flex-row gap-3 pb-1 pr-1">
+            <div class="flex min-h-0 w-full flex-1 flex-row gap-3 pb-1 pr-1">
               <.player_list_panel
                 players={@players}
                 player_order={@player_order}
@@ -363,7 +363,7 @@ defmodule FlamingoWeb.GameLive do
                   </div>
               <% end %>
 
-              <.box class="flex w-full flex-1 flex-col bg-white p-0">
+              <.box class="flex min-h-0 w-full flex-1 flex-col bg-white p-0">
                 <div
                   id="game-feed"
                   phx-hook=".ScrollFeed"
