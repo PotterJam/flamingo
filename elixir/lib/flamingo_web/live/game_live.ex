@@ -19,6 +19,8 @@ defmodule FlamingoWeb.GameLive do
        phase: :lobby,
        players: %{},
        player_order: [],
+       final_players: %{},
+       final_player_order: [],
        host_id: nil,
        drawer_id: nil,
        round_count: 3,
@@ -56,6 +58,12 @@ defmodule FlamingoWeb.GameLive do
             score_gains =
               if state.phase == :turn_reveal, do: state.score_gains, else: %{}
 
+            final_players =
+              if state.phase == :game_ended, do: state.players, else: %{}
+
+            final_player_order =
+              if state.phase == :game_ended, do: state.player_order, else: []
+
             socket =
               assign(socket,
                 player_id: player_id,
@@ -64,6 +72,8 @@ defmodule FlamingoWeb.GameLive do
                 player_order: state.player_order,
                 host_id: state.host_id,
                 drawer_id: state.drawer_id,
+                final_players: final_players,
+                final_player_order: final_player_order,
                 round_count: state.round_count,
                 turn_length: state.turn_length,
                 current_round: state.current_round,
@@ -393,7 +403,7 @@ defmodule FlamingoWeb.GameLive do
           <.card class="flex w-full max-w-xs flex-col items-center gap-6 bg-white p-8">
             <h2 class="text-3xl font-bold">Game finished</h2>
             <ul class="w-full space-y-1">
-              <%= for {pid, idx} <- @player_order |> Enum.sort_by(fn pid -> -(Map.get(@players, pid).score) end) |> Enum.with_index() do %>
+              <%= for {pid, idx} <- @final_player_order |> Enum.sort_by(fn pid -> -(Map.get(@final_players, pid).score) end) |> Enum.with_index() do %>
                 <li class="flex items-center gap-2 px-3 py-2">
                   <span class="text-lg">
                     <%= case idx do %>
@@ -407,9 +417,9 @@ defmodule FlamingoWeb.GameLive do
                         {idx + 1}
                     <% end %>
                   </span>
-                  <span class="font-bold">{Map.get(@players, pid).name}</span>
+                  <span class="font-bold">{Map.get(@final_players, pid).name}</span>
                   <span class="ml-auto text-pink-500 font-semibold">
-                    {Map.get(@players, pid).score}
+                    {Map.get(@final_players, pid).score}
                   </span>
                 </li>
               <% end %>
@@ -538,7 +548,7 @@ defmodule FlamingoWeb.GameLive do
     socket = assign(socket, players: players, player_order: player_order, host_id: host_id)
 
     socket =
-      if new_count > old_count do
+      if socket.assigns.phase != :game_ended and new_count > old_count do
         push_event(socket, "play_sound", %{sound: "join"})
       else
         socket
@@ -562,6 +572,8 @@ defmodule FlamingoWeb.GameLive do
         round_count: round_count,
         turn_length: turn_length,
         current_round: current_round,
+        final_players: %{},
+        final_player_order: [],
         word_choices: if(is_drawer, do: word_choices, else: nil),
         word: nil,
         show_word: false,
@@ -580,6 +592,8 @@ defmodule FlamingoWeb.GameLive do
       assign(socket,
         phase: :playing,
         drawer_id: drawer_id,
+        final_players: %{},
+        final_player_order: [],
         word_choices: nil,
         turn_end_time: turn_end_time,
         word: word,
@@ -596,6 +610,8 @@ defmodule FlamingoWeb.GameLive do
     socket =
       assign(socket,
         phase: :turn_reveal,
+        final_players: %{},
+        final_player_order: [],
         word: word,
         show_word: true,
         turn_end_time: turn_end_time,
@@ -611,7 +627,8 @@ defmodule FlamingoWeb.GameLive do
     {:noreply,
      assign(socket,
        phase: :game_ended,
-       players: players,
+       final_players: players,
+       final_player_order: socket.assigns.player_order,
        turn_end_time: nil
      )}
   end
