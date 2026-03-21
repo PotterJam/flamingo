@@ -103,7 +103,10 @@ defmodule FlamingoWeb.GameLive do
                 socket
               end
 
-            socket = push_event(socket, "play_sound", %{sound: "join"})
+            socket =
+              socket
+              |> sync_game_music(state.phase)
+              |> push_event("play_sound", %{sound: "join"})
 
             {:noreply, socket}
           else
@@ -123,6 +126,14 @@ defmodule FlamingoWeb.GameLive do
   end
 
   defp palette, do: @palette
+
+  defp sync_game_music(socket, phase) when phase in [:word_choice, :playing, :turn_reveal] do
+    push_event(socket, "start_music", %{sound: "gameMusic"})
+  end
+
+  defp sync_game_music(socket, _phase) do
+    push_event(socket, "stop_music", %{sound: "gameMusic"})
+  end
 
   def render(assigns) do
     ~H"""
@@ -582,7 +593,7 @@ defmodule FlamingoWeb.GameLive do
       )
 
     socket = push_event(socket, "set_timer", %{end_time: DateTime.to_iso8601(turn_end_time)})
-    {:noreply, socket}
+    {:noreply, sync_game_music(socket, :word_choice)}
   end
 
   def handle_info({:turn_started, drawer_id, word, turn_end_time}, socket) do
@@ -603,7 +614,7 @@ defmodule FlamingoWeb.GameLive do
       )
 
     socket = push_event(socket, "set_timer", %{end_time: DateTime.to_iso8601(turn_end_time)})
-    {:noreply, socket}
+    {:noreply, sync_game_music(socket, :playing)}
   end
 
   def handle_info({:turn_reveal, word, turn_end_time, score_gains, players}, socket) do
@@ -620,17 +631,19 @@ defmodule FlamingoWeb.GameLive do
       )
 
     socket = push_event(socket, "set_timer", %{end_time: DateTime.to_iso8601(turn_end_time)})
-    {:noreply, socket}
+    {:noreply, sync_game_music(socket, :turn_reveal)}
   end
 
   def handle_info({:game_ended, players}, socket) do
     {:noreply,
-     assign(socket,
+     socket
+     |> assign(
        phase: :game_ended,
        final_players: players,
        final_player_order: socket.assigns.player_order,
        turn_end_time: nil
-     )}
+     )
+     |> sync_game_music(:game_ended)}
   end
 
   def handle_info({:hint_revealed, revealed_indices}, socket) do

@@ -45,7 +45,7 @@ const SoundManager = {
       if (!audio) return;
 
       audio.loop = true;
-      audio.currentTime = 0;
+      if (!audio.paused) return;
       audio.play().catch(() => {});
     });
 
