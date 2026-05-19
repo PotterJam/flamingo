@@ -20,15 +20,6 @@ export type SoundName = keyof typeof SOUNDS;
 
 function createSoundManager() {
     const sounds: Record<string, HTMLAudioElement> = {};
-    const fadeTimers: Partial<Record<SoundName, number>> = {};
-
-    const clearFade = (name: SoundName) => {
-        const timer = fadeTimers[name];
-        if (timer !== undefined) {
-            window.clearInterval(timer);
-            delete fadeTimers[name];
-        }
-    };
 
     const loadSounds = () => {
         for (const [name, url] of Object.entries(SOUNDS)) {
@@ -40,7 +31,7 @@ function createSoundManager() {
     const playSound = (name: SoundName) => {
         const sound = sounds[name];
         sound.currentTime = 0;
-        void sound.play();
+        sound.play();
     };
 
     const startOrContinueMusic = () => {
@@ -48,78 +39,29 @@ function createSoundManager() {
         if (sound.paused) {
             sound.loop = true;
             sound.volume = 0.08;
-            void sound.play();
+            sound.play();
         }
     };
 
     const stopMusic = () => {
         const sound = sounds['gameMusic'];
-        clearFade('gameMusic');
         sound.pause();
-        sound.currentTime = 0;
-    };
-
-    const fadeInMusic = () => {
-        const sound = sounds['gameMusic'];
-        clearFade('gameMusic');
-        sound.loop = true;
-
-        if (sound.paused) {
-            sound.volume = 0;
-            void sound.play();
-        }
-
-        fadeTimers['gameMusic'] = window.setInterval(() => {
-            sound.volume = Math.min(0.08, sound.volume + 0.01);
-            if (sound.volume >= 0.08) {
-                clearFade('gameMusic');
-            }
-        }, 80);
-    };
-
-    const fadeOutMusic = () => {
-        const sound = sounds['gameMusic'];
-        if (sound.paused) {
-            clearFade('gameMusic');
-            return;
-        }
-
-        clearFade('gameMusic');
-        fadeTimers['gameMusic'] = window.setInterval(() => {
-            sound.volume = Math.max(0, sound.volume - 0.01);
-            if (sound.volume <= 0) {
-                clearFade('gameMusic');
-                sound.pause();
-                sound.currentTime = 0;
-            }
-        }, 80);
     };
 
     const startOrContinueCountdown = () => {
         const sound = sounds['countdown'];
         if (sound.paused) {
             sound.volume = 0.7;
-            sound.currentTime = 0;
-            void sound.play();
+            sound.play();
         }
     };
 
     const stopCountdown = () => {
         const sound = sounds['countdown'];
         sound.pause();
-        sound.currentTime = 0;
     };
 
-    return {
-        loadSounds,
-        playSound,
-        startOrContinueMusic,
-        stopMusic,
-        fadeInMusic,
-        fadeOutMusic,
-        startOrContinueCountdown,
-        stopCountdown,
-    };
+    return { loadSounds, playSound, startOrContinueMusic, stopMusic, startOrContinueCountdown, stopCountdown };
 }
 
 export const soundManager = createSoundManager();
