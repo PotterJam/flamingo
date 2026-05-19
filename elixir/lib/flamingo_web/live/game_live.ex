@@ -281,36 +281,44 @@ defmodule FlamingoWeb.GameLive do
                       </div>
                     <% end %>
                   </.box>
-                <% @phase == :turn_reveal -> %>
-                  <.box class="flex w-[704px] shrink-0 flex-col items-center justify-center gap-6 bg-white">
-                    <p class="text-2xl font-black">The word was</p>
-                    <p class="font-hero text-5xl font-black text-pink-400">{@word}</p>
-                    <ul class="w-64 space-y-1">
-                      <%= for {pid, gain} <- Enum.sort_by(@score_gains, fn {_pid, g} -> -g end) do %>
-                        <li class="flex items-center justify-between px-3 py-1">
-                          <span class="truncate">{Map.get(@players, pid).name}</span>
-                          <span class={[
-                            "font-semibold",
-                            if(gain > 0, do: "text-green-600"),
-                            if(gain < 0, do: "text-red-500"),
-                            if(gain == 0, do: "text-gray-400")
-                          ]}>
-                            {if(gain > 0, do: "+#{gain}", else: "#{gain}")}
-                          </span>
-                        </li>
-                      <% end %>
-                    </ul>
-                    <.starburst_timer
-                      position_class=""
-                      size_class="h-20 w-20"
-                      text_class="text-xl"
-                      timer_id="turn-reveal-timer"
-                      timer_hook="FlamingoWeb.GameLive.Timer"
-                      end_time={@turn_end_time && DateTime.to_iso8601(@turn_end_time)}
-                    />
-                  </.box>
                 <% true -> %>
-                  <div class="flex w-[704px] shrink-0 flex-col gap-4">
+                  <div class="relative flex w-[704px] shrink-0 flex-col gap-4">
+                    <%= if @phase == :turn_reveal do %>
+                      <div class="absolute inset-x-0 top-0 z-10 m-[2px] flex h-[500px] items-center justify-center bg-white/75 text-center backdrop-blur-[2px]">
+                        <div class="flex w-80 flex-col items-center gap-4">
+                          <div>
+                            <p class="text-xl font-black">The word was</p>
+                            <p class="font-hero text-5xl leading-none font-black text-pink-400">
+                              {@word}
+                            </p>
+                          </div>
+                          <ul class="w-64 space-y-1">
+                            <%= for {pid, gain} <- Enum.sort_by(@score_gains, fn {_pid, g} -> -g end) do %>
+                              <li class="flex items-center justify-between px-3 py-1">
+                                <span class="truncate">{Map.get(@players, pid).name}</span>
+                                <span class={[
+                                  "font-semibold",
+                                  if(gain > 0, do: "text-green-700"),
+                                  if(gain < 0, do: "text-red-600"),
+                                  if(gain == 0, do: "text-gray-700")
+                                ]}>
+                                  {if(gain > 0, do: "+#{gain}", else: "#{gain}")}
+                                </span>
+                              </li>
+                            <% end %>
+                          </ul>
+                          <.starburst_timer
+                            position_class=""
+                            size_class="h-20 w-20"
+                            text_class="text-xl"
+                            timer_id="turn-reveal-timer"
+                            timer_hook="FlamingoWeb.GameLive.Timer"
+                            end_time={@turn_end_time && DateTime.to_iso8601(@turn_end_time)}
+                          />
+                        </div>
+                      </div>
+                    <% end %>
+
                     <div
                       id="drawing-canvas"
                       phx-hook="DrawingCanvas"
@@ -333,14 +341,14 @@ defmodule FlamingoWeb.GameLive do
                         </canvas>
                       </.box>
 
-                      <%= if @player_id == @drawer_id do %>
+                      <%= if @phase == :playing and @player_id == @drawer_id do %>
                         <.box class="bg-white p-0">
                           <.drawing_toolbar palette={palette()} />
                         </.box>
                       <% end %>
                     </div>
 
-                    <%= if @player_id != @drawer_id do %>
+                    <%= if @phase == :playing and @player_id != @drawer_id do %>
                       <%= if MapSet.member?(@correct_guesses, @player_id) do %>
                         <.box class="bg-green-100 p-3 text-center font-bold text-green-800">
                           You guessed it!
