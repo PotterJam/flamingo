@@ -1,7 +1,17 @@
 import { createEffect, Accessor } from 'solid-js';
 import { ReceivedMsg } from '../messages';
-import { actions } from '../store';
+import { actions, store } from '../store';
 import { soundManager } from '../sound-manager';
+import { createRoundAudioLifecycle } from '../audio-lifecycle';
+
+const roundAudioLifecycle = createRoundAudioLifecycle(soundManager);
+
+const syncRoundAudio = () => {
+    roundAudioLifecycle.sync(
+        store.gameState.gamePhase,
+        store.gameState.turnEndTime
+    );
+};
 
 export const useHandleMessage = (message: Accessor<ReceivedMsg | null>) => {
     createEffect(() => {
@@ -10,6 +20,7 @@ export const useHandleMessage = (message: Accessor<ReceivedMsg | null>) => {
             switch (msg.type) {
                 case 'gameInfo': {
                     actions.handleGameInfo(msg);
+                    syncRoundAudio();
                     break;
                 }
                 case 'playerUpdate': {
@@ -17,11 +28,12 @@ export const useHandleMessage = (message: Accessor<ReceivedMsg | null>) => {
                     break;
                 }
                 case 'turnSetup':
-                    soundManager.startOrContinueMusic();
                     actions.handleTurnSetup(msg);
+                    syncRoundAudio();
                     break;
                 case 'turnStart': {
                     actions.handleTurnStart(msg);
+                    syncRoundAudio();
                     break;
                 }
                 case 'chat': {
@@ -34,17 +46,17 @@ export const useHandleMessage = (message: Accessor<ReceivedMsg | null>) => {
                 }
                 case 'turnEnd': {
                     actions.handleTurnEnd(msg);
+                    syncRoundAudio();
                     break;
                 }
                 case 'roundScoreDisplay': {
-                    soundManager.stopCountdown();
                     actions.handleRoundScoreDisplay(msg);
+                    syncRoundAudio();
                     break;
                 }
                 case 'gameFinished': {
-                    soundManager.stopMusic();
-                    soundManager.stopCountdown();
                     actions.handleGameFinished(msg);
+                    roundAudioLifecycle.stopAll();
                     break;
                 }
                 case 'wordReveal': {
