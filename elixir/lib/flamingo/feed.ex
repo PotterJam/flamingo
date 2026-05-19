@@ -23,6 +23,11 @@ defmodule Flamingo.Feed do
     {%{feed | events: feed.events ++ [event]}, event}
   end
 
+  def close_guess(feed, player_id) do
+    event = {:close_guess, player_id}
+    {%{feed | events: feed.events ++ [event]}, event}
+  end
+
   def correct_guess(feed, player_id, name) do
     event = {:correct_guess, player_id, name}
     {%{feed | events: feed.events ++ [event]}, event}
@@ -38,6 +43,11 @@ defmodule Flamingo.Feed do
 
   def format({:new_turn, _player_id, name}, _viewer), do: {:system, "It's #{name}'s turn to draw"}
   def format({:guess, _player_id, name, text}, _viewer), do: {:guess, "#{name}: #{text}"}
+
+  def format({:close_guess, player_id}, viewer) when player_id == viewer,
+    do: {:close, "You were close"}
+
+  def format({:close_guess, _player_id}, _viewer), do: nil
 
   def format({:correct_guess, player_id, _name}, viewer) when player_id == viewer,
     do: {:correct, "You guessed it"}
