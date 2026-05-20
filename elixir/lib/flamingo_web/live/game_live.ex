@@ -103,7 +103,10 @@ defmodule FlamingoWeb.GameLive do
                 socket
               end
 
-            socket = push_event(socket, "play_sound", %{sound: "join"})
+            socket =
+              socket
+              |> sync_round_audio()
+              |> push_event("play_sound", %{sound: "join"})
 
             {:noreply, socket}
           else
@@ -123,6 +126,17 @@ defmodule FlamingoWeb.GameLive do
   end
 
   defp palette, do: @palette
+
+  defp sync_round_audio(socket) do
+    push_event(socket, "sync_round_audio", %{
+      phase: Atom.to_string(socket.assigns.phase),
+      end_time:
+        if(socket.assigns.turn_end_time,
+          do: DateTime.to_iso8601(socket.assigns.turn_end_time),
+          else: nil
+        )
+    })
+  end
 
   def render(assigns) do
     ~H"""
@@ -581,7 +595,11 @@ defmodule FlamingoWeb.GameLive do
         score_gains: %{}
       )
 
-    socket = push_event(socket, "set_timer", %{end_time: DateTime.to_iso8601(turn_end_time)})
+    socket =
+      socket
+      |> push_event("set_timer", %{end_time: DateTime.to_iso8601(turn_end_time)})
+      |> sync_round_audio()
+
     {:noreply, socket}
   end
 
@@ -602,7 +620,11 @@ defmodule FlamingoWeb.GameLive do
         revealed_indices: []
       )
 
-    socket = push_event(socket, "set_timer", %{end_time: DateTime.to_iso8601(turn_end_time)})
+    socket =
+      socket
+      |> push_event("set_timer", %{end_time: DateTime.to_iso8601(turn_end_time)})
+      |> sync_round_audio()
+
     {:noreply, socket}
   end
 
@@ -619,7 +641,11 @@ defmodule FlamingoWeb.GameLive do
         players: players
       )
 
-    socket = push_event(socket, "set_timer", %{end_time: DateTime.to_iso8601(turn_end_time)})
+    socket =
+      socket
+      |> push_event("set_timer", %{end_time: DateTime.to_iso8601(turn_end_time)})
+      |> sync_round_audio()
+
     {:noreply, socket}
   end
 
@@ -630,7 +656,8 @@ defmodule FlamingoWeb.GameLive do
        final_players: players,
        final_player_order: socket.assigns.player_order,
        turn_end_time: nil
-     )}
+     )
+     |> sync_round_audio()}
   end
 
   def handle_info({:hint_revealed, revealed_indices}, socket) do
