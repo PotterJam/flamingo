@@ -84,7 +84,10 @@ defmodule FlamingoWeb.GameLive do
                 correct_guesses: MapSet.new(Map.keys(state.correct_guesses)),
                 revealed_indices: state.revealed_indices,
                 score_gains: score_gains,
-                feed: Enum.map(state.feed.events, &Feed.format(&1, player_id))
+                feed:
+                  state.feed.events
+                  |> Enum.map(&Feed.format(&1, player_id))
+                  |> Enum.reject(&is_nil/1)
               )
 
             socket =
@@ -399,6 +402,7 @@ defmodule FlamingoWeb.GameLive do
                       "p-1 text-xs",
                       type == :system && "font-semibold text-pink-600",
                       type == :correct && "font-semibold text-green-600",
+                      type == :close && "font-semibold text-amber-600",
                       type == :guess && "text-foreground",
                       type == :info && "text-gray-500"
                     ]}
@@ -696,10 +700,14 @@ defmodule FlamingoWeb.GameLive do
   def handle_info({:feed_event, event}, socket) do
     formatted = Feed.format(event, socket.assigns.player_id)
 
-    {:noreply,
-     socket
-     |> assign(:feed, socket.assigns.feed ++ [formatted])
-     |> push_event("scroll_feed", %{})}
+    if formatted do
+      {:noreply,
+       socket
+       |> assign(:feed, socket.assigns.feed ++ [formatted])
+       |> push_event("scroll_feed", %{})}
+    else
+      {:noreply, socket}
+    end
   end
 
   def handle_info({:draw_event, from_player_id, event}, socket) do

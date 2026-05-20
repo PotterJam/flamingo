@@ -190,6 +190,12 @@ defmodule Flamingo.GameServer do
         new_state = if all_guessed?, do: enter_turn_reveal(new_state), else: new_state
         {:reply, :correct, new_state}
 
+      close_guess?(text, state.word) ->
+        {feed, event} = Feed.close_guess(state.feed, player_id)
+        new_state = %{state | feed: feed}
+        broadcast(state.room_id, {:feed_event, event})
+        {:reply, :close, new_state}
+
       true ->
         player = Map.get(state.players, player_id)
         {feed, event} = Feed.guess(state.feed, player_id, player.name, text)
@@ -508,5 +514,28 @@ defmodule Flamingo.GameServer do
 
   defp broadcast(room_id, message) do
     Phoenix.PubSub.broadcast(Flamingo.PubSub, "game:#{room_id}", message)
+  end
+
+  defp close_guess?(guess, word) do
+    normalized_guess = normalize_guess(guess)
+    normalized_word = normalize_guess(word)
+
+    normalized_guess != normalized_word and
+      one_letter_different?(normalized_guess, normalized_word)
+  end
+
+  defp normalize_guess(text) do
+    text
+    |> String.downcase()
+    |> String.replace(~r/[^\p{L}\p{N}]/u, "")
+  end
+
+  defp one_letter_different?(left, right) do
+    left_chars = String.graphemes(left)
+    right_chars = String.graphemes(right)
+
+    length(left_chars) == length(right_chars) and
+      Enum.zip(left_chars, right_chars)
+      |> Enum.count(fn {left_char, right_char} -> left_char != right_char end) == 1
   end
 end

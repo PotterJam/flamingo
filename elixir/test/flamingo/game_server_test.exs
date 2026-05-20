@@ -145,6 +145,55 @@ defmodule Flamingo.GameServerTest do
     assert_receive {:incorrect_guess, ^guesser, "wrong-answer"}
   end
 
+  test "close guess sends private feedback instead of public chat", %{room_id: room_id} do
+    Phoenix.PubSub.subscribe(Flamingo.PubSub, "game:#{room_id}")
+    {p1, p2, word, state} = start_playing(room_id)
+    guesser = if p1 == state.drawer_id, do: p2, else: p1
+    other_player = if guesser == p1, do: p2, else: p1
+    close_guess = String.replace_suffix(word, String.last(word), "z")
+
+    assert :close = GameServer.guess(room_id, guesser, close_guess)
+
+    refute_receive {:incorrect_guess, ^guesser, ^close_guess}
+    assert_receive {:feed_event, {:close_guess, ^guesser} = event}
+
+    assert {:close, "You were close"} = Flamingo.Feed.format(event, guesser)
+    assert nil == Flamingo.Feed.format(event, other_player)
+  end
+
+  test "close guess ignores case spacing and punctuation for same-length typos", %{
+    room_id: room_id
+  } do
+    Phoenix.PubSub.subscribe(Flamingo.PubSub, "game:#{room_id}")
+    {p1, p2, word, state} = start_playing(room_id)
+    guesser = if p1 == state.drawer_id, do: p2, else: p1
+
+    close_guess =
+      word
+      |> String.replace_suffix(String.last(word), "z")
+      |> String.upcase()
+      |> String.graphemes()
+      |> Enum.join(" ")
+      |> Kernel.<>("!")
+
+    assert :close = GameServer.guess(room_id, guesser, close_guess)
+
+    refute_receive {:incorrect_guess, ^guesser, ^close_guess}
+    assert_receive {:feed_event, {:close_guess, ^guesser}}
+  end
+
+  test "wrong-length guesses are normal incorrect guesses", %{room_id: room_id} do
+    Phoenix.PubSub.subscribe(Flamingo.PubSub, "game:#{room_id}")
+    {p1, p2, word, state} = start_playing(room_id)
+    guesser = if p1 == state.drawer_id, do: p2, else: p1
+    wrong_length_guess = word <> "z"
+
+    assert :incorrect = GameServer.guess(room_id, guesser, wrong_length_guess)
+
+    assert_receive {:incorrect_guess, ^guesser, ^wrong_length_guess}
+    refute_receive {:feed_event, {:close_guess, ^guesser}}
+  end
+
   test "drawer cannot guess", %{room_id: room_id} do
     {_p1, _p2, word, state} = start_playing(room_id)
     assert {:error, :drawer_cannot_guess} = GameServer.guess(room_id, state.drawer_id, word)
