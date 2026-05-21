@@ -38,6 +38,42 @@ defmodule FlamingoWeb.GameLiveTest do
     assert html =~ "Bob"
   end
 
+  test "game end screen shows the winning player's drawings", %{conn: conn, room_id: room_id} do
+    {:ok, p1, _} = GameServer.join(room_id, "Alice")
+    {:ok, p2, _} = GameServer.join(room_id, "Bob")
+
+    {:ok, view, _html} = live(conn, ~p"/game/#{room_id}?player_id=#{p1}")
+
+    :ok = GameServer.start_game(room_id, p1, %{round_count: 1, turn_length: 30})
+
+    words_by_player =
+      play_turn(room_id, p1, p2, [
+        %{
+          "event_type" => "start",
+          "x" => 10,
+          "y" => 20,
+          "color" => "#000000",
+          "line_width" => 9
+        }
+      ])
+      |> then(&%{p1 => &1})
+
+    words_by_player = Map.put(words_by_player, p2, play_turn(room_id, p1, p2, []))
+
+    {:ok, state} = GameServer.get_state(room_id)
+    winner_id = Enum.max_by(state.player_order, fn pid -> Map.get(state.players, pid).score end)
+    winner = Map.get(state.players, winner_id)
+    winner_word = Map.get(words_by_player, winner_id)
+
+    html = render(view)
+
+    assert html =~ "Game finished"
+    assert html =~ "#{winner.name}&#39;s drawings"
+    assert html =~ "Round 1"
+    assert html =~ winner_word
+    assert html =~ "data-final-drawing-events="
+  end
+
   test "pushes round audio lifecycle events as phases change", %{conn: conn, room_id: room_id} do
     {:ok, p1, _} = GameServer.join(room_id, "Alice")
     {:ok, p2, _} = GameServer.join(room_id, "Bob")
@@ -76,12 +112,13 @@ defmodule FlamingoWeb.GameLiveTest do
     assert is_binary(reveal_end_time)
   end
 
-  defp play_turn(room_id, p1, p2) do
+  defp play_turn(room_id, p1, p2, drawing_events \\ []) do
     {:ok, state} = GameServer.get_state(room_id)
     word = List.first(state.word_choices)
     :ok = GameServer.select_word(room_id, state.drawer_id, word)
 
     {:ok, state} = GameServer.get_state(room_id)
+    Enum.each(drawing_events, &GameServer.draw_event(room_id, state.drawer_id, &1))
     guesser = if(p1 == state.drawer_id, do: p2, else: p1)
     :correct = GameServer.guess(room_id, guesser, word)
 
@@ -91,5 +128,7 @@ defmodule FlamingoWeb.GameLiveTest do
     {:ok, state} = GameServer.get_state(room_id)
     send(pid, {:turn_reveal_timeout, state.phase_timer_ref})
     _ = :sys.get_state(pid)
+
+    word
   end
 end

@@ -23,6 +23,7 @@ defmodule Flamingo.GameServer do
     revealed_indices: [],
     hint_timer_ref: nil,
     score_gains: %{},
+    final_drawings: [],
     feed: Feed.new()
   ]
 
@@ -417,6 +418,7 @@ defmodule Flamingo.GameServer do
         phase_timer_ref: ref,
         turn_end_time: turn_end_time,
         drawn_this_round: MapSet.put(state.drawn_this_round, state.drawer_id),
+        final_drawings: state.final_drawings ++ [completed_drawing(state)],
         score_gains: score_gains,
         players: players
     }
@@ -465,8 +467,18 @@ defmodule Flamingo.GameServer do
         turn_end_time: nil
     }
 
-    broadcast(state.room_id, {:game_ended, state.players})
+    broadcast(state.room_id, {:game_ended, state.players, state.final_drawings})
     new_state
+  end
+
+  defp completed_drawing(state) do
+    %{
+      drawer_id: state.drawer_id,
+      word: state.word,
+      round_number: state.current_round + 1,
+      turn_order: length(state.final_drawings) + 1,
+      events: state.current_drawing
+    }
   end
 
   defp validate_host(state, player_id) do

@@ -227,6 +227,66 @@ defmodule Flamingo.GameServerTest do
     assert MapSet.member?(state.drawn_this_round, drawer)
   end
 
+  test "completed turn records drawing history", %{room_id: room_id} do
+    {p1, p2, word, state} = start_playing(room_id)
+    drawer = state.drawer_id
+    guesser = if p1 == drawer, do: p2, else: p1
+
+    start_event = %{
+      "event_type" => "start",
+      "x" => 10,
+      "y" => 20,
+      "color" => "#000000",
+      "line_width" => 9
+    }
+
+    draw_event = %{
+      "event_type" => "draw",
+      "start_x" => 10,
+      "start_y" => 20,
+      "end_x" => 30,
+      "end_y" => 40,
+      "color" => "#000000",
+      "line_width" => 9
+    }
+
+    GameServer.draw_event(room_id, drawer, start_event)
+    GameServer.draw_event(room_id, drawer, draw_event)
+    :correct = GameServer.guess(room_id, guesser, word)
+
+    {:ok, state} = GameServer.get_state(room_id)
+
+    assert [
+             %{
+               drawer_id: ^drawer,
+               word: ^word,
+               round_number: 1,
+               turn_order: 1,
+               events: [^start_event, ^draw_event]
+             }
+           ] = state.final_drawings
+  end
+
+  test "completed turn records empty drawing history", %{room_id: room_id} do
+    {p1, p2, word, state} = start_playing(room_id)
+    drawer = state.drawer_id
+    guesser = if p1 == drawer, do: p2, else: p1
+
+    :correct = GameServer.guess(room_id, guesser, word)
+
+    {:ok, state} = GameServer.get_state(room_id)
+
+    assert [
+             %{
+               drawer_id: ^drawer,
+               word: ^word,
+               round_number: 1,
+               turn_order: 1,
+               events: []
+             }
+           ] = state.final_drawings
+  end
+
   test "game ends after all players draw in all rounds", %{room_id: room_id} do
     Phoenix.PubSub.subscribe(Flamingo.PubSub, "game:#{room_id}")
 
@@ -263,7 +323,7 @@ defmodule Flamingo.GameServerTest do
 
     {:ok, state} = GameServer.get_state(room_id)
     assert state.phase == :game_ended
-    assert_receive {:game_ended, _players}
+    assert_receive {:game_ended, _players, _final_drawings}
   end
 
   test "round increments after all players draw", %{room_id: room_id} do
