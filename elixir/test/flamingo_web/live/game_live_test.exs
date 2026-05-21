@@ -74,6 +74,79 @@ defmodule FlamingoWeb.GameLiveTest do
     assert html =~ "data-final-drawing-events="
   end
 
+  test "final score rows select the drawing showcase", %{
+    conn: conn,
+    room_id: room_id
+  } do
+    {:ok, p1, _} = GameServer.join(room_id, "Alice")
+    {:ok, p2, _} = GameServer.join(room_id, "Bob")
+
+    {:ok, view, _html} = live(conn, ~p"/game/#{room_id}?player_id=#{p1}")
+
+    :ok = GameServer.start_game(room_id, p1, %{round_count: 1, turn_length: 30})
+
+    alice_word =
+      play_turn(room_id, p1, p2, [
+        %{
+          "event_type" => "start",
+          "x" => 10,
+          "y" => 20,
+          "color" => "#000000",
+          "line_width" => 9
+        }
+      ])
+
+    bob_word =
+      play_turn(room_id, p1, p2, [
+        %{
+          "event_type" => "start",
+          "x" => 30,
+          "y" => 40,
+          "color" => "#EF120B",
+          "line_width" => 9
+        }
+      ])
+
+    html = render(view)
+    assert html =~ alice_word
+    assert html =~ "final-drawing-#{p1}-round-1"
+
+    html =
+      view
+      |> element("[data-player-id='#{p2}']")
+      |> render_click()
+
+    assert html =~ bob_word
+    assert html =~ "final-drawing-#{p2}-round-1"
+    assert html =~ "data-selected=\"true\""
+  end
+
+  test "final score row with no drawings remains selectable and shows an empty state", %{
+    conn: conn,
+    room_id: room_id
+  } do
+    {:ok, p1, _} = GameServer.join(room_id, "Alice")
+    {:ok, p2, _} = GameServer.join(room_id, "Bob")
+
+    {:ok, view, _html} = live(conn, ~p"/game/#{room_id}?player_id=#{p1}")
+
+    players = %{
+      p1 => %{id: p1, name: "Alice", score: 100},
+      p2 => %{id: p2, name: "Bob", score: 50}
+    }
+
+    send(view.pid, {:game_ended, players, []})
+
+    html =
+      view
+      |> element("[data-player-id='#{p2}']")
+      |> render_click()
+
+    assert html =~ "Bob"
+    assert html =~ "No drawings to show"
+    assert html =~ "data-selected=\"true\""
+  end
+
   test "pushes round audio lifecycle events as phases change", %{conn: conn, room_id: room_id} do
     {:ok, p1, _} = GameServer.join(room_id, "Alice")
     {:ok, p2, _} = GameServer.join(room_id, "Bob")
