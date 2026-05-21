@@ -261,7 +261,6 @@ defmodule Flamingo.GameServerTest do
                drawer_id: ^drawer,
                word: ^word,
                round_number: 1,
-               turn_order: 1,
                events: [^start_event, ^draw_event]
              }
            ] = state.final_drawings
@@ -281,7 +280,6 @@ defmodule Flamingo.GameServerTest do
                drawer_id: ^drawer,
                word: ^word,
                round_number: 1,
-               turn_order: 1,
                events: []
              }
            ] = state.final_drawings

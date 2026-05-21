@@ -476,7 +476,6 @@ defmodule Flamingo.GameServer do
       drawer_id: state.drawer_id,
       word: state.word,
       round_number: state.current_round + 1,
-      turn_order: length(state.final_drawings) + 1,
       events: state.current_drawing
     }
   end

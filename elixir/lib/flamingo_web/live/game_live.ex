@@ -142,7 +142,7 @@ defmodule FlamingoWeb.GameLive do
   defp drawings_for_player(final_drawings, player_id) do
     final_drawings
     |> Enum.filter(&(&1.drawer_id == player_id))
-    |> Enum.sort_by(& &1.turn_order)
+    |> Enum.sort_by(& &1.round_number)
   end
 
   defp sync_round_audio(socket) do
@@ -441,10 +441,9 @@ defmodule FlamingoWeb.GameLive do
       <%= if @phase == :game_ended do %>
         <.flamingo_background />
         <% winner_id = winning_player_id(@final_players, @final_player_order) %>
-        <% winner = winner_id && Map.get(@final_players, winner_id) %>
         <% winner_drawings = drawings_for_player(@final_drawings, winner_id) %>
-        <div class="flex h-screen w-full items-center justify-center p-6">
-          <div class="grid h-full w-full max-w-[1180px] grid-cols-[320px_minmax(0,1fr)] gap-6 py-8">
+        <div class="flex h-screen w-full items-center justify-center">
+          <div class="grid h-full w-fit grid-cols-[320px_320px] items-center justify-center gap-28">
             <.card class="flex h-fit w-full flex-col items-center gap-6 bg-white p-8">
               <h2 class="text-3xl font-bold">Game finished</h2>
               <ul class="w-full space-y-1">
@@ -471,38 +470,33 @@ defmodule FlamingoWeb.GameLive do
               </ul>
             </.card>
 
-            <div class="min-h-0 overflow-y-auto">
-              <div class="mb-4 flex items-end justify-between">
-                <div>
-                  <p class="text-sm font-bold uppercase tracking-wide text-pink-500">
-                    Winner showcase
-                  </p>
-                  <h3 class="text-3xl font-black">
-                    {if(winner, do: "#{winner.name}'s drawings", else: "Drawings")}
-                  </h3>
+            <div class="flex h-full min-h-0 flex-col">
+              <div class="no-scrollbar flex min-h-0 flex-1 flex-col overflow-y-auto pr-2 [justify-content:safe_center]">
+                <div class="flex w-full flex-col gap-4 py-4">
+                  <%= for drawing <- winner_drawings do %>
+                    <div class="border-2 border-border bg-white p-3">
+                      <div class="mb-2 flex items-center justify-between gap-3">
+                        <span
+                          class="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-pink-400 text-xs font-black text-white"
+                          aria-label={"Round #{drawing.round_number}"}
+                        >
+                          {drawing.round_number}
+                        </span>
+                        <p class="truncate text-right font-bold">{drawing.word}</p>
+                      </div>
+                      <div
+                        id={"final-drawing-round-#{drawing.round_number}"}
+                        phx-hook="DrawingCanvas"
+                        phx-update="ignore"
+                        data-is-drawer="false"
+                        data-final-drawing-events={Jason.encode!(drawing.events)}
+                      >
+                        <canvas width="700" height="500" class="aspect-[7/5] w-full bg-white">
+                        </canvas>
+                      </div>
+                    </div>
+                  <% end %>
                 </div>
-              </div>
-
-              <div class="grid grid-cols-2 gap-4">
-                <%= for drawing <- winner_drawings do %>
-                  <.box class="bg-white p-3">
-                    <div class="mb-2 flex items-center justify-between gap-3">
-                      <p class="truncate font-bold">{drawing.word}</p>
-                      <span class="shrink-0 text-sm font-semibold text-pink-500">
-                        Round {drawing.round_number}
-                      </span>
-                    </div>
-                    <div
-                      id={"final-drawing-#{drawing.turn_order}"}
-                      phx-hook="DrawingCanvas"
-                      phx-update="ignore"
-                      data-is-drawer="false"
-                      data-final-drawing-events={Jason.encode!(drawing.events)}
-                    >
-                      <canvas width="700" height="500" class="aspect-[7/5] w-full bg-white"></canvas>
-                    </div>
-                  </.box>
-                <% end %>
               </div>
             </div>
           </div>

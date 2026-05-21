@@ -68,8 +68,8 @@ defmodule FlamingoWeb.GameLiveTest do
     html = render(view)
 
     assert html =~ "Game finished"
-    assert html =~ "#{winner.name}&#39;s drawings"
-    assert html =~ "Round 1"
+    assert html =~ winner.name
+    assert html =~ "aria-label=\"Round 1\""
     assert html =~ winner_word
     assert html =~ "data-final-drawing-events="
   end
