@@ -44,6 +44,10 @@ _Avoid_: Custom prompt, free text
 The step in a turn where the drawer selects one word from the offered choices.
 _Avoid_: Setup detail, hidden implementation step
 
+**Drawing**:
+The visual image a drawer creates during a turn.
+_Avoid_: Picture, sketch
+
 **Room code**:
 The shareable identifier players enter to join a room.
 _Avoid_: Room name, invite code
@@ -85,28 +89,39 @@ _Avoid_: Match, game
 - A **Player** who joins during a **Round** may become the **Drawer** later in that same **Round**
 - A **Player** who joins during an active **Turn** becomes a **Guesser** for that **Turn** immediately
 - A **Player** who leaves during a **Game** stops participating and the **Game** continues with the remaining players
+- A **Player** who leaves during a **Game** remains part of that **Game**'s final results
+- A **Player** who is absent is not eligible to become the **Drawer**
 - A disconnected **Player** who returns to a **Room** reclaims the same **Player** identity
 - If the **Drawer** disconnects during a **Turn**, that **Turn** ends immediately
+- If the **Drawer** disconnects during a **Turn**, that **Turn** awards no **Score**
 - If a **Guesser** disconnects during a **Turn**, that **Turn** continues and the **Guesser** may resume participating if they return before it ends
 - A **Game** belongs to exactly one **Room**
 - A **Game** uses exactly one **Game mode**
 - A **Game** has exactly one set of **Game settings**
 - A **Game mode** defines its own **Minimum player count**
-- A **Game** ends and the **Room** returns to the **Lobby** if active players fall below that **Game mode**'s **Minimum player count**
+- A **Game** finishes early if active players fall below that **Game mode**'s **Minimum player count**
 - A **Score** belongs to exactly one **Player** within exactly one **Game**
 - A **Game** contains one or more **Rounds**
 - A **Turn** belongs to exactly one **Game**
 - A **Word** belongs to exactly one **Turn**
 - A **Turn** may present **Word choices** to its **Drawer**
 - A **Word choice** happens within a **Turn** before drawing begins
+- A **Drawing** belongs to exactly one **Turn**
+- A **Drawing** is created by exactly one **Drawer**
+- A **Drawing** belongs to exactly one **Game**
+- A **Player** may create multiple **Drawings** within one **Game**
+- A completed **Turn** produces exactly one **Drawing**, even if the drawer leaves the canvas blank
+- An interrupted **Turn** produces a **Drawing** from the drawer's partial work
+- An interrupted **Word choice** does not produce a **Drawing**
+- A **Drawing** remains part of its **Game** even if its **Drawer** leaves before the **Game** ends
 - A **Turn** has exactly one **Drawer**
 - A **Round** contains one or more **Turns**
 - A **Player** is a **Guesser** during any **Turn** where they are not the **Drawer**
 
 ## Example dialogue
 
-> **Dev:** "When the **Host** starts a **Game** in a **Room**, do they choose the **Game mode** first?"
-> **Domain expert:** "Yes — every **Game** runs under exactly one **Game mode**, even if the room supports others later."
+> **Dev:** "If a **Player** leaves during a **Game**, should their **Drawings** disappear from final results?"
+> **Domain expert:** "No — their **Drawings** and **Score** remain part of that **Game**, but they are skipped as a future **Drawer** while absent."
 
 ## Flagged ambiguities
 
@@ -130,11 +145,19 @@ _Avoid_: Match, game
 - "earlier round" was used when discussing a mid-round join — resolved: the missed scoring opportunity is from earlier **Turns** in the current **Round**.
 - Mid-turn join behavior was unclear — resolved: a player who joins during an active **Turn** can guess immediately.
 - Leave behavior was unclear — resolved: when a **Player** leaves during a **Game**, the **Game** continues with the remaining players.
-- Not-enough-players behavior was unclear — resolved: if active players fall below the **Game mode** minimum, the **Game** ends and the **Room** returns to the **Lobby**.
+- Departed player final result behavior was unclear — resolved: a **Player** who leaves during a **Game** remains part of that **Game**'s final results.
+- Absent player turn eligibility was unclear — resolved: an absent **Player** is skipped when choosing future **Drawers**.
+- Not-enough-players behavior was unclear — resolved: if active players fall below the **Game mode** minimum after a **Game** has started, the **Game** finishes early and shows final results.
 - The current drawing mode's minimum player count was informal — resolved: its **Minimum player count** is 2.
 - Reconnection identity was unclear — resolved: a disconnected **Player** reclaims the same identity on return.
-- Drawer disconnect behavior was unclear — resolved: the active **Turn** ends immediately, and any **Score** already earned for that turn is kept.
+- Drawer disconnect behavior was unclear — resolved: the active **Turn** ends immediately, preserves its **Drawing**, and awards no **Score**.
 - Guesser disconnect behavior was unclear — resolved: the active **Turn** continues, and a returning **Guesser** may still guess in that same **Turn** if it is still active.
 - Word lifetime was unclear — resolved: a **Word** is scoped to a single **Turn**.
 - Word selection authority was unclear — resolved: the **Drawer** chooses from **Word choices** provided by the game.
 - Word choice importance was unclear — resolved: **Word choice** is a first-class step within a **Turn**.
+- "pictures" was used for game-end showcase content — resolved: the domain term is **Drawing**.
+- Blank drawing behavior was unclear — resolved: a completed **Turn** produces a **Drawing** even if the drawer leaves the canvas blank.
+- Interrupted turn drawing behavior was unclear — resolved: an interrupted **Turn** produces a **Drawing** from the drawer's partial work.
+- Interrupted word choice drawing behavior was unclear — resolved: an interrupted **Word choice** does not produce a **Drawing**.
+- Drawing lifetime was unclear — resolved: a **Drawing** is scoped to a single **Game** and is not kept for later **Games** in the same **Room**.
+- Departed drawer drawing behavior was unclear — resolved: a **Drawing** remains part of its **Game** if its **Drawer** leaves before the **Game** ends.
