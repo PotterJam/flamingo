@@ -21,6 +21,7 @@ defmodule FlamingoWeb.GameLive do
        player_order: [],
        final_players: %{},
        final_player_order: [],
+       final_drawings: [],
        host_id: nil,
        drawer_id: nil,
        round_count: 3,
@@ -64,6 +65,9 @@ defmodule FlamingoWeb.GameLive do
             final_player_order =
               if state.phase == :game_ended, do: state.player_order, else: []
 
+            final_drawings =
+              if state.phase == :game_ended, do: state.final_drawings, else: []
+
             socket =
               assign(socket,
                 player_id: player_id,
@@ -74,6 +78,7 @@ defmodule FlamingoWeb.GameLive do
                 drawer_id: state.drawer_id,
                 final_players: final_players,
                 final_player_order: final_player_order,
+                final_drawings: final_drawings,
                 round_count: state.round_count,
                 turn_length: state.turn_length,
                 current_round: state.current_round,
@@ -129,6 +134,16 @@ defmodule FlamingoWeb.GameLive do
   end
 
   defp palette, do: @palette
+
+  defp winning_player_id(players, player_order) do
+    Enum.max_by(player_order, fn pid -> Map.get(players, pid).score end, fn -> nil end)
+  end
+
+  defp drawings_for_player(final_drawings, player_id) do
+    final_drawings
+    |> Enum.filter(&(&1.drawer_id == player_id))
+    |> Enum.sort_by(& &1.round_number)
+  end
 
   defp sync_round_audio(socket) do
     push_event(socket, "sync_round_audio", %{
@@ -425,32 +440,66 @@ defmodule FlamingoWeb.GameLive do
       <% end %>
       <%= if @phase == :game_ended do %>
         <.flamingo_background />
-        <div class="flex h-screen w-full items-center justify-center p-6">
-          <.card class="flex w-full max-w-xs flex-col items-center gap-6 bg-white p-8">
-            <h2 class="text-3xl font-bold">Game finished</h2>
-            <ul class="w-full space-y-1">
-              <%= for {pid, idx} <- @final_player_order |> Enum.sort_by(fn pid -> -(Map.get(@final_players, pid).score) end) |> Enum.with_index() do %>
-                <li class="flex items-center gap-2 px-3 py-2">
-                  <span class="text-lg">
-                    <%= case idx do %>
-                      <% 0 -> %>
-                        🥇
-                      <% 1 -> %>
-                        🥈
-                      <% 2 -> %>
-                        🥉
-                      <% _ -> %>
-                        {idx + 1}
-                    <% end %>
-                  </span>
-                  <span class="font-bold">{Map.get(@final_players, pid).name}</span>
-                  <span class="ml-auto text-pink-500 font-semibold">
-                    {Map.get(@final_players, pid).score}
-                  </span>
-                </li>
-              <% end %>
-            </ul>
-          </.card>
+        <% winner_id = winning_player_id(@final_players, @final_player_order) %>
+        <% winner_drawings = drawings_for_player(@final_drawings, winner_id) %>
+        <div class="flex h-screen w-full items-center justify-center">
+          <div class="grid h-full w-fit grid-cols-[320px_320px] items-center justify-center gap-28">
+            <.card class="flex h-fit w-full flex-col items-center gap-6 bg-white p-8">
+              <h2 class="text-3xl font-bold">Game finished</h2>
+              <ul class="w-full space-y-1">
+                <%= for {pid, idx} <- @final_player_order |> Enum.sort_by(fn pid -> -(Map.get(@final_players, pid).score) end) |> Enum.with_index() do %>
+                  <li class="flex items-center gap-2 px-3 py-2">
+                    <span class="text-lg">
+                      <%= case idx do %>
+                        <% 0 -> %>
+                          🥇
+                        <% 1 -> %>
+                          🥈
+                        <% 2 -> %>
+                          🥉
+                        <% _ -> %>
+                          {idx + 1}
+                      <% end %>
+                    </span>
+                    <span class="font-bold">{Map.get(@final_players, pid).name}</span>
+                    <span class="ml-auto text-pink-500 font-semibold">
+                      {Map.get(@final_players, pid).score}
+                    </span>
+                  </li>
+                <% end %>
+              </ul>
+            </.card>
+
+            <div class="flex h-full min-h-0 flex-col">
+              <div class="no-scrollbar flex min-h-0 flex-1 flex-col overflow-y-auto pr-2 [justify-content:safe_center]">
+                <div class="flex w-full flex-col gap-4 py-4">
+                  <%= for drawing <- winner_drawings do %>
+                    <div class="border-2 border-border bg-white p-3">
+                      <div class="mb-2 flex items-center justify-between gap-3">
+                        <span
+                          class="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-pink-400 text-xs font-black text-white"
+                          aria-label={"Round #{drawing.round_number}"}
+                        >
+                          {drawing.round_number}
+                        </span>
+                        <p class="truncate text-right font-bold">{drawing.word}</p>
+                      </div>
+                      <div
+                        id={"final-drawing-round-#{drawing.round_number}"}
+                        phx-hook="DrawingCanvas"
+                        phx-update="ignore"
+                        data-is-drawer="false"
+                        data-final-drawing-events={Jason.encode!(drawing.events)}
+                      >
+                        <canvas width="700" height="500" class="aspect-[7/5] w-full bg-white">
+                        </canvas>
+                      </div>
+                    </div>
+                  <% end %>
+                </div>
+              </div>
+            </div>
+          </div>
         </div>
       <% end %>
 
@@ -600,6 +649,7 @@ defmodule FlamingoWeb.GameLive do
         current_round: current_round,
         final_players: %{},
         final_player_order: [],
+        final_drawings: [],
         word_choices: if(is_drawer, do: word_choices, else: nil),
         word: nil,
         show_word: false,
@@ -624,6 +674,7 @@ defmodule FlamingoWeb.GameLive do
         drawer_id: drawer_id,
         final_players: %{},
         final_player_order: [],
+        final_drawings: [],
         word_choices: nil,
         turn_end_time: turn_end_time,
         word: word,
@@ -661,12 +712,13 @@ defmodule FlamingoWeb.GameLive do
     {:noreply, socket}
   end
 
-  def handle_info({:game_ended, players}, socket) do
+  def handle_info({:game_ended, players, final_drawings}, socket) do
     {:noreply,
      assign(socket,
        phase: :game_ended,
        final_players: players,
        final_player_order: socket.assigns.player_order,
+       final_drawings: final_drawings,
        turn_end_time: nil
      )
      |> sync_round_audio()}

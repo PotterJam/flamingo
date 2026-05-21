@@ -89,6 +89,14 @@
 
 [data-phx-session], [data-phx-teleported-src] { display: contents }
 
+.no-scrollbar {
+  scrollbar-width: none;
+}
+
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+
 .grid-background {
   background-color: var(--color-pink-100);
   background-image: linear-gradient(90deg, #80808033 1px, #0000 0), linear-gradient(#80808033 1px, #0000 0);

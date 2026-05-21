@@ -82,6 +82,12 @@ const DrawingCanvas = {
 
     canvasEffect(this.ctx, (imageData: ImageData) => clear(imageData));
 
+    if (this.el.dataset.finalDrawingEvents) {
+      const events = JSON.parse(this.el.dataset.finalDrawingEvents) as DrawEvent[];
+      this.eventStack = [...events];
+      replayEvents(this.ctx, events);
+    }
+
     if (this.isDrawer) {
       this.setupDrawerEvents();
       this.setupToolbar();
