@@ -24,6 +24,7 @@ defmodule Flamingo.GameServer do
     hint_timer_ref: nil,
     score_gains: %{},
     final_drawings: [],
+    departed_player_ids: MapSet.new(),
     feed: Feed.new()
   ]
 
@@ -106,7 +107,16 @@ defmodule Flamingo.GameServer do
 
   def handle_call({:rejoin, player_id}, _from, state) do
     if Map.has_key?(state.players, player_id) do
-      {:reply, {:ok, state}, state}
+      new_state = %{
+        state
+        | departed_player_ids: MapSet.delete(state.departed_player_ids, player_id)
+      }
+
+      if MapSet.member?(state.departed_player_ids, player_id) do
+        broadcast_active_players(new_state)
+      end
+
+      {:reply, {:ok, new_state}, new_state}
     else
       {:reply, {:error, :not_found}, state}
     end
@@ -165,7 +175,7 @@ defmodule Flamingo.GameServer do
       state.phase != :playing ->
         {:reply, {:error, :not_playing}, state}
 
-      not Map.has_key?(state.players, player_id) ->
+      not active_player?(state, player_id) ->
         {:reply, {:error, :not_found}, state}
 
       player_id == state.drawer_id ->
@@ -183,7 +193,9 @@ defmodule Flamingo.GameServer do
         broadcast(state.room_id, {:feed_event, event})
 
         non_drawers =
-          Enum.reject(state.player_order, &(&1 == state.drawer_id))
+          state
+          |> active_player_order()
+          |> Enum.reject(&(&1 == state.drawer_id))
 
         all_guessed? =
           Enum.all?(non_drawers, &Map.has_key?(correct_guesses, &1))
@@ -212,16 +224,32 @@ defmodule Flamingo.GameServer do
   end
 
   def handle_call({:leave, player_id}, _from, state) do
-    if not Map.has_key?(state.players, player_id) do
+    if not active_player?(state, player_id) do
       {:reply, :ok, state}
     else
       player_name = Map.get(state.players, player_id).name
-      players = Map.delete(state.players, player_id)
-      player_order = List.delete(state.player_order, player_id)
+      lobby? = state.phase == :lobby
+
+      players =
+        if lobby?,
+          do: Map.delete(state.players, player_id),
+          else: state.players
+
+      player_order =
+        if lobby?,
+          do: List.delete(state.player_order, player_id),
+          else: state.player_order
+
+      departed_player_ids =
+        if lobby?,
+          do: state.departed_player_ids,
+          else: MapSet.put(state.departed_player_ids, player_id)
+
+      active_player_order = active_player_order(player_order, departed_player_ids)
 
       host_id =
         if state.host_id == player_id,
-          do: List.first(player_order),
+          do: List.first(active_player_order),
           else: state.host_id
 
       correct_guesses = Map.delete(state.correct_guesses, player_id)
@@ -230,6 +258,7 @@ defmodule Flamingo.GameServer do
         state
         | players: players,
           player_order: player_order,
+          departed_player_ids: departed_player_ids,
           host_id: host_id,
           correct_guesses: correct_guesses
       }
@@ -237,16 +266,13 @@ defmodule Flamingo.GameServer do
       {feed, event} = Feed.player_left(new_state.feed, player_id, player_name)
       new_state = %{new_state | feed: feed}
 
-      broadcast(
-        state.room_id,
-        {:players_updated, new_state.players, new_state.player_order, new_state.host_id}
-      )
+      broadcast_active_players(new_state)
 
       broadcast(state.room_id, {:feed_event, event})
 
       new_state =
         if state.phase == :playing and player_id != state.drawer_id do
-          non_drawers = Enum.reject(player_order, &(&1 == state.drawer_id))
+          non_drawers = Enum.reject(active_player_order, &(&1 == state.drawer_id))
 
           if non_drawers != [] and
                Enum.all?(non_drawers, &Map.has_key?(correct_guesses, &1)) do
@@ -402,7 +428,7 @@ defmodule Flamingo.GameServer do
       Flamingo.Scoring.calculate_round_scores(
         state.correct_guesses,
         state.drawer_id,
-        state.player_order,
+        active_player_order(state),
         state.turn_length
       )
 
@@ -435,7 +461,7 @@ defmodule Flamingo.GameServer do
     state = %{state | score_gains: %{}}
 
     next_drawer =
-      Enum.find(state.player_order, fn pid ->
+      Enum.find(active_player_order(state), fn pid ->
         not MapSet.member?(state.drawn_this_round, pid)
       end)
 
@@ -452,7 +478,7 @@ defmodule Flamingo.GameServer do
           state
           | current_round: new_round,
             drawn_this_round: MapSet.new(),
-            drawer_id: List.first(state.player_order)
+            drawer_id: List.first(active_player_order(state))
         }
         |> enter_word_choice()
       end
@@ -469,6 +495,31 @@ defmodule Flamingo.GameServer do
 
     broadcast(state.room_id, {:game_ended, state.players, state.final_drawings})
     new_state
+  end
+
+  defp active_player?(state, player_id) do
+    Map.has_key?(state.players, player_id) and
+      not MapSet.member?(state.departed_player_ids, player_id)
+  end
+
+  defp active_players(state) do
+    state.players
+    |> Map.take(active_player_order(state))
+  end
+
+  defp active_player_order(state) do
+    active_player_order(state.player_order, state.departed_player_ids)
+  end
+
+  defp active_player_order(player_order, departed_player_ids) do
+    Enum.reject(player_order, &MapSet.member?(departed_player_ids, &1))
+  end
+
+  defp broadcast_active_players(state) do
+    broadcast(
+      state.room_id,
+      {:players_updated, active_players(state), active_player_order(state), state.host_id}
+    )
   end
 
   defp completed_drawing(state) do

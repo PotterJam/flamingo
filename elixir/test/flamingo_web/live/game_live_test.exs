@@ -38,6 +38,50 @@ defmodule FlamingoWeb.GameLiveTest do
     assert html =~ "Bob"
   end
 
+  test "game end screen keeps players who left mid-game", %{
+    conn: conn,
+    room_id: room_id
+  } do
+    {:ok, p1, _} = GameServer.join(room_id, "Alice")
+    {:ok, p2, _} = GameServer.join(room_id, "Bob")
+    {:ok, p3, _} = GameServer.join(room_id, "Charlie")
+
+    {:ok, view, _html} = live(conn, ~p"/game/#{room_id}?player_id=#{p2}")
+
+    :ok = GameServer.start_game(room_id, p1, %{round_count: 1, turn_length: 30})
+
+    alice_word =
+      play_turn_for_guessers(room_id, [p2, p3], [
+        %{
+          "event_type" => "start",
+          "x" => 10,
+          "y" => 20,
+          "color" => "#000000",
+          "line_width" => 9
+        }
+      ])
+
+    :ok = GameServer.leave(room_id, p1)
+    advance_reveal(room_id)
+
+    play_turn_for_guessers(room_id, [p3])
+    advance_reveal(room_id)
+    play_turn_for_guessers(room_id, [p2])
+    advance_reveal(room_id)
+
+    html = render(view)
+    assert html =~ "Game finished"
+    assert html =~ "Alice"
+
+    html =
+      view
+      |> element("[data-player-id='#{p1}']")
+      |> render_click()
+
+    assert html =~ alice_word
+    assert html =~ "final-drawing-#{p1}-round-1"
+  end
+
   test "game end screen shows the winning player's drawings", %{conn: conn, room_id: room_id} do
     {:ok, p1, _} = GameServer.join(room_id, "Alice")
     {:ok, p2, _} = GameServer.join(room_id, "Bob")
@@ -203,5 +247,24 @@ defmodule FlamingoWeb.GameLiveTest do
     _ = :sys.get_state(pid)
 
     word
+  end
+
+  defp play_turn_for_guessers(room_id, guessers, drawing_events \\ []) do
+    {:ok, state} = GameServer.get_state(room_id)
+    word = List.first(state.word_choices)
+    :ok = GameServer.select_word(room_id, state.drawer_id, word)
+
+    {:ok, state} = GameServer.get_state(room_id)
+    Enum.each(drawing_events, &GameServer.draw_event(room_id, state.drawer_id, &1))
+    Enum.each(guessers, &assert(:correct = GameServer.guess(room_id, &1, word)))
+
+    word
+  end
+
+  defp advance_reveal(room_id) do
+    pid = GenServer.whereis({:via, Registry, {Flamingo.GameRegistry, room_id}})
+    {:ok, state} = GameServer.get_state(room_id)
+    send(pid, {:turn_reveal_timeout, state.phase_timer_ref})
+    _ = :sys.get_state(pid)
   end
 end
