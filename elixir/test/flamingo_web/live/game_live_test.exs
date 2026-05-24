@@ -72,6 +72,7 @@ defmodule FlamingoWeb.GameLiveTest do
     assert html =~ "aria-label=\"Round 1\""
     assert html =~ winner_word
     assert html =~ "data-final-drawing-events="
+    assert html =~ "data-final-drawing-replay=\"true\""
   end
 
   test "final score rows select the drawing showcase", %{
@@ -119,6 +120,26 @@ defmodule FlamingoWeb.GameLiveTest do
     assert html =~ bob_word
     assert html =~ "final-drawing-#{p2}-round-1"
     assert html =~ "data-selected=\"true\""
+  end
+
+  test "selected final score row has a client-side replay control", %{
+    conn: conn,
+    room_id: room_id
+  } do
+    {:ok, p1, _} = GameServer.join(room_id, "Alice")
+    {:ok, p2, _} = GameServer.join(room_id, "Bob")
+
+    {:ok, view, _html} = live(conn, ~p"/game/#{room_id}?player_id=#{p1}")
+
+    :ok = GameServer.start_game(room_id, p1, %{round_count: 1, turn_length: 30})
+    play_turn(room_id, p1, p2, [])
+    play_turn(room_id, p1, p2, [])
+
+    html = render(view)
+
+    assert html =~ "aria-label=\"Replay selected drawings\""
+    assert html =~ "data-replay-final-drawings"
+    refute html =~ "phx-click=\"replay_final_drawings\""
   end
 
   test "final score row with no drawings remains selectable and shows an empty state", %{
