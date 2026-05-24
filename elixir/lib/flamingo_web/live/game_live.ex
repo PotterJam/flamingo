@@ -466,15 +466,22 @@ defmodule FlamingoWeb.GameLive do
           <div class="grid h-full w-fit grid-cols-[320px_320px] items-center justify-center gap-28">
             <.card class="flex h-fit w-full flex-col items-center gap-6 bg-white p-8">
               <h2 class="text-3xl font-bold">Game finished</h2>
-              <ul class="w-full space-y-1">
+              <ul
+                id="final-score-rows"
+                class="w-full space-y-1"
+                phx-hook="FinalDrawingShowcase"
+                data-selected-player-id={selected_player_id}
+              >
                 <%= for {pid, idx} <- @final_player_order |> Enum.sort_by(fn pid -> -(Map.get(@final_players, pid).score) end) |> Enum.with_index() do %>
-                  <li>
+                  <li class={[
+                    "flex items-center transition-colors",
+                    pid == selected_player_id && "bg-pink-100",
+                    pid != selected_player_id && "hover:bg-pink-50"
+                  ]}>
                     <button
                       type="button"
                       class={[
-                        "flex w-full items-center gap-2 px-3 py-2 text-left transition-colors",
-                        pid == selected_player_id && "bg-pink-100",
-                        pid != selected_player_id && "hover:bg-pink-50"
+                        "flex min-w-0 flex-1 items-center gap-2 px-3 py-2 text-left"
                       ]}
                       phx-click="select_player"
                       phx-value-player-id={pid}
@@ -498,6 +505,16 @@ defmodule FlamingoWeb.GameLive do
                         {Map.get(@final_players, pid).score}
                       </span>
                     </button>
+                    <button
+                      :if={pid == selected_player_id}
+                      type="button"
+                      class="mr-2 flex h-8 w-8 shrink-0 items-center justify-center text-pink-600 transition-colors hover:bg-pink-200"
+                      data-replay-final-drawings
+                      aria-label="Replay selected drawings"
+                    >
+                      <.icon name="arrows_clockwise" class="h-4 w-4" />
+                    </button>
+                    <span :if={pid != selected_player_id} class="mr-2 h-8 w-8 shrink-0"></span>
                   </li>
                 <% end %>
               </ul>
@@ -527,6 +544,7 @@ defmodule FlamingoWeb.GameLive do
                         phx-hook="DrawingCanvas"
                         phx-update="ignore"
                         data-is-drawer="false"
+                        data-final-drawing-replay="true"
                         data-final-drawing-events={Jason.encode!(drawing.events)}
                       >
                         <canvas width="700" height="500" class="aspect-[7/5] w-full bg-white">

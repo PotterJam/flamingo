@@ -2,6 +2,15 @@ type SoundKey = "join" | "correct" | "gameMusic" | "wrongGuess" | "correctGuess"
 
 import type { GamePhase } from "../game_model";
 
+interface SoundManagerHook {
+  sounds: Record<SoundKey, HTMLAudioElement>;
+  fadeTimers: Partial<Record<SoundKey, number>>;
+  countdownTimer: number | null;
+  countdownTurnEndTime: string | null;
+  stopAllAudio?: () => void;
+  handleEvent: <T>(event: string, callback: (payload: T) => void) => void;
+}
+
 const SOUND_FILES: Record<SoundKey, string> = {
   join: "/sounds/retro-join.wav",
   correct: "/sounds/correct-tone.wav",
@@ -13,7 +22,7 @@ const SOUND_FILES: Record<SoundKey, string> = {
 };
 
 const SoundManager = {
-  mounted(this: any) {
+  mounted(this: SoundManagerHook) {
     this.sounds = {} as Record<SoundKey, HTMLAudioElement>;
     this.fadeTimers = {} as Partial<Record<SoundKey, number>>;
     this.countdownTimer = null as number | null;
@@ -190,7 +199,7 @@ const SoundManager = {
     };
   },
 
-  destroyed(this: any) {
+  destroyed(this: SoundManagerHook) {
     if (this.stopAllAudio) {
       this.stopAllAudio();
     }

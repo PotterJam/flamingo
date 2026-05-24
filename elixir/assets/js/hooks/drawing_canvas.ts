@@ -14,6 +14,32 @@ interface Point {
   y: number;
 }
 
+type ActiveTool = "pen" | "fill";
+
+interface DrawingCanvasHook {
+  el: HTMLElement;
+  canvas: HTMLCanvasElement;
+  ctx: CanvasRenderingContext2D;
+  isDrawer: boolean;
+  isPainting: boolean;
+  lastCoord: Point | null;
+  selectedColor: string;
+  selectedThickness: number;
+  activeTool: ActiveTool;
+  eventStack: DrawEvent[];
+  redoStack: DrawEvent[][];
+  finalReplayToken: number;
+  replayFinalDrawingListener?: () => void;
+  handleEvent: <T>(event: string, callback: (payload: T) => void) => void;
+  pushEvent: (event: string, payload: DrawEvent) => void;
+  replayFinalDrawing: () => void;
+  setupDrawerEvents: () => void;
+  setupToolbar: () => void;
+  performUndo: () => void;
+  performRedo: () => void;
+  performClear: () => void;
+}
+
 const isUndoBoundary = (type: string) =>
   type === "start" || type === "fill" || type === "clear";
 
@@ -44,13 +70,42 @@ const renderDrawEvent = (imageData: ImageData, event: DrawEvent) => {
   }
 };
 
-const replayEvents = (ctx: CanvasRenderingContext2D, events: DrawEvent[]) => {
+const renderEvents = (ctx: CanvasRenderingContext2D, events: DrawEvent[]) => {
   canvasEffect(ctx, (imageData) => {
     clear(imageData);
     for (const e of events) {
       renderDrawEvent(imageData, e);
     }
   });
+};
+
+const replayEvents = (
+  ctx: CanvasRenderingContext2D,
+  events: DrawEvent[],
+  isCurrentReplay: () => boolean,
+  delayMs = 15
+) => {
+  canvasEffect(ctx, (imageData) => clear(imageData));
+
+  if (events.length === 0) return;
+
+  let index = 0;
+
+  const renderNext = () => {
+    if (!isCurrentReplay()) return;
+
+    canvasEffect(ctx, (imageData) => {
+      renderDrawEvent(imageData, events[index]);
+    });
+
+    index += 1;
+
+    if (index < events.length) {
+      window.setTimeout(renderNext, delayMs);
+    }
+  };
+
+  window.setTimeout(renderNext, delayMs);
 };
 
 const findUndoBoundaryIndex = (events: DrawEvent[]): number => {
@@ -68,7 +123,7 @@ const translatePointerToCanvas = (e: PointerEvent, canvas: HTMLCanvasElement): [
 };
 
 const DrawingCanvas = {
-  mounted(this: any) {
+  mounted(this: DrawingCanvasHook) {
     this.canvas = this.el.querySelector("canvas") as HTMLCanvasElement;
     this.ctx = this.canvas.getContext("2d", { willReadFrequently: true })!;
     this.isDrawer = this.el.dataset.isDrawer === "true";
@@ -76,16 +131,17 @@ const DrawingCanvas = {
     this.lastCoord = null as Point | null;
     this.selectedColor = "#000000";
     this.selectedThickness = 9;
-    this.activeTool = "pen" as "pen" | "fill";
+    this.activeTool = "pen";
     this.eventStack = [] as DrawEvent[];
     this.redoStack = [] as DrawEvent[][];
+    this.finalReplayToken = 0;
 
     canvasEffect(this.ctx, (imageData: ImageData) => clear(imageData));
 
     if (this.el.dataset.finalDrawingEvents) {
       const events = JSON.parse(this.el.dataset.finalDrawingEvents) as DrawEvent[];
       this.eventStack = [...events];
-      replayEvents(this.ctx, events);
+      this.replayFinalDrawing();
     }
 
     if (this.isDrawer) {
@@ -101,7 +157,7 @@ const DrawingCanvas = {
         if (idx >= 0) {
           this.eventStack.splice(idx);
         }
-        replayEvents(this.ctx, this.eventStack);
+        renderEvents(this.ctx, this.eventStack);
         return;
       }
 
@@ -113,11 +169,29 @@ const DrawingCanvas = {
 
     this.handleEvent("drawing_state", (data: { events: DrawEvent[] }) => {
       this.eventStack = [...data.events];
-      replayEvents(this.ctx, data.events);
+      renderEvents(this.ctx, data.events);
     });
+
+    this.replayFinalDrawingListener = () => {
+      this.replayFinalDrawing();
+    };
+    window.addEventListener("flamingo:replay-final-drawings", this.replayFinalDrawingListener);
   },
 
-  setupDrawerEvents(this: any) {
+  replayFinalDrawing(this: DrawingCanvasHook) {
+    if (this.el.dataset.finalDrawingReplay !== "true") return;
+
+    this.finalReplayToken += 1;
+    const token = this.finalReplayToken;
+
+    replayEvents(
+      this.ctx,
+      this.eventStack,
+      () => this.finalReplayToken === token
+    );
+  },
+
+  setupDrawerEvents(this: DrawingCanvasHook) {
     const canvas = this.canvas as HTMLCanvasElement;
 
     const pushDrawEvent = (event: DrawEvent) => {
@@ -198,17 +272,17 @@ const DrawingCanvas = {
     });
   },
 
-  performUndo(this: any) {
+  performUndo(this: DrawingCanvasHook) {
     const idx = findUndoBoundaryIndex(this.eventStack);
     if (idx < 0) return;
 
     const removed = this.eventStack.splice(idx);
     this.redoStack.push(removed);
-    replayEvents(this.ctx, this.eventStack);
+    renderEvents(this.ctx, this.eventStack);
     this.pushEvent("draw_event", { event_type: "undo" });
   },
 
-  performRedo(this: any) {
+  performRedo(this: DrawingCanvasHook) {
     if (this.redoStack.length === 0) return;
 
     const restored = this.redoStack.pop()!;
@@ -216,10 +290,10 @@ const DrawingCanvas = {
       this.eventStack.push(event);
       this.pushEvent("draw_event", event);
     }
-    replayEvents(this.ctx, this.eventStack);
+    renderEvents(this.ctx, this.eventStack);
   },
 
-  performClear(this: any) {
+  performClear(this: DrawingCanvasHook) {
     const clearEvent: DrawEvent = { event_type: "clear" };
     this.eventStack.push(clearEvent);
     this.redoStack = [];
@@ -227,7 +301,7 @@ const DrawingCanvas = {
     this.pushEvent("draw_event", clearEvent);
   },
 
-  setupToolbar(this: any) {
+  setupToolbar(this: DrawingCanvasHook) {
     const selectGroup = (attr: string, ringClasses: string[], onSelect: (value: string) => void) => {
       this.el.querySelectorAll(`[${attr}]`).forEach((btn: HTMLElement) => {
         btn.addEventListener("click", () => {
@@ -259,6 +333,14 @@ const DrawingCanvas = {
     this.el.querySelector(`[data-color="#000000"]`)?.classList.add("ring-2", "ring-offset-1");
     this.el.querySelector(`[data-size="9"]`)?.classList.add("bg-pink-300");
     this.el.querySelector(`[data-tool="pen"]`)?.classList.add("bg-pink-300");
+  },
+
+  destroyed(this: DrawingCanvasHook) {
+    this.finalReplayToken += 1;
+
+    if (this.replayFinalDrawingListener) {
+      window.removeEventListener("flamingo:replay-final-drawings", this.replayFinalDrawingListener);
+    }
   },
 };
 
