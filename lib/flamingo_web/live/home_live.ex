@@ -26,6 +26,16 @@ defmodule FlamingoWeb.HomeLive do
             phx-submit="submit_lobby"
             id="lobby-form"
           >
+            <button
+              type="submit"
+              name="lobby[action]"
+              value="auto"
+              class="sr-only"
+              aria-hidden="true"
+              tabindex="-1"
+            >
+              Submit
+            </button>
             <div class="flex flex-col gap-6">
               <input
                 type="text"
@@ -51,9 +61,10 @@ defmodule FlamingoWeb.HomeLive do
                     id="room-code-input"
                   />
                   <.button
-                    type="button"
+                    type="submit"
+                    name="lobby[action]"
+                    value="join"
                     variant="neutral"
-                    phx-click="join_room"
                     disabled={String.trim(@name) == "" || String.trim(@room_code) == ""}
                     id="join-button"
                   >
@@ -62,10 +73,11 @@ defmodule FlamingoWeb.HomeLive do
                 </div>
                 <p class="p-2 text-gray-700">or</p>
                 <.button
-                  type="button"
+                  type="submit"
+                  name="lobby[action]"
+                  value="create"
                   variant="default"
                   class="w-full"
-                  phx-click="create_room"
                   disabled={String.trim(@name) == "" || String.trim(@room_code) != ""}
                   id="create-room-button"
                 >
@@ -105,7 +117,14 @@ defmodule FlamingoWeb.HomeLive do
         error: nil
       )
 
-    if String.trim(params["room_code"] || "") == "" do
+    submit_lobby(socket, params["action"])
+  end
+
+  defp submit_lobby(socket, "create"), do: create_room(socket)
+  defp submit_lobby(socket, "join"), do: join_room(socket)
+
+  defp submit_lobby(socket, _action) do
+    if String.trim(socket.assigns.room_code) == "" do
       create_room(socket)
     else
       join_room(socket)

@@ -88,7 +88,7 @@ defmodule FlamingoWeb.CoreComponents do
       <.button phx-click="go" variant="primary">Send!</.button>
       <.button navigate={~p"/"}>Home</.button>
   """
-  attr :rest, :global, include: ~w(href navigate patch method download name value disabled)
+  attr :rest, :global, include: ~w(href navigate patch method download name value disabled type)
   attr :class, :any, default: nil
   attr :variant, :string, default: "default", values: ~w(default neutral ghost outline)
   attr :size, :string, default: "default", values: ~w(default sm)
