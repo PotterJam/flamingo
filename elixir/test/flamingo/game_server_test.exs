@@ -324,6 +324,54 @@ defmodule Flamingo.GameServerTest do
     assert_receive {:game_ended, _players, _final_drawings}
   end
 
+  test "departed players stay in final results but are skipped as future drawers", %{
+    room_id: room_id
+  } do
+    {:ok, p1, _} = GameServer.join(room_id, "Alice")
+    {:ok, p2, _} = GameServer.join(room_id, "Bob")
+    {:ok, p3, _} = GameServer.join(room_id, "Charlie")
+    :ok = GameServer.start_game(room_id, p1, %{round_count: 1, turn_length: 30})
+
+    pid = GenServer.whereis({:via, Registry, {Flamingo.GameRegistry, room_id}})
+
+    {:ok, state} = GameServer.get_state(room_id)
+    assert state.drawer_id == p1
+    word = List.first(state.word_choices)
+    :ok = GameServer.select_word(room_id, p1, word)
+
+    start_event = %{
+      "event_type" => "start",
+      "x" => 10,
+      "y" => 20,
+      "color" => "#000000",
+      "line_width" => 9
+    }
+
+    GameServer.draw_event(room_id, p1, start_event)
+    :correct = GameServer.guess(room_id, p2, word)
+    :correct = GameServer.guess(room_id, p3, word)
+
+    {:ok, state} = GameServer.get_state(room_id)
+    alice_score = Map.fetch!(state.players, p1).score
+    assert alice_score > 0
+
+    :ok = GameServer.leave(room_id, p1)
+    send(pid, {:turn_reveal_timeout, state.phase_timer_ref})
+    _ = :sys.get_state(pid)
+
+    {:ok, state} = GameServer.get_state(room_id)
+    assert state.phase == :word_choice
+    assert state.drawer_id == p2
+
+    play_current_turn(room_id, p3)
+    play_current_turn(room_id, p2)
+
+    {:ok, state} = GameServer.get_state(room_id)
+    assert state.phase == :game_ended
+    assert Map.fetch!(state.players, p1).score == alice_score
+    assert Enum.any?(state.final_drawings, &(&1.drawer_id == p1 and &1.events == [start_event]))
+  end
+
   test "round increments after all players draw", %{room_id: room_id} do
     {:ok, p1, _} = GameServer.join(room_id, "Alice")
     {:ok, p2, _} = GameServer.join(room_id, "Bob")
@@ -397,5 +445,17 @@ defmodule Flamingo.GameServerTest do
 
     {:ok, state} = GameServer.get_state(room_id)
     assert state.phase == :playing
+  end
+
+  defp play_current_turn(room_id, guesser) do
+    pid = GenServer.whereis({:via, Registry, {Flamingo.GameRegistry, room_id}})
+    {:ok, state} = GameServer.get_state(room_id)
+    word = List.first(state.word_choices)
+    :ok = GameServer.select_word(room_id, state.drawer_id, word)
+    :correct = GameServer.guess(room_id, guesser, word)
+
+    {:ok, state} = GameServer.get_state(room_id)
+    send(pid, {:turn_reveal_timeout, state.phase_timer_ref})
+    _ = :sys.get_state(pid)
   end
 end

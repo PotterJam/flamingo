@@ -19,6 +19,7 @@ defmodule FlamingoWeb.GameLive do
        phase: :lobby,
        players: %{},
        player_order: [],
+       participant_order: [],
        final_players: %{},
        final_player_order: [],
        final_drawings: [],
@@ -80,6 +81,7 @@ defmodule FlamingoWeb.GameLive do
                 phase: state.phase,
                 players: state.players,
                 player_order: state.player_order,
+                participant_order: state.player_order,
                 host_id: state.host_id,
                 drawer_id: state.drawer_id,
                 final_players: final_players,
@@ -680,7 +682,25 @@ defmodule FlamingoWeb.GameLive do
     old_count = map_size(socket.assigns.players)
     new_count = map_size(players)
 
-    socket = assign(socket, players: players, player_order: player_order, host_id: host_id)
+    players =
+      if socket.assigns.phase == :turn_reveal do
+        Map.merge(socket.assigns.players, players)
+      else
+        players
+      end
+
+    participant_order =
+      socket.assigns.participant_order
+      |> merge_player_order(socket.assigns.player_order)
+      |> merge_player_order(player_order)
+
+    socket =
+      assign(socket,
+        players: players,
+        player_order: player_order,
+        participant_order: participant_order,
+        host_id: host_id
+      )
 
     socket =
       if socket.assigns.phase != :game_ended and new_count > old_count do
@@ -764,7 +784,9 @@ defmodule FlamingoWeb.GameLive do
         show_word: true,
         turn_end_time: turn_end_time,
         score_gains: score_gains,
-        players: players
+        players: players,
+        participant_order:
+          merge_player_order(socket.assigns.participant_order, socket.assigns.player_order)
       )
 
     socket =
@@ -776,7 +798,10 @@ defmodule FlamingoWeb.GameLive do
   end
 
   def handle_info({:game_ended, players, final_drawings}, socket) do
-    final_player_order = socket.assigns.player_order
+    final_player_order =
+      socket.assigns.participant_order
+      |> merge_player_order(socket.assigns.player_order)
+      |> Enum.filter(&Map.has_key?(players, &1))
 
     {:noreply,
      assign(socket,
@@ -848,5 +873,11 @@ defmodule FlamingoWeb.GameLive do
     if Map.has_key?(socket.assigns, :room_id) and Map.has_key?(socket.assigns, :player_id) do
       Games.leave(socket.assigns.room_id, socket.assigns.player_id)
     end
+  end
+
+  defp merge_player_order(left, right) do
+    Enum.reduce(right, left, fn pid, order ->
+      if pid in order, do: order, else: order ++ [pid]
+    end)
   end
 end
