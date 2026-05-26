@@ -1,7 +1,7 @@
 {
     "scripts": {
-        "setup": "cd elixir && mix deps.get && mix assets.setup",
-        "run": "cd elixir && PORT=$CONDUCTOR_PORT mix phx.server"
+        "setup": "mix deps.get && mix assets.setup",
+        "run": "PORT=$CONDUCTOR_PORT mix phx.server"
     },
     "runScriptMode": "nonconcurrent"
 }
