@@ -169,9 +169,9 @@ defmodule FlamingoWeb.GameComponents do
               <span class="inline-flex h-5 w-5 shrink-0 items-center justify-center">
                 <%= cond do %>
                   <% pid == @drawer_id -> %>
-                    <.icon name="paint_brush" class="h-4 w-4" />
+                    <.icon name={:paintbrush} class="h-4 w-4" />
                   <% MapSet.member?(@correct_guesses, pid) -> %>
-                    <.icon name="check" class="h-4 w-4 text-green-600" />
+                    <.icon name={:check} class="h-4 w-4 text-green-600" />
                   <% true -> %>
                 <% end %>
               </span>
@@ -258,13 +258,13 @@ defmodule FlamingoWeb.GameComponents do
           data-tool="pen"
           class="flex h-10 w-10 cursor-pointer items-center justify-center border-r-2 border-border"
         >
-          <.icon name="paint_brush" class="h-5 w-5" />
+          <.icon name={:paintbrush} class="h-5 w-5" />
         </button>
         <button
           data-tool="fill"
           class="flex h-10 w-10 cursor-pointer items-center justify-center"
         >
-          <.icon name="paint_bucket" class="h-5 w-5" />
+          <.icon name={:paint_bucket} class="h-5 w-5" />
         </button>
       </.button_group>
 
@@ -273,19 +273,19 @@ defmodule FlamingoWeb.GameComponents do
           data-action="undo"
           class="flex h-8 w-8 cursor-pointer items-center justify-center hover:bg-pink-100"
         >
-          <.icon name="arrow_counter_clockwise" class="h-4 w-4" />
+          <.icon name={:rotate_ccw} class="h-4 w-4" />
         </button>
         <button
           data-action="redo"
           class="flex h-8 w-8 cursor-pointer items-center justify-center hover:bg-pink-100"
         >
-          <.icon name="arrow_clockwise" class="h-4 w-4" />
+          <.icon name={:rotate_cw} class="h-4 w-4" />
         </button>
         <button
           data-action="clear"
           class="flex h-8 w-8 cursor-pointer items-center justify-center hover:bg-pink-100"
         >
-          <.icon name="trash" class="h-4 w-4" />
+          <.icon name={:trash} class="h-4 w-4" />
         </button>
       </div>
     </div>

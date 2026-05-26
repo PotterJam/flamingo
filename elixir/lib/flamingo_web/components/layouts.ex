@@ -62,7 +62,7 @@ defmodule FlamingoWeb.Layouts do
         hidden
       >
         {gettext("Attempting to reconnect")}
-        <.icon name="arrows_clockwise" class="ml-1 size-3 motion-safe:animate-spin" />
+        <.icon name={:refresh_cw} class="ml-1 size-3 motion-safe:animate-spin" />
       </.flash>
 
       <.flash
@@ -74,7 +74,7 @@ defmodule FlamingoWeb.Layouts do
         hidden
       >
         {gettext("Attempting to reconnect")}
-        <.icon name="arrows_clockwise" class="ml-1 size-3 motion-safe:animate-spin" />
+        <.icon name={:refresh_cw} class="ml-1 size-3 motion-safe:animate-spin" />
       </.flash>
     </div>
     """
