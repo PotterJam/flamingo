@@ -22,4 +22,27 @@ defmodule FlamingoWeb.HomeLiveTest do
     assert %{"player_id" => player_id} = URI.decode_query(uri.query)
     assert player_id != ""
   end
+
+  test "submitting the lobby form creates when room name is empty", %{conn: conn} do
+    {:ok, view, _html} = live(conn, ~p"/")
+
+    view
+    |> form("#lobby-form", lobby: %{name: "Alice", room_code: ""})
+    |> render_submit()
+
+    {path, _flash} = assert_redirect(view)
+    uri = URI.parse(path)
+
+    assert uri.path =~ ~r(^/game/.+)
+    assert %{"player_id" => player_id} = URI.decode_query(uri.query)
+    assert player_id != ""
+  end
+
+  test "home action buttons are submit buttons", %{conn: conn} do
+    {:ok, _view, html} = live(conn, ~p"/")
+
+    assert html =~ ~s(id="join-button")
+    assert html =~ ~s(id="create-room-button")
+    assert html =~ ~s(type="submit")
+  end
 end
