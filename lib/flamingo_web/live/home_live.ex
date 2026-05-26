@@ -19,7 +19,13 @@ defmodule FlamingoWeb.HomeLive do
         </.card>
 
         <.card class="w-full max-w-xs p-6 text-center">
-          <.form for={%{}} as={:lobby} phx-change="update_fields" id="lobby-form">
+          <.form
+            for={%{}}
+            as={:lobby}
+            phx-change="update_fields"
+            phx-submit="submit_lobby"
+            id="lobby-form"
+          >
             <div class="flex flex-col gap-6">
               <input
                 type="text"
@@ -84,6 +90,29 @@ defmodule FlamingoWeb.HomeLive do
   end
 
   def handle_event("create_room", _params, socket) do
+    create_room(socket)
+  end
+
+  def handle_event("join_room", _params, socket) do
+    join_room(socket)
+  end
+
+  def handle_event("submit_lobby", %{"lobby" => params}, socket) do
+    socket =
+      assign(socket,
+        name: params["name"] || "",
+        room_code: params["room_code"] || "",
+        error: nil
+      )
+
+    if String.trim(params["room_code"] || "") == "" do
+      create_room(socket)
+    else
+      join_room(socket)
+    end
+  end
+
+  defp create_room(socket) do
     name = String.trim(socket.assigns.name)
 
     if name == "" do
@@ -98,7 +127,7 @@ defmodule FlamingoWeb.HomeLive do
     end
   end
 
-  def handle_event("join_room", _params, socket) do
+  defp join_room(socket) do
     name = String.trim(socket.assigns.name)
     code = String.trim(socket.assigns.room_code)
 
