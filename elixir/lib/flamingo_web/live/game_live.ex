@@ -408,6 +408,11 @@ defmodule FlamingoWeb.GameLive do
                           id="guess-form"
                           class="mx-auto flex w-96 items-center gap-2"
                         >
+                          <span
+                            id="guess-letter-count"
+                            class="mr-2 w-12 shrink-0 text-right font-hero text-lg leading-none font-medium text-black"
+                          >
+                          </span>
                           <div class="min-w-0 flex-1">
                             <.input
                               field={@guess_form[:guess]}
@@ -592,8 +597,26 @@ defmodule FlamingoWeb.GameLive do
       <script :type={Phoenix.LiveView.ColocatedHook} name=".GuessForm">
         export default {
           mounted() {
+            const input = this.el.querySelector("#guess-input")
+            const count = this.el.querySelector("#guess-letter-count")
+            const formatCount = (text) => {
+              if (!text.trim()) return ""
+
+              return text
+                .trim()
+                .split(" ")
+                .map((word) => Array.from(word).length)
+                .join(" ")
+            }
+            const update = () => {
+              count.textContent = formatCount(input.value)
+            }
+
+            update()
+            input.addEventListener("input", update)
             this.handleEvent("clear_guess", () => {
               this.el.reset()
+              update()
             })
           }
         }
