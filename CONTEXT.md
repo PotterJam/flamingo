@@ -17,7 +17,7 @@ The ruleset that defines how a game in a room is played.
 _Avoid_: Variant, template
 
 **Minimum player count**:
-The smallest number of active players required for a game mode to remain valid.
+The smallest number of connected players required for a game mode to remain valid.
 _Avoid_: Quorum
 
 **Game settings**:
@@ -56,6 +56,14 @@ _Avoid_: Room name, invite code
 A person participating in a room.
 _Avoid_: User, client, connection
 
+**Connected player**:
+A player who is currently present in a room through an active connection.
+_Avoid_: Active player, online user
+
+**Disconnected player**:
+A player who remains in a room but is not currently present through an active connection.
+_Avoid_: Left player, inactive user
+
 **Host**:
 The player who controls a room and can start games in it.
 _Avoid_: Owner, admin, moderator
@@ -80,26 +88,39 @@ _Avoid_: Match, game
 
 - A **Room** contains multiple **Players**
 - A **Room** has exactly one **Room code**
-- A **Room** has exactly one **Host** at a time
+- A **Room** has exactly one **Host** at a time when at least one **Player** is connected
+- A **Room** keeps **Players** in stable join order across disconnections and reconnections
 - A **Room** may be in the **Lobby** when no **Game** is active
 - A **Room** can host multiple **Games** over time
-- A **Player** in a **Room** participates in the active **Game** in that room
+- A **Connected player** in a **Room** participates in the active **Game** in that room
 - A **Player** may participate in multiple **Games** within the same **Room**
 - A **Player** who joins a **Room** during an active **Game** participates in that **Game** immediately
 - A **Player** who joins during a **Round** may become the **Drawer** later in that same **Round**
 - A **Player** who joins during an active **Turn** becomes a **Guesser** for that **Turn** immediately
-- A **Player** who leaves during a **Game** stops participating and the **Game** continues with the remaining players
-- A **Player** who leaves during a **Game** remains part of that **Game**'s final results
-- A **Player** who is absent is not eligible to become the **Drawer**
-- A disconnected **Player** who returns to a **Room** reclaims the same **Player** identity
+- A **Player** who disconnects during a **Game** stops participating while disconnected and the **Game** continues with the remaining **Connected players**
+- A **Player** who disconnects during a **Game** remains part of that **Game**'s final results
+- A **Disconnected player** is not eligible to become the **Drawer**
+- A **Player** is either a **Connected player** or a **Disconnected player**
+- A **Host** must be a **Connected player**
+- When the **Host** disconnects, the **Room** immediately assigns a new **Host** from the remaining **Connected players**
+- A **Room** has no **Host** while all **Players** are disconnected
+- When a **Player** reconnects to a hostless **Room**, that **Player** becomes the **Host**
+- A **Disconnected player** who returns to a **Room** reclaims the same **Player** identity
+- A **Disconnected player** reclaims their **Player** identity by returning with the same player identifier
 - If the **Drawer** disconnects during a **Turn**, that **Turn** ends immediately
 - If the **Drawer** disconnects during a **Turn**, that **Turn** awards no **Score**
+- If the **Drawer** disconnects during a **Turn**, that **Drawer** is skipped for the rest of the current **Round**
 - If a **Guesser** disconnects during a **Turn**, that **Turn** continues and the **Guesser** may resume participating if they return before it ends
+- If a **Guesser** disconnects after making a correct guess, that correct guess still counts for **Score** and **Turn** completion
+- A **Turn** completes early when all connected **Guessers** have guessed correctly
+- A **Disconnected player** who has not guessed correctly is not waited on for **Turn** completion
+- If the **Drawer** disconnects during **Word choice**, that **Word choice** ends immediately and the **Game** moves to the next eligible **Drawer**
+- If the **Drawer** disconnects during **Word choice**, that **Drawer** is skipped for the current **Round**
 - A **Game** belongs to exactly one **Room**
 - A **Game** uses exactly one **Game mode**
 - A **Game** has exactly one set of **Game settings**
 - A **Game mode** defines its own **Minimum player count**
-- A **Game** finishes early if active players fall below that **Game mode**'s **Minimum player count**
+- A **Game** finishes early if **Connected players** fall below that **Game mode**'s **Minimum player count**
 - A **Score** belongs to exactly one **Player** within exactly one **Game**
 - A **Game** contains one or more **Rounds**
 - A **Turn** belongs to exactly one **Game**
@@ -121,7 +142,7 @@ _Avoid_: Match, game
 ## Example dialogue
 
 > **Dev:** "If a **Player** leaves during a **Game**, should their **Drawings** disappear from final results?"
-> **Domain expert:** "No — their **Drawings** and **Score** remain part of that **Game**, but they are skipped as a future **Drawer** while absent."
+> **Domain expert:** "No — their **Drawings** and **Score** remain part of that **Game**, but they are skipped as a future **Drawer** while disconnected."
 
 ## Flagged ambiguities
 
@@ -136,22 +157,25 @@ _Avoid_: Match, game
 - "between rounds" was used when discussing changing **Game mode** — resolved: **Game mode** changes between **Games**, not within a single **Game**.
 - Player continuity was unclear — resolved: a **Player** keeps a stable identity within a **Room** across multiple **Games**.
 - Score lifetime was unclear — resolved: **Score** is scoped to a single **Game** and resets for the next one.
-- Host scope was unclear — resolved: **Host** is a room-level role and transfers when the host leaves.
+- Host scope was unclear — resolved: **Host** is a room-level role and transfers when the host disconnects.
 - The code currently uses `:lobby` as part of the game lifecycle — resolved in language: **Lobby** is a room state before any **Game** starts.
 - Lobby authority was unclear — resolved: only the **Host** chooses the next **Game mode** and **Game settings**.
-- Room membership versus game participation was unclear — resolved: all current room members participate in the active **Game**.
+- Room membership versus game participation was unclear — resolved: connected room members participate in the active **Game**.
 - Late join behavior was unclear — resolved: a player who joins during an active **Game** enters that **Game** immediately.
 - Mid-game turn eligibility was unclear — resolved: a player who joins during a **Round** can still draw later in that same **Round**.
 - "earlier round" was used when discussing a mid-round join — resolved: the missed scoring opportunity is from earlier **Turns** in the current **Round**.
 - Mid-turn join behavior was unclear — resolved: a player who joins during an active **Turn** can guess immediately.
-- Leave behavior was unclear — resolved: when a **Player** leaves during a **Game**, the **Game** continues with the remaining players.
-- Departed player final result behavior was unclear — resolved: a **Player** who leaves during a **Game** remains part of that **Game**'s final results.
-- Absent player turn eligibility was unclear — resolved: an absent **Player** is skipped when choosing future **Drawers**.
-- Not-enough-players behavior was unclear — resolved: if active players fall below the **Game mode** minimum after a **Game** has started, the **Game** finishes early and shows final results.
+- Disconnect behavior was unclear — resolved: when a **Player** disconnects during a **Game**, the **Game** continues with the remaining connected players.
+- Disconnected player final result behavior was unclear — resolved: a **Player** who disconnects during a **Game** remains part of that **Game**'s final results.
+- Disconnected player turn eligibility was unclear — resolved: a **Disconnected player** is skipped when choosing future **Drawers**.
+- Not-enough-players behavior was unclear — resolved: if **Connected players** fall below the **Game mode** minimum after a **Game** has started, the **Game** finishes early and shows final results.
 - The current drawing mode's minimum player count was informal — resolved: its **Minimum player count** is 2.
 - Reconnection identity was unclear — resolved: a disconnected **Player** reclaims the same identity on return.
 - Drawer disconnect behavior was unclear — resolved: the active **Turn** ends immediately, preserves its **Drawing**, and awards no **Score**.
+- Drawer disconnect round progression was unclear — resolved: a **Drawer** who disconnects during a **Turn** is skipped for the rest of the current **Round**.
 - Guesser disconnect behavior was unclear — resolved: the active **Turn** continues, and a returning **Guesser** may still guess in that same **Turn** if it is still active.
+- Correct guess lifetime was unclear — resolved: a **Guesser**'s correct guess still counts if that **Guesser** disconnects before the **Turn** ends.
+- Turn completion with disconnected guessers was unclear — resolved: a **Turn** waits only for connected **Guessers** who have not guessed correctly.
 - Word lifetime was unclear — resolved: a **Word** is scoped to a single **Turn**.
 - Word selection authority was unclear — resolved: the **Drawer** chooses from **Word choices** provided by the game.
 - Word choice importance was unclear — resolved: **Word choice** is a first-class step within a **Turn**.
@@ -159,5 +183,11 @@ _Avoid_: Match, game
 - Blank drawing behavior was unclear — resolved: a completed **Turn** produces a **Drawing** even if the drawer leaves the canvas blank.
 - Interrupted turn drawing behavior was unclear — resolved: an interrupted **Turn** produces a **Drawing** from the drawer's partial work.
 - Interrupted word choice drawing behavior was unclear — resolved: an interrupted **Word choice** does not produce a **Drawing**.
+- Drawer disconnect during word choice was unclear — resolved: the **Word choice** ends immediately and the disconnected **Drawer** is skipped for the current **Round**.
 - Drawing lifetime was unclear — resolved: a **Drawing** is scoped to a single **Game** and is not kept for later **Games** in the same **Room**.
-- Departed drawer drawing behavior was unclear — resolved: a **Drawing** remains part of its **Game** if its **Drawer** leaves before the **Game** ends.
+- Disconnected drawer drawing behavior was unclear — resolved: a **Drawing** remains part of its **Game** if its **Drawer** disconnects before the **Game** ends.
+- Player presence states were unclear — resolved: a **Player** is either connected or disconnected; there is no separate permanent departure state yet.
+- Host presence was unclear — resolved: the **Host** must be connected, so host authority transfers immediately when the host disconnects.
+- Hostless room behavior was unclear — resolved: a **Room** has no **Host** while all **Players** are disconnected, and the first reconnecting **Player** becomes the **Host**.
+- Player order continuity was unclear — resolved: a **Player** keeps their original room order position across disconnections and reconnections.
+- Reconnection identity matching was unclear — resolved: a returning **Player** reclaims identity by player identifier, not by player name.
