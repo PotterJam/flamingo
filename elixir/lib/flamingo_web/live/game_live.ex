@@ -592,8 +592,9 @@ defmodule FlamingoWeb.GameLive do
       <script :type={Phoenix.LiveView.ColocatedHook} name=".GuessForm">
         export default {
           mounted() {
-            this.handleEvent("clear_guess", () => {
-              this.el.reset()
+            this.el.addEventListener("submit", () => {
+              // Let LiveView serialize the submitted value before clearing the visible input.
+              setTimeout(() => this.el.reset(), 0)
             })
           }
         }
@@ -813,11 +814,7 @@ defmodule FlamingoWeb.GameLive do
 
   def handle_info({:incorrect_guess, player_id, _text}, socket) do
     if player_id == socket.assigns.player_id do
-      {:noreply,
-       socket
-       |> assign(:guess_form, to_form(%{"guess" => ""}, as: :guess_form))
-       |> push_event("play_sound", %{sound: "wrongGuess"})
-       |> push_event("clear_guess", %{})}
+      {:noreply, push_event(socket, "play_sound", %{sound: "wrongGuess"})}
     else
       {:noreply, socket}
     end
