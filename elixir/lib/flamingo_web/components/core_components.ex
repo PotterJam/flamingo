@@ -64,15 +64,15 @@ defmodule FlamingoWeb.CoreComponents do
         @kind == :info && "alert-info",
         @kind == :error && "alert-error"
       ]}>
-        <.icon :if={@kind == :info} name="info" class="size-5 shrink-0" />
-        <.icon :if={@kind == :error} name="warning_circle" class="size-5 shrink-0" />
+        <.icon :if={@kind == :info} name={:info} class="size-5 shrink-0" />
+        <.icon :if={@kind == :error} name={:circle_alert} class="size-5 shrink-0" />
         <div>
           <p :if={@title} class="font-semibold">{@title}</p>
           <p>{msg}</p>
         </div>
         <div class="flex-1" />
         <button type="button" class="group self-start cursor-pointer" aria-label={gettext("close")}>
-          <.icon name="x" class="size-5 opacity-40 group-hover:opacity-70" />
+          <.icon name={:x} class="size-5 opacity-40 group-hover:opacity-70" />
         </button>
       </div>
     </div>
@@ -116,7 +116,7 @@ defmodule FlamingoWeb.CoreComponents do
           {render_slot(@inner_block)}
         </span>
         <.icon
-          name="seal_check"
+          name={:badge_check}
           class="h-5 w-5 opacity-0 transition-opacity duration-200 group-[.confirmed]/confirm:opacity-100"
         />
       </span>
@@ -375,7 +375,7 @@ defmodule FlamingoWeb.CoreComponents do
   defp error(assigns) do
     ~H"""
     <p class="mt-1.5 flex gap-2 items-center text-sm text-error">
-      <.icon name="warning_circle" class="size-5" />
+      <.icon name={:circle_alert} class="size-5" />
       {render_slot(@inner_block)}
     </p>
     """
@@ -495,19 +495,25 @@ defmodule FlamingoWeb.CoreComponents do
   end
 
   @doc """
-  Renders a [Phosphor icon](https://phosphoricons.com) in bold weight.
+  Renders an icon.
 
   ## Examples
 
-      <.icon name="x" />
-      <.icon name="arrows_clockwise" class="ml-1 size-3 motion-safe:animate-spin" />
+      <.icon name={:x} />
+      <.icon name={:refresh_cw} class="ml-1 size-3 motion-safe:animate-spin" />
   """
-  attr :name, :string, required: true
+  attr :name, :atom, required: true
   attr :class, :any, default: "size-4"
 
   def icon(assigns) do
     assigns =
-      assign(assigns, :svg, Phosphoricons.icon(assigns.name, type: "bold", class: assigns.class))
+      assigns
+      |> assign(
+        :svg,
+        apply(Lucideicons, assigns.name, [
+          %{class: assigns.class, __changed__: nil}
+        ])
+      )
 
     ~H"""
     {@svg}
