@@ -76,7 +76,7 @@ defmodule FlamingoWeb.GameComponents do
   def logo(assigns) do
     ~H"""
     <h1 class="font-retro-display text-2xl font-bold text-pink-400">
-      flamin<span class="text-sky-400">go</span>
+      flamin<span class="text-purple-500">go</span>
     </h1>
     """
   end
