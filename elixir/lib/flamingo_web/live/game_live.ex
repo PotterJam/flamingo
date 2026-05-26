@@ -512,7 +512,7 @@ defmodule FlamingoWeb.GameLive do
                       data-replay-final-drawings
                       aria-label="Replay selected drawings"
                     >
-                      <.icon name="arrows_clockwise" class="h-4 w-4" />
+                      <.icon name={:refresh_cw} class="h-4 w-4" />
                     </button>
                     <span :if={pid != selected_player_id} class="mr-2 h-8 w-8 shrink-0"></span>
                   </li>
