@@ -26,6 +26,7 @@ import {hooks as colocatedHooks} from "phoenix-colocated/flamingo"
 import topbar from "../vendor/topbar"
 import DrawingCanvas from "./hooks/drawing_canvas"
 import FinalDrawingShowcase from "./hooks/final_drawing_showcase"
+import SharedDrawing from "./hooks/shared_drawing"
 import SoundManager from "./hooks/sound_manager"
 
 window.__soundMuted = localStorage.getItem("flamingo_sound_muted") === "true"
@@ -34,7 +35,7 @@ const csrfToken = document.querySelector("meta[name='csrf-token']").getAttribute
 const liveSocket = new LiveSocket("/live", Socket, {
   longPollFallbackMs: 2500,
   params: {_csrf_token: csrfToken},
-  hooks: {...colocatedHooks, DrawingCanvas, FinalDrawingShowcase, SoundManager},
+  hooks: {...colocatedHooks, DrawingCanvas, FinalDrawingShowcase, SharedDrawing, SoundManager},
 })
 
 // Show progress bar on live navigation and form submits

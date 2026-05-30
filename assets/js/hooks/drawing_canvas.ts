@@ -1,6 +1,6 @@
 import { CANVAS_WIDTH, CANVAS_HEIGHT, clear, drawBetween, fill } from "../lib/canvas";
 
-type DrawEvent =
+export type DrawEvent =
   | { event_type: "start"; x: number; y: number; color: string; line_width: number }
   | { event_type: "draw"; start_x: number; start_y: number; end_x: number; end_y: number; color: string; line_width: number }
   | { event_type: "end"; start_x: number; start_y: number; end_x: number; end_y: number; color: string; line_width: number }
@@ -79,7 +79,7 @@ const renderEvents = (ctx: CanvasRenderingContext2D, events: DrawEvent[]) => {
   });
 };
 
-const replayEvents = (
+export const replayEvents = (
   ctx: CanvasRenderingContext2D,
   events: DrawEvent[],
   isCurrentReplay: () => boolean,

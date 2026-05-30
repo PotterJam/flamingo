@@ -19,6 +19,7 @@ defmodule FlamingoWeb.Router do
 
     live "/", HomeLive
     live "/game/:room_id", GameLive
+    live "/drawing", DrawingLive
   end
 
   # Other scopes may use custom stacks.
