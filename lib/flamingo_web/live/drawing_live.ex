@@ -68,7 +68,7 @@ defmodule FlamingoWeb.DrawingLive do
               on_confirm_click={JS.dispatch("phx:copy-current-url")}
             >
               <span class="flex items-center gap-2">
-                <.icon name={:copy} class="h-5 w-5" /> Share
+                <.icon name={:copy} class="h-5 w-5" /> Copy link
               </span>
             </.button>
           </div>

@@ -564,7 +564,7 @@ defmodule FlamingoWeb.GameLive do
                           data-drawing-share-url={share_url}
                         >
                           <span class="flex items-center gap-1">
-                            <.icon name={:copy} class="h-4 w-4" /> Share
+                            <.icon name={:copy} class="h-4 w-4" /> Copy link
                           </span>
                         </.button>
                       </div>
