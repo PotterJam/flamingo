@@ -3,7 +3,7 @@ defmodule FlamingoWeb.GameLiveTest do
 
   import Phoenix.LiveViewTest
 
-  alias Flamingo.{GameServer, GameSupervisor}
+  alias Flamingo.{DrawingShare, GameServer, GameSupervisor}
 
   setup do
     room_id = "live-#{System.unique_integer([:positive])}"
@@ -73,6 +73,19 @@ defmodule FlamingoWeb.GameLiveTest do
     assert html =~ winner_word
     assert html =~ "data-final-drawing-events="
     assert html =~ "data-final-drawing-replay=\"true\""
+    assert html =~ "data-drawing-share-url="
+    assert html =~ "/drawing#"
+
+    [_, share_url] = Regex.run(~r/data-drawing-share-url="([^"]+)"/, html)
+    encoded = share_url |> String.split("/drawing#") |> List.last()
+
+    assert {:ok,
+            %{
+              drawer_name: drawer_name,
+              word: ^winner_word
+            }} = DrawingShare.decode(encoded)
+
+    assert drawer_name == winner.name
   end
 
   test "final score rows select the drawing showcase", %{

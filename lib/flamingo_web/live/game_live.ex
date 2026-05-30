@@ -1,7 +1,7 @@
 defmodule FlamingoWeb.GameLive do
   use FlamingoWeb, :live_view
 
-  alias Flamingo.{Feed, Games}
+  alias Flamingo.{DrawingShare, Feed, Games}
 
   @palette ~w(
     #000000 #FFFFFF #C1C1C1 #505050 #EF120B #740A08
@@ -158,6 +158,17 @@ defmodule FlamingoWeb.GameLive do
     final_drawings
     |> Enum.filter(&(&1.drawer_id == player_id))
     |> Enum.sort_by(& &1.round_number)
+  end
+
+  defp drawing_share_url(drawing, players) do
+    player = Map.fetch!(players, drawing.drawer_id)
+
+    encoded =
+      drawing
+      |> Map.put(:drawer_name, player.name)
+      |> DrawingShare.encode()
+
+    url(~p"/drawing") <> "##{encoded}"
   end
 
   defp sync_round_audio(socket) do
@@ -534,6 +545,7 @@ defmodule FlamingoWeb.GameLive do
                     </div>
                   <% end %>
                   <%= for drawing <- selected_drawings do %>
+                    <% share_url = drawing_share_url(drawing, @final_players) %>
                     <div class="border-2 border-border bg-white p-3">
                       <div class="mb-2 flex items-center justify-between gap-3">
                         <span
@@ -543,6 +555,18 @@ defmodule FlamingoWeb.GameLive do
                           {drawing.round_number}
                         </span>
                         <p class="truncate text-right font-bold">{drawing.word}</p>
+                        <.button
+                          variant="neutral"
+                          size="sm"
+                          class="shrink-0 px-2"
+                          on_confirm_click={JS.dispatch("phx:copy", detail: %{text: share_url})}
+                          id={"copy-final-drawing-#{drawing.drawer_id}-round-#{drawing.round_number}"}
+                          data-drawing-share-url={share_url}
+                        >
+                          <span class="flex items-center gap-1">
+                            <.icon name={:copy} class="h-4 w-4" /> Copy link
+                          </span>
+                        </.button>
                       </div>
                       <div
                         id={"final-drawing-#{drawing.drawer_id}-round-#{drawing.round_number}"}

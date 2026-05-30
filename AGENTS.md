@@ -29,6 +29,8 @@ custom classes must fully style the input
 ### JS and CSS guidelines
 
 - **Use Tailwind CSS classes and custom CSS rules** to create polished, responsive, and visually stunning interfaces.
+- Prefer browser-native APIs and standard Web Platform features before writing custom JavaScript utilities. For example, use built-in browser encoding, clipboard, URL, and DOM APIs where available instead of hand-rolled implementations.
+- In TypeScript, avoid explicit return type annotations unless they clarify a public contract or resolve an inference problem. Prefer letting TypeScript infer return types for local helpers and hooks.
 - Tailwindcss v4 **no longer needs a tailwind.config.js** and uses a new import syntax in `app.css`:
 
       @import "tailwindcss" source(none);
@@ -50,6 +52,7 @@ custom classes must fully style the input
 - Implement **subtle micro-interactions** (e.g., button hover effects, and smooth transitions)
 - Ensure **clean typography, spacing, and layout balance** for a refined, premium look
 - Focus on **delightful details** like hover effects, loading states, and smooth page transitions
+- Prefer improving or extending shared design-system components over local one-off markup or ad hoc classes. If a control exposes a gap in `<.button>`, `<.input>`, `<.icon>`, or another shared component, add the missing variant/size/API there when it is generally useful.
 
 
 <!-- usage-rules-start -->

@@ -91,7 +91,7 @@ defmodule FlamingoWeb.CoreComponents do
   attr :rest, :global, include: ~w(href navigate patch method download name value disabled type)
   attr :class, :any, default: nil
   attr :variant, :string, default: "default", values: ~w(default neutral ghost outline)
-  attr :size, :string, default: "default", values: ~w(default sm)
+  attr :size, :string, default: "default", values: ~w(default sm icon)
   attr :on_confirm_click, :any, default: nil
   slot :inner_block, required: true
 
@@ -151,6 +151,7 @@ defmodule FlamingoWeb.CoreComponents do
 
   defp button_size_classes("default"), do: "px-4 py-2 text-sm"
   defp button_size_classes("sm"), do: "px-2 py-1 text-xs"
+  defp button_size_classes("icon"), do: "inline-flex h-12 w-12 items-center justify-center p-0"
 
   defp button_variant_classes("default"),
     do:
