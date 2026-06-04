@@ -186,12 +186,36 @@ defmodule Flamingo.GameServerTest do
     Phoenix.PubSub.subscribe(Flamingo.PubSub, "game:#{room_id}")
     {p1, p2, word, state} = start_playing(room_id)
     guesser = if p1 == state.drawer_id, do: p2, else: p1
-    wrong_length_guess = word <> "z"
+    wrong_length_guess = word <> "zz"
 
     assert :incorrect = GameServer.guess(room_id, guesser, wrong_length_guess)
 
     assert_receive {:incorrect_guess, ^guesser, ^wrong_length_guess}
     refute_receive {:feed_event, {:close_guess, ^guesser}}
+  end
+
+  test "one-character insertion is a close guess", %{room_id: room_id} do
+    Phoenix.PubSub.subscribe(Flamingo.PubSub, "game:#{room_id}")
+    {p1, p2, word, state} = start_playing(room_id)
+    guesser = if p1 == state.drawer_id, do: p2, else: p1
+    close_guess = word <> "z"
+
+    assert :close = GameServer.guess(room_id, guesser, close_guess)
+
+    refute_receive {:incorrect_guess, ^guesser, ^close_guess}
+    assert_receive {:feed_event, {:close_guess, ^guesser}}
+  end
+
+  test "one-character deletion is a close guess", %{room_id: room_id} do
+    Phoenix.PubSub.subscribe(Flamingo.PubSub, "game:#{room_id}")
+    {p1, p2, word, state} = start_playing(room_id)
+    guesser = if p1 == state.drawer_id, do: p2, else: p1
+    close_guess = String.slice(word, 0, String.length(word) - 1)
+
+    assert :close = GameServer.guess(room_id, guesser, close_guess)
+
+    refute_receive {:incorrect_guess, ^guesser, ^close_guess}
+    assert_receive {:feed_event, {:close_guess, ^guesser}}
   end
 
   test "drawer cannot guess", %{room_id: room_id} do

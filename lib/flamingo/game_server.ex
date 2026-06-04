@@ -532,7 +532,7 @@ defmodule Flamingo.GameServer do
     normalized_word = normalize_guess(word)
 
     normalized_guess != normalized_word and
-      one_letter_different?(normalized_guess, normalized_word)
+      one_edit_different?(normalized_guess, normalized_word)
   end
 
   defp normalize_guess(text) do
@@ -541,12 +541,34 @@ defmodule Flamingo.GameServer do
     |> String.replace(~r/[^\p{L}\p{N}]/u, "")
   end
 
-  defp one_letter_different?(left, right) do
+  defp one_edit_different?(left, right) do
     left_chars = String.graphemes(left)
     right_chars = String.graphemes(right)
 
-    length(left_chars) == length(right_chars) and
-      Enum.zip(left_chars, right_chars)
-      |> Enum.count(fn {left_char, right_char} -> left_char != right_char end) == 1
+    cond do
+      length(left_chars) == length(right_chars) ->
+        one_substitution?(left_chars, right_chars)
+
+      length(left_chars) + 1 == length(right_chars) ->
+        one_insert_or_delete?(left_chars, right_chars)
+
+      length(left_chars) == length(right_chars) + 1 ->
+        one_insert_or_delete?(right_chars, left_chars)
+
+      true ->
+        false
+    end
+  end
+
+  defp one_substitution?(left_chars, right_chars) do
+    left_chars
+    |> Enum.zip(right_chars)
+    |> Enum.count(fn {left_char, right_char} -> left_char != right_char end) == 1
+  end
+
+  defp one_insert_or_delete?(shorter_chars, longer_chars) do
+    Enum.any?(0..length(longer_chars), fn index ->
+      List.delete_at(longer_chars, index) == shorter_chars
+    end)
   end
 end
