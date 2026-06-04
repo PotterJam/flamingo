@@ -19,6 +19,7 @@ defmodule Flamingo.GameServer do
     drawn_this_round: MapSet.new(),
     current_drawing: [],
     word_choices: [],
+    used_words: MapSet.new(),
     correct_guesses: %{},
     revealed_indices: [],
     hint_timer_ref: nil,
@@ -133,7 +134,9 @@ defmodule Flamingo.GameServer do
             turn_length: turn_length,
             drawer_id: drawer_id,
             current_round: 0,
-            drawn_this_round: MapSet.new()
+            drawn_this_round: MapSet.new(),
+            used_words: MapSet.new(),
+            final_drawings: []
         }
         |> enter_word_choice()
 
@@ -338,7 +341,16 @@ defmodule Flamingo.GameServer do
   end
 
   defp enter_word_choice(state) do
-    word_choices = Flamingo.Words.random_choices()
+    word_choices = Flamingo.Words.random_choices(3, state.used_words)
+
+    if word_choices == [] do
+      enter_game_ended(state)
+    else
+      start_word_choice(state, word_choices)
+    end
+  end
+
+  defp start_word_choice(state, word_choices) do
     ref = make_ref()
     Process.send_after(self(), {:word_choice_timeout, ref}, 10_000)
     turn_end_time = DateTime.add(DateTime.utc_now(), 10, :second)
@@ -380,6 +392,7 @@ defmodule Flamingo.GameServer do
       state
       | phase: :playing,
         word: word,
+        used_words: MapSet.put(state.used_words, word),
         word_choices: [],
         phase_timer_ref: ref,
         turn_end_time: turn_end_time,

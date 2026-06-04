@@ -378,6 +378,68 @@ defmodule Flamingo.GameServerTest do
     assert state.drawn_this_round == MapSet.new()
   end
 
+  test "selected words are excluded from later choices in the same game", %{room_id: room_id} do
+    {:ok, p1, _} = GameServer.join(room_id, "Alice")
+    {:ok, p2, _} = GameServer.join(room_id, "Bob")
+    :ok = GameServer.start_game(room_id, p1, %{round_count: 1, turn_length: 30})
+
+    pid = GenServer.whereis({:via, Registry, {Flamingo.GameRegistry, room_id}})
+
+    {:ok, state} = GameServer.get_state(room_id)
+    word = List.first(state.word_choices)
+    :ok = GameServer.select_word(room_id, state.drawer_id, word)
+
+    {:ok, state} = GameServer.get_state(room_id)
+    guesser = if p1 == state.drawer_id, do: p2, else: p1
+    :correct = GameServer.guess(room_id, guesser, word)
+
+    {:ok, state} = GameServer.get_state(room_id)
+    assert MapSet.member?(state.used_words, word)
+
+    send(pid, {:turn_reveal_timeout, state.phase_timer_ref})
+    _ = :sys.get_state(pid)
+
+    {:ok, state} = GameServer.get_state(room_id)
+    refute word in state.word_choices
+  end
+
+  test "used word history resets when a new game starts", %{room_id: room_id} do
+    {:ok, p1, _} = GameServer.join(room_id, "Alice")
+    {:ok, p2, _} = GameServer.join(room_id, "Bob")
+    :ok = GameServer.start_game(room_id, p1, %{round_count: 1, turn_length: 30})
+
+    pid = GenServer.whereis({:via, Registry, {Flamingo.GameRegistry, room_id}})
+
+    play_turn = fn ->
+      {:ok, state} = GameServer.get_state(room_id)
+      word = List.first(state.word_choices)
+      :ok = GameServer.select_word(room_id, state.drawer_id, word)
+
+      {:ok, state} = GameServer.get_state(room_id)
+      guesser = if p1 == state.drawer_id, do: p2, else: p1
+      :correct = GameServer.guess(room_id, guesser, word)
+
+      {:ok, state} = GameServer.get_state(room_id)
+      send(pid, {:turn_reveal_timeout, state.phase_timer_ref})
+      _ = :sys.get_state(pid)
+
+      word
+    end
+
+    first_word = play_turn.()
+    play_turn.()
+
+    {:ok, state} = GameServer.get_state(room_id)
+    assert state.phase == :game_ended
+    assert MapSet.member?(state.used_words, first_word)
+
+    :ok = GameServer.start_game(room_id, p1, %{round_count: 1, turn_length: 30})
+
+    {:ok, state} = GameServer.get_state(room_id)
+    assert state.phase == :word_choice
+    assert state.used_words == MapSet.new()
+  end
+
   test "leave during playing reconciles turn completion", %{room_id: room_id} do
     {:ok, p1, _} = GameServer.join(room_id, "Alice")
     {:ok, p2, _} = GameServer.join(room_id, "Bob")
