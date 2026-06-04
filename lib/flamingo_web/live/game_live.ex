@@ -666,12 +666,13 @@ defmodule FlamingoWeb.GameLive do
       <script :type={Phoenix.LiveView.ColocatedHook} name=".ScrollFeed">
         export default {
           mounted() {
-            this.el.scrollTop = this.el.scrollHeight
-            this.handleEvent("scroll_feed", () => {
-              this.el.scrollTop = this.el.scrollHeight
-            })
+            this.scrollToBottom()
+            this.handleEvent("scroll_feed", () => this.scrollToBottom())
           },
           updated() {
+            this.scrollToBottom()
+          },
+          scrollToBottom() {
             this.el.scrollTop = this.el.scrollHeight
           }
         }
