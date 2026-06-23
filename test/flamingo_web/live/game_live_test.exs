@@ -11,6 +11,27 @@ defmodule FlamingoWeb.GameLiveTest do
     %{room_id: room_id}
   end
 
+  test "host settings clamp round length to supported bounds", %{conn: conn, room_id: room_id} do
+    {:ok, p1, _} = GameServer.join(room_id, "Alice")
+    {:ok, _p2, _} = GameServer.join(room_id, "Bob")
+
+    {:ok, view, _html} = live(conn, ~p"/game/#{room_id}?player_id=#{p1}")
+
+    assert has_element?(view, "#round-length-input[min='15'][max='120']")
+
+    view
+    |> element("#settings-form")
+    |> render_change(%{"settings" => %{"round_count" => "3", "turn_length" => "14"}})
+
+    assert has_element?(view, "#round-length-input[value='15']")
+
+    view
+    |> element("#settings-form")
+    |> render_change(%{"settings" => %{"round_count" => "3", "turn_length" => "121"}})
+
+    assert has_element?(view, "#round-length-input[value='120']")
+  end
+
   test "game end screen keeps final scores visible after a player leaves", %{
     conn: conn,
     room_id: room_id

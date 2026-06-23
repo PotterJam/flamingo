@@ -3,6 +3,9 @@ defmodule FlamingoWeb.GameLive do
 
   alias Flamingo.{DrawingShare, Feed, Games}
 
+  @min_turn_length 15
+  @max_turn_length 120
+
   @palette ~w(
     #000000 #FFFFFF #C1C1C1 #505050 #EF120B #740A08
     #FF7700 #C23900 #FFE404 #E8A202 #08C202 #00461A
@@ -183,6 +186,12 @@ defmodule FlamingoWeb.GameLive do
   end
 
   def render(assigns) do
+    assigns =
+      assign(assigns,
+        min_turn_length: @min_turn_length,
+        max_turn_length: @max_turn_length
+      )
+
     ~H"""
     <Layouts.app flash={@flash} background={if(@phase == :lobby, do: "grid-background", else: "")}>
       <%= if @phase == :lobby do %>
@@ -221,10 +230,10 @@ defmodule FlamingoWeb.GameLive do
                   <div class="mt-4">
                     <label class="text-sm">Round length(s)</label>
                     <div class="mt-1 flex w-48 items-center">
-                      <input
+                      <.input
                         type="number"
-                        min="30"
-                        max="120"
+                        min={@min_turn_length}
+                        max={@max_turn_length}
                         value={@turn_length}
                         name="settings[turn_length]"
                         class="w-full rounded-base border-2 border-border bg-white px-3 py-2 text-sm focus:ring-2 focus:ring-ring focus:ring-offset-2 focus:outline-none"
@@ -686,7 +695,7 @@ defmodule FlamingoWeb.GameLive do
 
     turn_length =
       case Integer.parse(params["turn_length"]) do
-        {val, _} -> max(val, 30)
+        {val, _} -> val |> max(@min_turn_length) |> min(@max_turn_length)
         :error -> socket.assigns.turn_length
       end
 

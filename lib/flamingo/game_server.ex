@@ -3,6 +3,11 @@ defmodule Flamingo.GameServer do
 
   alias Flamingo.Feed
 
+  @min_turn_length 15
+  @max_turn_length 120
+  @hint_interval_ms 20_000
+  @hint_before_turn_end_ms 5_000
+
   defstruct [
     :room_id,
     :host_id,
@@ -70,6 +75,10 @@ defmodule Flamingo.GameServer do
     GenServer.call(via(room_id), :get_state)
   catch
     :exit, {:noproc, _} -> {:error, :not_found}
+  end
+
+  defp first_hint_delay_ms(turn_length) do
+    min(@hint_interval_ms, max(1_000, turn_length * 1000 - @hint_before_turn_end_ms))
   end
 
   defp via(room_id) do
@@ -291,7 +300,7 @@ defmodule Flamingo.GameServer do
     {:noreply, state}
   end
 
-  def handle_info({:reveal_hint, ref}, %{hint_timer_ref: ref} = state) do
+  def handle_info({:reveal_hint, ref}, %{phase: :playing, hint_timer_ref: ref} = state) do
     case maybe_reveal_letter(state) do
       {:ok, new_state} ->
         broadcast(state.room_id, {:hint_revealed, new_state.revealed_indices})
@@ -386,7 +395,7 @@ defmodule Flamingo.GameServer do
     ref = make_ref()
     Process.send_after(self(), {:playing_timeout, ref}, state.turn_length * 1000)
     turn_end_time = DateTime.add(DateTime.utc_now(), state.turn_length, :second)
-    hint_ref = schedule_hint_timer()
+    hint_ref = schedule_hint_timer(first_hint_delay_ms(state.turn_length))
 
     new_state = %{
       state
@@ -433,7 +442,8 @@ defmodule Flamingo.GameServer do
         drawn_this_round: MapSet.put(state.drawn_this_round, state.drawer_id),
         final_drawings: state.final_drawings ++ [completed_drawing(state)],
         score_gains: score_gains,
-        players: players
+        players: players,
+        hint_timer_ref: nil
     }
 
     {feed, event} = Feed.word_revealed(new_state.feed, state.word)
@@ -477,7 +487,8 @@ defmodule Flamingo.GameServer do
       state
       | phase: :game_ended,
         phase_timer_ref: nil,
-        turn_end_time: nil
+        turn_end_time: nil,
+        hint_timer_ref: nil
     }
 
     broadcast(state.room_id, {:game_ended, state.players, state.final_drawings})
@@ -504,16 +515,19 @@ defmodule Flamingo.GameServer do
   defp validate_round_count(count) when count >= 1 and count <= 5, do: :ok
   defp validate_round_count(_), do: {:error, :invalid_round_count}
 
-  defp validate_turn_length(length) when length >= 30, do: :ok
+  defp validate_turn_length(length)
+       when length >= @min_turn_length and length <= @max_turn_length,
+       do: :ok
+
   defp validate_turn_length(_), do: {:error, :invalid_turn_length}
 
   defp generate_player_id do
     :crypto.strong_rand_bytes(8) |> Base.url_encode64(padding: false)
   end
 
-  defp schedule_hint_timer do
+  defp schedule_hint_timer(delay_ms \\ @hint_interval_ms) do
     ref = make_ref()
-    Process.send_after(self(), {:reveal_hint, ref}, 20_000)
+    Process.send_after(self(), {:reveal_hint, ref}, delay_ms)
     ref
   end
 
