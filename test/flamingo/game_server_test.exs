@@ -75,7 +75,25 @@ defmodule Flamingo.GameServerTest do
     {:ok, _p2, _} = GameServer.join(room_id, "Bob")
 
     assert {:error, :invalid_turn_length} =
-             GameServer.start_game(room_id, p1, %{turn_length: 10})
+             GameServer.start_game(room_id, p1, %{turn_length: 14})
+
+    assert {:error, :invalid_turn_length} =
+             GameServer.start_game(room_id, p1, %{turn_length: 121})
+  end
+
+  test "start_game accepts turn_length boundaries", %{room_id: room_id} do
+    {:ok, p1, _} = GameServer.join(room_id, "Alice")
+    {:ok, _p2, _} = GameServer.join(room_id, "Bob")
+
+    assert :ok = GameServer.start_game(room_id, p1, %{turn_length: 15})
+
+    {:ok, state} = GameServer.get_state(room_id)
+    assert state.turn_length == 15
+
+    assert :ok = GameServer.start_game(room_id, p1, %{turn_length: 120})
+
+    {:ok, state} = GameServer.get_state(room_id)
+    assert state.turn_length == 120
   end
 
   test "start_game succeeds and broadcasts", %{room_id: room_id} do
@@ -89,6 +107,36 @@ defmodule Flamingo.GameServerTest do
 
     {:ok, state} = GameServer.get_state(room_id)
     assert state.phase == :word_choice
+  end
+
+  test "minimum turn length schedules first hint before the turn ends", %{room_id: room_id} do
+    {:ok, p1, _} = GameServer.join(room_id, "Alice")
+    {:ok, _p2, _} = GameServer.join(room_id, "Bob")
+    :ok = GameServer.start_game(room_id, p1, %{turn_length: 15})
+
+    {:ok, state} = GameServer.get_state(room_id)
+    word = List.first(state.word_choices)
+    :ok = GameServer.select_word(room_id, state.drawer_id, word)
+
+    {:ok, state} = GameServer.get_state(room_id)
+
+    assert is_reference(state.hint_timer_ref)
+    assert GameServer.first_hint_delay_ms(15) == 10_000
+    assert GameServer.first_hint_delay_ms(30) == 20_000
+  end
+
+  test "turn reveal clears pending hint timer", %{room_id: room_id} do
+    {p1, p2, word, state} = start_playing(room_id, %{turn_length: 15})
+    drawer = state.drawer_id
+    guesser = if p1 == drawer, do: p2, else: p1
+
+    assert is_reference(state.hint_timer_ref)
+
+    :correct = GameServer.guess(room_id, guesser, word)
+
+    {:ok, state} = GameServer.get_state(room_id)
+    assert state.phase == :turn_reveal
+    assert state.hint_timer_ref == nil
   end
 
   test "join returns not_found for nonexistent room" do
@@ -105,10 +153,10 @@ defmodule Flamingo.GameServerTest do
     assert {:error, :not_found} = GameServer.rejoin(room_id, "nonexistent")
   end
 
-  defp start_playing(room_id) do
+  defp start_playing(room_id, settings \\ %{round_count: 1, turn_length: 30}) do
     {:ok, p1, _} = GameServer.join(room_id, "Alice")
     {:ok, p2, _} = GameServer.join(room_id, "Bob")
-    :ok = GameServer.start_game(room_id, p1, %{round_count: 1, turn_length: 30})
+    :ok = GameServer.start_game(room_id, p1, settings)
 
     {:ok, state} = GameServer.get_state(room_id)
     word = List.first(state.word_choices)
