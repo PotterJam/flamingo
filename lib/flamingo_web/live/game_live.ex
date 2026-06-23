@@ -223,7 +223,7 @@ defmodule FlamingoWeb.GameLive do
                     <div class="mt-1 flex w-48 items-center">
                       <input
                         type="number"
-                        min="30"
+                        min="15"
                         max="120"
                         value={@turn_length}
                         name="settings[turn_length]"
@@ -686,7 +686,7 @@ defmodule FlamingoWeb.GameLive do
 
     turn_length =
       case Integer.parse(params["turn_length"]) do
-        {val, _} -> max(val, 30)
+        {val, _} -> max(val, 15)
         :error -> socket.assigns.turn_length
       end
 

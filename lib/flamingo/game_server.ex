@@ -504,7 +504,7 @@ defmodule Flamingo.GameServer do
   defp validate_round_count(count) when count >= 1 and count <= 5, do: :ok
   defp validate_round_count(_), do: {:error, :invalid_round_count}
 
-  defp validate_turn_length(length) when length >= 30, do: :ok
+  defp validate_turn_length(length) when length >= 15, do: :ok
   defp validate_turn_length(_), do: {:error, :invalid_turn_length}
 
   defp generate_player_id do
