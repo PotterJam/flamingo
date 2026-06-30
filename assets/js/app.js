@@ -29,7 +29,17 @@ import FinalDrawingShowcase from "./hooks/final_drawing_showcase"
 import SharedDrawing from "./hooks/shared_drawing"
 import SoundManager from "./hooks/sound_manager"
 
-window.__soundMuted = localStorage.getItem("flamingo_sound_muted") === "true"
+const clampStoredSoundVolume = (value) => {
+  const volume = Number.parseInt(value, 10)
+  if (!Number.isFinite(volume)) return 100
+  return Math.min(100, Math.max(0, volume))
+}
+
+const storedSoundVolume = localStorage.getItem("flamingo_sound_volume")
+window.__soundVolume = storedSoundVolume === null
+  ? (localStorage.getItem("flamingo_sound_muted") === "true" ? 0 : 100)
+  : clampStoredSoundVolume(storedSoundVolume)
+window.__soundMuted = window.__soundVolume === 0
 
 const csrfToken = document.querySelector("meta[name='csrf-token']").getAttribute("content")
 const liveSocket = new LiveSocket("/live", Socket, {

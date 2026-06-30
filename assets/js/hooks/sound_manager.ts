@@ -21,12 +21,29 @@ const SOUND_FILES: Record<SoundKey, string> = {
   countdown: "/sounds/countdown.mp3",
 };
 
+const MUSIC_VOLUME = 0.08;
+const COUNTDOWN_VOLUME = 0.7;
+const EFFECT_VOLUME = 1;
+
+type RoundAudioPayload = { phase: GamePhase; end_time?: string | null };
+
 const SoundManager = {
   mounted(this: SoundManagerHook) {
     this.sounds = {} as Record<SoundKey, HTMLAudioElement>;
     this.fadeTimers = {} as Partial<Record<SoundKey, number>>;
     this.countdownTimer = null as number | null;
-    this.countdownTurnEndTime = null as number | null;
+    this.countdownTurnEndTime = null as string | null;
+
+    const masterVolume = () => {
+      const volume = Number.isFinite(window.__soundVolume) ? window.__soundVolume : 100;
+      return Math.min(100, Math.max(0, volume)) / 100;
+    };
+
+    const volumeLevel = (baseVolume: number) => baseVolume * masterVolume();
+
+    const soundIsMuted = () => masterVolume() === 0;
+    let wasMuted = soundIsMuted();
+    let lastRoundAudio: RoundAudioPayload | null = null;
 
     const clearFade = (sound: SoundKey) => {
       const timer = this.fadeTimers[sound];
@@ -51,7 +68,7 @@ const SoundManager = {
     };
 
     const fadeInMusic = () => {
-      if (window.__soundMuted) return;
+      if (soundIsMuted()) return;
       const audio = this.sounds.gameMusic;
       if (!audio) return;
 
@@ -64,8 +81,9 @@ const SoundManager = {
       }
 
       this.fadeTimers.gameMusic = window.setInterval(() => {
-        audio.volume = Math.min(0.08, audio.volume + 0.01);
-        if (audio.volume >= 0.08) {
+        const targetVolume = volumeLevel(MUSIC_VOLUME);
+        audio.volume = Math.min(targetVolume, audio.volume + 0.01);
+        if (audio.volume >= targetVolume) {
           clearFade("gameMusic");
         }
       }, 80);
@@ -90,12 +108,12 @@ const SoundManager = {
     };
 
     const startCountdown = () => {
-      if (window.__soundMuted) return;
+      if (soundIsMuted()) return;
       const audio = this.sounds.countdown;
       if (!audio || !audio.paused) return;
 
       audio.currentTime = 0;
-      audio.volume = 0.7;
+      audio.volume = volumeLevel(COUNTDOWN_VOLUME);
       audio.play().catch(() => {});
     };
 
@@ -119,7 +137,7 @@ const SoundManager = {
       }, countdownStartDelay);
     };
 
-    const syncRoundAudio = ({ phase, end_time }: { phase: GamePhase; end_time?: string | null }) => {
+    const applyRoundAudio = ({ phase, end_time }: RoundAudioPayload) => {
       if (phase === "playing" && end_time) {
         fadeInMusic();
         scheduleCountdown(end_time);
@@ -130,6 +148,11 @@ const SoundManager = {
       stopCountdown();
     };
 
+    const syncRoundAudio = (payload: RoundAudioPayload) => {
+      lastRoundAudio = payload;
+      applyRoundAudio(payload);
+    };
+
     const keys = ["join", "correct", "gameMusic", "wrongGuess", "correctGuess", "otherPlayerCorrect", "countdown"] as SoundKey[];
     for (const key of keys) {
       const audio = new Audio(SOUND_FILES[key]);
@@ -137,7 +160,7 @@ const SoundManager = {
       this.sounds[key] = audio;
     }
 
-    window.addEventListener("flamingo:mute", () => {
+    const stopAllAudio = () => {
       if (this.countdownTimer !== null) {
         window.clearTimeout(this.countdownTimer);
         this.countdownTimer = null;
@@ -152,25 +175,54 @@ const SoundManager = {
         audio.currentTime = 0;
         audio.loop = false;
       }
+    };
+
+    window.addEventListener("flamingo:volumechange", () => {
+      if (soundIsMuted()) {
+        stopAllAudio();
+        wasMuted = true;
+        return;
+      }
+
+      if (wasMuted && lastRoundAudio) {
+        stopAllAudio();
+        wasMuted = false;
+        applyRoundAudio(lastRoundAudio);
+        return;
+      }
+
+      wasMuted = false;
+
+      const music = this.sounds.gameMusic;
+      if (music && !music.paused) {
+        music.volume = volumeLevel(MUSIC_VOLUME);
+      }
+
+      const countdown = this.sounds.countdown;
+      if (countdown && !countdown.paused) {
+        countdown.volume = volumeLevel(COUNTDOWN_VOLUME);
+      }
     });
 
     this.handleEvent("play_sound", ({ sound }: { sound: SoundKey }) => {
-      if (window.__soundMuted) return;
+      if (soundIsMuted()) return;
       const audio = this.sounds[sound];
       if (!audio) return;
 
       audio.currentTime = 0;
+      audio.volume = volumeLevel(EFFECT_VOLUME);
       audio.play().catch(() => {});
     });
 
     this.handleEvent("start_music", ({ sound }: { sound: SoundKey }) => {
-      if (window.__soundMuted) return;
+      if (soundIsMuted()) return;
       const audio = this.sounds[sound];
       if (!audio) return;
 
       clearFade(sound);
       audio.loop = true;
       audio.currentTime = 0;
+      audio.volume = volumeLevel(sound === "gameMusic" ? MUSIC_VOLUME : EFFECT_VOLUME);
       audio.play().catch(() => {});
     });
 
