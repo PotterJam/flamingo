@@ -77,7 +77,7 @@ defmodule Flamingo.GameServer do
     :exit, {:noproc, _} -> {:error, :not_found}
   end
 
-  defp first_hint_delay_ms(turn_length) do
+  def first_hint_delay_ms(turn_length) do
     min(@hint_interval_ms, max(1_000, turn_length * 1000 - @hint_before_turn_end_ms))
   end
 
