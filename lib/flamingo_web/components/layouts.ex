@@ -16,27 +16,110 @@ defmodule FlamingoWeb.Layouts do
     <.flash_group flash={@flash} />
     <div id="sound-manager" phx-hook="SoundManager" phx-update="ignore"></div>
     <div
-      id="sound-toggle"
-      phx-hook=".SoundToggle"
+      id="sound-volume-control"
+      phx-hook=".SoundVolume"
       phx-update="ignore"
-      class="fixed bottom-4 left-4 z-50"
+      class="fixed bottom-4 left-4 z-50 rounded-base border-2 border-border bg-white px-3 py-2 shadow-shadow"
     >
-      <.switch id="sound-toggle-switch" label="Play sounds" />
+      <div class="flex items-center gap-2">
+        <button
+          type="button"
+          id="sound-volume-button"
+          aria-label="Toggle sound mute"
+          class="flex size-5 shrink-0 cursor-pointer items-center justify-center text-foreground"
+        >
+          <span class="sr-only">Toggle sound mute</span>
+          <span
+            id="sound-volume-icon"
+            class="flex size-5 shrink-0 items-center justify-center text-foreground"
+            aria-hidden="true"
+          >
+            <span data-sound-volume-icon="muted" class="hidden">
+              <.icon name={:volume_x} class="size-5" />
+            </span>
+            <span data-sound-volume-icon="low" class="hidden">
+              <.icon name={:volume} class="size-5" />
+            </span>
+            <span data-sound-volume-icon="medium" class="hidden">
+              <.icon name={:volume_1} class="size-5" />
+            </span>
+            <span data-sound-volume-icon="high"><.icon name={:volume_2} class="size-5" /></span>
+          </span>
+        </button>
+        <label for="sound-volume-slider" class="sr-only">Sound volume</label>
+        <input
+          type="range"
+          id="sound-volume-slider"
+          min="0"
+          max="100"
+          step="1"
+          value="100"
+          aria-label="Sound volume"
+          class="nb-slider w-28"
+          style="--slider-progress: 100%"
+        />
+      </div>
     </div>
-    <script :type={Phoenix.LiveView.ColocatedHook} name=".SoundToggle">
+    <script :type={Phoenix.LiveView.ColocatedHook} name=".SoundVolume">
       export default {
         mounted() {
-          const checkbox = this.el.querySelector("#sound-toggle-switch");
-          const muted = localStorage.getItem("flamingo_sound_muted") === "true";
-          window.__soundMuted = muted;
-          checkbox.checked = !muted;
+          const slider = this.el.querySelector("#sound-volume-slider");
+          const muteButton = this.el.querySelector("#sound-volume-button");
+          const icons = Array.from(this.el.querySelectorAll("[data-sound-volume-icon]"));
 
-          checkbox.addEventListener("change", () => {
-            window.__soundMuted = !checkbox.checked;
+          const clampVolume = (value) => {
+            const volume = Number.parseInt(value, 10);
+            if (!Number.isFinite(volume)) return 100;
+            return Math.min(100, Math.max(0, volume));
+          };
+
+          const storedPreviousVolume = () => {
+            const previous = clampVolume(localStorage.getItem("flamingo_sound_previous_volume"));
+            return previous === 0 ? 100 : previous;
+          };
+
+          const storedVolume = () => {
+            const stored = localStorage.getItem("flamingo_sound_volume");
+            if (stored !== null) return clampVolume(stored);
+            return localStorage.getItem("flamingo_sound_muted") === "true" ? 0 : 100;
+          };
+
+          const iconForVolume = (volume) => {
+            if (volume === 0) return "muted";
+            if (volume <= 33) return "low";
+            if (volume <= 66) return "medium";
+            return "high";
+          };
+
+          const applyVolume = (volume) => {
+            const clampedVolume = clampVolume(volume);
+            const visibleIcon = iconForVolume(clampedVolume);
+
+            slider.value = clampedVolume;
+            slider.style.setProperty("--slider-progress", `${clampedVolume}%`);
+            window.__soundVolume = clampedVolume;
+            window.__soundMuted = clampedVolume === 0;
+            localStorage.setItem("flamingo_sound_volume", clampedVolume);
             localStorage.setItem("flamingo_sound_muted", window.__soundMuted);
-            if (window.__soundMuted) {
-              window.dispatchEvent(new Event("flamingo:mute"));
+            muteButton.setAttribute("aria-pressed", window.__soundMuted);
+
+            if (clampedVolume > 0) {
+              localStorage.setItem("flamingo_sound_previous_volume", clampedVolume);
             }
+
+            for (const icon of icons) {
+              icon.classList.toggle("hidden", icon.dataset.soundVolumeIcon !== visibleIcon);
+            }
+
+            window.dispatchEvent(new CustomEvent("flamingo:volumechange", {
+              detail: { volume: clampedVolume }
+            }));
+          };
+
+          applyVolume(storedVolume());
+          slider.addEventListener("input", () => applyVolume(slider.value));
+          muteButton.addEventListener("click", () => {
+            applyVolume(window.__soundVolume === 0 ? storedPreviousVolume() : 0);
           });
         }
       }
