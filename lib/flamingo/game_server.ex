@@ -87,6 +87,10 @@ defmodule Flamingo.GameServer do
     :exit, {:noproc, _} -> {:error, :not_found}
   end
 
+  def whereis(room_id) do
+    GenServer.whereis(via(room_id))
+  end
+
   @doc """
   Millisecond offsets from turn start at which letters are revealed, spread
   evenly across the middle of the turn. Up to half the word's letters are
@@ -102,8 +106,11 @@ defmodule Flamingo.GameServer do
     end
   end
 
+  # Rooms are registered globally so that any clustered node can route calls
+  # to the machine actually hosting the room. Fly runs more than one machine,
+  # and a reconnecting player's socket may land on any of them.
   defp via(room_id) do
-    {:via, Registry, {Flamingo.GameRegistry, room_id}}
+    {:via, :global, {:flamingo_room, room_id}}
   end
 
   @impl true

@@ -6,13 +6,18 @@ primary_region = 'lhr'
 [env]
   PHX_HOST = 'flamingo.fly.dev'
   PHX_SERVER = 'true'
+  # Cluster the machines so a room hosted on one machine is reachable from
+  # a websocket that lands on another (see rel/env.sh.eex).
+  DNS_CLUSTER_QUERY = 'flamingo.internal'
 
 [http_service]
   internal_port = 4000
   force_https = true
-  auto_stop_machines = 'stop'
+  # Games live in machine memory: stopping a machine mid-game destroys its
+  # rooms, so never autostop while players may be in a game.
+  auto_stop_machines = 'off'
   auto_start_machines = true
-  min_machines_running = 0
+  min_machines_running = 1
   processes = ['app']
 
 [http_service.concurrency]

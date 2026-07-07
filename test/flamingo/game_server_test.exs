@@ -150,7 +150,7 @@ defmodule Flamingo.GameServerTest do
     Phoenix.PubSub.subscribe(Flamingo.PubSub, "game:#{room_id}")
     {_p1, _p2, word, state} = start_playing(room_id)
 
-    pid = GenServer.whereis({:via, Registry, {Flamingo.GameRegistry, room_id}})
+    pid = GameServer.whereis(room_id)
     send(pid, {:reveal_hint, state.hint_timer_ref})
 
     assert_receive {:hint_revealed, [index]}
@@ -232,7 +232,7 @@ defmodule Flamingo.GameServerTest do
     {:ok, state} = GameServer.get_state(room_id)
     ref = Map.fetch!(state.disconnect_timers, guesser)
 
-    pid = GenServer.whereis({:via, Registry, {Flamingo.GameRegistry, room_id}})
+    pid = GameServer.whereis(room_id)
     send(pid, {:remove_player, guesser, ref})
     _ = :sys.get_state(pid)
 
@@ -252,7 +252,7 @@ defmodule Flamingo.GameServerTest do
 
     {:ok, _state} = GameServer.rejoin(room_id, guesser)
 
-    pid = GenServer.whereis({:via, Registry, {Flamingo.GameRegistry, room_id}})
+    pid = GameServer.whereis(room_id)
     send(pid, {:remove_player, guesser, ref})
     _ = :sys.get_state(pid)
 
@@ -314,7 +314,7 @@ defmodule Flamingo.GameServerTest do
 
     :ok = GameServer.leave(room_id, next_in_order)
 
-    pid = GenServer.whereis({:via, Registry, {Flamingo.GameRegistry, room_id}})
+    pid = GameServer.whereis(room_id)
     {:ok, state} = GameServer.get_state(room_id)
     send(pid, {:turn_reveal_timeout, state.phase_timer_ref})
     _ = :sys.get_state(pid)
@@ -546,7 +546,7 @@ defmodule Flamingo.GameServerTest do
       guesser = if p1 == state.drawer_id, do: p2, else: p1
       :correct = GameServer.guess(room_id, guesser, word)
 
-      pid = GenServer.whereis({:via, Registry, {Flamingo.GameRegistry, room_id}})
+      pid = GameServer.whereis(room_id)
       _ = :sys.get_state(pid)
 
       {:ok, state} = GameServer.get_state(room_id)
@@ -574,7 +574,7 @@ defmodule Flamingo.GameServerTest do
     {:ok, p2, _} = GameServer.join(room_id, "Bob")
     :ok = GameServer.start_game(room_id, p1, %{round_count: 2, turn_length: 30})
 
-    pid = GenServer.whereis({:via, Registry, {Flamingo.GameRegistry, room_id}})
+    pid = GameServer.whereis(room_id)
 
     play_turn = fn ->
       {:ok, state} = GameServer.get_state(room_id)
@@ -604,7 +604,7 @@ defmodule Flamingo.GameServerTest do
     {:ok, p2, _} = GameServer.join(room_id, "Bob")
     :ok = GameServer.start_game(room_id, p1, %{round_count: 1, turn_length: 30})
 
-    pid = GenServer.whereis({:via, Registry, {Flamingo.GameRegistry, room_id}})
+    pid = GameServer.whereis(room_id)
 
     {:ok, state} = GameServer.get_state(room_id)
     word = List.first(state.word_choices)
@@ -629,7 +629,7 @@ defmodule Flamingo.GameServerTest do
     {:ok, p2, _} = GameServer.join(room_id, "Bob")
     :ok = GameServer.start_game(room_id, p1, %{round_count: 1, turn_length: 30})
 
-    pid = GenServer.whereis({:via, Registry, {Flamingo.GameRegistry, room_id}})
+    pid = GameServer.whereis(room_id)
 
     play_turn = fn ->
       {:ok, state} = GameServer.get_state(room_id)
