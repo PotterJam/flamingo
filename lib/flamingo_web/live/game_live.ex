@@ -16,7 +16,8 @@ defmodule FlamingoWeb.GameLive do
 
   def mount(%{"room_id" => room_id} = _params, _session, socket) do
     {:ok,
-     assign(socket,
+     socket
+     |> assign(
        room_id: room_id,
        player_id: nil,
        phase: :lobby,
@@ -38,98 +39,95 @@ defmodule FlamingoWeb.GameLive do
        correct_guesses: MapSet.new(),
        revealed_indices: [],
        guess_form: to_form(%{"guess" => ""}, as: :guess_form),
-       score_gains: %{},
-       feed: []
-     )}
+       score_gains: %{}
+     )
+     |> stream_configure(:feed, dom_id: &"feed-#{&1.id}")
+     |> stream(:feed, [])}
   end
 
   def handle_params(%{"player_id" => player_id}, _uri, socket) do
     room_id = socket.assigns.room_id
 
     if connected?(socket) do
-      case Games.get_state(room_id) do
+      # Rejoin (rather than just reading state) so a reconnecting player is
+      # marked connected again before their disconnect grace period expires.
+      case Games.rejoin(room_id, player_id) do
         {:ok, state} ->
-          if Map.has_key?(state.players, player_id) do
-            Games.subscribe(room_id)
+          Games.subscribe(room_id)
 
-            word_choices =
-              if state.phase == :word_choice and player_id == state.drawer_id,
-                do: state.word_choices,
-                else: nil
+          word_choices =
+            if state.phase == :word_choice and player_id == state.drawer_id,
+              do: state.word_choices,
+              else: nil
 
-            is_drawer = player_id == state.drawer_id
-            show_word = is_drawer or state.phase == :turn_reveal or state.phase == :game_ended
+          is_drawer = player_id == state.drawer_id
+          show_word = is_drawer or state.phase == :turn_reveal or state.phase == :game_ended
 
-            score_gains =
-              if state.phase == :turn_reveal, do: state.score_gains, else: %{}
+          score_gains =
+            if state.phase == :turn_reveal, do: state.score_gains, else: %{}
 
-            final_players =
-              if state.phase == :game_ended, do: state.players, else: %{}
+          final_players =
+            if state.phase == :game_ended, do: state.players, else: %{}
 
-            final_player_order =
-              if state.phase == :game_ended, do: state.player_order, else: []
+          final_player_order =
+            if state.phase == :game_ended, do: state.player_order, else: []
 
-            final_drawings =
-              if state.phase == :game_ended, do: state.final_drawings, else: []
+          final_drawings =
+            if state.phase == :game_ended, do: state.final_drawings, else: []
 
-            selected_player_id =
-              if state.phase == :game_ended,
-                do: winning_player_id(final_players, final_player_order),
-                else: nil
+          selected_player_id =
+            if state.phase == :game_ended,
+              do: winning_player_id(final_players, final_player_order),
+              else: nil
 
-            socket =
-              assign(socket,
-                player_id: player_id,
-                phase: state.phase,
-                players: state.players,
-                player_order: state.player_order,
-                host_id: state.host_id,
-                drawer_id: state.drawer_id,
-                final_players: final_players,
-                final_player_order: final_player_order,
-                final_drawings: final_drawings,
-                selected_player_id: selected_player_id,
-                round_count: state.round_count,
-                turn_length: state.turn_length,
-                current_round: state.current_round,
-                word_choices: word_choices,
-                turn_end_time: state.turn_end_time,
-                word: state.word,
-                show_word: show_word,
-                correct_guesses: MapSet.new(Map.keys(state.correct_guesses)),
-                revealed_indices: state.revealed_indices,
-                score_gains: score_gains,
-                feed:
-                  state.feed.events
-                  |> Enum.map(&Feed.format(&1, player_id))
-                  |> Enum.reject(&is_nil/1)
-              )
+          socket =
+            socket
+            |> assign(
+              player_id: player_id,
+              phase: state.phase,
+              players: state.players,
+              player_order: state.player_order,
+              host_id: state.host_id,
+              drawer_id: state.drawer_id,
+              final_players: final_players,
+              final_player_order: final_player_order,
+              final_drawings: final_drawings,
+              selected_player_id: selected_player_id,
+              round_count: state.round_count,
+              turn_length: state.turn_length,
+              current_round: state.current_round,
+              word_choices: word_choices,
+              turn_end_time: state.turn_end_time,
+              word: state.word,
+              show_word: show_word,
+              correct_guesses: MapSet.new(Map.keys(state.correct_guesses)),
+              revealed_indices: state.revealed_indices,
+              score_gains: score_gains
+            )
+            |> stream(:feed, formatted_feed(state.feed, player_id), reset: true)
 
-            socket =
-              if state.phase in [:word_choice, :playing, :turn_reveal] and state.turn_end_time do
-                push_event(socket, "set_timer", %{
-                  end_time: DateTime.to_iso8601(state.turn_end_time)
-                })
-              else
-                socket
-              end
-
-            socket =
-              if state.phase == :playing and state.current_drawing != [] do
-                push_event(socket, "drawing_state", %{events: state.current_drawing})
-              else
-                socket
-              end
-
-            socket =
+          socket =
+            if state.phase in [:word_choice, :playing, :turn_reveal] and state.turn_end_time do
+              push_event(socket, "set_timer", %{
+                end_time: DateTime.to_iso8601(state.turn_end_time)
+              })
+            else
               socket
-              |> sync_round_audio()
-              |> push_event("play_sound", %{sound: "join"})
+            end
 
-            {:noreply, socket}
-          else
-            {:noreply, push_navigate(socket, to: ~p"/")}
-          end
+          socket =
+            if state.phase == :playing and state.current_drawing != [] do
+              push_event(socket, "drawing_state", %{events: state.current_drawing})
+            else
+              socket
+            end
+
+          socket =
+            socket
+            |> sync_round_audio()
+            |> push_event("play_sound", %{sound: "join"})
+
+          {:noreply, socket}
 
         {:error, :not_found} ->
           {:noreply, push_navigate(socket, to: ~p"/")}
@@ -144,6 +142,12 @@ defmodule FlamingoWeb.GameLive do
   end
 
   defp palette, do: @palette
+
+  defp formatted_feed(feed, player_id) do
+    feed.events
+    |> Enum.map(&Feed.format(&1, player_id))
+    |> Enum.reject(&is_nil/1)
+  end
 
   defp winning_player_id(players, player_order) do
     Enum.max_by(player_order, fn pid -> Map.get(players, pid).score end, fn -> nil end)
@@ -457,20 +461,22 @@ defmodule FlamingoWeb.GameLive do
                 <div
                   id="game-feed"
                   phx-hook=".ScrollFeed"
+                  phx-update="stream"
                   class="flex min-h-0 flex-1 flex-col gap-0 overflow-y-auto"
                 >
                   <p
-                    :for={{type, text} <- @feed}
+                    :for={{dom_id, entry} <- @streams.feed}
+                    id={dom_id}
                     class={[
                       "p-1 text-xs",
-                      type == :system && "font-semibold text-pink-600",
-                      type == :correct && "font-semibold text-green-600",
-                      type == :close && "font-semibold text-amber-600",
-                      type == :guess && "text-foreground",
-                      type == :info && "text-gray-500"
+                      entry.kind == :system && "font-semibold text-pink-600",
+                      entry.kind == :correct && "font-semibold text-green-600",
+                      entry.kind == :close && "font-semibold text-amber-600",
+                      entry.kind == :guess && "text-foreground",
+                      entry.kind == :info && "text-gray-500"
                     ]}
                   >
-                    {text}
+                    {entry.text}
                   </p>
                 </div>
               </.box>
@@ -583,7 +589,9 @@ defmodule FlamingoWeb.GameLive do
                         phx-update="ignore"
                         data-is-drawer="false"
                         data-final-drawing-replay="true"
-                        data-final-drawing-events={Jason.encode!(drawing.events)}
+                        data-final-drawing-events={
+                          Jason.encode!(DrawingShare.compact_ops(drawing.events))
+                        }
                       >
                         <canvas width="700" height="500" class="aspect-[7/5] w-full bg-white">
                         </canvas>
@@ -646,12 +654,16 @@ defmodule FlamingoWeb.GameLive do
             }
 
             update()
+            // The form (re)mounts when a turn starts drawing; put the player
+            // straight into the input so they can type immediately.
+            input.focus()
             input.addEventListener("input", update)
             this.el.addEventListener("submit", () => {
               // Let LiveView serialize the submitted value before clearing the visible input.
               setTimeout(() => {
                 this.el.reset()
                 update()
+                input.focus()
               }, 0)
             })
           }
@@ -675,14 +687,26 @@ defmodule FlamingoWeb.GameLive do
       <script :type={Phoenix.LiveView.ColocatedHook} name=".ScrollFeed">
         export default {
           mounted() {
+            // Follow new messages only while the user is at (or near) the
+            // bottom; never yank the feed around while they're reading back.
+            this.pinned = true
+            this.el.addEventListener("scroll", () => {
+              const distanceFromBottom =
+                this.el.scrollHeight - this.el.scrollTop - this.el.clientHeight
+              this.pinned = distanceFromBottom < 32
+            })
             this.scrollToBottom()
-            this.handleEvent("scroll_feed", () => this.scrollToBottom())
+            this.handleEvent("scroll_feed", () => this.pinned && this.scrollToBottom())
           },
           updated() {
-            this.scrollToBottom()
+            if (this.pinned) this.scrollToBottom()
           },
           scrollToBottom() {
-            this.el.scrollTop = this.el.scrollHeight
+            // Wait a frame so layout has settled; scrolling while the panel is
+            // mid-patch (height not yet computed) silently clamps to the top.
+            requestAnimationFrame(() => {
+              this.el.scrollTop = this.el.scrollHeight
+            })
           }
         }
       </script>
@@ -758,6 +782,27 @@ defmodule FlamingoWeb.GameLive do
         socket
       ) do
     is_drawer = socket.assigns.player_id == drawer_id
+
+    # The feed container isn't rendered in the lobby or game-end screens, so
+    # any stream items pushed while it was absent never reached the DOM.
+    # Re-seed the stream from the server when the game (re)starts.
+    socket =
+      if socket.assigns.phase in [:lobby, :game_ended] do
+        case Games.get_state(socket.assigns.room_id) do
+          {:ok, state} ->
+            stream(
+              socket,
+              :feed,
+              formatted_feed(state.feed, socket.assigns.player_id),
+              reset: true
+            )
+
+          {:error, :not_found} ->
+            socket
+        end
+      else
+        socket
+      end
 
     socket =
       assign(socket,
@@ -879,16 +924,16 @@ defmodule FlamingoWeb.GameLive do
     end
   end
 
-  def handle_info({:feed_event, event}, socket) do
-    formatted = Feed.format(event, socket.assigns.player_id)
+  def handle_info({:feed_event, entry}, socket) do
+    case Feed.format(entry, socket.assigns.player_id) do
+      nil ->
+        {:noreply, socket}
 
-    if formatted do
-      {:noreply,
-       socket
-       |> assign(:feed, socket.assigns.feed ++ [formatted])
-       |> push_event("scroll_feed", %{})}
-    else
-      {:noreply, socket}
+      item ->
+        {:noreply,
+         socket
+         |> stream_insert(:feed, item)
+         |> push_event("scroll_feed", %{})}
     end
   end
 

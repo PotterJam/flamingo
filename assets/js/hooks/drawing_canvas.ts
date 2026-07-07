@@ -9,6 +9,38 @@ export type DrawEvent =
   | { event_type: "undo" }
   | { event_type: "redo" };
 
+// Compact representation used for share links and final-drawing payloads:
+// pen stroke polyline, flood fill, or canvas clear.
+export type CompactOp =
+  | ["p", string, number, number[]]
+  | ["f", string, number, number]
+  | ["c"];
+
+export const opsToEvents = (ops: CompactOp[]) => {
+  const events: DrawEvent[] = [];
+
+  for (const op of ops) {
+    if (op[0] === "p") {
+      const [, color, lineWidth, points] = op;
+      events.push({ event_type: "start", x: points[0], y: points[1], color, line_width: lineWidth });
+      for (let i = 3; i < points.length; i += 2) {
+        events.push({
+          event_type: "draw",
+          start_x: points[i - 3], start_y: points[i - 2],
+          end_x: points[i - 1], end_y: points[i],
+          color, line_width: lineWidth,
+        });
+      }
+    } else if (op[0] === "f") {
+      events.push({ event_type: "fill", x: op[2], y: op[3], color: op[1] });
+    } else if (op[0] === "c") {
+      events.push({ event_type: "clear" });
+    }
+  }
+
+  return events;
+};
+
 interface Point {
   x: number;
   y: number;
@@ -139,8 +171,8 @@ const DrawingCanvas = {
     canvasEffect(this.ctx, (imageData: ImageData) => clear(imageData));
 
     if (this.el.dataset.finalDrawingEvents) {
-      const events = JSON.parse(this.el.dataset.finalDrawingEvents) as DrawEvent[];
-      this.eventStack = [...events];
+      const ops = JSON.parse(this.el.dataset.finalDrawingEvents) as CompactOp[];
+      this.eventStack = opsToEvents(ops);
       this.replayFinalDrawing();
     }
 

@@ -109,7 +109,7 @@ defmodule Flamingo.GameServerTest do
     assert state.phase == :word_choice
   end
 
-  test "minimum turn length schedules first hint before the turn ends", %{room_id: room_id} do
+  test "minimum turn length schedules hints before the turn ends", %{room_id: room_id} do
     {:ok, p1, _} = GameServer.join(room_id, "Alice")
     {:ok, _p2, _} = GameServer.join(room_id, "Bob")
     :ok = GameServer.start_game(room_id, p1, %{turn_length: 15})
@@ -121,8 +121,43 @@ defmodule Flamingo.GameServerTest do
     {:ok, state} = GameServer.get_state(room_id)
 
     assert is_reference(state.hint_timer_ref)
-    assert GameServer.first_hint_delay_ms(15) == 10_000
-    assert GameServer.first_hint_delay_ms(30) == 20_000
+
+    schedule = GameServer.hint_schedule(word, 15)
+    assert schedule != []
+    assert Enum.all?(schedule, &(&1 < 15_000))
+  end
+
+  test "hint schedule spreads reveals across the turn for every round length" do
+    for turn_length <- [15, 30, 45, 120] do
+      schedule = GameServer.hint_schedule("flamingo", turn_length)
+      turn_ms = turn_length * 1000
+
+      # 8 letters -> up to half revealed
+      assert length(schedule) == 4
+      assert schedule == Enum.sort(schedule)
+      assert Enum.all?(schedule, &(&1 >= trunc(turn_ms * 0.3)))
+      assert Enum.all?(schedule, &(&1 < turn_ms))
+    end
+  end
+
+  test "hint schedule reveals at most half the letters" do
+    assert length(GameServer.hint_schedule("cat", 45)) == 1
+    assert length(GameServer.hint_schedule("Pac-Man", 45)) == 3
+    assert GameServer.hint_schedule("a", 45) == []
+  end
+
+  test "hints reveal letters while playing", %{room_id: room_id} do
+    Phoenix.PubSub.subscribe(Flamingo.PubSub, "game:#{room_id}")
+    {_p1, _p2, word, state} = start_playing(room_id)
+
+    pid = GenServer.whereis({:via, Registry, {Flamingo.GameRegistry, room_id}})
+    send(pid, {:reveal_hint, state.hint_timer_ref})
+
+    assert_receive {:hint_revealed, [index]}
+    assert index in 0..(String.length(word) - 1)
+
+    {:ok, state} = GameServer.get_state(room_id)
+    assert state.revealed_indices == [index]
   end
 
   test "turn reveal clears pending hint timer", %{room_id: room_id} do
@@ -151,6 +186,142 @@ defmodule Flamingo.GameServerTest do
 
   test "rejoin fails for unknown player", %{room_id: room_id} do
     assert {:error, :not_found} = GameServer.rejoin(room_id, "nonexistent")
+  end
+
+  test "leave during a game marks the player disconnected instead of removing them", %{
+    room_id: room_id
+  } do
+    {p1, p2, _word, state} = start_playing(room_id)
+    guesser = if p1 == state.drawer_id, do: p2, else: p1
+
+    :ok = GameServer.leave(room_id, guesser)
+
+    {:ok, state} = GameServer.get_state(room_id)
+    assert Map.has_key?(state.players, guesser)
+    refute Map.get(state.players, guesser).connected
+    assert guesser in state.player_order
+    assert is_reference(Map.get(state.disconnect_timers, guesser))
+  end
+
+  test "rejoin reconnects a disconnected player", %{room_id: room_id} do
+    {p1, p2, _word, state} = start_playing(room_id)
+    guesser = if p1 == state.drawer_id, do: p2, else: p1
+
+    :ok = GameServer.leave(room_id, guesser)
+    {:ok, state} = GameServer.rejoin(room_id, guesser)
+
+    assert Map.get(state.players, guesser).connected
+    refute Map.has_key?(state.disconnect_timers, guesser)
+  end
+
+  test "disconnected players are removed once the grace period expires", %{room_id: room_id} do
+    {:ok, p1, _} = GameServer.join(room_id, "Alice")
+    {:ok, p2, _} = GameServer.join(room_id, "Bob")
+    {:ok, p3, _} = GameServer.join(room_id, "Charlie")
+    :ok = GameServer.start_game(room_id, p1, %{round_count: 1, turn_length: 30})
+
+    {:ok, state} = GameServer.get_state(room_id)
+    word = List.first(state.word_choices)
+    :ok = GameServer.select_word(room_id, state.drawer_id, word)
+
+    {:ok, state} = GameServer.get_state(room_id)
+    guesser = Enum.find([p1, p2, p3], &(&1 != state.drawer_id))
+
+    :ok = GameServer.leave(room_id, guesser)
+
+    {:ok, state} = GameServer.get_state(room_id)
+    ref = Map.fetch!(state.disconnect_timers, guesser)
+
+    pid = GenServer.whereis({:via, Registry, {Flamingo.GameRegistry, room_id}})
+    send(pid, {:remove_player, guesser, ref})
+    _ = :sys.get_state(pid)
+
+    {:ok, state} = GameServer.get_state(room_id)
+    refute Map.has_key?(state.players, guesser)
+    refute guesser in state.player_order
+  end
+
+  test "a reconnected player is not removed by the stale grace timer", %{room_id: room_id} do
+    {p1, p2, _word, state} = start_playing(room_id)
+    guesser = if p1 == state.drawer_id, do: p2, else: p1
+
+    :ok = GameServer.leave(room_id, guesser)
+
+    {:ok, state} = GameServer.get_state(room_id)
+    ref = Map.fetch!(state.disconnect_timers, guesser)
+
+    {:ok, _state} = GameServer.rejoin(room_id, guesser)
+
+    pid = GenServer.whereis({:via, Registry, {Flamingo.GameRegistry, room_id}})
+    send(pid, {:remove_player, guesser, ref})
+    _ = :sys.get_state(pid)
+
+    {:ok, state} = GameServer.get_state(room_id)
+    assert Map.has_key?(state.players, guesser)
+    assert Map.get(state.players, guesser).connected
+  end
+
+  test "a disconnected guesser keeps their earned score", %{room_id: room_id} do
+    {:ok, p1, _} = GameServer.join(room_id, "Alice")
+    {:ok, p2, _} = GameServer.join(room_id, "Bob")
+    {:ok, p3, _} = GameServer.join(room_id, "Charlie")
+    :ok = GameServer.start_game(room_id, p1, %{round_count: 1, turn_length: 30})
+
+    {:ok, state} = GameServer.get_state(room_id)
+    word = List.first(state.word_choices)
+    :ok = GameServer.select_word(room_id, state.drawer_id, word)
+
+    {:ok, state} = GameServer.get_state(room_id)
+    [g1, g2] = Enum.reject([p1, p2, p3], &(&1 == state.drawer_id))
+
+    :correct = GameServer.guess(room_id, g1, word)
+    :ok = GameServer.leave(room_id, g1)
+    :correct = GameServer.guess(room_id, g2, word)
+
+    {:ok, state} = GameServer.get_state(room_id)
+    assert state.phase == :turn_reveal
+    assert Map.get(state.players, g1).score > 0
+
+    {:ok, state} = GameServer.rejoin(room_id, g1)
+    assert Map.get(state.players, g1).score > 0
+    assert Map.get(state.players, g1).connected
+  end
+
+  test "next drawer skips disconnected players", %{room_id: room_id} do
+    {:ok, p1, _} = GameServer.join(room_id, "Alice")
+    {:ok, p2, _} = GameServer.join(room_id, "Bob")
+    {:ok, p3, _} = GameServer.join(room_id, "Charlie")
+    :ok = GameServer.start_game(room_id, p1, %{round_count: 1, turn_length: 30})
+
+    {:ok, state} = GameServer.get_state(room_id)
+    word = List.first(state.word_choices)
+    :ok = GameServer.select_word(room_id, state.drawer_id, word)
+
+    {:ok, state} = GameServer.get_state(room_id)
+    [g1, g2] = Enum.reject([p1, p2, p3], &(&1 == state.drawer_id))
+
+    :correct = GameServer.guess(room_id, g1, word)
+    :correct = GameServer.guess(room_id, g2, word)
+
+    {:ok, state} = GameServer.get_state(room_id)
+    assert state.phase == :turn_reveal
+
+    # The next drawer in order disconnects during the reveal
+    next_in_order =
+      Enum.find(state.player_order, fn pid ->
+        not MapSet.member?(state.drawn_this_round, pid)
+      end)
+
+    :ok = GameServer.leave(room_id, next_in_order)
+
+    pid = GenServer.whereis({:via, Registry, {Flamingo.GameRegistry, room_id}})
+    {:ok, state} = GameServer.get_state(room_id)
+    send(pid, {:turn_reveal_timeout, state.phase_timer_ref})
+    _ = :sys.get_state(pid)
+
+    {:ok, state} = GameServer.get_state(room_id)
+    assert state.phase == :word_choice
+    assert state.drawer_id != next_in_order
   end
 
   defp start_playing(room_id, settings \\ %{round_count: 1, turn_length: 30}) do
@@ -203,10 +374,10 @@ defmodule Flamingo.GameServerTest do
     assert :close = GameServer.guess(room_id, guesser, close_guess)
 
     refute_receive {:incorrect_guess, ^guesser, ^close_guess}
-    assert_receive {:feed_event, {:close_guess, ^guesser} = event}
+    assert_receive {:feed_event, %{event: {:close_guess, ^guesser}} = entry}
 
-    assert {:close, "You were close"} = Flamingo.Feed.format(event, guesser)
-    assert nil == Flamingo.Feed.format(event, other_player)
+    assert %{kind: :close, text: "You were close"} = Flamingo.Feed.format(entry, guesser)
+    assert nil == Flamingo.Feed.format(entry, other_player)
   end
 
   test "close guess ignores case spacing and punctuation for same-length typos", %{
@@ -227,7 +398,7 @@ defmodule Flamingo.GameServerTest do
     assert :close = GameServer.guess(room_id, guesser, close_guess)
 
     refute_receive {:incorrect_guess, ^guesser, ^close_guess}
-    assert_receive {:feed_event, {:close_guess, ^guesser}}
+    assert_receive {:feed_event, %{event: {:close_guess, ^guesser}}}
   end
 
   test "wrong-length guesses are normal incorrect guesses", %{room_id: room_id} do
@@ -239,7 +410,7 @@ defmodule Flamingo.GameServerTest do
     assert :incorrect = GameServer.guess(room_id, guesser, wrong_length_guess)
 
     assert_receive {:incorrect_guess, ^guesser, ^wrong_length_guess}
-    refute_receive {:feed_event, {:close_guess, ^guesser}}
+    refute_receive {:feed_event, %{event: {:close_guess, ^guesser}}}
   end
 
   test "one-character insertion is a close guess", %{room_id: room_id} do
@@ -251,7 +422,7 @@ defmodule Flamingo.GameServerTest do
     assert :close = GameServer.guess(room_id, guesser, close_guess)
 
     refute_receive {:incorrect_guess, ^guesser, ^close_guess}
-    assert_receive {:feed_event, {:close_guess, ^guesser}}
+    assert_receive {:feed_event, %{event: {:close_guess, ^guesser}}}
   end
 
   test "one-character deletion is a close guess", %{room_id: room_id} do
@@ -263,7 +434,7 @@ defmodule Flamingo.GameServerTest do
     assert :close = GameServer.guess(room_id, guesser, close_guess)
 
     refute_receive {:incorrect_guess, ^guesser, ^close_guess}
-    assert_receive {:feed_event, {:close_guess, ^guesser}}
+    assert_receive {:feed_event, %{event: {:close_guess, ^guesser}}}
   end
 
   test "drawer cannot guess", %{room_id: room_id} do

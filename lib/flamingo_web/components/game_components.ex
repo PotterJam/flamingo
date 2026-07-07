@@ -36,8 +36,12 @@ defmodule FlamingoWeb.GameComponents do
     """
   end
 
-  @num_rows 30
-  @num_cols 45
+  # Rows must cover the tallest realistic viewport (portrait QHD ~2560 CSS px)
+  # and columns the widest (4K ~3840 CSS px plus drift animation overshoot),
+  # since the cells are a fixed-size tessellation behind a fixed full-screen
+  # layer.
+  @num_rows 66
+  @num_cols 27
   @row_height_rem 2.5
   @col_width_rem 10
 
@@ -88,25 +92,24 @@ defmodule FlamingoWeb.GameComponents do
   attr :show_timer, :boolean, default: false
 
   def game_header(assigns) do
-    {display, letter_count} =
+    {display, hint_chars, letter_count} =
       case {assigns.word, assigns.show_word} do
         {nil, _} ->
-          {nil, nil}
+          {nil, nil, nil}
 
         {word, true} ->
-          {word, nil}
+          {word, nil, nil}
 
         {word, false} ->
           revealed = MapSet.new(assigns.revealed_indices)
 
-          hint =
+          chars =
             word
             |> String.graphemes()
             |> Enum.with_index()
             |> Enum.map(fn {ch, idx} ->
               if ch == " " or MapSet.member?(revealed, idx), do: ch, else: "_"
             end)
-            |> Enum.join()
 
           count =
             word
@@ -114,10 +117,11 @@ defmodule FlamingoWeb.GameComponents do
             |> Enum.map(&String.length/1)
             |> Enum.join("-")
 
-          {hint, count}
+          {word, chars, count}
       end
 
-    assigns = assign(assigns, display: display, letter_count: letter_count)
+    assigns =
+      assign(assigns, display: display, hint_chars: hint_chars, letter_count: letter_count)
 
     ~H"""
     <div class="relative self-center">
@@ -126,10 +130,21 @@ defmodule FlamingoWeb.GameComponents do
         if(!@display, do: "invisible")
       ]}>
         <div class="flex items-center justify-center gap-4">
-          <p class="font-hero text-5xl leading-none font-black tracking-widest text-white">
-            {if(@display, do: @display, else: Phoenix.HTML.raw("&nbsp;"))}
-          </p>
-          <%= if @display && @letter_count do %>
+          <%= if @hint_chars do %>
+            <p class="flex items-baseline gap-[0.18em] font-hero text-5xl leading-none font-black text-white">
+              <span
+                :for={ch <- @hint_chars}
+                class={["inline-block text-center", ch == " " && "w-[0.45em]"]}
+              >
+                {if(ch == " ", do: "", else: ch)}
+              </span>
+            </p>
+          <% else %>
+            <p class="font-hero text-5xl leading-none font-black tracking-widest text-white">
+              {if(@display, do: @display, else: Phoenix.HTML.raw("&nbsp;"))}
+            </p>
+          <% end %>
+          <%= if @hint_chars && @letter_count do %>
             <p class="font-hero text-2xl leading-none font-bold text-white">{@letter_count}</p>
           <% end %>
         </div>
@@ -161,13 +176,17 @@ defmodule FlamingoWeb.GameComponents do
       <div class="min-h-0 flex-grow overflow-y-auto">
         <ul>
           <%= for pid <- @player_order do %>
+            <% connected = Map.get(Map.get(@players, pid), :connected, true) %>
             <li class={[
-              "flex items-center gap-2 px-3 py-2",
+              "flex items-center gap-2 px-3 py-2 transition-opacity",
               pid == @drawer_id && "bg-pink-100 font-semibold",
-              pid != @drawer_id && MapSet.member?(@correct_guesses, pid) && "bg-green-100"
+              pid != @drawer_id && MapSet.member?(@correct_guesses, pid) && "bg-green-100",
+              !connected && "opacity-40"
             ]}>
               <span class="inline-flex h-5 w-5 shrink-0 items-center justify-center">
                 <%= cond do %>
+                  <% !connected -> %>
+                    <.icon name={:wifi_off} class="h-4 w-4 text-gray-500" />
                   <% pid == @drawer_id -> %>
                     <.icon name={:paintbrush} class="h-4 w-4" />
                   <% MapSet.member?(@correct_guesses, pid) -> %>
