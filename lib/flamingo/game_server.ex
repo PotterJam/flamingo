@@ -589,12 +589,14 @@ defmodule Flamingo.GameServer do
     new_state
   end
 
+  # Raw draw events are dropped here: the compact ops are all the game-end
+  # screen and share links need, and they're orders of magnitude smaller.
   defp completed_drawing(state) do
     %{
       drawer_id: state.drawer_id,
       word: state.word,
       round_number: state.current_round + 1,
-      events: state.current_drawing
+      ops: Flamingo.DrawingShare.compact_ops(state.current_drawing)
     }
   end
 

@@ -10,7 +10,8 @@ export type DrawEvent =
   | { event_type: "redo" };
 
 // Compact representation used for share links and final-drawing payloads:
-// pen stroke polyline, flood fill, or canvas clear.
+// pen stroke polyline (delta-encoded after the first point), flood fill, or
+// canvas clear.
 export type CompactOp =
   | ["p", string, number, number[]]
   | ["f", string, number, number]
@@ -21,15 +22,21 @@ export const opsToEvents = (ops: CompactOp[]) => {
 
   for (const op of ops) {
     if (op[0] === "p") {
-      const [, color, lineWidth, points] = op;
-      events.push({ event_type: "start", x: points[0], y: points[1], color, line_width: lineWidth });
-      for (let i = 3; i < points.length; i += 2) {
+      const [, color, lineWidth, nums] = op;
+      let x = nums[0];
+      let y = nums[1];
+      events.push({ event_type: "start", x, y, color, line_width: lineWidth });
+      for (let i = 2; i + 1 < nums.length; i += 2) {
+        const nextX = x + nums[i];
+        const nextY = y + nums[i + 1];
         events.push({
           event_type: "draw",
-          start_x: points[i - 3], start_y: points[i - 2],
-          end_x: points[i - 1], end_y: points[i],
+          start_x: x, start_y: y,
+          end_x: nextX, end_y: nextY,
           color, line_width: lineWidth,
         });
+        x = nextX;
+        y = nextY;
       }
     } else if (op[0] === "f") {
       events.push({ event_type: "fill", x: op[2], y: op[3], color: op[1] });

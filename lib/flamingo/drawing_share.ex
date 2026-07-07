@@ -2,24 +2,37 @@ defmodule Flamingo.DrawingShare do
   @moduledoc """
   Encodes a finished drawing into a URL fragment.
 
-  Raw draw events are far too heavy to put in a link (hundreds of KB), so we
-  compact them first: pen strokes collapse into simplified integer polylines,
-  fills and clears stay as single ops. The compact payload is then
-  JSON-encoded, zlib-compressed and base64url'd, prefixed with "z" so clients
-  can tell it apart from legacy uncompressed links.
+  Raw draw events are far too heavy to put in a link (hundreds of KB), so
+  drawings are reduced to compact ops the moment a turn completes:
+
+    * pen strokes become polylines simplified with Ramer-Douglas-Peucker
+      under a total point budget - the tolerance escalates until the whole
+      drawing fits, so busy sketches trade fidelity for size instead of
+      producing huge payloads;
+    * polyline coordinates are delta-encoded integers, which keeps the
+      numbers small and compresses well;
+    * fills and clears are single ops.
+
+  The payload is JSON-encoded, zlib-compressed and base64url'd, prefixed
+  with "z" so clients can tell it apart from legacy uncompressed links.
+  A typical drawing encodes to roughly 1KB.
   """
 
   @type drawing :: %{
           required(:drawer_name) => String.t(),
           required(:word) => String.t(),
           required(:round_number) => pos_integer(),
-          required(:events) => list(map())
+          required(:ops) => list(list())
         }
 
   @version_prefix "z"
-  # Minimum distance in px between kept polyline points; small deviations are
-  # invisible at pen widths >= 6.
-  @min_point_gap 2.0
+
+  # Total polyline points allowed across the whole drawing. RDP tolerance
+  # steps up through @epsilon_steps until the drawing fits (or the roughest
+  # tolerance is reached - e.g. hundreds of separate dots can't be reduced
+  # below two points per stroke, so the budget is best-effort).
+  @max_total_points 200
+  @epsilon_steps [1.5, 3, 6, 12, 24, 48, 96]
 
   def encode(drawing) do
     payload = %{
@@ -27,7 +40,7 @@ defmodule Flamingo.DrawingShare do
       "n" => Map.fetch!(drawing, :drawer_name),
       "w" => Map.fetch!(drawing, :word),
       "r" => Map.fetch!(drawing, :round_number),
-      "o" => compact_ops(Map.fetch!(drawing, :events))
+      "o" => Map.fetch!(drawing, :ops)
     }
 
     compressed =
@@ -66,16 +79,26 @@ defmodule Flamingo.DrawingShare do
   @doc """
   Collapses raw draw events into compact ops:
 
-    * `["p", color, line_width, [x0, y0, x1, y1, ...]]` - a pen stroke polyline
+    * `["p", color, line_width, [x0, y0, dx1, dy1, ...]]` - a simplified,
+      delta-encoded pen stroke polyline
     * `["f", color, x, y]` - a flood fill
     * `["c"]` - a canvas clear
   """
   def compact_ops(events) do
-    {ops, stroke} = Enum.reduce(events, {[], nil}, &compact_event/2)
+    raw_ops = collect_ops(events)
 
-    [flush_stroke(stroke) | ops]
-    |> Enum.reject(&is_nil/1)
-    |> Enum.reverse()
+    epsilon = choose_epsilon(raw_ops)
+
+    Enum.map(raw_ops, fn
+      {:stroke, color, width, points} ->
+        ["p", color, width, points |> simplify(epsilon) |> delta_encode()]
+
+      {:fill, color, x, y} ->
+        ["f", color, x, y]
+
+      :clear ->
+        ["c"]
+    end)
   end
 
   @doc """
@@ -85,81 +108,123 @@ defmodule Flamingo.DrawingShare do
     Enum.flat_map(ops, &expand_op/1)
   end
 
-  defp compact_event(%{"event_type" => "start"} = event, {ops, stroke}) do
-    new_stroke = %{
-      color: event["color"],
-      width: event["line_width"],
-      points: [{round_coord(event["x"]), round_coord(event["y"])}]
-    }
+  defp collect_ops(events) do
+    {ops, stroke} = Enum.reduce(events, {[], nil}, &collect_event/2)
 
-    {[flush_stroke(stroke) | ops], new_stroke}
+    [flush_stroke(stroke) | ops]
+    |> Enum.reject(&is_nil/1)
+    |> Enum.reverse()
   end
 
-  defp compact_event(%{"event_type" => type} = event, {ops, stroke})
+  defp collect_event(%{"event_type" => "start"} = event, {ops, stroke}) do
+    point = {round_coord(event["x"]), round_coord(event["y"])}
+    {[flush_stroke(stroke) | ops], {event["color"], event["line_width"], [point]}}
+  end
+
+  defp collect_event(%{"event_type" => type} = event, {ops, stroke})
        when type in ["draw", "end"] do
     point = {round_coord(event["end_x"]), round_coord(event["end_y"])}
 
     case stroke do
       nil ->
         start = {round_coord(event["start_x"]), round_coord(event["start_y"])}
+        {ops, {event["color"], event["line_width"], [point, start]}}
 
-        {ops,
-         %{color: event["color"], width: event["line_width"], points: [point, start]}}
+      {color, width, [^point | _] = points} ->
+        {ops, {color, width, points}}
 
-      stroke ->
-        {ops, %{stroke | points: [point | stroke.points]}}
+      {color, width, points} ->
+        {ops, {color, width, [point | points]}}
     end
   end
 
-  defp compact_event(%{"event_type" => "fill"} = event, {ops, stroke}) do
-    op = ["f", event["color"], round_coord(event["x"]), round_coord(event["y"])]
+  defp collect_event(%{"event_type" => "fill"} = event, {ops, stroke}) do
+    op = {:fill, event["color"], round_coord(event["x"]), round_coord(event["y"])}
     {[op, flush_stroke(stroke) | ops], nil}
   end
 
-  defp compact_event(%{"event_type" => "clear"}, {ops, stroke}) do
-    {[["c"], flush_stroke(stroke) | ops], nil}
+  defp collect_event(%{"event_type" => "clear"}, {ops, stroke}) do
+    {[:clear, flush_stroke(stroke) | ops], nil}
   end
 
-  defp compact_event(_event, acc), do: acc
+  defp collect_event(_event, acc), do: acc
 
   defp flush_stroke(nil), do: nil
 
-  defp flush_stroke(stroke) do
-    points =
-      stroke.points
-      |> Enum.reverse()
-      |> simplify_points()
-      |> Enum.flat_map(fn {x, y} -> [x, y] end)
-
-    ["p", stroke.color, stroke.width, points]
+  defp flush_stroke({color, width, points}) do
+    {:stroke, color, width, Enum.reverse(points)}
   end
 
-  # Keeps the first point, then only points at least @min_point_gap away from
-  # the previously kept one, and always the final point.
-  defp simplify_points([first | rest]) do
-    {kept, last_kept, last_point} =
-      Enum.reduce(rest, {[first], first, first}, fn point, {kept, last_kept, _last} ->
-        if distance(point, last_kept) >= @min_point_gap do
-          {[point | kept], point, point}
-        else
-          {kept, last_kept, point}
-        end
+  defp choose_epsilon(raw_ops) do
+    point_lists = for {:stroke, _color, _width, points} <- raw_ops, do: points
+
+    Enum.find(@epsilon_steps, List.last(@epsilon_steps), fn epsilon ->
+      total =
+        point_lists
+        |> Enum.map(&length(simplify(&1, epsilon)))
+        |> Enum.sum()
+
+      total <= @max_total_points
+    end)
+  end
+
+  # Ramer-Douglas-Peucker: keeps the points that define the stroke's shape
+  # (corners, curves) and drops everything within `epsilon` px of the
+  # simplified line.
+  defp simplify(points, _epsilon) when length(points) <= 2, do: points
+
+  defp simplify(points, epsilon) do
+    first = List.first(points)
+    last = List.last(points)
+
+    {max_distance, max_index} =
+      points
+      |> Enum.with_index()
+      |> Enum.reduce({0.0, 0}, fn {point, index}, {best_distance, best_index} ->
+        distance = perpendicular_distance(point, first, last)
+
+        if distance > best_distance,
+          do: {distance, index},
+          else: {best_distance, best_index}
       end)
 
-    kept = if last_point != last_kept, do: [last_point | kept], else: kept
-    Enum.reverse(kept)
+    if max_distance > epsilon do
+      {left, right} = Enum.split(points, max_index + 1)
+      simplify(left, epsilon) ++ tl(simplify([Enum.at(points, max_index) | right], epsilon))
+    else
+      [first, last]
+    end
   end
 
-  defp simplify_points([]), do: []
+  defp perpendicular_distance({px, py}, {x1, y1} = first, {x2, y2} = last) do
+    if first == last do
+      distance({px, py}, first)
+    else
+      dx = x2 - x1
+      dy = y2 - y1
+      abs(dy * px - dx * py + x2 * y1 - y2 * x1) / :math.sqrt(dx * dx + dy * dy)
+    end
+  end
 
   defp distance({x1, y1}, {x2, y2}) do
     :math.sqrt((x1 - x2) * (x1 - x2) + (y1 - y2) * (y1 - y2))
   end
 
+  defp delta_encode([{x0, y0} | rest]) do
+    {deltas, _last} =
+      Enum.map_reduce(rest, {x0, y0}, fn {x, y}, {prev_x, prev_y} ->
+        {[x - prev_x, y - prev_y], {x, y}}
+      end)
+
+    [x0, y0 | List.flatten(deltas)]
+  end
+
+  defp delta_encode([]), do: []
+
   defp round_coord(value) when is_number(value), do: round(value)
   defp round_coord(_value), do: 0
 
-  defp expand_op(["p", color, width, [x0, y0 | rest]]) do
+  defp expand_op(["p", color, width, [x0, y0 | deltas]]) do
     start = %{
       "event_type" => "start",
       "x" => x0,
@@ -169,9 +234,12 @@ defmodule Flamingo.DrawingShare do
     }
 
     {segments, _last} =
-      rest
+      deltas
       |> Enum.chunk_every(2)
-      |> Enum.map_reduce({x0, y0}, fn [x, y], {prev_x, prev_y} ->
+      |> Enum.map_reduce({x0, y0}, fn [dx, dy], {prev_x, prev_y} ->
+        x = prev_x + dx
+        y = prev_y + dy
+
         segment = %{
           "event_type" => "draw",
           "start_x" => prev_x,

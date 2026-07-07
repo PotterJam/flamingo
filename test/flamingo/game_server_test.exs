@@ -499,12 +499,14 @@ defmodule Flamingo.GameServerTest do
 
     {:ok, state} = GameServer.get_state(room_id)
 
+    # Drawings are kept as compact ops (delta-encoded polylines), not raw
+    # events.
     assert [
              %{
                drawer_id: ^drawer,
                word: ^word,
                round_number: 1,
-               events: [^start_event, ^draw_event]
+               ops: [["p", "#000000", 9, [10, 20, 20, 20]]]
              }
            ] = state.final_drawings
   end
@@ -523,7 +525,7 @@ defmodule Flamingo.GameServerTest do
                drawer_id: ^drawer,
                word: ^word,
                round_number: 1,
-               events: []
+               ops: []
              }
            ] = state.final_drawings
   end

@@ -56,8 +56,7 @@ defmodule Flamingo.Scoring do
     {scores, _prev} =
       sorted
       |> Enum.with_index()
-      |> Enum.reduce({%{}, @first_score}, fn {{player_id, guess_time}, rank},
-                                             {acc, prev_score} ->
+      |> Enum.reduce({%{}, @first_score}, fn {{player_id, guess_time}, rank}, {acc, prev_score} ->
         score =
           if rank == 0 do
             @first_score

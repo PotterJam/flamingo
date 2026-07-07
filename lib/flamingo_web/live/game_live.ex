@@ -589,9 +589,7 @@ defmodule FlamingoWeb.GameLive do
                         phx-update="ignore"
                         data-is-drawer="false"
                         data-final-drawing-replay="true"
-                        data-final-drawing-events={
-                          Jason.encode!(DrawingShare.compact_ops(drawing.events))
-                        }
+                        data-final-drawing-events={Jason.encode!(drawing.ops)}
                       >
                         <canvas width="700" height="500" class="aspect-[7/5] w-full bg-white">
                         </canvas>
