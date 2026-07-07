@@ -1,10 +1,21 @@
 defmodule Flamingo.Scoring do
+  @first_score 400
   @base_score 300
-  @min_gap 25
+  @rank_decay 0.8
+  @min_gap 10
   @min_score 50
-  @max_time_penalty 250
-  @first_bonus 100
+  @max_time_penalty 100
 
+  @doc """
+  Scores a completed turn.
+
+  Guessers are scored primarily by finishing position so being early feels
+  great: the first guesser always banks #{@first_score}, and each later rank
+  decays multiplicatively from #{@base_score}. A smaller time penalty (up to
+  #{@max_time_penalty}) punishes guesses that trail long after the first
+  correct answer. Scores never increase with rank and never drop below
+  #{@min_score}.
+  """
   def calculate_round_scores(correct_guesses, drawer_id, player_order, turn_length) do
     guesser_scores = calculate_guesser_scores(correct_guesses, turn_length)
 
@@ -45,25 +56,22 @@ defmodule Flamingo.Scoring do
     {scores, _prev} =
       sorted
       |> Enum.with_index()
-      |> Enum.reduce({%{}, nil}, fn {{player_id, guess_time}, idx}, {acc, prev_score} ->
-        time_taken_us = DateTime.diff(guess_time, first_time, :microsecond)
-        time_ratio = time_taken_us / turn_duration_us
-        time_ratio = max(0.0, min(1.0, time_ratio))
-
-        score = @base_score - trunc(@max_time_penalty * time_ratio)
-
+      |> Enum.reduce({%{}, @first_score}, fn {{player_id, guess_time}, rank}, {acc, prev_score} ->
         score =
-          if idx == 0 do
-            score + @first_bonus
+          if rank == 0 do
+            @first_score
           else
-            if prev_score - score < @min_gap do
-              prev_score - @min_gap
-            else
-              score
-            end
+            time_taken_us = DateTime.diff(guess_time, first_time, :microsecond)
+            time_ratio = time_taken_us / turn_duration_us
+            time_ratio = max(0.0, min(1.0, time_ratio))
+
+            rank_score = trunc(@base_score * :math.pow(@rank_decay, rank))
+
+            (rank_score - trunc(@max_time_penalty * time_ratio))
+            |> min(prev_score - @min_gap)
+            |> max(@min_score)
           end
 
-        score = max(score, @min_score)
         {Map.put(acc, player_id, score), score}
       end)
 
