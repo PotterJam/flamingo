@@ -652,8 +652,6 @@ defmodule FlamingoWeb.GameLive do
             }
 
             update()
-            // The form (re)mounts when a turn starts drawing; put the player
-            // straight into the input so they can type immediately.
             input.focus()
             input.addEventListener("input", update)
             this.el.addEventListener("submit", () => {
