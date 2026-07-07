@@ -6,10 +6,19 @@ primary_region = 'lhr'
 [env]
   PHX_HOST = 'flamingo.fly.dev'
   PHX_SERVER = 'true'
+  # Rooms live in a single machine's memory, so this app must run exactly ONE
+  # machine (`fly scale count 1`) - a player routed to a second machine can't
+  # see rooms hosted on the first. Clustering (this query + rel/env.sh.eex +
+  # :global room registration) is kept as a safety net so things still work
+  # if a second machine ever appears.
+  DNS_CLUSTER_QUERY = 'flamingo.internal'
 
 [http_service]
   internal_port = 4000
   force_https = true
+  # With a single machine, Fly only stops it when it has no connections at
+  # all (an empty app), and wakes it on the next visit. Anyone in a lobby or
+  # game holds a websocket open, so it never stops mid-game.
   auto_stop_machines = 'stop'
   auto_start_machines = true
   min_machines_running = 0

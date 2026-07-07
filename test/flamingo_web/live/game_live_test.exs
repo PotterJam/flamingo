@@ -250,7 +250,7 @@ defmodule FlamingoWeb.GameLiveTest do
     guesser = if(p1 == state.drawer_id, do: p2, else: p1)
     :correct = GameServer.guess(room_id, guesser, word)
 
-    pid = GenServer.whereis({:via, Registry, {Flamingo.GameRegistry, room_id}})
+    pid = GameServer.whereis(room_id)
     _ = :sys.get_state(pid)
 
     {:ok, state} = GameServer.get_state(room_id)
