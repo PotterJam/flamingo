@@ -1,0 +1,14 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+readonly OTP_DIR="$HOME/.elixir-install/installs/otp/28.1.1"
+readonly ELIXIR_DIR="$HOME/.elixir-install/installs/elixir/1.20.0-otp-28"
+
+export PATH="$ELIXIR_DIR/bin:$OTP_DIR/bin:$PATH"
+
+if [[ ! -x "$OTP_DIR/bin/erl" || ! -x "$ELIXIR_DIR/bin/mix" ]]; then
+  echo "Flamingo's Elixir toolchain is missing; rerun .agents/setup" >&2
+  exit 1
+fi
+
+echo "Flamingo orb ready (no external services required)"

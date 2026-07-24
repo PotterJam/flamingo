@@ -1,0 +1,79 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+readonly OTP_VERSION="28.1.1"
+readonly ELIXIR_VERSION="1.20.0"
+readonly OTP_DIR="$HOME/.elixir-install/installs/otp/$OTP_VERSION"
+readonly ELIXIR_DIR="$HOME/.elixir-install/installs/elixir/$ELIXIR_VERSION-otp-28"
+
+echo "==> Installing system prerequisites"
+packages=(build-essential ca-certificates curl git libncurses6 libssl3 libstdc++6 unzip)
+missing_packages=()
+
+for package in "${packages[@]}"; do
+  if ! dpkg-query -W -f='${Status}' "$package" 2>/dev/null | grep -Fq "install ok installed"; then
+    missing_packages+=("$package")
+  fi
+done
+
+if ((${#missing_packages[@]})); then
+  sudo apt-get update
+  sudo DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends "${missing_packages[@]}"
+fi
+
+if [[ "$(uname -m)" != "x86_64" ]]; then
+  echo "Unsupported orb architecture: $(uname -m)" >&2
+  exit 1
+fi
+
+tmp_dir="$(mktemp -d)"
+trap 'rm -rf "$tmp_dir"' EXIT
+
+if [[ ! -x "$OTP_DIR/bin/erl" ]]; then
+  echo "==> Installing Erlang/OTP $OTP_VERSION"
+  mkdir -p "$OTP_DIR"
+  curl -fsSL \
+    "https://builds.hex.pm/builds/otp/amd64/ubuntu-22.04/OTP-$OTP_VERSION.tar.gz" \
+    -o "$tmp_dir/otp.tar.gz"
+  tar xzf "$tmp_dir/otp.tar.gz" --strip-components 1 -C "$OTP_DIR"
+  (cd "$OTP_DIR" && ./Install -sasl "$OTP_DIR")
+fi
+
+if [[ ! -x "$ELIXIR_DIR/bin/elixir" ]]; then
+  echo "==> Installing Elixir $ELIXIR_VERSION"
+  mkdir -p "$ELIXIR_DIR"
+  curl -fsSL \
+    "https://builds.hex.pm/builds/elixir/v$ELIXIR_VERSION-otp-28.zip" \
+    -o "$tmp_dir/elixir.zip"
+  unzip -q "$tmp_dir/elixir.zip" -d "$ELIXIR_DIR"
+fi
+
+export PATH="$ELIXIR_DIR/bin:$OTP_DIR/bin:$PATH"
+
+profile_marker="# Flamingo Elixir toolchain"
+if ! grep -Fqx "$profile_marker" "$HOME/.bash_profile" 2>/dev/null; then
+  cat >> "$HOME/.bash_profile" <<EOF
+
+$profile_marker
+export PATH="$ELIXIR_DIR/bin:$OTP_DIR/bin:\$PATH"
+EOF
+fi
+
+locale_marker="# Flamingo UTF-8 locale"
+if ! grep -Fqx "$locale_marker" "$HOME/.bash_profile" 2>/dev/null; then
+  cat >> "$HOME/.bash_profile" <<'EOF'
+
+# Flamingo UTF-8 locale
+export LANG="${LANG:-C.UTF-8}"
+EOF
+fi
+
+echo "==> Installing Hex and Rebar"
+mix local.hex --force
+mix local.rebar --force
+
+echo "==> Installing project dependencies and asset tools"
+mix setup
+
+echo "==> Orb setup complete"
+elixir --version
