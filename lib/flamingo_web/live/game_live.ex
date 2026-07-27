@@ -1,7 +1,7 @@
 defmodule FlamingoWeb.GameLive do
   use FlamingoWeb, :live_view
 
-  alias Flamingo.{DrawingShare, Feed, Games}
+  alias Flamingo.{DrawingShare, Feed, Games, Words}
 
   @min_turn_length 15
   @max_turn_length 120
@@ -31,6 +31,19 @@ defmodule FlamingoWeb.GameLive do
        drawer_id: nil,
        round_count: 3,
        turn_length: 45,
+       custom_words: "",
+       custom_word_count: 0,
+       custom_words_error: nil,
+       settings_form:
+         to_form(
+           %{
+             "round_count" => "3",
+             "turn_length" => "45",
+             "custom_words" => "",
+             "include_default_words" => false
+           },
+           as: :settings
+         ),
        word_choices: nil,
        turn_end_time: nil,
        word: nil,
@@ -95,6 +108,19 @@ defmodule FlamingoWeb.GameLive do
               selected_player_id: selected_player_id,
               round_count: state.round_count,
               turn_length: state.turn_length,
+              custom_words: Enum.join(state.custom_words, "\n"),
+              custom_word_count: length(state.custom_words),
+              custom_words_error: nil,
+              settings_form:
+                to_form(
+                  %{
+                    "round_count" => Integer.to_string(state.round_count),
+                    "turn_length" => Integer.to_string(state.turn_length),
+                    "custom_words" => Enum.join(state.custom_words, "\n"),
+                    "include_default_words" => state.include_default_words
+                  },
+                  as: :settings
+                ),
               current_round: state.current_round,
               word_choices: word_choices,
               turn_end_time: state.turn_end_time,
@@ -211,8 +237,14 @@ defmodule FlamingoWeb.GameLive do
             </div>
 
             <%= if @player_id == @host_id do %>
-              <div class="flex h-full w-full flex-[3] flex-col gap-4 p-4">
-                <.form for={%{}} as={:settings} phx-change="update_settings" id="settings-form">
+              <div class="flex h-full min-h-0 w-full flex-[3] flex-col overflow-hidden">
+                <.form
+                  for={@settings_form}
+                  phx-change="update_settings"
+                  phx-submit="start_game"
+                  class="min-h-0 flex-1 overflow-y-auto p-4"
+                  id="settings-form"
+                >
                   <div class="space-y-1">
                     <div class="flex w-full justify-between">
                       <label class="text-sm">Rounds</label>
@@ -223,7 +255,7 @@ defmodule FlamingoWeb.GameLive do
                       min="1"
                       max="5"
                       value={@round_count}
-                      name="settings[round_count]"
+                      name={@settings_form[:round_count].name}
                       class="nb-slider w-full"
                       style={"--slider-progress: #{(@round_count - 1) / 4 * 100}%"}
                       phx-hook=".RoundSlider"
@@ -239,15 +271,51 @@ defmodule FlamingoWeb.GameLive do
                         min={@min_turn_length}
                         max={@max_turn_length}
                         value={@turn_length}
-                        name="settings[turn_length]"
+                        name={@settings_form[:turn_length].name}
                         class="w-full rounded-base border-2 border-border bg-white px-3 py-2 text-sm focus:ring-2 focus:ring-ring focus:ring-offset-2 focus:outline-none"
                         id="round-length-input"
                       />
                     </div>
                   </div>
+
+                  <div class="mt-4">
+                    <div class="flex items-end justify-between gap-3">
+                      <label for="custom-words-input" class="text-sm">Custom words</label>
+                      <span id="custom-word-count" class="text-xs text-gray-500">
+                        {@custom_word_count} / 1000
+                      </span>
+                    </div>
+                    <.input
+                      field={@settings_form[:custom_words]}
+                      type="textarea"
+                      rows="4"
+                      placeholder={"Add your own words, one per line" <> "\nflamingo\nsandcastle"}
+                      class="mt-1 min-h-24 w-full resize-y rounded-base border-2 border-border bg-white px-3 py-2 text-sm leading-5 focus:ring-2 focus:ring-ring focus:ring-offset-2 focus:outline-none"
+                      phx-hook=".CustomWords"
+                      id="custom-words-input"
+                    />
+                    <p
+                      :if={@custom_words_error}
+                      id="custom-words-error"
+                      class="mt-1 text-xs text-red-600"
+                    >
+                      {@custom_words_error}
+                    </p>
+                    <p :if={!@custom_words_error} class="mt-1 text-xs text-gray-500">
+                      Leave empty to use the standard word list. Commas are not supported.
+                    </p>
+                    <div class="mt-3">
+                      <.input
+                        field={@settings_form[:include_default_words]}
+                        type="checkbox"
+                        label="Include standard words"
+                        id="include-default-words-input"
+                      />
+                    </div>
+                  </div>
                 </.form>
 
-                <div class="mt-auto flex w-full flex-col gap-4">
+                <div class="flex w-full shrink-0 flex-col gap-4 border-t-2 border-border p-4">
                   <div>
                     <label class="text-sm">Room name</label>
                     <div class="flex flex-row items-center justify-between">
@@ -277,7 +345,8 @@ defmodule FlamingoWeb.GameLive do
 
                   <.button
                     variant="default"
-                    phx-click="start_game"
+                    type="submit"
+                    form="settings-form"
                     disabled={map_size(@players) < 2}
                     id="start-game-button"
                   >
@@ -680,6 +749,31 @@ defmodule FlamingoWeb.GameLive do
           }
         }
       </script>
+      <script :type={Phoenix.LiveView.ColocatedHook} name=".CustomWords">
+        export default {
+          mounted() {
+            this.validate = () => {
+              const words = this.el.value.split(/\r?\n/).map(word => word.trim()).filter(Boolean)
+              const message = this.el.value.includes(",")
+                ? "Enter one word per line without commas."
+                : words.length > 1000
+                  ? "Custom word lists can contain at most 1000 words."
+                  : ""
+
+              this.el.setCustomValidity(message)
+            }
+
+            this.validate()
+            this.el.addEventListener("input", this.validate)
+          },
+          updated() {
+            this.validate()
+          },
+          destroyed() {
+            this.el.removeEventListener("input", this.validate)
+          }
+        }
+      </script>
       <script :type={Phoenix.LiveView.ColocatedHook} name=".ScrollFeed">
         export default {
           mounted() {
@@ -711,7 +805,7 @@ defmodule FlamingoWeb.GameLive do
   end
 
   def handle_event("update_settings", %{"settings" => params}, socket) do
-    round_count = String.to_integer(params["round_count"])
+    round_count = parse_integer(params["round_count"], socket.assigns.round_count)
 
     turn_length =
       case Integer.parse(params["turn_length"]) do
@@ -719,21 +813,50 @@ defmodule FlamingoWeb.GameLive do
         :error -> socket.assigns.turn_length
       end
 
-    {:noreply, assign(socket, round_count: round_count, turn_length: turn_length)}
+    custom_words = Map.get(params, "custom_words", "")
+    {custom_word_count, custom_words_error} = custom_words_summary(custom_words)
+
+    {:noreply,
+     assign(socket,
+       round_count: round_count,
+       turn_length: turn_length,
+       custom_words: custom_words,
+       custom_word_count: custom_word_count,
+       custom_words_error: custom_words_error,
+       settings_form: to_form(params, as: :settings)
+     )}
   end
 
-  def handle_event("start_game", _params, socket) do
-    settings = %{
-      round_count: socket.assigns.round_count,
-      turn_length: socket.assigns.turn_length
-    }
+  def handle_event("start_game", %{"settings" => params}, socket) do
+    custom_words = Map.get(params, "custom_words", "")
 
-    case Games.start_game(socket.assigns.room_id, socket.assigns.player_id, settings) do
-      :ok ->
-        {:noreply, socket}
+    case Words.parse_custom_words(custom_words) do
+      {:ok, words} ->
+        settings = %{
+          round_count: socket.assigns.round_count,
+          turn_length: socket.assigns.turn_length,
+          custom_words: words,
+          include_default_words: params["include_default_words"] == "true"
+        }
 
-      {:error, reason} ->
-        {:noreply, put_flash(socket, :error, "Cannot start game: #{reason}")}
+        case Games.start_game(socket.assigns.room_id, socket.assigns.player_id, settings) do
+          :ok ->
+            {:noreply, socket}
+
+          {:error, reason} ->
+            {:noreply, put_flash(socket, :error, "Cannot start game: #{reason}")}
+        end
+
+      {:error, _reason} ->
+        {custom_word_count, custom_words_error} = custom_words_summary(custom_words)
+
+        {:noreply,
+         assign(socket,
+           custom_words: custom_words,
+           custom_word_count: custom_word_count,
+           custom_words_error: custom_words_error,
+           settings_form: to_form(params, as: :settings)
+         )}
     end
   end
 
@@ -754,6 +877,32 @@ defmodule FlamingoWeb.GameLive do
 
   def handle_event("select_player", %{"player-id" => player_id}, socket) do
     {:noreply, assign(socket, selected_player_id: player_id)}
+  end
+
+  defp parse_integer(value, fallback) do
+    case Integer.parse(value || "") do
+      {parsed, _} -> parsed
+      :error -> fallback
+    end
+  end
+
+  defp custom_words_summary(custom_words) do
+    case Words.parse_custom_words(custom_words) do
+      {:ok, words} ->
+        {length(words), nil}
+
+      {:error, :too_many_custom_words} ->
+        {custom_word_line_count(custom_words), "Use at most 1000 custom words."}
+
+      {:error, :invalid_custom_words} ->
+        {custom_word_line_count(custom_words), "Enter one word per line without commas."}
+    end
+  end
+
+  defp custom_word_line_count(custom_words) do
+    custom_words
+    |> String.split(~r/\R/)
+    |> Enum.count(&(String.trim(&1) != ""))
   end
 
   def handle_info({:players_updated, players, player_order, host_id}, socket) do
