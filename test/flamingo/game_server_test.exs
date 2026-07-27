@@ -132,12 +132,10 @@ defmodule Flamingo.GameServerTest do
              })
 
     {:ok, state} = GameServer.get_state(room_id)
-    words = Flamingo.Words.available_words(state.custom_words, state.include_default_words)
 
     assert state.include_default_words
-    assert "orbital llama" in words
-    refute "Apple" in words
-    assert length(Enum.filter(words, &(String.downcase(&1) == "apple"))) == 1
+    assert state.custom_words == ["apple", "orbital llama"]
+    assert length(state.word_choices) == 3
   end
 
   test "start_game rejects invalid custom words", %{room_id: room_id} do

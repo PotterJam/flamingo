@@ -446,10 +446,11 @@ defmodule Flamingo.GameServer do
   end
 
   defp enter_word_choice(state) do
-    words =
-      Flamingo.Words.available_words(state.custom_words, state.include_default_words)
-
-    word_choices = Flamingo.Words.random_choices(3, state.used_words, words)
+    word_choices =
+      Flamingo.Words.random_choices(3, state.used_words,
+        custom_words: state.custom_words,
+        include_default_words: state.include_default_words
+      )
 
     if word_choices == [] do
       enter_game_ended(state)

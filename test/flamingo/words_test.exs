@@ -18,13 +18,16 @@ defmodule Flamingo.WordsTest do
     assert Words.random_choices(3, excluded_words) == []
   end
 
-  test "available_words merges defaults and deduplicates case-insensitively" do
-    words = Words.available_words(["apple", "orbital llama"], true)
+  test "random_choices merges defaults and deduplicates case-insensitively" do
+    excluded_words = all_words() |> Enum.reject(&(&1 in ["Apple", "bow"])) |> MapSet.new()
 
-    assert "apple" in words
-    assert "orbital llama" in words
-    refute "Apple" in words
-    assert length(Enum.filter(words, &(String.downcase(&1) == "apple"))) == 1
+    choices =
+      Words.random_choices(3, excluded_words,
+        custom_words: ["Bow", "orbital llama"],
+        include_default_words: true
+      )
+
+    assert Enum.sort(choices) == Enum.sort(["Apple", "Bow", "orbital llama"])
   end
 
   test "parse_custom_words trims blank lines and removes duplicates" do

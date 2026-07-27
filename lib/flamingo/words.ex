@@ -4,16 +4,21 @@ defmodule Flamingo.Words do
   @words File.read!("priv/words/default.txt")
          |> String.split("\n", trim: true)
 
-  def random_choices(n \\ 3, excluded_words \\ MapSet.new(), words \\ @words) do
+  def random_choices(n \\ 3, excluded_words \\ MapSet.new(), options \\ []) do
+    custom_words = Keyword.get(options, :custom_words, [])
+    include_default_words = Keyword.get(options, :include_default_words, false)
+
+    words = available_words(custom_words, include_default_words)
+
     words
     |> Enum.reject(&MapSet.member?(excluded_words, &1))
     |> Enum.take_random(n)
   end
 
-  def available_words([], _include_default_words), do: @words
-  def available_words(custom_words, false), do: custom_words
+  defp available_words([], _include_default_words), do: @words
+  defp available_words(custom_words, false), do: custom_words
 
-  def available_words(custom_words, true) do
+  defp available_words(custom_words, true) do
     Enum.uniq_by(custom_words ++ @words, &String.downcase/1)
   end
 
