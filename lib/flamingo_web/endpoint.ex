@@ -5,11 +5,14 @@ defmodule FlamingoWeb.Endpoint do
   # this means its contents can be read but not tampered with.
   # Set :encryption_salt if you would also like to encrypt it.
   @session_options [
-    store: :cookie,
-    key: "_flamingo_key",
-    signing_salt: "Hnq1ZvWb",
-    same_site: "Lax"
-  ]
+                     store: :cookie,
+                     key: "_flamingo_key",
+                     signing_salt: "Hnq1ZvWb"
+                   ] ++
+                     if(System.get_env("PUBLIC_URL"),
+                       do: [same_site: "None", secure: true],
+                       else: [same_site: "Lax"]
+                     )
 
   socket "/live", Phoenix.LiveView.Socket,
     websocket: [connect_info: [session: @session_options]],

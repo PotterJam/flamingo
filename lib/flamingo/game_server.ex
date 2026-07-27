@@ -32,6 +32,8 @@ defmodule Flamingo.GameServer do
     drawn_this_round: MapSet.new(),
     current_drawing: [],
     word_choices: [],
+    custom_words: [],
+    include_default_words: false,
     used_words: MapSet.new(),
     correct_guesses: %{},
     revealed_indices: [],
@@ -154,11 +156,17 @@ defmodule Flamingo.GameServer do
   def handle_call({:start_game, player_id, settings}, _from, state) do
     round_count = Map.get(settings, :round_count, state.round_count)
     turn_length = Map.get(settings, :turn_length, state.turn_length)
+    custom_words = Map.get(settings, :custom_words, state.custom_words)
+
+    include_default_words =
+      Map.get(settings, :include_default_words, state.include_default_words)
 
     with :ok <- validate_host(state, player_id),
          :ok <- validate_player_count(state),
          :ok <- validate_round_count(round_count),
-         :ok <- validate_turn_length(turn_length) do
+         :ok <- validate_turn_length(turn_length),
+         {:ok, custom_words} <- Flamingo.Words.validate_custom_words(custom_words),
+         :ok <- validate_include_default_words(include_default_words) do
       drawer_id = List.first(state.player_order)
 
       new_state =
@@ -166,6 +174,8 @@ defmodule Flamingo.GameServer do
           state
           | round_count: round_count,
             turn_length: turn_length,
+            custom_words: custom_words,
+            include_default_words: include_default_words,
             drawer_id: drawer_id,
             current_round: 0,
             drawn_this_round: MapSet.new(),
@@ -436,7 +446,11 @@ defmodule Flamingo.GameServer do
   end
 
   defp enter_word_choice(state) do
-    word_choices = Flamingo.Words.random_choices(3, state.used_words)
+    word_choices =
+      Flamingo.Words.random_choices(3, state.used_words,
+        custom_words: state.custom_words,
+        include_default_words: state.include_default_words
+      )
 
     if word_choices == [] do
       enter_game_ended(state)
@@ -624,6 +638,9 @@ defmodule Flamingo.GameServer do
        do: :ok
 
   defp validate_turn_length(_), do: {:error, :invalid_turn_length}
+
+  defp validate_include_default_words(value) when is_boolean(value), do: :ok
+  defp validate_include_default_words(_value), do: {:error, :invalid_include_default_words}
 
   defp generate_player_id do
     :crypto.strong_rand_bytes(8) |> Base.url_encode64(padding: false)

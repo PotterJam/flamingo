@@ -32,6 +32,50 @@ defmodule FlamingoWeb.GameLiveTest do
     assert has_element?(view, "#round-length-input[value='120']")
   end
 
+  test "host can configure custom words one per line", %{conn: conn, room_id: room_id} do
+    {:ok, p1, _} = GameServer.join(room_id, "Alice")
+    {:ok, _p2, _} = GameServer.join(room_id, "Bob")
+
+    {:ok, view, _html} = live(conn, ~p"/game/#{room_id}?player_id=#{p1}")
+
+    assert has_element?(view, "#custom-words-input[placeholder*='one per line']")
+    assert has_element?(view, "#include-default-words-input:not(:checked)")
+
+    view
+    |> form("#settings-form", %{
+      "settings" => %{
+        "round_count" => "3",
+        "turn_length" => "45",
+        "custom_words" => "orbital llama\nvelvet cactus\ndisco teapot",
+        "include_default_words" => "true"
+      }
+    })
+    |> render_submit()
+
+    {:ok, state} = GameServer.get_state(room_id)
+    assert state.custom_words == ["orbital llama", "velvet cactus", "disco teapot"]
+    assert state.include_default_words
+  end
+
+  test "custom word validation is shown before starting", %{conn: conn, room_id: room_id} do
+    {:ok, p1, _} = GameServer.join(room_id, "Alice")
+    {:ok, _p2, _} = GameServer.join(room_id, "Bob")
+
+    {:ok, view, _html} = live(conn, ~p"/game/#{room_id}?player_id=#{p1}")
+
+    view
+    |> element("#settings-form")
+    |> render_change(%{
+      "settings" => %{
+        "round_count" => "3",
+        "turn_length" => "45",
+        "custom_words" => "cat, dog"
+      }
+    })
+
+    assert has_element?(view, "#custom-words-error")
+  end
+
   test "game end screen keeps final scores visible after a player leaves", %{
     conn: conn,
     room_id: room_id

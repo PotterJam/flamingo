@@ -109,6 +109,46 @@ defmodule Flamingo.GameServerTest do
     assert state.phase == :word_choice
   end
 
+  test "start_game uses custom words exclusively", %{room_id: room_id} do
+    {:ok, p1, _} = GameServer.join(room_id, "Alice")
+    {:ok, _p2, _} = GameServer.join(room_id, "Bob")
+    custom_words = ["orbital llama", "velvet cactus", "disco teapot"]
+
+    assert :ok = GameServer.start_game(room_id, p1, %{custom_words: custom_words})
+
+    {:ok, state} = GameServer.get_state(room_id)
+    assert state.custom_words == custom_words
+    assert Enum.sort(state.word_choices) == Enum.sort(custom_words)
+  end
+
+  test "start_game can include deduplicated default words with custom words", %{room_id: room_id} do
+    {:ok, p1, _} = GameServer.join(room_id, "Alice")
+    {:ok, _p2, _} = GameServer.join(room_id, "Bob")
+
+    assert :ok =
+             GameServer.start_game(room_id, p1, %{
+               custom_words: ["apple", "orbital llama"],
+               include_default_words: true
+             })
+
+    {:ok, state} = GameServer.get_state(room_id)
+
+    assert state.include_default_words
+    assert state.custom_words == ["apple", "orbital llama"]
+    assert length(state.word_choices) == 3
+  end
+
+  test "start_game rejects invalid custom words", %{room_id: room_id} do
+    {:ok, p1, _} = GameServer.join(room_id, "Alice")
+    {:ok, _p2, _} = GameServer.join(room_id, "Bob")
+
+    assert {:error, :invalid_custom_words} =
+             GameServer.start_game(room_id, p1, %{custom_words: ["cat, dog"]})
+
+    assert {:error, :too_many_custom_words} =
+             GameServer.start_game(room_id, p1, %{custom_words: Enum.map(1..1001, &"word #{&1}")})
+  end
+
   test "minimum turn length schedules hints before the turn ends", %{room_id: room_id} do
     {:ok, p1, _} = GameServer.join(room_id, "Alice")
     {:ok, _p2, _} = GameServer.join(room_id, "Bob")

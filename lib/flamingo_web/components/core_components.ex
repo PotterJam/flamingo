@@ -88,7 +88,9 @@ defmodule FlamingoWeb.CoreComponents do
       <.button phx-click="go" variant="primary">Send!</.button>
       <.button navigate={~p"/"}>Home</.button>
   """
-  attr :rest, :global, include: ~w(href navigate patch method download name value disabled type)
+  attr :rest, :global,
+    include: ~w(href navigate patch method download name value disabled type form)
+
   attr :class, :any, default: nil
   attr :variant, :string, default: "default", values: ~w(default neutral ghost outline)
   attr :size, :string, default: "default", values: ~w(default sm icon)
@@ -290,16 +292,17 @@ defmodule FlamingoWeb.CoreComponents do
           disabled={@rest[:disabled]}
           form={@rest[:form]}
         />
-        <span class="label">
+        <span class="flex cursor-pointer items-center gap-2 text-sm text-foreground">
           <input
             type="checkbox"
             id={@id}
             name={@name}
             value="true"
             checked={@checked}
-            class={@class || "checkbox checkbox-sm"}
+            class={@class || "nb-checkbox"}
             {@rest}
-          />{@label}
+          />
+          <span>{@label}</span>
         </span>
       </label>
       <.error :for={msg <- @errors}>{msg}</.error>
