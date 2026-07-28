@@ -1,5 +1,5 @@
 defmodule Flamingo.Words do
-  @max_custom_words 1_000
+  @max_custom_words 3_000
 
   @words File.read!("priv/words/default.txt")
          |> String.split("\n", trim: true)

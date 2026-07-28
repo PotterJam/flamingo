@@ -146,7 +146,7 @@ defmodule Flamingo.GameServerTest do
              GameServer.start_game(room_id, p1, %{custom_words: ["cat, dog"]})
 
     assert {:error, :too_many_custom_words} =
-             GameServer.start_game(room_id, p1, %{custom_words: Enum.map(1..1001, &"word #{&1}")})
+             GameServer.start_game(room_id, p1, %{custom_words: Enum.map(1..3001, &"word #{&1}")})
   end
 
   test "minimum turn length schedules hints before the turn ends", %{room_id: room_id} do

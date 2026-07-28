@@ -282,7 +282,7 @@ defmodule FlamingoWeb.GameLive do
                     <div class="flex items-end justify-between gap-3">
                       <label for="custom-words-input" class="text-sm">Custom words</label>
                       <span id="custom-word-count" class="text-xs text-gray-500">
-                        {@custom_word_count} / 1000
+                        {@custom_word_count} / 3000
                       </span>
                     </div>
                     <.input
@@ -756,8 +756,8 @@ defmodule FlamingoWeb.GameLive do
               const words = this.el.value.split(/\r?\n/).map(word => word.trim()).filter(Boolean)
               const message = this.el.value.includes(",")
                 ? "Enter one word per line without commas."
-                : words.length > 1000
-                  ? "Custom word lists can contain at most 1000 words."
+                : words.length > 3000
+                  ? "Custom word lists can contain at most 3000 words."
                   : ""
 
               this.el.setCustomValidity(message)
@@ -892,7 +892,7 @@ defmodule FlamingoWeb.GameLive do
         {length(words), nil}
 
       {:error, :too_many_custom_words} ->
-        {custom_word_line_count(custom_words), "Use at most 1000 custom words."}
+        {custom_word_line_count(custom_words), "Use at most 3000 custom words."}
 
       {:error, :invalid_custom_words} ->
         {custom_word_line_count(custom_words), "Enter one word per line without commas."}
