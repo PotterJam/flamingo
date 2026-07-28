@@ -35,10 +35,10 @@ defmodule Flamingo.WordsTest do
              Words.parse_custom_words(" red panda \n\nflamingo\nred panda\n")
   end
 
-  test "parse_custom_words rejects commas and more than 1000 words" do
+  test "parse_custom_words rejects commas and more than 3000 words" do
     assert {:error, :invalid_custom_words} = Words.parse_custom_words("cat, dog")
 
-    too_many_words = Enum.map_join(1..1001, "\n", &"word #{&1}")
+    too_many_words = Enum.map_join(1..3001, "\n", &"word #{&1}")
     assert {:error, :too_many_custom_words} = Words.parse_custom_words(too_many_words)
   end
 
