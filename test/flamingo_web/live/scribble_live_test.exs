@@ -1,13 +1,15 @@
-defmodule FlamingoWeb.GameLiveTest do
+defmodule FlamingoWeb.ScribbleLiveTest do
   use FlamingoWeb.ConnCase, async: true
 
   import Phoenix.LiveViewTest
 
-  alias Flamingo.{DrawingShare, GameServer, GameSupervisor}
+  alias Flamingo.DrawingShare
+  alias Flamingo.RoomServer, as: GameServer
+  alias Flamingo.RoomSupervisor
 
   setup do
     room_id = "live-#{System.unique_integer([:positive])}"
-    {:ok, ^room_id} = GameSupervisor.start_game(room_id)
+    {:ok, ^room_id} = RoomSupervisor.start_room(room_id)
     %{room_id: room_id}
   end
 

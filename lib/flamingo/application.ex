@@ -11,7 +11,7 @@ defmodule Flamingo.Application do
       FlamingoWeb.Telemetry,
       {DNSCluster, query: Application.get_env(:flamingo, :dns_cluster_query) || :ignore},
       {Phoenix.PubSub, name: Flamingo.PubSub},
-      {Flamingo.GameSupervisor, []},
+      {Flamingo.RoomSupervisor, []},
       FlamingoWeb.Endpoint
     ]
 

@@ -18,7 +18,7 @@ defmodule FlamingoWeb.Router do
     pipe_through :browser
 
     live "/", HomeLive
-    live "/game/:room_id", GameLive
+    live "/game/:room_id", ScribbleLive
     live "/drawing", DrawingLive
   end
 

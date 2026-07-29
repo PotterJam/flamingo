@@ -1,7 +1,7 @@
 defmodule FlamingoWeb.HomeLive do
   use FlamingoWeb, :live_view
 
-  alias Flamingo.Games
+  alias Flamingo.Rooms
 
   def mount(params, _session, socket) do
     room_code = params["room"] || ""
@@ -137,8 +137,8 @@ defmodule FlamingoWeb.HomeLive do
     if name == "" do
       {:noreply, assign(socket, error: "Name cannot be empty")}
     else
-      with {:ok, room_id} <- Games.create_room(),
-           {:ok, player_id, _state} <- Games.join(room_id, name) do
+      with {:ok, room_id} <- Rooms.create_room(),
+           {:ok, player_id, _state} <- Rooms.join(room_id, name) do
         {:noreply, push_navigate(socket, to: ~p"/game/#{room_id}?player_id=#{player_id}")}
       else
         _ -> {:noreply, assign(socket, error: "Failed to create room")}
@@ -158,7 +158,7 @@ defmodule FlamingoWeb.HomeLive do
         {:noreply, assign(socket, error: "Room code cannot be empty")}
 
       true ->
-        case Games.join(code, name) do
+        case Rooms.join(code, name) do
           {:ok, player_id, _state} ->
             {:noreply, push_navigate(socket, to: ~p"/game/#{code}?player_id=#{player_id}")}
 

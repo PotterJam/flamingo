@@ -4,11 +4,11 @@ defmodule FlamingoWeb.HomeLiveTest do
   import Phoenix.Component
   import Phoenix.LiveViewTest
 
-  alias Flamingo.GameSupervisor
+  alias Flamingo.RoomSupervisor
 
   test "submitting the lobby form joins when a room name is present", %{conn: conn} do
     room_id = "home-#{System.unique_integer([:positive])}"
-    {:ok, ^room_id} = GameSupervisor.start_game(room_id)
+    {:ok, ^room_id} = RoomSupervisor.start_room(room_id)
 
     {:ok, view, _html} = live(conn, ~p"/")
 

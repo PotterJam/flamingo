@@ -1,17 +1,18 @@
-defmodule Flamingo.GameServerTest do
+defmodule Flamingo.RoomServerTest do
   use ExUnit.Case, async: true
 
-  alias Flamingo.GameServer
-  alias Flamingo.GameSupervisor
+  alias Flamingo.RoomServer, as: GameServer
+  alias Flamingo.RoomSupervisor
 
   setup do
     room_id = "test-#{System.unique_integer([:positive])}"
-    {:ok, ^room_id} = GameSupervisor.start_game(room_id)
+    {:ok, ^room_id} = RoomSupervisor.start_room(room_id)
     %{room_id: room_id}
   end
 
   test "first player becomes host", %{room_id: room_id} do
     {:ok, player_id, state} = GameServer.join(room_id, "Alice")
+    assert state.mode == :scribble
     assert state.host_id == player_id
     assert map_size(state.players) == 1
     assert state.player_order == [player_id]

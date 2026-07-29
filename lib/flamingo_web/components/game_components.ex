@@ -155,7 +155,7 @@ defmodule FlamingoWeb.GameComponents do
           size_class="h-24 w-24"
           text_class="text-2xl"
           timer_id="turn-timer"
-          timer_hook="FlamingoWeb.GameLive.Timer"
+          timer_hook="FlamingoWeb.ScribbleLive.Timer"
           end_time={@turn_end_time && DateTime.to_iso8601(@turn_end_time)}
           stroke="black"
           stroke_width="6"

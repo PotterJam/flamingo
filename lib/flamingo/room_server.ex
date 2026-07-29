@@ -1,4 +1,4 @@
-defmodule Flamingo.GameServer do
+defmodule Flamingo.RoomServer do
   use GenServer
 
   alias Flamingo.Feed
@@ -23,6 +23,7 @@ defmodule Flamingo.GameServer do
     :word,
     :phase_timer_ref,
     :turn_end_time,
+    mode: :scribble,
     phase: :lobby,
     players: %{},
     player_order: [],

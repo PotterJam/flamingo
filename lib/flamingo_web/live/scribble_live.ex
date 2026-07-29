@@ -1,7 +1,7 @@
-defmodule FlamingoWeb.GameLive do
+defmodule FlamingoWeb.ScribbleLive do
   use FlamingoWeb, :live_view
 
-  alias Flamingo.{DrawingShare, Feed, Games, Words}
+  alias Flamingo.{DrawingShare, Feed, Rooms, Words}
 
   @min_turn_length 15
   @max_turn_length 120
@@ -64,9 +64,9 @@ defmodule FlamingoWeb.GameLive do
     if connected?(socket) do
       # Rejoin (rather than just reading state) so a reconnecting player is
       # marked connected again before their disconnect grace period expires.
-      case Games.rejoin(room_id, player_id) do
+      case Rooms.rejoin(room_id, player_id) do
         {:ok, state} ->
-          Games.subscribe(room_id)
+          Rooms.subscribe(room_id)
 
           word_choices =
             if state.phase == :word_choice and player_id == state.drawer_id,
@@ -390,7 +390,7 @@ defmodule FlamingoWeb.GameLive do
                         <.starburst_timer
                           position_class="absolute -top-36 -right-16"
                           timer_id="word-choice-timer"
-                          timer_hook="FlamingoWeb.GameLive.Timer"
+                          timer_hook="FlamingoWeb.ScribbleLive.Timer"
                           end_time={@turn_end_time && DateTime.to_iso8601(@turn_end_time)}
                         />
                         <h2 class="text-3xl font-black">Choose a word</h2>
@@ -412,7 +412,7 @@ defmodule FlamingoWeb.GameLive do
                           size_class="h-28 w-28"
                           text_class="text-2xl"
                           timer_id="word-choice-timer"
-                          timer_hook="FlamingoWeb.GameLive.Timer"
+                          timer_hook="FlamingoWeb.ScribbleLive.Timer"
                           end_time={@turn_end_time && DateTime.to_iso8601(@turn_end_time)}
                         />
                         <p class="text-3xl font-black">
@@ -452,7 +452,7 @@ defmodule FlamingoWeb.GameLive do
                             size_class="h-20 w-20"
                             text_class="text-xl"
                             timer_id="turn-reveal-timer"
-                            timer_hook="FlamingoWeb.GameLive.Timer"
+                            timer_hook="FlamingoWeb.ScribbleLive.Timer"
                             end_time={@turn_end_time && DateTime.to_iso8601(@turn_end_time)}
                           />
                         </div>
@@ -839,7 +839,7 @@ defmodule FlamingoWeb.GameLive do
           include_default_words: params["include_default_words"] == "true"
         }
 
-        case Games.start_game(socket.assigns.room_id, socket.assigns.player_id, settings) do
+        case Rooms.start_game(socket.assigns.room_id, socket.assigns.player_id, settings) do
           :ok ->
             {:noreply, socket}
 
@@ -861,17 +861,17 @@ defmodule FlamingoWeb.GameLive do
   end
 
   def handle_event("select_word", %{"word" => word}, socket) do
-    Games.select_word(socket.assigns.room_id, socket.assigns.player_id, word)
+    Rooms.select_word(socket.assigns.room_id, socket.assigns.player_id, word)
     {:noreply, socket}
   end
 
   def handle_event("draw_event", event, socket) do
-    Games.draw_event(socket.assigns.room_id, socket.assigns.player_id, event)
+    Rooms.draw_event(socket.assigns.room_id, socket.assigns.player_id, event)
     {:noreply, socket}
   end
 
   def handle_event("guess", %{"guess_form" => %{"guess" => text}}, socket) do
-    Games.guess(socket.assigns.room_id, socket.assigns.player_id, text)
+    Rooms.guess(socket.assigns.room_id, socket.assigns.player_id, text)
     {:noreply, socket}
   end
 
@@ -933,7 +933,7 @@ defmodule FlamingoWeb.GameLive do
     # Re-seed the stream from the server when the game (re)starts.
     socket =
       if socket.assigns.phase in [:lobby, :game_ended] do
-        case Games.get_state(socket.assigns.room_id) do
+        case Rooms.get_state(socket.assigns.room_id) do
           {:ok, state} ->
             stream(
               socket,
@@ -1092,7 +1092,7 @@ defmodule FlamingoWeb.GameLive do
 
   def terminate(_reason, socket) do
     if Map.has_key?(socket.assigns, :room_id) and Map.has_key?(socket.assigns, :player_id) do
-      Games.leave(socket.assigns.room_id, socket.assigns.player_id)
+      Rooms.leave(socket.assigns.room_id, socket.assigns.player_id)
     end
   end
 end
