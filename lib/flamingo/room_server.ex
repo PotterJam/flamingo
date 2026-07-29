@@ -90,6 +90,12 @@ defmodule Flamingo.RoomServer do
     :exit, {:noproc, _} -> {:error, :not_found}
   end
 
+  def view(room_id, player_id) do
+    GenServer.call(via(room_id), {:view, player_id})
+  catch
+    :exit, {:noproc, _} -> {:error, :not_found}
+  end
+
   def whereis(room_id) do
     GenServer.whereis(via(room_id))
   end
@@ -152,6 +158,14 @@ defmodule Flamingo.RoomServer do
 
   def handle_call(:get_state, _from, state) do
     {:reply, {:ok, state}, state}
+  end
+
+  def handle_call({:view, player_id}, _from, state) do
+    if Map.has_key?(state.players, player_id) do
+      {:reply, {:ok, project_view(state, player_id)}, state}
+    else
+      {:reply, {:error, :not_found}, state}
+    end
   end
 
   def handle_call({:start_game, player_id, settings}, _from, state) do
@@ -484,8 +498,8 @@ defmodule Flamingo.RoomServer do
 
     broadcast(
       new_state.room_id,
-      {:word_choice_started, new_state.drawer_id, word_choices, turn_end_time,
-       new_state.round_count, new_state.turn_length, new_state.current_round}
+      {:word_choice_started, new_state.drawer_id, turn_end_time, new_state.round_count,
+       new_state.turn_length, new_state.current_round}
     )
 
     broadcast(new_state.room_id, {:feed_event, entry})
@@ -515,7 +529,7 @@ defmodule Flamingo.RoomServer do
       }
       |> schedule_next_hint()
 
-    broadcast(state.room_id, {:turn_started, state.drawer_id, word, turn_end_time})
+    broadcast(state.room_id, {:turn_started, state.drawer_id, turn_end_time})
     new_state
   end
 
@@ -693,6 +707,61 @@ defmodule Flamingo.RoomServer do
       state.room_id,
       {:players_updated, state.players, state.player_order, state.host_id}
     )
+  end
+
+  defp project_view(state, player_id) do
+    word_visible? =
+      player_id == state.drawer_id or Map.has_key?(state.correct_guesses, player_id) or
+        state.phase in [:turn_reveal, :game_ended]
+
+    %{
+      mode: state.mode,
+      phase: state.phase,
+      viewer_id: player_id,
+      players: state.players,
+      player_order: state.player_order,
+      host_id: state.host_id,
+      drawer_id: state.drawer_id,
+      round_count: state.round_count,
+      turn_length: state.turn_length,
+      current_round: state.current_round,
+      custom_words: if(player_id == state.host_id, do: state.custom_words, else: []),
+      include_default_words:
+        if(player_id == state.host_id, do: state.include_default_words, else: false),
+      word_choices:
+        if(state.phase == :word_choice and player_id == state.drawer_id,
+          do: state.word_choices,
+          else: []
+        ),
+      word: project_word(state.word, state.revealed_indices, word_visible?),
+      word_visible?: word_visible?,
+      turn_end_time: state.turn_end_time,
+      correct_guesses: MapSet.new(Map.keys(state.correct_guesses)),
+      revealed_indices: state.revealed_indices,
+      score_gains: if(state.phase == :turn_reveal, do: state.score_gains, else: %{}),
+      current_drawing: state.current_drawing,
+      final_drawings: if(state.phase == :game_ended, do: state.final_drawings, else: []),
+      feed:
+        state.feed.events
+        |> Enum.map(&Feed.format(&1, player_id))
+        |> Enum.reject(&is_nil/1)
+    }
+  end
+
+  defp project_word(nil, _revealed_indices, _visible?), do: nil
+  defp project_word(word, _revealed_indices, true), do: word
+
+  defp project_word(word, revealed_indices, false) do
+    revealed_indices = MapSet.new(revealed_indices)
+
+    word
+    |> String.graphemes()
+    |> Enum.with_index()
+    |> Enum.map_join(fn {character, index} ->
+      if character == " " or MapSet.member?(revealed_indices, index),
+        do: character,
+        else: "_"
+    end)
   end
 
   defp broadcast(room_id, message) do

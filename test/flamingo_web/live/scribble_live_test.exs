@@ -78,6 +78,32 @@ defmodule FlamingoWeb.ScribbleLiveTest do
     assert has_element?(view, "#custom-words-error")
   end
 
+  test "guesser receives a projected word while the drawer sees the selected word", %{
+    conn: conn,
+    room_id: room_id
+  } do
+    {:ok, drawer_id, _} = GameServer.join(room_id, "Alice")
+    {:ok, guesser_id, _} = GameServer.join(room_id, "Bob")
+
+    {:ok, drawer_view, _html} = live(conn, ~p"/game/#{room_id}?player_id=#{drawer_id}")
+    {:ok, guesser_view, _html} = live(conn, ~p"/game/#{room_id}?player_id=#{guesser_id}")
+
+    :ok =
+      GameServer.start_game(room_id, drawer_id, %{
+        custom_words: ["secret", "other", "third"],
+        round_count: 1,
+        turn_length: 30
+      })
+
+    {:ok, state} = GameServer.get_state(room_id)
+    word = List.first(state.word_choices)
+    :ok = GameServer.select_word(room_id, drawer_id, word)
+
+    assert render(drawer_view) =~ word
+    refute render(guesser_view) =~ word
+    assert has_element?(guesser_view, "#guess-input")
+  end
+
   test "game end screen keeps final scores visible after a player leaves", %{
     conn: conn,
     room_id: room_id

@@ -103,11 +103,64 @@ defmodule Flamingo.RoomServerTest do
     {:ok, _p2, _} = GameServer.join(room_id, "Bob")
 
     assert :ok = GameServer.start_game(room_id, p1, %{round_count: 2, turn_length: 45})
-    assert_receive {:word_choice_started, _drawer_id, word_choices, _turn_end_time, 2, 45, 0}
-    assert length(word_choices) == 3
+    assert_receive {:word_choice_started, _drawer_id, _turn_end_time, 2, 45, 0}
 
     {:ok, state} = GameServer.get_state(room_id)
     assert state.phase == :word_choice
+    assert length(state.word_choices) == 3
+  end
+
+  test "view projects word choices and words for the requesting player", %{room_id: room_id} do
+    {:ok, p1, _} = GameServer.join(room_id, "Alice")
+    {:ok, p2, _} = GameServer.join(room_id, "Bob")
+    {:ok, p3, _} = GameServer.join(room_id, "Charlie")
+
+    :ok =
+      GameServer.start_game(room_id, p1, %{
+        custom_words: ["secret", "other", "third"],
+        round_count: 1,
+        turn_length: 30
+      })
+
+    {:ok, state} = GameServer.get_state(room_id)
+    drawer_id = state.drawer_id
+    guesser_ids = Enum.reject(state.player_order, &(&1 == drawer_id))
+    [first_guesser_id, second_guesser_id] = guesser_ids
+
+    {:ok, drawer_view} = GameServer.view(room_id, drawer_id)
+    {:ok, guesser_view} = GameServer.view(room_id, first_guesser_id)
+
+    assert drawer_view.mode == :scribble
+    assert drawer_view.word_choices == state.word_choices
+    assert guesser_view.word_choices == []
+    refute Map.has_key?(guesser_view, :phase_timer_ref)
+    refute Map.has_key?(guesser_view, :used_words)
+
+    word = List.first(state.word_choices)
+    :ok = GameServer.select_word(room_id, drawer_id, word)
+
+    {:ok, drawer_view} = GameServer.view(room_id, drawer_id)
+    {:ok, hidden_view} = GameServer.view(room_id, second_guesser_id)
+
+    assert drawer_view.word == word
+    assert drawer_view.word_visible?
+    assert hidden_view.word == String.replace(word, ~r/[^ ]/u, "_")
+    refute hidden_view.word_visible?
+
+    assert :correct = GameServer.guess(room_id, first_guesser_id, word)
+    {:ok, correct_guesser_view} = GameServer.view(room_id, first_guesser_id)
+    {:ok, still_hidden_view} = GameServer.view(room_id, second_guesser_id)
+
+    assert correct_guesser_view.word == word
+    assert correct_guesser_view.word_visible?
+    refute still_hidden_view.word_visible?
+
+    assert p2 in guesser_ids
+    assert p3 in guesser_ids
+  end
+
+  test "view rejects an unknown player", %{room_id: room_id} do
+    assert {:error, :not_found} = GameServer.view(room_id, "unknown")
   end
 
   test "start_game uses custom words exclusively", %{room_id: room_id} do

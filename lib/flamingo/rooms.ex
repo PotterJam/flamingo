@@ -6,19 +6,24 @@ defmodule Flamingo.Rooms do
   end
 
   def join(room_id, player_name) do
-    RoomServer.join(room_id, player_name)
+    with {:ok, player_id, _state} <- RoomServer.join(room_id, player_name),
+         {:ok, view} <- RoomServer.view(room_id, player_id) do
+      {:ok, player_id, view}
+    end
   end
 
   def rejoin(room_id, player_id) do
-    RoomServer.rejoin(room_id, player_id)
+    with {:ok, _state} <- RoomServer.rejoin(room_id, player_id) do
+      RoomServer.view(room_id, player_id)
+    end
   end
 
   def leave(room_id, player_id) do
     RoomServer.leave(room_id, player_id)
   end
 
-  def get_state(room_id) do
-    RoomServer.get_state(room_id)
+  def view(room_id, player_id) do
+    RoomServer.view(room_id, player_id)
   end
 
   def start_game(room_id, player_id, settings) do

@@ -65,31 +65,20 @@ defmodule FlamingoWeb.ScribbleLive do
       # Rejoin (rather than just reading state) so a reconnecting player is
       # marked connected again before their disconnect grace period expires.
       case Rooms.rejoin(room_id, player_id) do
-        {:ok, state} ->
+        {:ok, view} ->
           Rooms.subscribe(room_id)
 
-          word_choices =
-            if state.phase == :word_choice and player_id == state.drawer_id,
-              do: state.word_choices,
-              else: nil
-
-          is_drawer = player_id == state.drawer_id
-          show_word = is_drawer or state.phase == :turn_reveal or state.phase == :game_ended
-
-          score_gains =
-            if state.phase == :turn_reveal, do: state.score_gains, else: %{}
-
           final_players =
-            if state.phase == :game_ended, do: state.players, else: %{}
+            if view.phase == :game_ended, do: view.players, else: %{}
 
           final_player_order =
-            if state.phase == :game_ended, do: state.player_order, else: []
+            if view.phase == :game_ended, do: view.player_order, else: []
 
           final_drawings =
-            if state.phase == :game_ended, do: state.final_drawings, else: []
+            if view.phase == :game_ended, do: view.final_drawings, else: []
 
           selected_player_id =
-            if state.phase == :game_ended,
+            if view.phase == :game_ended,
               do: winning_player_id(final_players, final_player_order),
               else: nil
 
@@ -97,53 +86,53 @@ defmodule FlamingoWeb.ScribbleLive do
             socket
             |> assign(
               player_id: player_id,
-              phase: state.phase,
-              players: state.players,
-              player_order: state.player_order,
-              host_id: state.host_id,
-              drawer_id: state.drawer_id,
+              phase: view.phase,
+              players: view.players,
+              player_order: view.player_order,
+              host_id: view.host_id,
+              drawer_id: view.drawer_id,
               final_players: final_players,
               final_player_order: final_player_order,
               final_drawings: final_drawings,
               selected_player_id: selected_player_id,
-              round_count: state.round_count,
-              turn_length: state.turn_length,
-              custom_words: Enum.join(state.custom_words, "\n"),
-              custom_word_count: length(state.custom_words),
+              round_count: view.round_count,
+              turn_length: view.turn_length,
+              custom_words: Enum.join(view.custom_words, "\n"),
+              custom_word_count: length(view.custom_words),
               custom_words_error: nil,
               settings_form:
                 to_form(
                   %{
-                    "round_count" => Integer.to_string(state.round_count),
-                    "turn_length" => Integer.to_string(state.turn_length),
-                    "custom_words" => Enum.join(state.custom_words, "\n"),
-                    "include_default_words" => state.include_default_words
+                    "round_count" => Integer.to_string(view.round_count),
+                    "turn_length" => Integer.to_string(view.turn_length),
+                    "custom_words" => Enum.join(view.custom_words, "\n"),
+                    "include_default_words" => view.include_default_words
                   },
                   as: :settings
                 ),
-              current_round: state.current_round,
-              word_choices: word_choices,
-              turn_end_time: state.turn_end_time,
-              word: state.word,
-              show_word: show_word,
-              correct_guesses: MapSet.new(Map.keys(state.correct_guesses)),
-              revealed_indices: state.revealed_indices,
-              score_gains: score_gains
+              current_round: view.current_round,
+              word_choices: view.word_choices,
+              turn_end_time: view.turn_end_time,
+              word: view.word,
+              show_word: view.word_visible?,
+              correct_guesses: view.correct_guesses,
+              revealed_indices: view.revealed_indices,
+              score_gains: view.score_gains
             )
-            |> stream(:feed, formatted_feed(state.feed, player_id), reset: true)
+            |> stream(:feed, view.feed, reset: true)
 
           socket =
-            if state.phase in [:word_choice, :playing, :turn_reveal] and state.turn_end_time do
+            if view.phase in [:word_choice, :playing, :turn_reveal] and view.turn_end_time do
               push_event(socket, "set_timer", %{
-                end_time: DateTime.to_iso8601(state.turn_end_time)
+                end_time: DateTime.to_iso8601(view.turn_end_time)
               })
             else
               socket
             end
 
           socket =
-            if state.phase == :playing and state.current_drawing != [] do
-              push_event(socket, "drawing_state", %{events: state.current_drawing})
+            if view.phase == :playing and view.current_drawing != [] do
+              push_event(socket, "drawing_state", %{events: view.current_drawing})
             else
               socket
             end
@@ -168,12 +157,6 @@ defmodule FlamingoWeb.ScribbleLive do
   end
 
   defp palette, do: @palette
-
-  defp formatted_feed(feed, player_id) do
-    feed.events
-    |> Enum.map(&Feed.format(&1, player_id))
-    |> Enum.reject(&is_nil/1)
-  end
 
   defp winning_player_id(players, player_order) do
     Enum.max_by(player_order, fn pid -> Map.get(players, pid).score end, fn -> nil end)
@@ -922,85 +905,86 @@ defmodule FlamingoWeb.ScribbleLive do
   end
 
   def handle_info(
-        {:word_choice_started, drawer_id, word_choices, turn_end_time, round_count, turn_length,
-         current_round},
+        {:word_choice_started, _drawer_id, _turn_end_time, _round_count, _turn_length,
+         _current_round},
         socket
       ) do
-    is_drawer = socket.assigns.player_id == drawer_id
-
-    # The feed container isn't rendered in the lobby or game-end screens, so
-    # any stream items pushed while it was absent never reached the DOM.
-    # Re-seed the stream from the server when the game (re)starts.
-    socket =
-      if socket.assigns.phase in [:lobby, :game_ended] do
-        case Rooms.get_state(socket.assigns.room_id) do
-          {:ok, state} ->
-            stream(
-              socket,
-              :feed,
-              formatted_feed(state.feed, socket.assigns.player_id),
-              reset: true
-            )
-
-          {:error, :not_found} ->
+    case Rooms.view(socket.assigns.room_id, socket.assigns.player_id) do
+      {:ok, %{phase: :word_choice} = view} ->
+        socket =
+          if socket.assigns.phase in [:lobby, :game_ended] do
+            stream(socket, :feed, view.feed, reset: true)
+          else
             socket
-        end
-      else
-        socket
-      end
+          end
 
-    socket =
-      assign(socket,
-        phase: :word_choice,
-        drawer_id: drawer_id,
-        turn_end_time: turn_end_time,
-        round_count: round_count,
-        turn_length: turn_length,
-        current_round: current_round,
-        final_players: %{},
-        final_player_order: [],
-        final_drawings: [],
-        selected_player_id: nil,
-        word_choices: if(is_drawer, do: word_choices, else: nil),
-        word: nil,
-        show_word: false,
-        correct_guesses: MapSet.new(),
-        score_gains: %{}
-      )
+        socket =
+          assign(socket,
+            phase: view.phase,
+            drawer_id: view.drawer_id,
+            turn_end_time: view.turn_end_time,
+            round_count: view.round_count,
+            turn_length: view.turn_length,
+            current_round: view.current_round,
+            final_players: %{},
+            final_player_order: [],
+            final_drawings: [],
+            selected_player_id: nil,
+            word_choices: view.word_choices,
+            word: view.word,
+            show_word: view.word_visible?,
+            correct_guesses: view.correct_guesses,
+            revealed_indices: view.revealed_indices,
+            score_gains: view.score_gains
+          )
 
-    socket =
-      socket
-      |> push_event("set_timer", %{end_time: DateTime.to_iso8601(turn_end_time)})
-      |> sync_round_audio()
+        socket =
+          socket
+          |> push_event("set_timer", %{end_time: DateTime.to_iso8601(view.turn_end_time)})
+          |> sync_round_audio()
 
-    {:noreply, socket}
+        {:noreply, socket}
+
+      {:ok, _newer_view} ->
+        {:noreply, socket}
+
+      {:error, :not_found} ->
+        {:noreply, push_navigate(socket, to: ~p"/")}
+    end
   end
 
-  def handle_info({:turn_started, drawer_id, word, turn_end_time}, socket) do
-    is_drawer = socket.assigns.player_id == drawer_id
+  def handle_info({:turn_started, _drawer_id, _turn_end_time}, socket) do
+    case Rooms.view(socket.assigns.room_id, socket.assigns.player_id) do
+      {:ok, %{phase: :playing} = view} ->
+        socket =
+          assign(socket,
+            phase: view.phase,
+            drawer_id: view.drawer_id,
+            final_players: %{},
+            final_player_order: [],
+            final_drawings: [],
+            selected_player_id: nil,
+            word_choices: view.word_choices,
+            turn_end_time: view.turn_end_time,
+            word: view.word,
+            show_word: view.word_visible?,
+            correct_guesses: view.correct_guesses,
+            revealed_indices: view.revealed_indices
+          )
 
-    socket =
-      assign(socket,
-        phase: :playing,
-        drawer_id: drawer_id,
-        final_players: %{},
-        final_player_order: [],
-        final_drawings: [],
-        selected_player_id: nil,
-        word_choices: nil,
-        turn_end_time: turn_end_time,
-        word: word,
-        show_word: is_drawer,
-        correct_guesses: MapSet.new(),
-        revealed_indices: []
-      )
+        socket =
+          socket
+          |> push_event("set_timer", %{end_time: DateTime.to_iso8601(view.turn_end_time)})
+          |> sync_round_audio()
 
-    socket =
-      socket
-      |> push_event("set_timer", %{end_time: DateTime.to_iso8601(turn_end_time)})
-      |> sync_round_audio()
+        {:noreply, socket}
 
-    {:noreply, socket}
+      {:ok, _newer_view} ->
+        {:noreply, socket}
+
+      {:error, :not_found} ->
+        {:noreply, push_navigate(socket, to: ~p"/")}
+    end
   end
 
   def handle_info({:turn_reveal, word, turn_end_time, score_gains, players}, socket) do
@@ -1040,12 +1024,23 @@ defmodule FlamingoWeb.ScribbleLive do
      |> sync_round_audio()}
   end
 
-  def handle_info({:hint_revealed, revealed_indices}, socket) do
+  def handle_info({:hint_revealed, _revealed_indices}, socket) do
     if socket.assigns.show_word or
          MapSet.member?(socket.assigns.correct_guesses, socket.assigns.player_id) do
       {:noreply, socket}
     else
-      {:noreply, assign(socket, revealed_indices: revealed_indices)}
+      case Rooms.view(socket.assigns.room_id, socket.assigns.player_id) do
+        {:ok, view} ->
+          {:noreply,
+           assign(socket,
+             word: view.word,
+             show_word: view.word_visible?,
+             revealed_indices: view.revealed_indices
+           )}
+
+        {:error, :not_found} ->
+          {:noreply, push_navigate(socket, to: ~p"/")}
+      end
     end
   end
 
@@ -1055,10 +1050,20 @@ defmodule FlamingoWeb.ScribbleLive do
         do: "correctGuess",
         else: "otherPlayerCorrect"
 
-    {:noreply,
-     socket
-     |> assign(:correct_guesses, MapSet.put(socket.assigns.correct_guesses, player_id))
-     |> push_event("play_sound", %{sound: sound})}
+    socket =
+      assign(socket, :correct_guesses, MapSet.put(socket.assigns.correct_guesses, player_id))
+
+    socket =
+      if player_id == socket.assigns.player_id do
+        case Rooms.view(socket.assigns.room_id, socket.assigns.player_id) do
+          {:ok, view} -> assign(socket, word: view.word, show_word: view.word_visible?)
+          {:error, :not_found} -> socket
+        end
+      else
+        socket
+      end
+
+    {:noreply, push_event(socket, "play_sound", %{sound: sound})}
   end
 
   def handle_info({:incorrect_guess, player_id, _text}, socket) do
