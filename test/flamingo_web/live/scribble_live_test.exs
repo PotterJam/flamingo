@@ -39,6 +39,10 @@ defmodule FlamingoWeb.ScribbleLiveTest do
       {:room_snapshot, snapshot} ->
         send(parent, {:room_snapshot, snapshot})
         player_loop(parent)
+
+      {:draw_event, event} ->
+        send(parent, {:draw_event, self(), event})
+        player_loop(parent)
     end
   end
 
@@ -196,6 +200,79 @@ defmodule FlamingoWeb.ScribbleLiveTest do
     |> render_submit()
 
     assert_push_event(guesser_view, "play_sound", %{sound: "wrongGuess"})
+  end
+
+  test "drawing events are incremental and excluded only from their originating tab", %{
+    conn: conn,
+    room_id: room_id
+  } do
+    {:ok, drawer_token, _drawer_snapshot} = join_connected(room_id, "Alice")
+    {:ok, guesser_token, _guesser_snapshot} = join_connected(room_id, "Bob")
+
+    {:ok, drawer_view, _html} = live(conn, ~p"/game/#{room_id}?resume_token=#{drawer_token}")
+    {:ok, duplicate_view, _html} = live(conn, ~p"/game/#{room_id}?resume_token=#{drawer_token}")
+    {:ok, guesser_view, _html} = live(conn, ~p"/game/#{room_id}?resume_token=#{guesser_token}")
+
+    :ok =
+      start_game_as(room_id, drawer_token, %{
+        custom_words: ["secret", "other", "third"]
+      })
+
+    {:ok, state} = RoomServer.get_state(room_id)
+    word = List.first(state.word_choices)
+    :ok = select_word_as(room_id, drawer_token, word)
+
+    assert_push_event(drawer_view, "drawing_state", %{events: []})
+    assert_push_event(duplicate_view, "drawing_state", %{events: []})
+    assert_push_event(guesser_view, "drawing_state", %{events: []})
+
+    event = %{"event_type" => "clear"}
+    render_hook(drawer_view, "draw_event", event)
+    _ = :sys.get_state(RoomServer.whereis(room_id))
+
+    refute_push_event(drawer_view, "draw_event", ^event)
+    assert_push_event(duplicate_view, "draw_event", ^event)
+    assert_push_event(guesser_view, "draw_event", ^event)
+    refute_push_event(drawer_view, "drawing_state", %{})
+    refute_push_event(duplicate_view, "drawing_state", %{})
+    refute_push_event(guesser_view, "drawing_state", %{})
+
+    guesser_view
+    |> form("#guess-form", %{"guess_form" => %{"guess" => "wrong answer"}})
+    |> render_submit()
+
+    refute_push_event(drawer_view, "drawing_state", %{})
+    refute_push_event(duplicate_view, "drawing_state", %{})
+    refute_push_event(guesser_view, "drawing_state", %{})
+
+    {:ok, state} = RoomServer.get_state(room_id)
+    assert state.current_drawing == [event]
+  end
+
+  test "a late connection receives the complete drawing baseline", %{
+    conn: conn,
+    room_id: room_id
+  } do
+    {:ok, drawer_token, _drawer_snapshot} = join_connected(room_id, "Alice")
+    {:ok, guesser_token, _guesser_snapshot} = join_connected(room_id, "Bob")
+
+    :ok =
+      start_game_as(room_id, drawer_token, %{
+        custom_words: ["secret", "other", "third"]
+      })
+
+    {:ok, state} = RoomServer.get_state(room_id)
+    :ok = select_word_as(room_id, drawer_token, List.first(state.word_choices))
+
+    first_event = %{"event_type" => "clear"}
+    second_event = %{"event_type" => "fill", "x" => 10, "y" => 20, "color" => "#000000"}
+    draw_event_as(room_id, drawer_token, first_event)
+    draw_event_as(room_id, drawer_token, second_event)
+    _ = :sys.get_state(RoomServer.whereis(room_id))
+
+    {:ok, guesser_view, _html} = live(conn, ~p"/game/#{room_id}?resume_token=#{guesser_token}")
+
+    assert_push_event(guesser_view, "drawing_state", %{events: [^first_event, ^second_event]})
   end
 
   test "game end screen keeps final scores visible after a player leaves", %{

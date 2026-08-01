@@ -20,8 +20,8 @@ Flamingo.Rooms
 Flamingo.RoomServer
     |-- process monitors
     |-- timer runtime and stale-timer protection
-    |-- room revisions
-    |-- safe, versioned notifications
+    |-- registered connection delivery
+    |-- recipient-safe ordered snapshots and drawing deltas
     |-- atomic coordination of room and mode transitions
     |
     |-- Room.Members
@@ -63,7 +63,7 @@ A standalone `Room.Lobby` module is not currently justified. `RoomServer` owns t
 - A **mode participant** is the mode-specific interpretation of a room member. They may be active, spectating, on a team, or otherwise classified by the mode.
 - Host is a room-member role. Drawer is a Scribble role.
 - Scores belong entirely to the game mode. `RoomServer` and `Room.Members` do not know their representation or scale.
-- `RoomServer` owns real PIDs, monitor references, timer references, revisions, and notification delivery.
+- `RoomServer` owns real PIDs, monitor references, timer references, and notification delivery.
 - `Room.Members` owns pure member and connection-count semantics.
 - `ScribbleLive` renders Scribble settings, participation, scores, controls, and results. Future modes receive their own mode-specific LiveViews.
 
@@ -110,7 +110,7 @@ grace expires:       permanently remove the member and notify the mode
 
 An explicit leave is different from a connection ending: it permanently removes the seat. `ScribbleLive.terminate/2` must not call leave.
 
-## Versioned safe views
+## Safe ordered views
 
 The current snapshot-then-subscribe flow can miss a mutation between reading state and subscribing. PubSub has no replay, and `ScribbleLive` currently reconstructs a second state machine from deltas. Raw state and shared events can also expose secret words and choices.
 
@@ -119,16 +119,13 @@ The improved flow is:
 1. `Rooms.connect/2` authenticates the credential.
 2. `RoomServer` registers and monitors the caller in the same serialised call.
 3. It applies any online transition.
-4. It returns a safe viewer-specific snapshot at revision `N`.
-5. Later mutations produce versioned, recipient-safe notifications.
+4. It returns a complete safe viewer-specific snapshot.
+5. Later room mutations direct-send complete recipient-safe snapshots.
+6. Drawing operations direct-send low-latency deltas to every connection except the exact originating PID.
 
-```text
-incoming revision == current + 1: apply it
-incoming revision <= current:     ignore it
-incoming revision > current + 1:  fetch Rooms.snapshot/2 and replace the projection
-```
+Snapshots and drawing deltas are sent from the same `RoomServer` process, so Erlang preserves their order for each registered LiveView. A duplicated tab for the drawer receives deltas originating from the other tab, while the exact origin renders locally without receiving an echo.
 
-Use full projected views for connection, phase changes, membership changes, and recovery. Drawing operations may remain safe low-latency deltas, with the complete current drawing included in recovery views.
+Use full projected views for connection, phase changes, membership changes, and other ordinary room mutations. Keep drawing operations as safe low-latency deltas. The complete authoritative drawing remains in connection snapshots so late joins and reconnects begin with the correct baseline before receiving subsequent deltas.
 
 ## Scribble late joining
 
@@ -168,7 +165,7 @@ This is the browser behaviour to preserve after every slice.
 - Rename `GameServer` to `RoomServer`.
 - Rename `GameLive` to `ScribbleLive`.
 - Record the room mode as `:scribble`.
-- Introduce `Rooms.snapshot/2`.
+- Introduce viewer-safe room snapshots.
 - Stop returning raw `RoomServer` state to the web layer.
 - Remove secret words, word choices, and credentials from unauthorised views and shared messages.
 
@@ -185,18 +182,18 @@ Keep the game implementation inside `RoomServer` temporarily. Do not combine thi
 
 Play the complete two-player game. During play, verify the drawer sees the chosen word while the guesser sees only its masked projection.
 
-### Slice 2: fix connections and add versioned notifications
+### Slice 2: fix connections and add safe direct notifications
 
 #### Change
 
-- Add `Rooms.connect/2`, `Rooms.snapshot/2`, and explicit `Rooms.leave/2` semantics.
+- Add `Rooms.connect/2`, `Rooms.snapshot/1`, and explicit `Rooms.leave/1` semantics.
 - Register and monitor the calling LiveView process.
 - Track multiple connections per member.
 - Remove `ScribbleLive.terminate/2` calling leave.
 - Make connect-and-snapshot one serialised operation.
-- Add monotonic room revisions and recipient-safe direct notifications.
-- Resynchronise through `Rooms.snapshot/2` when a revision is missed.
-- Keep drawing operations as safe low-latency deltas.
+- Add recipient-safe direct snapshot notifications from the authoritative room process.
+- Keep drawing operations as ordered low-latency deltas that exclude only the exact origin.
+- Include the complete current drawing in connection snapshots for late joins and reconnects.
 
 #### Automated verification
 
@@ -205,7 +202,8 @@ Play the complete two-player game. During play, verify the drawer sees the chose
 - Closing the final connection marks the member offline.
 - Reconnect before grace expiry.
 - Stale `:DOWN` and stale disconnect timers.
-- Revision progression and snapshot resynchronisation.
+- Exact-origin drawing delivery and duplicate-tab synchronization.
+- Complete drawing baselines on late join and reconnect.
 - Run `mix precommit`.
 
 #### Browser acceptance
@@ -259,7 +257,7 @@ Create `GameModes.Scribble` and move into it:
 - final results;
 - viewer-specific projections.
 
-`Scribble` returns pure transitions and logical timer intents. `RoomServer` remains responsible for process monitors, runtime timer references, stale-message protection, committing state, revisions, and notification delivery.
+`Scribble` returns pure transitions and logical timer intents. `RoomServer` remains responsible for process monitors, runtime timer references, stale-message protection, committing state, and notification delivery.
 
 Move one coherent transition family at a time without dual-writing old and new mode state:
 

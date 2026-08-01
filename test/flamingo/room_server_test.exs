@@ -60,6 +60,10 @@ defmodule Flamingo.RoomServerTest do
       {:room_snapshot, snapshot} ->
         send(parent, {:room_snapshot, snapshot})
         player_loop(parent)
+
+      {:draw_event, event} ->
+        send(parent, {:draw_event, self(), event})
+        player_loop(parent)
     end
   end
 
@@ -97,7 +101,7 @@ defmodule Flamingo.RoomServerTest do
           {Task,
            fn ->
              send(parent, {:connected, self(), RoomServer.connect(room_id, resume_token)})
-             receive do: (:stop -> :ok)
+             connection_loop(parent)
            end},
           id: child_id
         )
@@ -105,6 +109,17 @@ defmodule Flamingo.RoomServerTest do
 
     assert_receive {:connected, ^pid, {:ok, snapshot}}
     {child_id, pid, snapshot}
+  end
+
+  defp connection_loop(parent) do
+    receive do
+      {:draw_event, event} ->
+        send(parent, {:draw_event, self(), event})
+        connection_loop(parent)
+
+      :stop ->
+        :ok
+    end
   end
 
   defp flush_room_snapshots do
@@ -338,6 +353,102 @@ defmodule Flamingo.RoomServerTest do
     assert Map.fetch!(snapshots, drawer_id).word_visible?
     refute Map.fetch!(snapshots, guesser_id).word_visible?
     refute Map.fetch!(snapshots, guesser_id).word == word
+  end
+
+  test "drawing operations send ordered deltas without full snapshots", %{room_id: room_id} do
+    {p1, p2, _word, state} = start_playing(room_id)
+    drawer = state.drawer_id
+    guesser = if drawer == p1, do: p2, else: p1
+    drawer_token = resume_token_for(state, drawer)
+    guesser_pid = Process.get({:player, resume_token_for(state, guesser)})
+    originating_pid = Process.get({:player, drawer_token})
+    flush_room_snapshots()
+
+    first_event = %{"event_type" => "clear"}
+    second_event = %{"event_type" => "fill", "x" => 10, "y" => 20, "color" => "#000000"}
+
+    :ok = draw_event_as(room_id, drawer_token, first_event)
+    _ = :sys.get_state(RoomServer.whereis(room_id))
+
+    assert_receive {:draw_event, ^guesser_pid, ^first_event}
+    refute_receive {:draw_event, ^originating_pid, _event}
+    refute_receive {:room_snapshot, _snapshot}
+
+    :ok = draw_event_as(room_id, drawer_token, second_event)
+    _ = :sys.get_state(RoomServer.whereis(room_id))
+
+    assert_receive {:draw_event, ^guesser_pid, ^second_event}
+    refute_receive {:room_snapshot, _snapshot}
+
+    {:ok, state} = RoomServer.get_state(room_id)
+    assert state.current_drawing == [first_event, second_event]
+  end
+
+  test "a duplicate drawer connection receives deltas and a reconnect baseline", %{
+    room_id: room_id
+  } do
+    {p1, p2, _word, state} = start_playing(room_id)
+    drawer = state.drawer_id
+    guesser = if drawer == p1, do: p2, else: p1
+    drawer_token = resume_token_for(state, drawer)
+    guesser_pid = Process.get({:player, resume_token_for(state, guesser)})
+    originating_pid = Process.get({:player, drawer_token})
+    first_event = %{"event_type" => "clear"}
+
+    :ok = draw_event_as(room_id, drawer_token, first_event)
+    _ = :sys.get_state(RoomServer.whereis(room_id))
+    assert_receive {:draw_event, ^guesser_pid, ^first_event}
+
+    {_connection_id, duplicate_pid, snapshot} = start_connection(room_id, drawer_token)
+    assert snapshot.current_drawing == [first_event]
+    flush_room_snapshots()
+
+    second_event = %{"event_type" => "fill", "x" => 10, "y" => 20, "color" => "#000000"}
+    :ok = draw_event_as(room_id, drawer_token, second_event)
+    _ = :sys.get_state(RoomServer.whereis(room_id))
+
+    assert_receive {:draw_event, ^duplicate_pid, ^second_event}
+    assert_receive {:draw_event, ^guesser_pid, ^second_event}
+    refute_receive {:draw_event, ^originating_pid, _event}
+  end
+
+  test "undo and invalid drawing operations do not send snapshots", %{room_id: room_id} do
+    {p1, p2, word, state} = start_playing(room_id)
+    drawer = state.drawer_id
+    guesser = if drawer == p1, do: p2, else: p1
+    drawer_token = resume_token_for(state, drawer)
+    guesser_token = resume_token_for(state, guesser)
+    guesser_pid = Process.get({:player, guesser_token})
+    flush_room_snapshots()
+
+    start_event = %{"event_type" => "start", "x" => 10, "y" => 20}
+    :ok = draw_event_as(room_id, drawer_token, start_event)
+    _ = :sys.get_state(RoomServer.whereis(room_id))
+    assert_receive {:draw_event, ^guesser_pid, ^start_event}
+
+    undo_event = %{"event_type" => "undo"}
+    :ok = draw_event_as(room_id, drawer_token, undo_event)
+    _ = :sys.get_state(RoomServer.whereis(room_id))
+    assert_receive {:draw_event, ^guesser_pid, ^undo_event}
+    refute_receive {:room_snapshot, _snapshot}
+
+    {:ok, state} = RoomServer.get_state(room_id)
+    assert state.current_drawing == []
+
+    :ok = draw_event_as(room_id, drawer_token, undo_event)
+    :ok = draw_event_as(room_id, guesser_token, start_event)
+    _ = :sys.get_state(RoomServer.whereis(room_id))
+    refute_receive {:draw_event, _pid, _event}
+
+    :correct = guess_as(room_id, guesser_token, word)
+    flush_room_snapshots()
+    :ok = draw_event_as(room_id, drawer_token, start_event)
+    _ = :sys.get_state(RoomServer.whereis(room_id))
+    refute_receive {:draw_event, _pid, _event}
+
+    {:ok, state} = RoomServer.get_state(room_id)
+    assert state.phase == :turn_reveal
+    assert state.current_drawing == []
   end
 
   test "rejected commands and stale timers do not notify connections", %{room_id: room_id} do

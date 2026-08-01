@@ -824,11 +824,14 @@ defmodule FlamingoWeb.ScribbleLive do
     {:noreply, apply_snapshot(socket, snapshot)}
   end
 
+  def handle_info({:draw_event, event}, socket) do
+    {:noreply, push_event(socket, "draw_event", event)}
+  end
+
   defp apply_snapshot(socket, snapshot) do
     initial? = is_nil(socket.assigns.player_id)
     old_phase = socket.assigns.phase
     old_turn_end_time = socket.assigns.turn_end_time
-    old_drawing = Map.get(socket.assigns, :current_drawing, [])
     old_count = map_size(socket.assigns.players)
     old_feed_ids = socket.assigns.feed_ids
     feed_ids = MapSet.new(snapshot.feed, & &1.id)
@@ -921,8 +924,7 @@ defmodule FlamingoWeb.ScribbleLive do
         correct_guesses: snapshot.correct_guesses,
         revealed_indices: snapshot.revealed_indices,
         feed_ids: feed_ids,
-        score_gains: snapshot.score_gains,
-        current_drawing: snapshot.current_drawing
+        score_gains: snapshot.score_gains
       )
 
     socket =
@@ -943,8 +945,7 @@ defmodule FlamingoWeb.ScribbleLive do
       end
 
     socket =
-      if snapshot.phase == :playing &&
-           (snapshot.current_drawing != old_drawing || old_phase != :playing) do
+      if snapshot.phase == :playing && (initial? || old_phase != :playing) do
         push_event(socket, "drawing_state", %{events: snapshot.current_drawing})
       else
         socket

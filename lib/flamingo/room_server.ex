@@ -375,43 +375,56 @@ defmodule Flamingo.RoomServer do
 
   @impl true
   def handle_cast({:draw_event, pid, event}, state) do
-    {:noreply, draw_event(state, player_id_for_connection(state, pid), event)}
+    {:noreply, draw_event(state, player_id_for_connection(state, pid), pid, event)}
   end
 
-  defp draw_event(state, nil, _event), do: state
+  defp draw_event(state, nil, _originating_pid, _event), do: state
 
-  defp draw_event(state, player_id, %{"event_type" => "undo"}) do
-    if player_id != state.drawer_id do
-      state
-    else
-      boundary_types = MapSet.new(["start", "fill", "clear"])
+  defp draw_event(
+         %{phase: :playing, drawer_id: player_id} = state,
+         player_id,
+         originating_pid,
+         %{"event_type" => "undo"} = event
+       ) do
+    boundary_types = MapSet.new(["start", "fill", "clear"])
 
-      idx =
-        state.current_drawing
-        |> Enum.reverse()
-        |> Enum.find_index(fn e -> MapSet.member?(boundary_types, e["event_type"]) end)
+    idx =
+      state.current_drawing
+      |> Enum.reverse()
+      |> Enum.find_index(fn drawing_event ->
+        MapSet.member?(boundary_types, drawing_event["event_type"])
+      end)
 
-      new_drawing =
-        case idx do
-          nil -> state.current_drawing
-          n -> Enum.take(state.current_drawing, length(state.current_drawing) - n - 1)
-        end
-
-      if new_drawing == state.current_drawing do
-        state
-      else
-        %{state | current_drawing: new_drawing} |> commit()
+    new_drawing =
+      case idx do
+        nil -> state.current_drawing
+        n -> Enum.take(state.current_drawing, length(state.current_drawing) - n - 1)
       end
+
+    if new_drawing == state.current_drawing do
+      state
+    else
+      notify_draw_event(state, originating_pid, event)
+      %{state | current_drawing: new_drawing}
     end
   end
 
-  defp draw_event(state, player_id, event) do
-    if player_id == state.drawer_id do
-      new_state = %{state | current_drawing: state.current_drawing ++ [event]}
-      commit(new_state)
-    else
-      state
-    end
+  defp draw_event(
+         %{phase: :playing, drawer_id: player_id} = state,
+         player_id,
+         originating_pid,
+         event
+       ) do
+    notify_draw_event(state, originating_pid, event)
+    %{state | current_drawing: state.current_drawing ++ [event]}
+  end
+
+  defp draw_event(state, _player_id, _originating_pid, _event), do: state
+
+  defp notify_draw_event(state, originating_pid, event) do
+    Enum.each(state.connections, fn {pid, _connection} ->
+      if pid != originating_pid, do: send(pid, {:draw_event, event})
+    end)
   end
 
   defp connect_pid(state, player_id, pid) do

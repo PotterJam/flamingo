@@ -189,7 +189,7 @@ const DrawingCanvas = {
     }
 
     this.handleEvent("draw_event", (event: DrawEvent) => {
-      if (this.isDrawer) return;
+      this.redoStack = [];
 
       if (event.event_type === "undo") {
         const idx = findUndoBoundaryIndex(this.eventStack);
@@ -208,6 +208,7 @@ const DrawingCanvas = {
 
     this.handleEvent("drawing_state", (data: { events: DrawEvent[] }) => {
       this.eventStack = [...data.events];
+      this.redoStack = [];
       renderEvents(this.ctx, data.events);
     });
 
