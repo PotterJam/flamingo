@@ -669,10 +669,10 @@ defmodule Flamingo.RoomServer do
   end
 
   defp enter_game_ended(state) do
-    member_view = Members.public_view(state.members)
+    member_snapshot = Members.snapshot(state.members)
 
     final_players =
-      Map.new(member_view.players, fn {player_id, player} ->
+      Map.new(member_snapshot.players, fn {player_id, player} ->
         {player_id,
          player
          |> Map.take([:id, :name])
@@ -681,7 +681,7 @@ defmodule Flamingo.RoomServer do
 
     final_result = %{
       players: final_players,
-      player_order: member_view.player_order,
+      player_order: member_snapshot.player_order,
       drawings: state.final_drawings
     }
 
@@ -789,7 +789,7 @@ defmodule Flamingo.RoomServer do
       player_id == state.drawer_id or Map.has_key?(state.correct_guesses, player_id) or
         state.phase in [:turn_reveal, :game_ended]
 
-    member_view = Members.public_view(state.members)
+    member_snapshot = Members.snapshot(state.members)
     final_result = if state.phase == :game_ended, do: state.final_result
 
     %{
@@ -797,18 +797,18 @@ defmodule Flamingo.RoomServer do
       phase: state.phase,
       viewer_id: player_id,
       players:
-        Map.new(member_view.players, fn {pid, player} ->
+        Map.new(member_snapshot.players, fn {pid, player} ->
           {pid, Map.put(player, :score, Map.fetch!(state.scores, pid))}
         end),
-      player_order: member_view.player_order,
-      host_id: member_view.host_id,
+      player_order: member_snapshot.player_order,
+      host_id: member_snapshot.host_id,
       drawer_id: state.drawer_id,
       round_count: state.round_count,
       turn_length: state.turn_length,
       current_round: state.current_round,
-      custom_words: if(player_id == member_view.host_id, do: state.custom_words, else: []),
+      custom_words: if(player_id == member_snapshot.host_id, do: state.custom_words, else: []),
       include_default_words:
-        if(player_id == member_view.host_id, do: state.include_default_words, else: false),
+        if(player_id == member_snapshot.host_id, do: state.include_default_words, else: false),
       word_choices:
         if(state.phase == :word_choice and player_id == state.drawer_id,
           do: state.word_choices,

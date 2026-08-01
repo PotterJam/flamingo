@@ -66,7 +66,7 @@ defmodule Flamingo.Room.MembersTest do
     assert :error = Members.connection_added(members, "missing")
   end
 
-  test "public views omit resume tokens and connection counts" do
+  test "snapshots omit resume tokens and connection counts" do
     members = members_fixture()
     {:ok, members, :became_online} = Members.connection_added(members, "alice")
 
@@ -77,7 +77,7 @@ defmodule Flamingo.Room.MembersTest do
              },
              player_order: ["alice", "bob"],
              host_id: "alice"
-           } = Members.public_view(members)
+           } = Members.snapshot(members)
   end
 
   defp members_fixture do

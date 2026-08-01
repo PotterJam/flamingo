@@ -94,7 +94,7 @@ defmodule Flamingo.Room.Members do
     Enum.count(members.seats, fn {_seat_id, seat} -> seat.connection_count > 0 end)
   end
 
-  def public_view(%__MODULE__{} = members) do
+  def snapshot(%__MODULE__{} = members) do
     %{
       players:
         Map.new(members.seats, fn {seat_id, seat} ->
