@@ -391,9 +391,7 @@ defmodule Flamingo.RoomServer do
     idx =
       state.current_drawing
       |> Enum.reverse()
-      |> Enum.find_index(fn drawing_event ->
-        MapSet.member?(boundary_types, drawing_event["event_type"])
-      end)
+      |> Enum.find_index(fn e -> MapSet.member?(boundary_types, e["event_type"]) end)
 
     new_drawing =
       case idx do
