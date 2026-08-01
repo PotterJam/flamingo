@@ -130,6 +130,23 @@ defmodule Flamingo.RoomServerTest do
     end
   end
 
+  defp receive_room_snapshots(player_ids, phase, snapshots \\ %{}) do
+    if map_size(snapshots) == length(player_ids) do
+      snapshots
+    else
+      assert_receive {:room_snapshot, snapshot}
+
+      snapshots =
+        if snapshot.phase == phase and snapshot.viewer_id in player_ids do
+          Map.put(snapshots, snapshot.viewer_id, snapshot)
+        else
+          snapshots
+        end
+
+      receive_room_snapshots(player_ids, phase, snapshots)
+    end
+  end
+
   test "first player becomes host", %{room_id: room_id} do
     {:ok, _resume_token, %{viewer_id: player_id} = state} = join_connected(room_id, "Alice")
     assert state.mode == :scribble
@@ -322,13 +339,7 @@ defmodule Flamingo.RoomServerTest do
         custom_words: ["secret", "other", "third"]
       })
 
-    assert_receive {:room_snapshot, first_snapshot}
-    assert_receive {:room_snapshot, second_snapshot}
-
-    snapshots = %{
-      first_snapshot.viewer_id => first_snapshot,
-      second_snapshot.viewer_id => second_snapshot
-    }
+    snapshots = receive_room_snapshots([alice, bob], :word_choice)
 
     {:ok, state} = RoomServer.get_state(room_id)
     drawer_id = state.drawer_id
@@ -341,13 +352,7 @@ defmodule Flamingo.RoomServerTest do
     word = List.first(state.word_choices)
     :ok = select_word_as(room_id, Map.fetch!(tokens, drawer_id), word)
 
-    assert_receive {:room_snapshot, first_snapshot}
-    assert_receive {:room_snapshot, second_snapshot}
-
-    snapshots = %{
-      first_snapshot.viewer_id => first_snapshot,
-      second_snapshot.viewer_id => second_snapshot
-    }
+    snapshots = receive_room_snapshots([alice, bob], :playing)
 
     assert Map.fetch!(snapshots, drawer_id).word == word
     assert Map.fetch!(snapshots, drawer_id).word_visible?
