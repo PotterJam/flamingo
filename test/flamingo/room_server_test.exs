@@ -17,6 +17,12 @@ defmodule Flamingo.RoomServerTest do
     end)
   end
 
+  defp connection_count(state, player_id) do
+    Enum.count(state.connections, fn {_pid, connection} ->
+      connection.player_id == player_id
+    end)
+  end
+
   defp join_connected(room_id, player_name) do
     parent = self()
     child_id = {:player, make_ref()}
@@ -560,14 +566,14 @@ defmodule Flamingo.RoomServerTest do
     {_second_id, _second_pid, _snapshot} = start_connection(room_id, resume_token)
 
     {:ok, state} = RoomServer.get_state(room_id)
-    assert map_size(Map.fetch!(state.connections, seat_id)) == 2
+    assert connection_count(state, seat_id) == 2
 
     stop_supervised!(first_id)
     _ = :sys.get_state(RoomServer.whereis(room_id))
 
     {:ok, state} = RoomServer.get_state(room_id)
     assert Map.fetch!(state.players, seat_id).connected
-    assert map_size(Map.fetch!(state.connections, seat_id)) == 1
+    assert connection_count(state, seat_id) == 1
     refute Map.has_key?(state.disconnect_timers, seat_id)
   end
 
@@ -605,7 +611,7 @@ defmodule Flamingo.RoomServerTest do
 
     {:ok, state} = RoomServer.get_state(room_id)
     assert Map.fetch!(state.players, seat_id).connected
-    assert map_size(Map.fetch!(state.connections, seat_id)) == 1
+    assert connection_count(state, seat_id) == 1
   end
 
   test "leave during a game permanently removes the player", %{

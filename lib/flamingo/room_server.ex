@@ -43,8 +43,6 @@ defmodule Flamingo.RoomServer do
     pending_hint_delays: [],
     disconnect_timers: %{},
     connections: %{},
-    connection_players: %{},
-    monitor_refs: %{},
     score_gains: %{},
     final_drawings: [],
     feed: Feed.new()
@@ -173,9 +171,10 @@ defmodule Flamingo.RoomServer do
     {:reply, {:ok, state}, state}
   end
 
-  def handle_call({:snapshot, pid}, _from, %{connection_players: connections} = state)
+  def handle_call({:snapshot, pid}, _from, %{connections: connections} = state)
       when is_map_key(connections, pid) do
-    {:reply, {:ok, snapshot_for(state, Map.fetch!(connections, pid))}, state}
+    player_id = Map.fetch!(connections, pid).player_id
+    {:reply, {:ok, snapshot_for(state, player_id)}, state}
   end
 
   def handle_call({:snapshot, _pid}, _from, state),
@@ -184,10 +183,10 @@ defmodule Flamingo.RoomServer do
   def handle_call(
         {:start_game, pid, settings},
         _from,
-        %{connection_players: connections} = state
+        %{connections: connections} = state
       )
       when is_map_key(connections, pid) do
-    player_id = Map.fetch!(connections, pid)
+    player_id = Map.fetch!(connections, pid).player_id
     round_count = Map.get(settings, :round_count, state.round_count)
     turn_length = Map.get(settings, :turn_length, state.turn_length)
     custom_words = Map.get(settings, :custom_words, state.custom_words)
@@ -231,10 +230,10 @@ defmodule Flamingo.RoomServer do
   def handle_call(
         {:select_word, pid, word},
         _from,
-        %{connection_players: connections} = state
+        %{connections: connections} = state
       )
       when is_map_key(connections, pid) do
-    player_id = Map.fetch!(connections, pid)
+    player_id = Map.fetch!(connections, pid).player_id
 
     cond do
       state.phase != :word_choice ->
@@ -258,10 +257,10 @@ defmodule Flamingo.RoomServer do
   def handle_call(
         {:guess, pid, text},
         _from,
-        %{connection_players: connections} = state
+        %{connections: connections} = state
       )
       when is_map_key(connections, pid) and is_binary(text) do
-    player_id = Map.fetch!(connections, pid)
+    player_id = Map.fetch!(connections, pid).player_id
 
     cond do
       state.phase != :playing ->
@@ -302,16 +301,16 @@ defmodule Flamingo.RoomServer do
     end
   end
 
-  def handle_call({:guess, pid, _text}, _from, %{connection_players: connections} = state)
+  def handle_call({:guess, pid, _text}, _from, %{connections: connections} = state)
       when is_map_key(connections, pid),
       do: {:reply, {:error, :invalid_guess}, state}
 
   def handle_call({:guess, _pid, _text}, _from, state),
     do: {:reply, {:error, :not_found}, state}
 
-  def handle_call({:leave, pid}, _from, %{connection_players: connections} = state)
+  def handle_call({:leave, pid}, _from, %{connections: connections} = state)
       when is_map_key(connections, pid) do
-    player_id = Map.fetch!(connections, pid)
+    player_id = Map.fetch!(connections, pid).player_id
     {:reply, :ok, state |> remove_player(player_id) |> commit()}
   end
 
@@ -367,42 +366,30 @@ defmodule Flamingo.RoomServer do
     end
   end
 
-  def handle_info({:DOWN, ref, :process, _pid, _reason}, state) do
-    case Map.pop(state.monitor_refs, ref) do
-      {nil, _monitor_refs} ->
-        {:noreply, state}
+  def handle_info({:DOWN, ref, :process, pid, _reason}, state) do
+    case state.connections do
+      %{^pid => %{player_id: player_id, monitor_ref: ^ref}} ->
+        connections = Map.delete(state.connections, pid)
+        state = %{state | connections: connections}
 
-      {{player_id, pid}, monitor_refs} ->
-        seat_connections = Map.get(state.connections, player_id, %{})
-        seat_connections = Map.delete(seat_connections, pid)
-
-        connections =
-          if map_size(seat_connections) == 0,
-            do: Map.delete(state.connections, player_id),
-            else: Map.put(state.connections, player_id, seat_connections)
-
-        state = %{
-          state
-          | connections: connections,
-            connection_players: Map.delete(state.connection_players, pid),
-            monitor_refs: monitor_refs
-        }
-
-        if map_size(seat_connections) == 0 and Map.has_key?(state.players, player_id) do
-          {:noreply, state |> mark_disconnected(player_id) |> commit()}
-        else
+        if player_connected?(state, player_id) or not Map.has_key?(state.players, player_id) do
           {:noreply, state}
+        else
+          {:noreply, state |> mark_disconnected(player_id) |> commit()}
         end
+
+      _connections ->
+        {:noreply, state}
     end
   end
 
   @impl true
   def handle_cast(
         {:draw_event, pid, %{"event_type" => "undo"}},
-        %{connection_players: connections} = state
+        %{connections: connections} = state
       )
       when is_map_key(connections, pid) do
-    player_id = Map.fetch!(connections, pid)
+    player_id = Map.fetch!(connections, pid).player_id
 
     if player_id != state.drawer_id do
       {:noreply, state}
@@ -430,10 +417,10 @@ defmodule Flamingo.RoomServer do
 
   def handle_cast(
         {:draw_event, pid, event},
-        %{connection_players: connections} = state
+        %{connections: connections} = state
       )
       when is_map_key(connections, pid) do
-    case Map.fetch!(connections, pid) do
+    case Map.fetch!(connections, pid).player_id do
       player_id when player_id == state.drawer_id ->
         new_state = %{state | current_drawing: state.current_drawing ++ [event]}
         {:noreply, commit(new_state)}
@@ -446,27 +433,30 @@ defmodule Flamingo.RoomServer do
   def handle_cast({:draw_event, _pid, _event}, state), do: {:noreply, state}
 
   defp connect_pid(state, player_id, pid) do
-    case Map.fetch(state.connection_players, pid) do
-      {:ok, ^player_id} ->
+    case Map.fetch(state.connections, pid) do
+      {:ok, %{player_id: ^player_id}} ->
         {:ok, state}
 
-      {:ok, _other_player_id} ->
+      {:ok, _connection} ->
         {:error, :already_connected}
 
       :error ->
-        seat_connections = Map.get(state.connections, player_id, %{})
         ref = Process.monitor(pid)
+        connection = %{player_id: player_id, monitor_ref: ref}
 
         state = %{
           state
-          | connections:
-              Map.put(state.connections, player_id, Map.put(seat_connections, pid, ref)),
-            connection_players: Map.put(state.connection_players, pid, player_id),
-            monitor_refs: Map.put(state.monitor_refs, ref, {player_id, pid})
+          | connections: Map.put(state.connections, pid, connection)
         }
 
         {:ok, mark_connected(state, player_id)}
     end
+  end
+
+  defp player_connected?(state, player_id) do
+    Enum.any?(state.connections, fn {_pid, connection} ->
+      connection.player_id == player_id
+    end)
   end
 
   defp mark_connected(state, player_id) do
@@ -496,17 +486,17 @@ defmodule Flamingo.RoomServer do
 
   defp remove_player(state, player_id) do
     player_name = Map.get(state.players, player_id).name
-    seat_connections = Map.get(state.connections, player_id, %{})
 
-    Enum.each(seat_connections, fn {_pid, ref} -> Process.demonitor(ref, [:flush]) end)
+    Enum.each(state.connections, fn {_pid, connection} ->
+      if connection.player_id == player_id do
+        Process.demonitor(connection.monitor_ref, [:flush])
+      end
+    end)
 
-    removed_refs = seat_connections |> Map.values() |> MapSet.new()
-
-    connection_players =
-      Map.reject(state.connection_players, fn {_pid, seat_id} -> seat_id == player_id end)
-
-    monitor_refs =
-      Map.reject(state.monitor_refs, fn {ref, _seat} -> MapSet.member?(removed_refs, ref) end)
+    connections =
+      Map.reject(state.connections, fn {_pid, connection} ->
+        connection.player_id == player_id
+      end)
 
     players = Map.delete(state.players, player_id)
     player_order = List.delete(state.player_order, player_id)
@@ -530,9 +520,7 @@ defmodule Flamingo.RoomServer do
         resume_tokens: resume_tokens,
         correct_guesses: correct_guesses,
         disconnect_timers: disconnect_timers,
-        connections: Map.delete(state.connections, player_id),
-        connection_players: connection_players,
-        monitor_refs: monitor_refs
+        connections: connections
     }
 
     {feed, _entry} = Feed.player_left(new_state.feed, player_id, player_name)
@@ -873,10 +861,12 @@ defmodule Flamingo.RoomServer do
   end
 
   defp commit(state, excluded_pid \\ nil) do
-    Enum.each(state.connections, fn {player_id, seat_connections} ->
+    state.connections
+    |> Enum.group_by(fn {_pid, connection} -> connection.player_id end)
+    |> Enum.each(fn {player_id, player_connections} ->
       snapshot = snapshot_for(state, player_id)
 
-      Enum.each(seat_connections, fn {pid, _ref} ->
+      Enum.each(player_connections, fn {pid, _connection} ->
         if pid != excluded_pid, do: send(pid, {:room_snapshot, snapshot})
       end)
     end)
