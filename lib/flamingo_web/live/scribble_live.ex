@@ -19,7 +19,6 @@ defmodule FlamingoWeb.ScribbleLive do
      socket
      |> assign(
        room_id: room_id,
-       revision: 0,
        player_id: nil,
        phase: :lobby,
        players: %{},
@@ -821,20 +820,8 @@ defmodule FlamingoWeb.ScribbleLive do
     |> Enum.count(&(String.trim(&1) != ""))
   end
 
-  def handle_info({:room_snapshot, revision, _snapshot}, socket)
-      when revision <= socket.assigns.revision do
-    {:noreply, socket}
-  end
-
-  def handle_info({:room_snapshot, revision, snapshot}, socket) do
-    if revision == socket.assigns.revision + 1 do
-      {:noreply, apply_snapshot(socket, snapshot)}
-    else
-      case Rooms.snapshot(socket.assigns.room_id) do
-        {:ok, authoritative} -> {:noreply, apply_snapshot(socket, authoritative)}
-        {:error, :not_found} -> {:noreply, push_navigate(socket, to: ~p"/")}
-      end
-    end
+  def handle_info({:room_snapshot, snapshot}, socket) do
+    {:noreply, apply_snapshot(socket, snapshot)}
   end
 
   defp apply_snapshot(socket, snapshot) do
@@ -901,7 +888,6 @@ defmodule FlamingoWeb.ScribbleLive do
     socket =
       socket
       |> assign(
-        revision: snapshot.revision,
         player_id: snapshot.viewer_id,
         phase: snapshot.phase,
         players: snapshot.players,

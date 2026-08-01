@@ -36,8 +36,8 @@ defmodule FlamingoWeb.ScribbleLiveTest do
         send(caller, {ref, operation.()})
         player_loop(parent)
 
-      {:room_snapshot, revision, snapshot} ->
-        send(parent, {:room_snapshot, revision, snapshot})
+      {:room_snapshot, snapshot} ->
+        send(parent, {:room_snapshot, snapshot})
         player_loop(parent)
     end
   end
@@ -49,8 +49,6 @@ defmodule FlamingoWeb.ScribbleLiveTest do
     assert_receive {^ref, result}
     result
   end
-
-  defp snapshot_as(room_id, token), do: as_player(token, fn -> RoomServer.snapshot(room_id) end)
 
   defp start_game_as(room_id, token, settings),
     do: as_player(token, fn -> RoomServer.start_game(room_id, settings) end)
@@ -161,29 +159,6 @@ defmodule FlamingoWeb.ScribbleLiveTest do
     assert has_element?(view, "#round-count-slider[value='5']")
     assert has_element?(view, "#round-length-input[value='90']")
     assert has_element?(view, "#custom-words-input", "saved locally")
-  end
-
-  test "versioned snapshots ignore stale delivery and recover revision gaps", %{
-    conn: conn,
-    room_id: room_id
-  } do
-    {:ok, resume_token, %{viewer_id: seat_id}} = join_connected(room_id, "Alice")
-    {:ok, view, _html} = live(conn, ~p"/game/#{room_id}?resume_token=#{resume_token}")
-    {:ok, snapshot} = snapshot_as(room_id, resume_token)
-
-    altered_snapshot = put_in(snapshot.players[seat_id].name, "Mallory")
-
-    send(view.pid, {:room_snapshot, snapshot.revision, altered_snapshot})
-    refute has_element?(view, "li", "Mallory")
-
-    ordered_revision = snapshot.revision + 1
-    ordered_snapshot = %{altered_snapshot | revision: ordered_revision}
-    send(view.pid, {:room_snapshot, ordered_revision, ordered_snapshot})
-    assert has_element?(view, "li", "Mallory")
-
-    send(view.pid, {:room_snapshot, ordered_revision + 2, ordered_snapshot})
-    assert has_element?(view, "li", "Alice")
-    refute has_element?(view, "li", "Mallory")
   end
 
   test "guesser receives a projected word while the drawer sees the selected word", %{

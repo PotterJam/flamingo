@@ -23,7 +23,6 @@ defmodule Flamingo.RoomServer do
     :word,
     :phase_timer_ref,
     :turn_end_time,
-    revision: 0,
     mode: :scribble,
     phase: :lobby,
     players: %{},
@@ -824,7 +823,6 @@ defmodule Flamingo.RoomServer do
         state.phase in [:turn_reveal, :game_ended]
 
     %{
-      revision: state.revision,
       mode: state.mode,
       phase: state.phase,
       viewer_id: player_id,
@@ -875,13 +873,11 @@ defmodule Flamingo.RoomServer do
   end
 
   defp commit(state, excluded_pid \\ nil) do
-    state = %{state | revision: state.revision + 1}
-
     Enum.each(state.connections, fn {player_id, seat_connections} ->
       snapshot = snapshot_for(state, player_id)
 
       Enum.each(seat_connections, fn {pid, _ref} ->
-        if pid != excluded_pid, do: send(pid, {:room_snapshot, state.revision, snapshot})
+        if pid != excluded_pid, do: send(pid, {:room_snapshot, snapshot})
       end)
     end)
 

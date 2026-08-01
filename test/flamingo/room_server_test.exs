@@ -51,8 +51,8 @@ defmodule Flamingo.RoomServerTest do
         send(caller, {ref, operation.()})
         player_loop(parent)
 
-      {:room_snapshot, revision, snapshot} ->
-        send(parent, {:room_snapshot, revision, snapshot})
+      {:room_snapshot, snapshot} ->
+        send(parent, {:room_snapshot, snapshot})
         player_loop(parent)
     end
   end
@@ -103,7 +103,7 @@ defmodule Flamingo.RoomServerTest do
 
   defp flush_room_snapshots do
     receive do
-      {:room_snapshot, _revision, _snapshot} -> flush_room_snapshots()
+      {:room_snapshot, _snapshot} -> flush_room_snapshots()
     after
       0 -> :ok
     end
@@ -148,13 +148,6 @@ defmodule Flamingo.RoomServerTest do
 
     {:ok, state} = RoomServer.get_state(room_id)
     assert state.host_id == p1
-  end
-
-  test "join and connect advance the authoritative revision", %{room_id: room_id} do
-    {:ok, _resume_token, snapshot} = join_connected(room_id, "Alice")
-
-    assert snapshot.revision == 2
-    assert {:ok, %{revision: 2}} = RoomServer.get_state(room_id)
   end
 
   test "start_game fails if not host", %{room_id: room_id} do
@@ -295,7 +288,7 @@ defmodule Flamingo.RoomServerTest do
     assert p3 in guesser_ids
   end
 
-  test "direct notifications share a revision without sharing secret projections", %{
+  test "direct notifications do not share secret projections", %{
     room_id: room_id
   } do
     {:ok, alice_token, %{viewer_id: alice}} = join_connected(room_id, "Alice")
@@ -308,8 +301,8 @@ defmodule Flamingo.RoomServerTest do
         custom_words: ["secret", "other", "third"]
       })
 
-    assert_receive {:room_snapshot, revision, first_snapshot}
-    assert_receive {:room_snapshot, ^revision, second_snapshot}
+    assert_receive {:room_snapshot, first_snapshot}
+    assert_receive {:room_snapshot, second_snapshot}
 
     snapshots = %{
       first_snapshot.viewer_id => first_snapshot,
@@ -327,9 +320,8 @@ defmodule Flamingo.RoomServerTest do
     word = List.first(state.word_choices)
     :ok = select_word_as(room_id, Map.fetch!(tokens, drawer_id), word)
 
-    assert_receive {:room_snapshot, next_revision, first_snapshot}
-    assert_receive {:room_snapshot, ^next_revision, second_snapshot}
-    assert next_revision == revision + 1
+    assert_receive {:room_snapshot, first_snapshot}
+    assert_receive {:room_snapshot, second_snapshot}
 
     snapshots = %{
       first_snapshot.viewer_id => first_snapshot,
@@ -342,17 +334,16 @@ defmodule Flamingo.RoomServerTest do
     refute Map.fetch!(snapshots, guesser_id).word == word
   end
 
-  test "rejected commands and stale timers do not advance revision", %{room_id: room_id} do
-    {:ok, alice_token, snapshot} = join_connected(room_id, "Alice")
-    revision = snapshot.revision
+  test "rejected commands and stale timers do not notify connections", %{room_id: room_id} do
+    {:ok, alice_token, _snapshot} = join_connected(room_id, "Alice")
 
     assert {:error, :not_enough_players} = start_game_as(room_id, alice_token, %{})
-    assert {:ok, %{revision: ^revision}} = RoomServer.get_state(room_id)
+    refute_receive {:room_snapshot, _snapshot}
 
     send(RoomServer.whereis(room_id), {:word_choice_timeout, make_ref()})
     _ = :sys.get_state(RoomServer.whereis(room_id))
 
-    assert {:ok, %{revision: ^revision}} = RoomServer.get_state(room_id)
+    refute_receive {:room_snapshot, _snapshot}
   end
 
   test "snapshot rejects an unregistered caller", %{room_id: room_id} do
