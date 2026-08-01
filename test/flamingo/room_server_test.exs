@@ -936,6 +936,20 @@ defmodule Flamingo.RoomServerTest do
     assert state.word == word
   end
 
+  test "scores are Scribble state projected onto public players", %{room_id: room_id} do
+    {p1, p2, word, state} = start_playing(room_id)
+    guesser = if p1 == state.drawer_id, do: p2, else: p1
+
+    assert :correct = guess_as(room_id, resume_token_for(state, guesser), word)
+
+    {:ok, state} = RoomServer.get_state(room_id)
+    {:ok, snapshot} = snapshot_as(room_id, resume_token_for(state, guesser))
+
+    refute Map.has_key?(Map.fetch!(state.players, guesser), :score)
+    assert Map.fetch!(state.scores, guesser) > 0
+    assert Map.fetch!(snapshot.players, guesser).score == Map.fetch!(state.scores, guesser)
+  end
+
   test "turn_reveal tracks drawn_this_round", %{room_id: room_id} do
     {p1, p2, word, state} = start_playing(room_id)
     drawer = state.drawer_id

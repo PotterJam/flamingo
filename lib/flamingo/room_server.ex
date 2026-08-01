@@ -43,6 +43,7 @@ defmodule Flamingo.RoomServer do
     pending_hint_delays: [],
     disconnect_timers: %{},
     connections: %{},
+    scores: %{},
     score_gains: %{},
     final_drawings: [],
     feed: Feed.new()
@@ -133,19 +134,21 @@ defmodule Flamingo.RoomServer do
   def handle_call({:join, player_name}, _from, state) do
     player_id = generate_player_id()
     resume_token = generate_resume_token()
-    player = %{id: player_id, name: player_name, score: 0, connected: false}
+    player = %{id: player_id, name: player_name, connected: false}
 
     players = Map.put(state.players, player_id, player)
     resume_tokens = Map.put(state.resume_tokens, resume_token, player_id)
     player_order = state.player_order ++ [player_id]
     host_id = state.host_id || player_id
+    scores = Map.put(state.scores, player_id, 0)
 
     new_state = %{
       state
       | players: players,
         resume_tokens: resume_tokens,
         player_order: player_order,
-        host_id: host_id
+        host_id: host_id,
+        scores: scores
     }
 
     {feed, _entry} = Feed.player_joined(new_state.feed, player_id, player_name)
@@ -508,6 +511,8 @@ defmodule Flamingo.RoomServer do
 
     correct_guesses = Map.delete(state.correct_guesses, player_id)
     disconnect_timers = Map.delete(state.disconnect_timers, player_id)
+    scores = Map.delete(state.scores, player_id)
+    score_gains = Map.delete(state.score_gains, player_id)
 
     resume_tokens =
       Map.reject(state.resume_tokens, fn {_token, seat_id} -> seat_id == player_id end)
@@ -520,7 +525,9 @@ defmodule Flamingo.RoomServer do
         resume_tokens: resume_tokens,
         correct_guesses: correct_guesses,
         disconnect_timers: disconnect_timers,
-        connections: connections
+        connections: connections,
+        scores: scores,
+        score_gains: score_gains
     }
 
     {feed, _entry} = Feed.player_left(new_state.feed, player_id, player_name)
@@ -642,10 +649,10 @@ defmodule Flamingo.RoomServer do
       )
       |> Map.filter(fn {pid, _gain} -> Map.has_key?(state.players, pid) end)
 
-    players =
-      Map.new(state.players, fn {pid, player} ->
+    scores =
+      Map.new(state.scores, fn {pid, score} ->
         gain = Map.get(score_gains, pid, 0)
-        {pid, %{player | score: player.score + gain}}
+        {pid, score + gain}
       end)
 
     new_state = %{
@@ -656,7 +663,7 @@ defmodule Flamingo.RoomServer do
         drawn_this_round: MapSet.put(state.drawn_this_round, state.drawer_id),
         final_drawings: state.final_drawings ++ [completed_drawing(state)],
         score_gains: score_gains,
-        players: players,
+        scores: scores,
         hint_timer_ref: nil,
         pending_hint_delays: []
     }
@@ -814,7 +821,10 @@ defmodule Flamingo.RoomServer do
       mode: state.mode,
       phase: state.phase,
       viewer_id: player_id,
-      players: state.players,
+      players:
+        Map.new(state.players, fn {pid, player} ->
+          {pid, Map.put(player, :score, Map.fetch!(state.scores, pid))}
+        end),
       player_order: state.player_order,
       host_id: state.host_id,
       drawer_id: state.drawer_id,

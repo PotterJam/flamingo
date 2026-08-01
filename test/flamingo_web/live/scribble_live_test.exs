@@ -66,6 +66,9 @@ defmodule FlamingoWeb.ScribbleLiveTest do
   defp draw_event_as(room_id, token, event),
     do: as_player(token, fn -> RoomServer.draw_event(room_id, event) end)
 
+  defp snapshot_as(room_id, token),
+    do: as_player(token, fn -> RoomServer.snapshot(room_id) end)
+
   defp leave_as(room_id, token), do: as_player(token, fn -> RoomServer.leave(room_id) end)
 
   alias Flamingo.RoomSupervisor
@@ -337,9 +340,12 @@ defmodule FlamingoWeb.ScribbleLiveTest do
     words_by_player =
       Map.put(words_by_player, p2, play_turn(room_id, p1, p1_token, p2, p2_token, []))
 
-    {:ok, state} = RoomServer.get_state(room_id)
-    winner_id = Enum.max_by(state.player_order, fn pid -> Map.get(state.players, pid).score end)
-    winner = Map.get(state.players, winner_id)
+    {:ok, snapshot} = snapshot_as(room_id, p1_token)
+
+    winner_id =
+      Enum.max_by(snapshot.player_order, fn pid -> Map.fetch!(snapshot.players, pid).score end)
+
+    winner = Map.fetch!(snapshot.players, winner_id)
     winner_word = Map.get(words_by_player, winner_id)
 
     html = render(view)
