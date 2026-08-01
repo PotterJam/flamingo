@@ -65,20 +65,20 @@ defmodule FlamingoWeb.ScribbleLive do
       # Rejoin (rather than just reading state) so a reconnecting player is
       # marked connected again before their disconnect grace period expires.
       case Rooms.rejoin(room_id, player_id) do
-        {:ok, view} ->
+        {:ok, snapshot} ->
           Rooms.subscribe(room_id)
 
           final_players =
-            if view.phase == :game_ended, do: view.players, else: %{}
+            if snapshot.phase == :game_ended, do: snapshot.players, else: %{}
 
           final_player_order =
-            if view.phase == :game_ended, do: view.player_order, else: []
+            if snapshot.phase == :game_ended, do: snapshot.player_order, else: []
 
           final_drawings =
-            if view.phase == :game_ended, do: view.final_drawings, else: []
+            if snapshot.phase == :game_ended, do: snapshot.final_drawings, else: []
 
           selected_player_id =
-            if view.phase == :game_ended,
+            if snapshot.phase == :game_ended,
               do: winning_player_id(final_players, final_player_order),
               else: nil
 
@@ -86,53 +86,53 @@ defmodule FlamingoWeb.ScribbleLive do
             socket
             |> assign(
               player_id: player_id,
-              phase: view.phase,
-              players: view.players,
-              player_order: view.player_order,
-              host_id: view.host_id,
-              drawer_id: view.drawer_id,
+              phase: snapshot.phase,
+              players: snapshot.players,
+              player_order: snapshot.player_order,
+              host_id: snapshot.host_id,
+              drawer_id: snapshot.drawer_id,
               final_players: final_players,
               final_player_order: final_player_order,
               final_drawings: final_drawings,
               selected_player_id: selected_player_id,
-              round_count: view.round_count,
-              turn_length: view.turn_length,
-              custom_words: Enum.join(view.custom_words, "\n"),
-              custom_word_count: length(view.custom_words),
+              round_count: snapshot.round_count,
+              turn_length: snapshot.turn_length,
+              custom_words: Enum.join(snapshot.custom_words, "\n"),
+              custom_word_count: length(snapshot.custom_words),
               custom_words_error: nil,
               settings_form:
                 to_form(
                   %{
-                    "round_count" => Integer.to_string(view.round_count),
-                    "turn_length" => Integer.to_string(view.turn_length),
-                    "custom_words" => Enum.join(view.custom_words, "\n"),
-                    "include_default_words" => view.include_default_words
+                    "round_count" => Integer.to_string(snapshot.round_count),
+                    "turn_length" => Integer.to_string(snapshot.turn_length),
+                    "custom_words" => Enum.join(snapshot.custom_words, "\n"),
+                    "include_default_words" => snapshot.include_default_words
                   },
                   as: :settings
                 ),
-              current_round: view.current_round,
-              word_choices: view.word_choices,
-              turn_end_time: view.turn_end_time,
-              word: view.word,
-              show_word: view.word_visible?,
-              correct_guesses: view.correct_guesses,
-              revealed_indices: view.revealed_indices,
-              score_gains: view.score_gains
+              current_round: snapshot.current_round,
+              word_choices: snapshot.word_choices,
+              turn_end_time: snapshot.turn_end_time,
+              word: snapshot.word,
+              show_word: snapshot.word_visible?,
+              correct_guesses: snapshot.correct_guesses,
+              revealed_indices: snapshot.revealed_indices,
+              score_gains: snapshot.score_gains
             )
-            |> stream(:feed, view.feed, reset: true)
+            |> stream(:feed, snapshot.feed, reset: true)
 
           socket =
-            if view.phase in [:word_choice, :playing, :turn_reveal] and view.turn_end_time do
+            if snapshot.phase in [:word_choice, :playing, :turn_reveal] and snapshot.turn_end_time do
               push_event(socket, "set_timer", %{
-                end_time: DateTime.to_iso8601(view.turn_end_time)
+                end_time: DateTime.to_iso8601(snapshot.turn_end_time)
               })
             else
               socket
             end
 
           socket =
-            if view.phase == :playing and view.current_drawing != [] do
-              push_event(socket, "drawing_state", %{events: view.current_drawing})
+            if snapshot.phase == :playing and snapshot.current_drawing != [] do
+              push_event(socket, "drawing_state", %{events: snapshot.current_drawing})
             else
               socket
             end
@@ -909,43 +909,43 @@ defmodule FlamingoWeb.ScribbleLive do
          _current_round},
         socket
       ) do
-    case Rooms.view(socket.assigns.room_id, socket.assigns.player_id) do
-      {:ok, %{phase: :word_choice} = view} ->
+    case Rooms.snapshot(socket.assigns.room_id, socket.assigns.player_id) do
+      {:ok, %{phase: :word_choice} = snapshot} ->
         socket =
           if socket.assigns.phase in [:lobby, :game_ended] do
-            stream(socket, :feed, view.feed, reset: true)
+            stream(socket, :feed, snapshot.feed, reset: true)
           else
             socket
           end
 
         socket =
           assign(socket,
-            phase: view.phase,
-            drawer_id: view.drawer_id,
-            turn_end_time: view.turn_end_time,
-            round_count: view.round_count,
-            turn_length: view.turn_length,
-            current_round: view.current_round,
+            phase: snapshot.phase,
+            drawer_id: snapshot.drawer_id,
+            turn_end_time: snapshot.turn_end_time,
+            round_count: snapshot.round_count,
+            turn_length: snapshot.turn_length,
+            current_round: snapshot.current_round,
             final_players: %{},
             final_player_order: [],
             final_drawings: [],
             selected_player_id: nil,
-            word_choices: view.word_choices,
-            word: view.word,
-            show_word: view.word_visible?,
-            correct_guesses: view.correct_guesses,
-            revealed_indices: view.revealed_indices,
-            score_gains: view.score_gains
+            word_choices: snapshot.word_choices,
+            word: snapshot.word,
+            show_word: snapshot.word_visible?,
+            correct_guesses: snapshot.correct_guesses,
+            revealed_indices: snapshot.revealed_indices,
+            score_gains: snapshot.score_gains
           )
 
         socket =
           socket
-          |> push_event("set_timer", %{end_time: DateTime.to_iso8601(view.turn_end_time)})
+          |> push_event("set_timer", %{end_time: DateTime.to_iso8601(snapshot.turn_end_time)})
           |> sync_round_audio()
 
         {:noreply, socket}
 
-      {:ok, _newer_view} ->
+      {:ok, _newer_snapshot} ->
         {:noreply, socket}
 
       {:error, :not_found} ->
@@ -954,32 +954,32 @@ defmodule FlamingoWeb.ScribbleLive do
   end
 
   def handle_info({:turn_started, _drawer_id, _turn_end_time}, socket) do
-    case Rooms.view(socket.assigns.room_id, socket.assigns.player_id) do
-      {:ok, %{phase: :playing} = view} ->
+    case Rooms.snapshot(socket.assigns.room_id, socket.assigns.player_id) do
+      {:ok, %{phase: :playing} = snapshot} ->
         socket =
           assign(socket,
-            phase: view.phase,
-            drawer_id: view.drawer_id,
+            phase: snapshot.phase,
+            drawer_id: snapshot.drawer_id,
             final_players: %{},
             final_player_order: [],
             final_drawings: [],
             selected_player_id: nil,
-            word_choices: view.word_choices,
-            turn_end_time: view.turn_end_time,
-            word: view.word,
-            show_word: view.word_visible?,
-            correct_guesses: view.correct_guesses,
-            revealed_indices: view.revealed_indices
+            word_choices: snapshot.word_choices,
+            turn_end_time: snapshot.turn_end_time,
+            word: snapshot.word,
+            show_word: snapshot.word_visible?,
+            correct_guesses: snapshot.correct_guesses,
+            revealed_indices: snapshot.revealed_indices
           )
 
         socket =
           socket
-          |> push_event("set_timer", %{end_time: DateTime.to_iso8601(view.turn_end_time)})
+          |> push_event("set_timer", %{end_time: DateTime.to_iso8601(snapshot.turn_end_time)})
           |> sync_round_audio()
 
         {:noreply, socket}
 
-      {:ok, _newer_view} ->
+      {:ok, _newer_snapshot} ->
         {:noreply, socket}
 
       {:error, :not_found} ->
@@ -1029,13 +1029,13 @@ defmodule FlamingoWeb.ScribbleLive do
          MapSet.member?(socket.assigns.correct_guesses, socket.assigns.player_id) do
       {:noreply, socket}
     else
-      case Rooms.view(socket.assigns.room_id, socket.assigns.player_id) do
-        {:ok, view} ->
+      case Rooms.snapshot(socket.assigns.room_id, socket.assigns.player_id) do
+        {:ok, snapshot} ->
           {:noreply,
            assign(socket,
-             word: view.word,
-             show_word: view.word_visible?,
-             revealed_indices: view.revealed_indices
+             word: snapshot.word,
+             show_word: snapshot.word_visible?,
+             revealed_indices: snapshot.revealed_indices
            )}
 
         {:error, :not_found} ->
@@ -1055,9 +1055,12 @@ defmodule FlamingoWeb.ScribbleLive do
 
     socket =
       if player_id == socket.assigns.player_id do
-        case Rooms.view(socket.assigns.room_id, socket.assigns.player_id) do
-          {:ok, view} -> assign(socket, word: view.word, show_word: view.word_visible?)
-          {:error, :not_found} -> socket
+        case Rooms.snapshot(socket.assigns.room_id, socket.assigns.player_id) do
+          {:ok, snapshot} ->
+            assign(socket, word: snapshot.word, show_word: snapshot.word_visible?)
+
+          {:error, :not_found} ->
+            socket
         end
       else
         socket

@@ -90,8 +90,8 @@ defmodule Flamingo.RoomServer do
     :exit, {:noproc, _} -> {:error, :not_found}
   end
 
-  def view(room_id, player_id) do
-    GenServer.call(via(room_id), {:view, player_id})
+  def snapshot(room_id, player_id) do
+    GenServer.call(via(room_id), {:snapshot, player_id})
   catch
     :exit, {:noproc, _} -> {:error, :not_found}
   end
@@ -160,9 +160,9 @@ defmodule Flamingo.RoomServer do
     {:reply, {:ok, state}, state}
   end
 
-  def handle_call({:view, player_id}, _from, state) do
+  def handle_call({:snapshot, player_id}, _from, state) do
     if Map.has_key?(state.players, player_id) do
-      {:reply, {:ok, project_view(state, player_id)}, state}
+      {:reply, {:ok, snapshot_for(state, player_id)}, state}
     else
       {:reply, {:error, :not_found}, state}
     end
@@ -709,7 +709,7 @@ defmodule Flamingo.RoomServer do
     )
   end
 
-  defp project_view(state, player_id) do
+  defp snapshot_for(state, player_id) do
     word_visible? =
       player_id == state.drawer_id or Map.has_key?(state.correct_guesses, player_id) or
         state.phase in [:turn_reveal, :game_ended]

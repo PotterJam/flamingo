@@ -119,13 +119,13 @@ The improved flow is:
 1. `Rooms.connect/2` authenticates the credential.
 2. `RoomServer` registers and monitors the caller in the same serialised call.
 3. It applies any online transition.
-4. It returns a safe viewer-specific view at revision `N`.
+4. It returns a safe viewer-specific snapshot at revision `N`.
 5. Later mutations produce versioned, recipient-safe notifications.
 
 ```text
 incoming revision == current + 1: apply it
 incoming revision <= current:     ignore it
-incoming revision > current + 1:  fetch Rooms.view/2 and replace the projection
+incoming revision > current + 1:  fetch Rooms.snapshot/2 and replace the projection
 ```
 
 Use full projected views for connection, phase changes, membership changes, and recovery. Drawing operations may remain safe low-latency deltas, with the complete current drawing included in recovery views.
@@ -168,7 +168,7 @@ This is the browser behaviour to preserve after every slice.
 - Rename `GameServer` to `RoomServer`.
 - Rename `GameLive` to `ScribbleLive`.
 - Record the room mode as `:scribble`.
-- Introduce `Rooms.view/2`.
+- Introduce `Rooms.snapshot/2`.
 - Stop returning raw `RoomServer` state to the web layer.
 - Remove secret words, word choices, and credentials from unauthorised views and shared messages.
 
@@ -189,13 +189,13 @@ Play the complete two-player game. During play, verify the drawer sees the chose
 
 #### Change
 
-- Add `Rooms.connect/2`, `Rooms.view/2`, and explicit `Rooms.leave/2` semantics.
+- Add `Rooms.connect/2`, `Rooms.snapshot/2`, and explicit `Rooms.leave/2` semantics.
 - Register and monitor the calling LiveView process.
 - Track multiple connections per member.
 - Remove `ScribbleLive.terminate/2` calling leave.
-- Make connect-and-view one serialised operation.
+- Make connect-and-snapshot one serialised operation.
 - Add monotonic room revisions and recipient-safe direct notifications.
-- Resynchronise through `Rooms.view/2` when a revision is missed.
+- Resynchronise through `Rooms.snapshot/2` when a revision is missed.
 - Keep drawing operations as safe low-latency deltas.
 
 #### Automated verification
@@ -205,7 +205,7 @@ Play the complete two-player game. During play, verify the drawer sees the chose
 - Closing the final connection marks the member offline.
 - Reconnect before grace expiry.
 - Stale `:DOWN` and stale disconnect timers.
-- Revision progression and view resynchronisation.
+- Revision progression and snapshot resynchronisation.
 - Run `mix precommit`.
 
 #### Browser acceptance
@@ -235,7 +235,7 @@ Remove score from room member records and move it into explicitly Scribble-owned
 - Score unaffected by room-role changes.
 - Disconnect preserving Scribble score.
 - Finished results surviving later member removal.
-- Prefer projected-view assertions over raw server-state assertions.
+- Prefer snapshot assertions over raw server-state assertions.
 - Run `mix precommit`.
 
 #### Browser acceptance
