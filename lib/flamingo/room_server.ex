@@ -42,6 +42,8 @@ defmodule Flamingo.RoomServer do
     hint_timer_ref: nil,
     pending_hint_delays: [],
     disconnect_timers: %{},
+    connections: %{},
+    monitor_refs: %{},
     score_gains: %{},
     final_drawings: [],
     feed: Feed.new()
@@ -57,8 +59,8 @@ defmodule Flamingo.RoomServer do
     :exit, {:noproc, _} -> {:error, :not_found}
   end
 
-  def rejoin(room_id, resume_token) do
-    GenServer.call(via(room_id), {:rejoin, resume_token})
+  def connect(room_id, resume_token) do
+    GenServer.call(via(room_id), {:connect, resume_token})
   catch
     :exit, {:noproc, _} -> {:error, :not_found}
   end
@@ -132,7 +134,7 @@ defmodule Flamingo.RoomServer do
   def handle_call({:join, player_name}, _from, state) do
     player_id = generate_player_id()
     resume_token = generate_resume_token()
-    player = %{id: player_id, name: player_name, score: 0, connected: true}
+    player = %{id: player_id, name: player_name, score: 0, connected: false}
 
     players = Map.put(state.players, player_id, player)
     resume_tokens = Map.put(state.resume_tokens, resume_token, player_id)
@@ -156,9 +158,9 @@ defmodule Flamingo.RoomServer do
     {:reply, {:ok, resume_token, snapshot_for(new_state, player_id)}, new_state}
   end
 
-  def handle_call({:rejoin, resume_token}, _from, state) do
+  def handle_call({:connect, resume_token}, {pid, _tag}, state) do
     with {:ok, player_id} <- resolve_token(state, resume_token) do
-      new_state = mark_connected(state, player_id)
+      new_state = connect_pid(state, player_id, pid)
       {:reply, {:ok, snapshot_for(new_state, player_id)}, new_state}
     else
       :error -> {:reply, {:error, :not_found}, state}
@@ -297,11 +299,7 @@ defmodule Flamingo.RoomServer do
   def handle_call({:leave, resume_token}, _from, state) do
     case resolve_token(state, resume_token) do
       {:ok, player_id} ->
-        if state.phase in [:lobby, :game_ended] do
-          {:reply, :ok, remove_player(state, player_id)}
-        else
-          {:reply, :ok, mark_disconnected(state, player_id)}
-        end
+        {:reply, :ok, remove_player(state, player_id)}
 
       :error ->
         {:reply, :ok, state}
@@ -359,6 +357,30 @@ defmodule Flamingo.RoomServer do
     end
   end
 
+  def handle_info({:DOWN, ref, :process, _pid, _reason}, state) do
+    case Map.pop(state.monitor_refs, ref) do
+      {nil, _monitor_refs} ->
+        {:noreply, state}
+
+      {{player_id, pid}, monitor_refs} ->
+        seat_connections = Map.get(state.connections, player_id, %{})
+        seat_connections = Map.delete(seat_connections, pid)
+
+        connections =
+          if map_size(seat_connections) == 0,
+            do: Map.delete(state.connections, player_id),
+            else: Map.put(state.connections, player_id, seat_connections)
+
+        state = %{state | connections: connections, monitor_refs: monitor_refs}
+
+        if map_size(seat_connections) == 0 and Map.has_key?(state.players, player_id) do
+          {:noreply, mark_disconnected(state, player_id)}
+        else
+          {:noreply, state}
+        end
+    end
+  end
+
   @impl true
   def handle_cast(
         {:draw_event, resume_token, %{"event_type" => "undo"}},
@@ -400,6 +422,24 @@ defmodule Flamingo.RoomServer do
     end
   end
 
+  defp connect_pid(state, player_id, pid) do
+    seat_connections = Map.get(state.connections, player_id, %{})
+
+    if Map.has_key?(seat_connections, pid) do
+      state
+    else
+      ref = Process.monitor(pid)
+
+      state = %{
+        state
+        | connections: Map.put(state.connections, player_id, Map.put(seat_connections, pid, ref)),
+          monitor_refs: Map.put(state.monitor_refs, ref, {player_id, pid})
+      }
+
+      mark_connected(state, player_id)
+    end
+  end
+
   defp mark_connected(state, player_id) do
     player = Map.fetch!(state.players, player_id)
 
@@ -430,6 +470,15 @@ defmodule Flamingo.RoomServer do
 
   defp remove_player(state, player_id) do
     player_name = Map.get(state.players, player_id).name
+    seat_connections = Map.get(state.connections, player_id, %{})
+
+    Enum.each(seat_connections, fn {_pid, ref} -> Process.demonitor(ref, [:flush]) end)
+
+    removed_refs = seat_connections |> Map.values() |> MapSet.new()
+
+    monitor_refs =
+      Map.reject(state.monitor_refs, fn {ref, _seat} -> MapSet.member?(removed_refs, ref) end)
+
     players = Map.delete(state.players, player_id)
     player_order = List.delete(state.player_order, player_id)
 
@@ -451,7 +500,9 @@ defmodule Flamingo.RoomServer do
         host_id: host_id,
         resume_tokens: resume_tokens,
         correct_guesses: correct_guesses,
-        disconnect_timers: disconnect_timers
+        disconnect_timers: disconnect_timers,
+        connections: Map.delete(state.connections, player_id),
+        monitor_refs: monitor_refs
     }
 
     {feed, entry} = Feed.player_left(new_state.feed, player_id, player_name)

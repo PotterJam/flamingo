@@ -9,7 +9,7 @@ defmodule Flamingo.Rooms do
     RoomServer.join(room_id, player_name)
   end
 
-  def rejoin(room_id, resume_token), do: RoomServer.rejoin(room_id, resume_token)
+  def connect(room_id, resume_token), do: RoomServer.connect(room_id, resume_token)
 
   def leave(room_id, resume_token) do
     RoomServer.leave(room_id, resume_token)

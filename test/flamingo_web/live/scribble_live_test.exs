@@ -5,6 +5,14 @@ defmodule FlamingoWeb.ScribbleLiveTest do
 
   alias Flamingo.DrawingShare
   alias Flamingo.RoomServer
+
+  defp join_connected(room_id, player_name) do
+    with {:ok, resume_token, _snapshot} <- RoomServer.join(room_id, player_name),
+         {:ok, snapshot} <- RoomServer.connect(room_id, resume_token) do
+      {:ok, resume_token, snapshot}
+    end
+  end
+
   alias Flamingo.RoomSupervisor
 
   setup do
@@ -14,8 +22,8 @@ defmodule FlamingoWeb.ScribbleLiveTest do
   end
 
   test "host settings clamp round length to supported bounds", %{conn: conn, room_id: room_id} do
-    {:ok, p1_token, _p1_snapshot} = RoomServer.join(room_id, "Alice")
-    {:ok, _p2_token, _p2_snapshot} = RoomServer.join(room_id, "Bob")
+    {:ok, p1_token, _p1_snapshot} = join_connected(room_id, "Alice")
+    {:ok, _p2_token, _p2_snapshot} = join_connected(room_id, "Bob")
 
     {:ok, view, _html} = live(conn, ~p"/game/#{room_id}?resume_token=#{p1_token}")
 
@@ -35,8 +43,8 @@ defmodule FlamingoWeb.ScribbleLiveTest do
   end
 
   test "host can configure custom words one per line", %{conn: conn, room_id: room_id} do
-    {:ok, p1_token, _p1_snapshot} = RoomServer.join(room_id, "Alice")
-    {:ok, _p2_token, _p2_snapshot} = RoomServer.join(room_id, "Bob")
+    {:ok, p1_token, _p1_snapshot} = join_connected(room_id, "Alice")
+    {:ok, _p2_token, _p2_snapshot} = join_connected(room_id, "Bob")
 
     {:ok, view, _html} = live(conn, ~p"/game/#{room_id}?resume_token=#{p1_token}")
 
@@ -60,8 +68,8 @@ defmodule FlamingoWeb.ScribbleLiveTest do
   end
 
   test "custom word validation is shown before starting", %{conn: conn, room_id: room_id} do
-    {:ok, p1_token, _p1_snapshot} = RoomServer.join(room_id, "Alice")
-    {:ok, _p2_token, _p2_snapshot} = RoomServer.join(room_id, "Bob")
+    {:ok, p1_token, _p1_snapshot} = join_connected(room_id, "Alice")
+    {:ok, _p2_token, _p2_snapshot} = join_connected(room_id, "Bob")
 
     {:ok, view, _html} = live(conn, ~p"/game/#{room_id}?resume_token=#{p1_token}")
 
@@ -82,8 +90,8 @@ defmodule FlamingoWeb.ScribbleLiveTest do
     conn: conn,
     room_id: room_id
   } do
-    {:ok, drawer_id_token, %{viewer_id: drawer_id}} = RoomServer.join(room_id, "Alice")
-    {:ok, guesser_id_token, %{viewer_id: guesser_id}} = RoomServer.join(room_id, "Bob")
+    {:ok, drawer_id_token, %{viewer_id: drawer_id}} = join_connected(room_id, "Alice")
+    {:ok, guesser_id_token, %{viewer_id: guesser_id}} = join_connected(room_id, "Bob")
 
     {:ok, drawer_view, _html} =
       live(conn, ~p"/game/#{room_id}?resume_token=#{drawer_id_token}")
@@ -113,8 +121,8 @@ defmodule FlamingoWeb.ScribbleLiveTest do
     conn: conn,
     room_id: room_id
   } do
-    {:ok, p1_token, %{viewer_id: p1}} = RoomServer.join(room_id, "Alice")
-    {:ok, p2_token, %{viewer_id: p2}} = RoomServer.join(room_id, "Bob")
+    {:ok, p1_token, %{viewer_id: p1}} = join_connected(room_id, "Alice")
+    {:ok, p2_token, %{viewer_id: p2}} = join_connected(room_id, "Bob")
 
     {:ok, view, _html} = live(conn, ~p"/game/#{room_id}?resume_token=#{p1_token}")
 
@@ -143,8 +151,8 @@ defmodule FlamingoWeb.ScribbleLiveTest do
   end
 
   test "game end screen shows the winning player's drawings", %{conn: conn, room_id: room_id} do
-    {:ok, p1_token, %{viewer_id: p1}} = RoomServer.join(room_id, "Alice")
-    {:ok, p2_token, %{viewer_id: p2}} = RoomServer.join(room_id, "Bob")
+    {:ok, p1_token, %{viewer_id: p1}} = join_connected(room_id, "Alice")
+    {:ok, p2_token, %{viewer_id: p2}} = join_connected(room_id, "Bob")
 
     {:ok, view, _html} = live(conn, ~p"/game/#{room_id}?resume_token=#{p1_token}")
 
@@ -203,8 +211,8 @@ defmodule FlamingoWeb.ScribbleLiveTest do
     conn: conn,
     room_id: room_id
   } do
-    {:ok, p1_token, %{viewer_id: p1}} = RoomServer.join(room_id, "Alice")
-    {:ok, p2_token, %{viewer_id: p2}} = RoomServer.join(room_id, "Bob")
+    {:ok, p1_token, %{viewer_id: p1}} = join_connected(room_id, "Alice")
+    {:ok, p2_token, %{viewer_id: p2}} = join_connected(room_id, "Bob")
 
     {:ok, view, _html} = live(conn, ~p"/game/#{room_id}?resume_token=#{p1_token}")
 
@@ -256,8 +264,8 @@ defmodule FlamingoWeb.ScribbleLiveTest do
     conn: conn,
     room_id: room_id
   } do
-    {:ok, p1_token, %{viewer_id: p1}} = RoomServer.join(room_id, "Alice")
-    {:ok, p2_token, %{viewer_id: p2}} = RoomServer.join(room_id, "Bob")
+    {:ok, p1_token, %{viewer_id: p1}} = join_connected(room_id, "Alice")
+    {:ok, p2_token, %{viewer_id: p2}} = join_connected(room_id, "Bob")
 
     {:ok, view, _html} = live(conn, ~p"/game/#{room_id}?resume_token=#{p1_token}")
 
@@ -283,8 +291,8 @@ defmodule FlamingoWeb.ScribbleLiveTest do
     conn: conn,
     room_id: room_id
   } do
-    {:ok, p1_token, %{viewer_id: p1}} = RoomServer.join(room_id, "Alice")
-    {:ok, _p2_token, %{viewer_id: p2}} = RoomServer.join(room_id, "Bob")
+    {:ok, p1_token, %{viewer_id: p1}} = join_connected(room_id, "Alice")
+    {:ok, _p2_token, %{viewer_id: p2}} = join_connected(room_id, "Bob")
 
     {:ok, view, _html} = live(conn, ~p"/game/#{room_id}?resume_token=#{p1_token}")
 
@@ -306,8 +314,8 @@ defmodule FlamingoWeb.ScribbleLiveTest do
   end
 
   test "pushes round audio lifecycle events as phases change", %{conn: conn, room_id: room_id} do
-    {:ok, p1_token, %{viewer_id: p1}} = RoomServer.join(room_id, "Alice")
-    {:ok, p2_token, %{viewer_id: p2}} = RoomServer.join(room_id, "Bob")
+    {:ok, p1_token, %{viewer_id: p1}} = join_connected(room_id, "Alice")
+    {:ok, p2_token, %{viewer_id: p2}} = join_connected(room_id, "Bob")
 
     {:ok, view, _html} = live(conn, ~p"/game/#{room_id}?resume_token=#{p1_token}")
 

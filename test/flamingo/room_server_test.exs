@@ -17,8 +17,35 @@ defmodule Flamingo.RoomServerTest do
     end)
   end
 
+  defp join_connected(room_id, player_name) do
+    with {:ok, resume_token, _snapshot} <- RoomServer.join(room_id, player_name),
+         {:ok, snapshot} <- RoomServer.connect(room_id, resume_token) do
+      {:ok, resume_token, snapshot}
+    end
+  end
+
+  defp start_connection(room_id, resume_token) do
+    parent = self()
+    child_id = make_ref()
+
+    pid =
+      start_supervised!(
+        Supervisor.child_spec(
+          {Task,
+           fn ->
+             send(parent, {:connected, self(), RoomServer.connect(room_id, resume_token)})
+             receive do: (:stop -> :ok)
+           end},
+          id: child_id
+        )
+      )
+
+    assert_receive {:connected, ^pid, {:ok, snapshot}}
+    {child_id, pid, snapshot}
+  end
+
   test "first player becomes host", %{room_id: room_id} do
-    {:ok, _resume_token, %{viewer_id: player_id} = state} = RoomServer.join(room_id, "Alice")
+    {:ok, _resume_token, %{viewer_id: player_id} = state} = join_connected(room_id, "Alice")
     assert state.mode == :scribble
     assert state.host_id == player_id
     assert map_size(state.players) == 1
@@ -26,15 +53,15 @@ defmodule Flamingo.RoomServerTest do
   end
 
   test "second player does not change host", %{room_id: room_id} do
-    {:ok, _p1_token, %{viewer_id: p1}} = RoomServer.join(room_id, "Alice")
-    {:ok, _p2_token, %{viewer_id: p2} = state} = RoomServer.join(room_id, "Bob")
+    {:ok, _p1_token, %{viewer_id: p1}} = join_connected(room_id, "Alice")
+    {:ok, _p2_token, %{viewer_id: p2} = state} = join_connected(room_id, "Bob")
     assert state.host_id == p1
     assert state.player_order == [p1, p2]
   end
 
   test "leave reassigns host when host leaves", %{room_id: room_id} do
-    {:ok, p1_token, %{viewer_id: p1}} = RoomServer.join(room_id, "Alice")
-    {:ok, p2_token, %{viewer_id: p2}} = RoomServer.join(room_id, "Bob")
+    {:ok, p1_token, %{viewer_id: p1}} = join_connected(room_id, "Alice")
+    {:ok, p2_token, %{viewer_id: p2}} = join_connected(room_id, "Bob")
 
     resume_tokens = %{p1 => p1_token, p2 => p2_token}
 
@@ -47,8 +74,8 @@ defmodule Flamingo.RoomServerTest do
   end
 
   test "leave does not change host when non-host leaves", %{room_id: room_id} do
-    {:ok, p1_token, %{viewer_id: p1}} = RoomServer.join(room_id, "Alice")
-    {:ok, p2_token, %{viewer_id: p2}} = RoomServer.join(room_id, "Bob")
+    {:ok, p1_token, %{viewer_id: p1}} = join_connected(room_id, "Alice")
+    {:ok, p2_token, %{viewer_id: p2}} = join_connected(room_id, "Bob")
 
     resume_tokens = %{p1 => p1_token, p2 => p2_token}
 
@@ -60,13 +87,13 @@ defmodule Flamingo.RoomServerTest do
 
   test "join broadcasts players_updated", %{room_id: room_id} do
     Phoenix.PubSub.subscribe(Flamingo.PubSub, "game:#{room_id}")
-    RoomServer.join(room_id, "Alice")
+    join_connected(room_id, "Alice")
     assert_receive {:players_updated, _players, _order, _host}
   end
 
   test "start_game fails if not host", %{room_id: room_id} do
-    {:ok, p1_token, %{viewer_id: p1}} = RoomServer.join(room_id, "Alice")
-    {:ok, p2_token, %{viewer_id: p2}} = RoomServer.join(room_id, "Bob")
+    {:ok, p1_token, %{viewer_id: p1}} = join_connected(room_id, "Alice")
+    {:ok, p2_token, %{viewer_id: p2}} = join_connected(room_id, "Bob")
     resume_tokens = %{p1 => p1_token, p2 => p2_token}
 
     assert {:error, :not_host} =
@@ -74,7 +101,7 @@ defmodule Flamingo.RoomServerTest do
   end
 
   test "start_game fails with fewer than 2 players", %{room_id: room_id} do
-    {:ok, p1_token, %{viewer_id: p1}} = RoomServer.join(room_id, "Alice")
+    {:ok, p1_token, %{viewer_id: p1}} = join_connected(room_id, "Alice")
     resume_tokens = %{p1 => p1_token}
 
     assert {:error, :not_enough_players} =
@@ -82,8 +109,8 @@ defmodule Flamingo.RoomServerTest do
   end
 
   test "start_game fails with invalid round_count", %{room_id: room_id} do
-    {:ok, p1_token, %{viewer_id: p1}} = RoomServer.join(room_id, "Alice")
-    {:ok, p2_token, %{viewer_id: p2}} = RoomServer.join(room_id, "Bob")
+    {:ok, p1_token, %{viewer_id: p1}} = join_connected(room_id, "Alice")
+    {:ok, p2_token, %{viewer_id: p2}} = join_connected(room_id, "Bob")
     resume_tokens = %{p1 => p1_token, p2 => p2_token}
 
     assert {:error, :invalid_round_count} =
@@ -94,8 +121,8 @@ defmodule Flamingo.RoomServerTest do
   end
 
   test "start_game fails with invalid turn_length", %{room_id: room_id} do
-    {:ok, p1_token, %{viewer_id: p1}} = RoomServer.join(room_id, "Alice")
-    {:ok, p2_token, %{viewer_id: p2}} = RoomServer.join(room_id, "Bob")
+    {:ok, p1_token, %{viewer_id: p1}} = join_connected(room_id, "Alice")
+    {:ok, p2_token, %{viewer_id: p2}} = join_connected(room_id, "Bob")
 
     resume_tokens = %{p1 => p1_token, p2 => p2_token}
 
@@ -107,8 +134,8 @@ defmodule Flamingo.RoomServerTest do
   end
 
   test "start_game accepts turn_length boundaries", %{room_id: room_id} do
-    {:ok, p1_token, %{viewer_id: p1}} = RoomServer.join(room_id, "Alice")
-    {:ok, p2_token, %{viewer_id: p2}} = RoomServer.join(room_id, "Bob")
+    {:ok, p1_token, %{viewer_id: p1}} = join_connected(room_id, "Alice")
+    {:ok, p2_token, %{viewer_id: p2}} = join_connected(room_id, "Bob")
 
     resume_tokens = %{p1 => p1_token, p2 => p2_token}
 
@@ -126,8 +153,8 @@ defmodule Flamingo.RoomServerTest do
 
   test "start_game succeeds and broadcasts", %{room_id: room_id} do
     Phoenix.PubSub.subscribe(Flamingo.PubSub, "game:#{room_id}")
-    {:ok, p1_token, %{viewer_id: p1}} = RoomServer.join(room_id, "Alice")
-    {:ok, p2_token, %{viewer_id: p2}} = RoomServer.join(room_id, "Bob")
+    {:ok, p1_token, %{viewer_id: p1}} = join_connected(room_id, "Alice")
+    {:ok, p2_token, %{viewer_id: p2}} = join_connected(room_id, "Bob")
 
     resume_tokens = %{p1 => p1_token, p2 => p2_token}
 
@@ -145,9 +172,9 @@ defmodule Flamingo.RoomServerTest do
   end
 
   test "snapshot projects word choices and words for the requesting player", %{room_id: room_id} do
-    {:ok, p1_token, %{viewer_id: p1}} = RoomServer.join(room_id, "Alice")
-    {:ok, p2_token, %{viewer_id: p2}} = RoomServer.join(room_id, "Bob")
-    {:ok, p3_token, %{viewer_id: p3}} = RoomServer.join(room_id, "Charlie")
+    {:ok, p1_token, %{viewer_id: p1}} = join_connected(room_id, "Alice")
+    {:ok, p2_token, %{viewer_id: p2}} = join_connected(room_id, "Bob")
+    {:ok, p3_token, %{viewer_id: p3}} = join_connected(room_id, "Charlie")
 
     resume_tokens = %{p1 => p1_token, p2 => p2_token, p3 => p3_token}
 
@@ -208,7 +235,7 @@ defmodule Flamingo.RoomServerTest do
   end
 
   test "join separates the opaque credential from the public seat identity", %{room_id: room_id} do
-    {:ok, seat_id_token, %{viewer_id: seat_id} = snapshot} = RoomServer.join(room_id, "Alice")
+    {:ok, seat_id_token, %{viewer_id: seat_id} = snapshot} = join_connected(room_id, "Alice")
     token = seat_id_token
 
     assert is_binary(token)
@@ -220,8 +247,8 @@ defmodule Flamingo.RoomServerTest do
   end
 
   test "unknown tokens cannot inspect or mutate a game", %{room_id: room_id} do
-    {:ok, _alice_token, %{viewer_id: alice}} = RoomServer.join(room_id, "Alice")
-    {:ok, _bob_token, _bob_snapshot} = RoomServer.join(room_id, "Bob")
+    {:ok, _alice_token, %{viewer_id: alice}} = join_connected(room_id, "Alice")
+    {:ok, _bob_token, _bob_snapshot} = join_connected(room_id, "Bob")
     unknown = "unknown-token"
 
     assert {:error, :not_found} = RoomServer.snapshot(room_id, unknown)
@@ -240,8 +267,8 @@ defmodule Flamingo.RoomServerTest do
   test "credentials resolve only their own seat and cannot borrow authorization", %{
     room_id: room_id
   } do
-    {:ok, alice_token, %{viewer_id: alice}} = RoomServer.join(room_id, "Alice")
-    {:ok, bob_token, %{viewer_id: bob}} = RoomServer.join(room_id, "Bob")
+    {:ok, alice_token, %{viewer_id: alice}} = join_connected(room_id, "Alice")
+    {:ok, bob_token, %{viewer_id: bob}} = join_connected(room_id, "Bob")
 
     assert {:ok, %{viewer_id: ^alice}} = RoomServer.snapshot(room_id, alice_token)
 
@@ -259,7 +286,7 @@ defmodule Flamingo.RoomServerTest do
   end
 
   test "permanent lobby removal invalidates the removed credential", %{room_id: room_id} do
-    {:ok, alice_token, %{viewer_id: alice}} = RoomServer.join(room_id, "Alice")
+    {:ok, alice_token, %{viewer_id: alice}} = join_connected(room_id, "Alice")
     token = alice_token
 
     resume_tokens = %{alice => alice_token}
@@ -267,12 +294,12 @@ defmodule Flamingo.RoomServerTest do
     :ok = RoomServer.leave(room_id, Map.fetch!(resume_tokens, alice))
 
     assert {:error, :not_found} = RoomServer.snapshot(room_id, token)
-    assert {:error, :not_found} = RoomServer.rejoin(room_id, token)
+    assert {:error, :not_found} = RoomServer.connect(room_id, token)
   end
 
   test "start_game uses custom words exclusively", %{room_id: room_id} do
-    {:ok, p1_token, %{viewer_id: p1}} = RoomServer.join(room_id, "Alice")
-    {:ok, p2_token, %{viewer_id: p2}} = RoomServer.join(room_id, "Bob")
+    {:ok, p1_token, %{viewer_id: p1}} = join_connected(room_id, "Alice")
+    {:ok, p2_token, %{viewer_id: p2}} = join_connected(room_id, "Bob")
     custom_words = ["orbital llama", "velvet cactus", "disco teapot"]
 
     resume_tokens = %{p1 => p1_token, p2 => p2_token}
@@ -288,8 +315,8 @@ defmodule Flamingo.RoomServerTest do
   end
 
   test "start_game can include deduplicated default words with custom words", %{room_id: room_id} do
-    {:ok, p1_token, %{viewer_id: p1}} = RoomServer.join(room_id, "Alice")
-    {:ok, p2_token, %{viewer_id: p2}} = RoomServer.join(room_id, "Bob")
+    {:ok, p1_token, %{viewer_id: p1}} = join_connected(room_id, "Alice")
+    {:ok, p2_token, %{viewer_id: p2}} = join_connected(room_id, "Bob")
 
     resume_tokens = %{p1 => p1_token, p2 => p2_token}
 
@@ -307,8 +334,8 @@ defmodule Flamingo.RoomServerTest do
   end
 
   test "start_game rejects invalid custom words", %{room_id: room_id} do
-    {:ok, p1_token, %{viewer_id: p1}} = RoomServer.join(room_id, "Alice")
-    {:ok, p2_token, %{viewer_id: p2}} = RoomServer.join(room_id, "Bob")
+    {:ok, p1_token, %{viewer_id: p1}} = join_connected(room_id, "Alice")
+    {:ok, p2_token, %{viewer_id: p2}} = join_connected(room_id, "Bob")
 
     resume_tokens = %{p1 => p1_token, p2 => p2_token}
 
@@ -324,8 +351,8 @@ defmodule Flamingo.RoomServerTest do
   end
 
   test "minimum turn length schedules hints before the turn ends", %{room_id: room_id} do
-    {:ok, p1_token, %{viewer_id: p1}} = RoomServer.join(room_id, "Alice")
-    {:ok, p2_token, %{viewer_id: p2}} = RoomServer.join(room_id, "Bob")
+    {:ok, p1_token, %{viewer_id: p1}} = join_connected(room_id, "Alice")
+    {:ok, p2_token, %{viewer_id: p2}} = join_connected(room_id, "Bob")
     resume_tokens = %{p1 => p1_token, p2 => p2_token}
 
     :ok = RoomServer.start_game(room_id, Map.fetch!(resume_tokens, p1), %{turn_length: 15})
@@ -394,19 +421,82 @@ defmodule Flamingo.RoomServerTest do
     assert {:error, :not_found} = RoomServer.join("no-such-room", "Alice")
   end
 
-  test "rejoin succeeds for existing player", %{room_id: room_id} do
-    {:ok, player_id_token, %{viewer_id: player_id}} = RoomServer.join(room_id, "Alice")
+  test "connect succeeds for an existing player", %{room_id: room_id} do
+    {:ok, player_id_token, %{viewer_id: player_id}} = join_connected(room_id, "Alice")
     resume_tokens = %{player_id => player_id_token}
 
-    {:ok, state} = RoomServer.rejoin(room_id, Map.fetch!(resume_tokens, player_id))
+    {:ok, state} = RoomServer.connect(room_id, Map.fetch!(resume_tokens, player_id))
     assert Map.has_key?(state.players, player_id)
   end
 
-  test "rejoin fails for unknown player", %{room_id: room_id} do
-    assert {:error, :not_found} = RoomServer.rejoin(room_id, "nonexistent")
+  test "connect fails for an unknown credential", %{room_id: room_id} do
+    assert {:error, :not_found} = RoomServer.connect(room_id, "nonexistent")
   end
 
-  test "leave during a game marks the player disconnected instead of removing them", %{
+  test "join remains offline until its first connection", %{room_id: room_id} do
+    {:ok, resume_token, %{viewer_id: seat_id} = snapshot} = RoomServer.join(room_id, "Alice")
+
+    refute Map.fetch!(snapshot.players, seat_id).connected
+
+    assert {:ok, connected_snapshot} = RoomServer.connect(room_id, resume_token)
+    assert Map.fetch!(connected_snapshot.players, seat_id).connected
+  end
+
+  test "closing one of two connections leaves the seat online", %{room_id: room_id} do
+    {:ok, resume_token, %{viewer_id: seat_id}} = RoomServer.join(room_id, "Alice")
+    {first_id, _first_pid, _snapshot} = start_connection(room_id, resume_token)
+    {_second_id, _second_pid, _snapshot} = start_connection(room_id, resume_token)
+
+    {:ok, state} = RoomServer.get_state(room_id)
+    assert map_size(Map.fetch!(state.connections, seat_id)) == 2
+
+    stop_supervised!(first_id)
+    _ = :sys.get_state(RoomServer.whereis(room_id))
+
+    {:ok, state} = RoomServer.get_state(room_id)
+    assert Map.fetch!(state.players, seat_id).connected
+    assert map_size(Map.fetch!(state.connections, seat_id)) == 1
+    refute Map.has_key?(state.disconnect_timers, seat_id)
+  end
+
+  test "closing the final connection starts grace and reconnect rejects stale expiry", %{
+    room_id: room_id
+  } do
+    {:ok, resume_token, %{viewer_id: seat_id}} = RoomServer.join(room_id, "Alice")
+    {connection_id, _pid, _snapshot} = start_connection(room_id, resume_token)
+
+    stop_supervised!(connection_id)
+    _ = :sys.get_state(RoomServer.whereis(room_id))
+
+    {:ok, state} = RoomServer.get_state(room_id)
+    refute Map.fetch!(state.players, seat_id).connected
+    stale_grace_ref = Map.fetch!(state.disconnect_timers, seat_id)
+
+    {_replacement_id, _pid, snapshot} = start_connection(room_id, resume_token)
+    assert Map.fetch!(snapshot.players, seat_id).connected
+
+    send(RoomServer.whereis(room_id), {:remove_player, seat_id, stale_grace_ref})
+    _ = :sys.get_state(RoomServer.whereis(room_id))
+
+    {:ok, state} = RoomServer.get_state(room_id)
+    assert Map.fetch!(state.players, seat_id).connected
+    refute Map.has_key?(state.disconnect_timers, seat_id)
+  end
+
+  test "stale DOWN does not remove a current connection", %{room_id: room_id} do
+    {:ok, resume_token, %{viewer_id: seat_id}} = RoomServer.join(room_id, "Alice")
+    {_connection_id, connection_pid, _snapshot} = start_connection(room_id, resume_token)
+    stale_ref = make_ref()
+
+    send(RoomServer.whereis(room_id), {:DOWN, stale_ref, :process, connection_pid, :normal})
+    _ = :sys.get_state(RoomServer.whereis(room_id))
+
+    {:ok, state} = RoomServer.get_state(room_id)
+    assert Map.fetch!(state.players, seat_id).connected
+    assert map_size(Map.fetch!(state.connections, seat_id)) == 1
+  end
+
+  test "leave during a game permanently removes the player", %{
     room_id: room_id
   } do
     {p1, p2, _word, state} = start_playing(room_id)
@@ -415,113 +505,15 @@ defmodule Flamingo.RoomServerTest do
     :ok = RoomServer.leave(room_id, resume_token_for(state, guesser))
 
     {:ok, state} = RoomServer.get_state(room_id)
-    assert Map.has_key?(state.players, guesser)
-    refute Map.get(state.players, guesser).connected
-    assert guesser in state.player_order
-    assert is_reference(Map.get(state.disconnect_timers, guesser))
-  end
-
-  test "rejoin reconnects a disconnected player", %{room_id: room_id} do
-    {p1, p2, _word, state} = start_playing(room_id)
-    guesser = if p1 == state.drawer_id, do: p2, else: p1
-
-    :ok = RoomServer.leave(room_id, resume_token_for(state, guesser))
-    {:ok, _snapshot} = RoomServer.rejoin(room_id, resume_token_for(state, guesser))
-    {:ok, state} = RoomServer.get_state(room_id)
-
-    assert Map.get(state.players, guesser).connected
+    refute Map.has_key?(state.players, guesser)
+    refute guesser in state.player_order
     refute Map.has_key?(state.disconnect_timers, guesser)
   end
 
-  test "disconnected players are removed once the grace period expires", %{room_id: room_id} do
-    {:ok, p1_token, %{viewer_id: p1}} = RoomServer.join(room_id, "Alice")
-    {:ok, p2_token, %{viewer_id: p2}} = RoomServer.join(room_id, "Bob")
-    {:ok, p3_token, %{viewer_id: p3}} = RoomServer.join(room_id, "Charlie")
-    resume_tokens = %{p1 => p1_token, p2 => p2_token, p3 => p3_token}
-
-    :ok =
-      RoomServer.start_game(room_id, Map.fetch!(resume_tokens, p1), %{
-        round_count: 1,
-        turn_length: 30
-      })
-
-    {:ok, state} = RoomServer.get_state(room_id)
-    word = List.first(state.word_choices)
-    :ok = RoomServer.select_word(room_id, Map.fetch!(resume_tokens, state.drawer_id), word)
-
-    {:ok, state} = RoomServer.get_state(room_id)
-    guesser = Enum.find([p1, p2, p3], &(&1 != state.drawer_id))
-
-    :ok = RoomServer.leave(room_id, Map.fetch!(resume_tokens, guesser))
-
-    {:ok, state} = RoomServer.get_state(room_id)
-    ref = Map.fetch!(state.disconnect_timers, guesser)
-
-    pid = RoomServer.whereis(room_id)
-    send(pid, {:remove_player, guesser, ref})
-    _ = :sys.get_state(pid)
-
-    {:ok, state} = RoomServer.get_state(room_id)
-    refute Map.has_key?(state.players, guesser)
-    refute guesser in state.player_order
-  end
-
-  test "a reconnected player is not removed by the stale grace timer", %{room_id: room_id} do
-    {p1, p2, _word, state} = start_playing(room_id)
-    guesser = if p1 == state.drawer_id, do: p2, else: p1
-
-    :ok = RoomServer.leave(room_id, resume_token_for(state, guesser))
-
-    {:ok, state} = RoomServer.get_state(room_id)
-    ref = Map.fetch!(state.disconnect_timers, guesser)
-
-    {:ok, _state} = RoomServer.rejoin(room_id, resume_token_for(state, guesser))
-
-    pid = RoomServer.whereis(room_id)
-    send(pid, {:remove_player, guesser, ref})
-    _ = :sys.get_state(pid)
-
-    {:ok, state} = RoomServer.get_state(room_id)
-    assert Map.has_key?(state.players, guesser)
-    assert Map.get(state.players, guesser).connected
-  end
-
-  test "a disconnected guesser keeps their earned score", %{room_id: room_id} do
-    {:ok, p1_token, %{viewer_id: p1}} = RoomServer.join(room_id, "Alice")
-    {:ok, p2_token, %{viewer_id: p2}} = RoomServer.join(room_id, "Bob")
-    {:ok, p3_token, %{viewer_id: p3}} = RoomServer.join(room_id, "Charlie")
-    resume_tokens = %{p1 => p1_token, p2 => p2_token, p3 => p3_token}
-
-    :ok =
-      RoomServer.start_game(room_id, Map.fetch!(resume_tokens, p1), %{
-        round_count: 1,
-        turn_length: 30
-      })
-
-    {:ok, state} = RoomServer.get_state(room_id)
-    word = List.first(state.word_choices)
-    :ok = RoomServer.select_word(room_id, Map.fetch!(resume_tokens, state.drawer_id), word)
-
-    {:ok, state} = RoomServer.get_state(room_id)
-    [g1, g2] = Enum.reject([p1, p2, p3], &(&1 == state.drawer_id))
-
-    :correct = RoomServer.guess(room_id, Map.fetch!(resume_tokens, g1), word)
-    :ok = RoomServer.leave(room_id, Map.fetch!(resume_tokens, g1))
-    :correct = RoomServer.guess(room_id, Map.fetch!(resume_tokens, g2), word)
-
-    {:ok, state} = RoomServer.get_state(room_id)
-    assert state.phase == :turn_reveal
-    assert Map.get(state.players, g1).score > 0
-
-    {:ok, state} = RoomServer.rejoin(room_id, Map.fetch!(resume_tokens, g1))
-    assert Map.get(state.players, g1).score > 0
-    assert Map.get(state.players, g1).connected
-  end
-
-  test "next drawer skips disconnected players", %{room_id: room_id} do
-    {:ok, p1_token, %{viewer_id: p1}} = RoomServer.join(room_id, "Alice")
-    {:ok, p2_token, %{viewer_id: p2}} = RoomServer.join(room_id, "Bob")
-    {:ok, p3_token, %{viewer_id: p3}} = RoomServer.join(room_id, "Charlie")
+  test "next drawer skips removed players", %{room_id: room_id} do
+    {:ok, p1_token, %{viewer_id: p1}} = join_connected(room_id, "Alice")
+    {:ok, p2_token, %{viewer_id: p2}} = join_connected(room_id, "Bob")
+    {:ok, p3_token, %{viewer_id: p3}} = join_connected(room_id, "Charlie")
     resume_tokens = %{p1 => p1_token, p2 => p2_token, p3 => p3_token}
 
     :ok =
@@ -543,7 +535,7 @@ defmodule Flamingo.RoomServerTest do
     {:ok, state} = RoomServer.get_state(room_id)
     assert state.phase == :turn_reveal
 
-    # The next drawer in order disconnects during the reveal
+    # The next drawer in order leaves during the reveal.
     next_in_order =
       Enum.find(state.player_order, fn pid ->
         not MapSet.member?(state.drawn_this_round, pid)
@@ -562,8 +554,8 @@ defmodule Flamingo.RoomServerTest do
   end
 
   defp start_playing(room_id, settings \\ %{round_count: 1, turn_length: 30}) do
-    {:ok, p1_token, %{viewer_id: p1}} = RoomServer.join(room_id, "Alice")
-    {:ok, p2_token, %{viewer_id: p2}} = RoomServer.join(room_id, "Bob")
+    {:ok, p1_token, %{viewer_id: p1}} = join_connected(room_id, "Alice")
+    {:ok, p2_token, %{viewer_id: p2}} = join_connected(room_id, "Bob")
     resume_tokens = %{p1 => p1_token, p2 => p2_token}
 
     :ok = RoomServer.start_game(room_id, Map.fetch!(resume_tokens, p1), settings)
@@ -785,8 +777,8 @@ defmodule Flamingo.RoomServerTest do
   test "game ends after all players draw in all rounds", %{room_id: room_id} do
     Phoenix.PubSub.subscribe(Flamingo.PubSub, "game:#{room_id}")
 
-    {:ok, p1_token, %{viewer_id: p1}} = RoomServer.join(room_id, "Alice")
-    {:ok, p2_token, %{viewer_id: p2}} = RoomServer.join(room_id, "Bob")
+    {:ok, p1_token, %{viewer_id: p1}} = join_connected(room_id, "Alice")
+    {:ok, p2_token, %{viewer_id: p2}} = join_connected(room_id, "Bob")
     resume_tokens = %{p1 => p1_token, p2 => p2_token}
 
     :ok =
@@ -828,8 +820,8 @@ defmodule Flamingo.RoomServerTest do
   end
 
   test "round increments after all players draw", %{room_id: room_id} do
-    {:ok, p1_token, %{viewer_id: p1}} = RoomServer.join(room_id, "Alice")
-    {:ok, p2_token, %{viewer_id: p2}} = RoomServer.join(room_id, "Bob")
+    {:ok, p1_token, %{viewer_id: p1}} = join_connected(room_id, "Alice")
+    {:ok, p2_token, %{viewer_id: p2}} = join_connected(room_id, "Bob")
     resume_tokens = %{p1 => p1_token, p2 => p2_token}
 
     :ok =
@@ -864,8 +856,8 @@ defmodule Flamingo.RoomServerTest do
   end
 
   test "selected words are excluded from later choices in the same game", %{room_id: room_id} do
-    {:ok, p1_token, %{viewer_id: p1}} = RoomServer.join(room_id, "Alice")
-    {:ok, p2_token, %{viewer_id: p2}} = RoomServer.join(room_id, "Bob")
+    {:ok, p1_token, %{viewer_id: p1}} = join_connected(room_id, "Alice")
+    {:ok, p2_token, %{viewer_id: p2}} = join_connected(room_id, "Bob")
     resume_tokens = %{p1 => p1_token, p2 => p2_token}
 
     :ok =
@@ -895,8 +887,8 @@ defmodule Flamingo.RoomServerTest do
   end
 
   test "used word history resets when a new game starts", %{room_id: room_id} do
-    {:ok, p1_token, %{viewer_id: p1}} = RoomServer.join(room_id, "Alice")
-    {:ok, p2_token, %{viewer_id: p2}} = RoomServer.join(room_id, "Bob")
+    {:ok, p1_token, %{viewer_id: p1}} = join_connected(room_id, "Alice")
+    {:ok, p2_token, %{viewer_id: p2}} = join_connected(room_id, "Bob")
     resume_tokens = %{p1 => p1_token, p2 => p2_token}
 
     :ok =
@@ -942,9 +934,9 @@ defmodule Flamingo.RoomServerTest do
   end
 
   test "leave during playing reconciles turn completion", %{room_id: room_id} do
-    {:ok, p1_token, %{viewer_id: p1}} = RoomServer.join(room_id, "Alice")
-    {:ok, p2_token, %{viewer_id: p2}} = RoomServer.join(room_id, "Bob")
-    {:ok, p3_token, %{viewer_id: p3}} = RoomServer.join(room_id, "Charlie")
+    {:ok, p1_token, %{viewer_id: p1}} = join_connected(room_id, "Alice")
+    {:ok, p2_token, %{viewer_id: p2}} = join_connected(room_id, "Bob")
+    {:ok, p3_token, %{viewer_id: p3}} = join_connected(room_id, "Charlie")
     resume_tokens = %{p1 => p1_token, p2 => p2_token, p3 => p3_token}
 
     :ok =
@@ -973,9 +965,9 @@ defmodule Flamingo.RoomServerTest do
   end
 
   test "leave during playing does not trigger reveal if guessers remain", %{room_id: room_id} do
-    {:ok, p1_token, %{viewer_id: p1}} = RoomServer.join(room_id, "Alice")
-    {:ok, p2_token, %{viewer_id: p2}} = RoomServer.join(room_id, "Bob")
-    {:ok, p3_token, %{viewer_id: p3}} = RoomServer.join(room_id, "Charlie")
+    {:ok, p1_token, %{viewer_id: p1}} = join_connected(room_id, "Alice")
+    {:ok, p2_token, %{viewer_id: p2}} = join_connected(room_id, "Bob")
+    {:ok, p3_token, %{viewer_id: p3}} = join_connected(room_id, "Charlie")
     resume_tokens = %{p1 => p1_token, p2 => p2_token, p3 => p3_token}
 
     :ok =

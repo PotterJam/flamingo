@@ -63,9 +63,7 @@ defmodule FlamingoWeb.ScribbleLive do
     room_id = socket.assigns.room_id
 
     if connected?(socket) do
-      # Rejoin (rather than just reading state) so a reconnecting player is
-      # marked connected again before their disconnect grace period expires.
-      case Rooms.rejoin(room_id, resume_token) do
+      case Rooms.connect(room_id, resume_token) do
         {:ok, snapshot} ->
           Rooms.subscribe(room_id)
 
@@ -1097,12 +1095,6 @@ defmodule FlamingoWeb.ScribbleLive do
       {:noreply, socket}
     else
       {:noreply, push_event(socket, "draw_event", event)}
-    end
-  end
-
-  def terminate(_reason, socket) do
-    if Map.has_key?(socket.assigns, :room_id) and socket.assigns.resume_token do
-      Rooms.leave(socket.assigns.room_id, socket.assigns.resume_token)
     end
   end
 end
