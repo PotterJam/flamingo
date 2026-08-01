@@ -2,6 +2,7 @@ defmodule Flamingo.RoomServer do
   use GenServer
 
   alias Flamingo.Feed
+  alias Flamingo.Room.Members
 
   @min_turn_length 15
   @max_turn_length 120
@@ -18,16 +19,13 @@ defmodule Flamingo.RoomServer do
 
   defstruct [
     :room_id,
-    :host_id,
     :drawer_id,
     :word,
     :phase_timer_ref,
     :turn_end_time,
     mode: :scribble,
     phase: :lobby,
-    players: %{},
-    resume_tokens: %{},
-    player_order: [],
+    members: Members.new(),
     round_count: 3,
     turn_length: 30,
     current_round: 0,
@@ -134,22 +132,10 @@ defmodule Flamingo.RoomServer do
   def handle_call({:join, player_name}, _from, state) do
     player_id = generate_player_id()
     resume_token = generate_resume_token()
-    player = %{id: player_id, name: player_name, connected: false}
-
-    players = Map.put(state.players, player_id, player)
-    resume_tokens = Map.put(state.resume_tokens, resume_token, player_id)
-    player_order = state.player_order ++ [player_id]
-    host_id = state.host_id || player_id
+    {:ok, members} = Members.add(state.members, player_id, resume_token, player_name)
     scores = Map.put(state.scores, player_id, 0)
 
-    new_state = %{
-      state
-      | players: players,
-        resume_tokens: resume_tokens,
-        player_order: player_order,
-        host_id: host_id,
-        scores: scores
-    }
+    new_state = %{state | members: members, scores: scores}
 
     {feed, _entry} = Feed.player_joined(new_state.feed, player_id, player_name)
     new_state = %{new_state | feed: feed}
@@ -160,9 +146,8 @@ defmodule Flamingo.RoomServer do
 
   def handle_call({:connect, resume_token}, {pid, _tag}, state) do
     with {:ok, player_id} <- resolve_token(state, resume_token),
-         {:ok, new_state} <- connect_pid(state, player_id, pid) do
-      new_state =
-        if new_state.players != state.players, do: commit(new_state, pid), else: new_state
+         {:ok, new_state, transition} <- connect_pid(state, player_id, pid) do
+      new_state = if transition == :became_online, do: commit(new_state, pid), else: new_state
 
       {:reply, {:ok, snapshot_for(new_state, player_id)}, new_state}
     else
@@ -216,7 +201,7 @@ defmodule Flamingo.RoomServer do
          :ok <- validate_turn_length(turn_length),
          {:ok, custom_words} <- Flamingo.Words.validate_custom_words(custom_words),
          :ok <- validate_include_default_words(include_default_words) do
-      drawer_id = List.first(state.player_order)
+      drawer_id = List.first(Members.ordered_ids(state.members))
 
       new_state =
         %{
@@ -266,7 +251,7 @@ defmodule Flamingo.RoomServer do
       state.phase != :playing ->
         {:reply, {:error, :not_playing}, state}
 
-      not Map.has_key?(state.players, player_id) ->
+      not Map.has_key?(state.scores, player_id) ->
         {:reply, {:error, :not_found}, state}
 
       player_id == state.drawer_id ->
@@ -276,7 +261,7 @@ defmodule Flamingo.RoomServer do
         {:reply, {:error, :already_guessed}, state}
 
       String.downcase(String.trim(text)) == String.downcase(state.word) ->
-        player = Map.get(state.players, player_id)
+        player = Members.fetch!(state.members, player_id)
         correct_guesses = Map.put(state.correct_guesses, player_id, DateTime.utc_now())
         {feed, _entry} = Feed.correct_guess(state.feed, player_id, player.name)
         new_state = %{state | correct_guesses: correct_guesses, feed: feed}
@@ -294,7 +279,7 @@ defmodule Flamingo.RoomServer do
         {:reply, :close, commit(new_state)}
 
       true ->
-        player = Map.get(state.players, player_id)
+        player = Members.fetch!(state.members, player_id)
         {feed, _entry} = Feed.guess(state.feed, player_id, player.name, text)
         new_state = %{state | feed: feed}
         {:reply, :incorrect, commit(new_state)}
@@ -350,9 +335,9 @@ defmodule Flamingo.RoomServer do
   end
 
   def handle_info({:remove_player, player_id, ref}, state) do
-    player = Map.get(state.players, player_id)
-
-    if player && !player.connected && Map.get(state.disconnect_timers, player_id) == ref do
+    if match?({:ok, _seat}, Members.fetch(state.members, player_id)) and
+         not Members.online?(state.members, player_id) and
+         Map.get(state.disconnect_timers, player_id) == ref do
       {:noreply, state |> remove_player(player_id) |> commit()}
     else
       {:noreply, state}
@@ -363,12 +348,12 @@ defmodule Flamingo.RoomServer do
     case state.connections do
       %{^pid => %{player_id: player_id, monitor_ref: ^ref}} ->
         connections = Map.delete(state.connections, pid)
-        state = %{state | connections: connections}
+        {:ok, members, transition} = Members.connection_removed(state.members, player_id)
+        state = %{state | connections: connections, members: members}
 
-        if player_connected?(state, player_id) or not Map.has_key?(state.players, player_id) do
-          {:noreply, state}
-        else
-          {:noreply, state |> mark_disconnected(player_id) |> commit()}
+        case transition do
+          :unchanged -> {:noreply, state}
+          :became_offline -> {:noreply, state |> mark_disconnected(player_id) |> commit()}
         end
 
       _connections ->
@@ -431,7 +416,7 @@ defmodule Flamingo.RoomServer do
   defp connect_pid(state, player_id, pid) do
     case Map.fetch(state.connections, pid) do
       {:ok, %{player_id: ^player_id}} ->
-        {:ok, state}
+        {:ok, state, :unchanged}
 
       {:ok, _connection} ->
         {:error, :already_connected}
@@ -439,13 +424,21 @@ defmodule Flamingo.RoomServer do
       :error ->
         ref = Process.monitor(pid)
         connection = %{player_id: player_id, monitor_ref: ref}
+        {:ok, members, transition} = Members.connection_added(state.members, player_id)
+
+        disconnect_timers =
+          if transition == :became_online,
+            do: Map.delete(state.disconnect_timers, player_id),
+            else: state.disconnect_timers
 
         state = %{
           state
-          | connections: Map.put(state.connections, pid, connection)
+          | connections: Map.put(state.connections, pid, connection),
+            members: members,
+            disconnect_timers: disconnect_timers
         }
 
-        {:ok, mark_connected(state, player_id)}
+        {:ok, state, transition}
     end
   end
 
@@ -456,39 +449,17 @@ defmodule Flamingo.RoomServer do
     end
   end
 
-  defp player_connected?(state, player_id) do
-    Enum.any?(state.connections, fn {_pid, connection} ->
-      connection.player_id == player_id
-    end)
-  end
-
-  defp mark_connected(state, player_id) do
-    player = Map.fetch!(state.players, player_id)
-
-    if player.connected do
-      state
-    else
-      players = Map.put(state.players, player_id, %{player | connected: true})
-      disconnect_timers = Map.delete(state.disconnect_timers, player_id)
-      new_state = %{state | players: players, disconnect_timers: disconnect_timers}
-      new_state
-    end
-  end
-
   defp mark_disconnected(state, player_id) do
-    player = Map.fetch!(state.players, player_id)
-    players = Map.put(state.players, player_id, %{player | connected: false})
-
     ref = make_ref()
     Process.send_after(self(), {:remove_player, player_id, ref}, @disconnect_grace_ms)
     disconnect_timers = Map.put(state.disconnect_timers, player_id, ref)
 
-    new_state = %{state | players: players, disconnect_timers: disconnect_timers}
+    new_state = %{state | disconnect_timers: disconnect_timers}
     reconcile_turn_completion(new_state, player_id)
   end
 
   defp remove_player(state, player_id) do
-    player_name = Map.get(state.players, player_id).name
+    {:ok, members, seat} = Members.remove(state.members, player_id)
 
     Enum.each(state.connections, fn {_pid, connection} ->
       if connection.player_id == player_id do
@@ -501,28 +472,14 @@ defmodule Flamingo.RoomServer do
         connection.player_id == player_id
       end)
 
-    players = Map.delete(state.players, player_id)
-    player_order = List.delete(state.player_order, player_id)
-
-    host_id =
-      if state.host_id == player_id,
-        do: List.first(player_order),
-        else: state.host_id
-
     correct_guesses = Map.delete(state.correct_guesses, player_id)
     disconnect_timers = Map.delete(state.disconnect_timers, player_id)
     scores = Map.delete(state.scores, player_id)
     score_gains = Map.delete(state.score_gains, player_id)
 
-    resume_tokens =
-      Map.reject(state.resume_tokens, fn {_token, seat_id} -> seat_id == player_id end)
-
     new_state = %{
       state
-      | players: players,
-        player_order: player_order,
-        host_id: host_id,
-        resume_tokens: resume_tokens,
+      | members: members,
         correct_guesses: correct_guesses,
         disconnect_timers: disconnect_timers,
         connections: connections,
@@ -530,7 +487,7 @@ defmodule Flamingo.RoomServer do
         score_gains: score_gains
     }
 
-    {feed, _entry} = Feed.player_left(new_state.feed, player_id, player_name)
+    {feed, _entry} = Feed.player_left(new_state.feed, player_id, seat.name)
     new_state = %{new_state | feed: feed}
 
     cond do
@@ -563,8 +520,8 @@ defmodule Flamingo.RoomServer do
 
   defp all_connected_guessed?(state) do
     connected_guessers =
-      Enum.filter(state.player_order, fn pid ->
-        pid != state.drawer_id and Map.fetch!(state.players, pid).connected
+      Enum.filter(Members.ordered_ids(state.members), fn pid ->
+        pid != state.drawer_id and Members.online?(state.members, pid)
       end)
 
     connected_guessers != [] and
@@ -603,7 +560,7 @@ defmodule Flamingo.RoomServer do
         pending_hint_delays: []
     }
 
-    drawer_name = Map.get(new_state.players, new_state.drawer_id).name
+    drawer_name = Members.fetch!(new_state.members, new_state.drawer_id).name
     {feed, _entry} = Feed.new_turn(new_state.feed, new_state.drawer_id, drawer_name)
     new_state = %{new_state | feed: feed}
 
@@ -644,10 +601,10 @@ defmodule Flamingo.RoomServer do
       Flamingo.Scoring.calculate_round_scores(
         state.correct_guesses,
         state.drawer_id,
-        state.player_order,
+        Members.ordered_ids(state.members),
         state.turn_length
       )
-      |> Map.filter(fn {pid, _gain} -> Map.has_key?(state.players, pid) end)
+      |> Map.filter(fn {pid, _gain} -> Map.has_key?(state.scores, pid) end)
 
     scores =
       Map.new(state.scores, fn {pid, score} ->
@@ -678,9 +635,9 @@ defmodule Flamingo.RoomServer do
     state = %{state | score_gains: %{}}
 
     next_drawer =
-      Enum.find(state.player_order, fn pid ->
+      Enum.find(Members.ordered_ids(state.members), fn pid ->
         not MapSet.member?(state.drawn_this_round, pid) and
-          Map.fetch!(state.players, pid).connected
+          Members.online?(state.members, pid)
       end)
 
     cond do
@@ -693,9 +650,7 @@ defmodule Flamingo.RoomServer do
 
       true ->
         first_connected =
-          Enum.find(state.player_order, fn pid ->
-            Map.fetch!(state.players, pid).connected
-          end)
+          Enum.find(Members.ordered_ids(state.members), &Members.online?(state.members, &1))
 
         if first_connected do
           %{
@@ -736,12 +691,13 @@ defmodule Flamingo.RoomServer do
   end
 
   defp validate_host(state, player_id) do
-    if player_id == state.host_id, do: :ok, else: {:error, :not_host}
+    if player_id == Members.host_id(state.members), do: :ok, else: {:error, :not_host}
   end
 
   defp validate_player_count(state) do
-    connected_count = Enum.count(state.players, fn {_pid, player} -> player.connected end)
-    if connected_count >= 2, do: :ok, else: {:error, :not_enough_players}
+    if Members.online_count(state.members) >= 2,
+      do: :ok,
+      else: {:error, :not_enough_players}
   end
 
   defp validate_round_count(count) when count >= 1 and count <= 5, do: :ok
@@ -765,10 +721,7 @@ defmodule Flamingo.RoomServer do
   end
 
   defp resolve_token(state, resume_token) do
-    case Map.fetch(state.resume_tokens, resume_token) do
-      {:ok, player_id} when is_map_key(state.players, player_id) -> {:ok, player_id}
-      _ -> :error
-    end
+    Members.resolve(state.members, resume_token)
   end
 
   defp hint_delays(word, turn_length) do
@@ -817,23 +770,25 @@ defmodule Flamingo.RoomServer do
       player_id == state.drawer_id or Map.has_key?(state.correct_guesses, player_id) or
         state.phase in [:turn_reveal, :game_ended]
 
+    member_view = Members.public_view(state.members)
+
     %{
       mode: state.mode,
       phase: state.phase,
       viewer_id: player_id,
       players:
-        Map.new(state.players, fn {pid, player} ->
+        Map.new(member_view.players, fn {pid, player} ->
           {pid, Map.put(player, :score, Map.fetch!(state.scores, pid))}
         end),
-      player_order: state.player_order,
-      host_id: state.host_id,
+      player_order: member_view.player_order,
+      host_id: member_view.host_id,
       drawer_id: state.drawer_id,
       round_count: state.round_count,
       turn_length: state.turn_length,
       current_round: state.current_round,
-      custom_words: if(player_id == state.host_id, do: state.custom_words, else: []),
+      custom_words: if(player_id == member_view.host_id, do: state.custom_words, else: []),
       include_default_words:
-        if(player_id == state.host_id, do: state.include_default_words, else: false),
+        if(player_id == member_view.host_id, do: state.include_default_words, else: false),
       word_choices:
         if(state.phase == :word_choice and player_id == state.drawer_id,
           do: state.word_choices,

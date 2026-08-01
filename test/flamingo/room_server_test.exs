@@ -2,6 +2,7 @@ defmodule Flamingo.RoomServerTest do
   use ExUnit.Case, async: true
 
   alias Flamingo.RoomServer
+  alias Flamingo.Room.Members
   alias Flamingo.RoomSupervisor
 
   setup do
@@ -10,12 +11,7 @@ defmodule Flamingo.RoomServerTest do
     %{room_id: room_id}
   end
 
-  defp resume_token_for(state, seat_id) do
-    Enum.find_value(state.resume_tokens, fn
-      {resume_token, ^seat_id} -> resume_token
-      _ -> nil
-    end)
-  end
+  defp resume_token_for(_state, seat_id), do: Process.get({:resume_token, seat_id})
 
   defp connection_count(state, player_id) do
     Enum.count(state.connections, fn {_pid, connection} ->
@@ -37,6 +33,7 @@ defmodule Flamingo.RoomServerTest do
 
     assert_receive {:player_connected, ^pid, {:ok, resume_token, snapshot}}
     Process.put({:player, resume_token}, pid)
+    Process.put({:resume_token, snapshot.viewer_id}, resume_token)
     {:ok, resume_token, snapshot}
   end
 
@@ -170,7 +167,7 @@ defmodule Flamingo.RoomServerTest do
 
     :ok = leave_as(room_id, Map.fetch!(resume_tokens, p1))
 
-    {:ok, state} = RoomServer.get_state(room_id)
+    {:ok, state} = snapshot_as(room_id, p2_token)
     assert state.host_id == p2
     assert state.player_order == [p2]
     refute Map.has_key?(state.players, p1)
@@ -184,7 +181,7 @@ defmodule Flamingo.RoomServerTest do
 
     :ok = leave_as(room_id, Map.fetch!(resume_tokens, p2))
 
-    {:ok, state} = RoomServer.get_state(room_id)
+    {:ok, state} = snapshot_as(room_id, p1_token)
     assert state.host_id == p1
   end
 
@@ -283,7 +280,7 @@ defmodule Flamingo.RoomServerTest do
 
     {:ok, state} = RoomServer.get_state(room_id)
     drawer_id = state.drawer_id
-    guesser_ids = Enum.reject(state.player_order, &(&1 == drawer_id))
+    guesser_ids = Enum.reject([p1, p2, p3], &(&1 == drawer_id))
     [first_guesser_id, second_guesser_id] = guesser_ids
 
     {:ok, drawer_snapshot} = snapshot_as(room_id, Map.fetch!(resume_tokens, drawer_id))
@@ -485,7 +482,7 @@ defmodule Flamingo.RoomServerTest do
   end
 
   test "unregistered callers cannot inspect or mutate a game", %{room_id: room_id} do
-    {:ok, _alice_token, %{viewer_id: alice}} = join_connected(room_id, "Alice")
+    {:ok, _alice_token, %{viewer_id: alice, host_id: alice}} = join_connected(room_id, "Alice")
     {:ok, _bob_token, _bob_snapshot} = join_connected(room_id, "Bob")
 
     assert {:error, :not_found} = RoomServer.snapshot(room_id)
@@ -497,8 +494,6 @@ defmodule Flamingo.RoomServerTest do
     :ok = RoomServer.draw_event(room_id, %{"event_type" => "clear"})
     _ = :sys.get_state(RoomServer.whereis(room_id))
     assert {:ok, ^before_draw} = RoomServer.get_state(room_id)
-
-    assert before_draw.host_id == alice
   end
 
   test "credentials resolve only their own seat and cannot borrow authorization", %{
@@ -688,7 +683,7 @@ defmodule Flamingo.RoomServerTest do
     _ = :sys.get_state(RoomServer.whereis(room_id))
 
     {:ok, state} = RoomServer.get_state(room_id)
-    assert Map.fetch!(state.players, seat_id).connected
+    assert Members.online?(state.members, seat_id)
     assert connection_count(state, seat_id) == 1
     refute Map.has_key?(state.disconnect_timers, seat_id)
   end
@@ -703,7 +698,7 @@ defmodule Flamingo.RoomServerTest do
     _ = :sys.get_state(RoomServer.whereis(room_id))
 
     {:ok, state} = RoomServer.get_state(room_id)
-    refute Map.fetch!(state.players, seat_id).connected
+    refute Members.online?(state.members, seat_id)
     stale_grace_ref = Map.fetch!(state.disconnect_timers, seat_id)
 
     {_replacement_id, _pid, snapshot} = start_connection(room_id, resume_token)
@@ -713,7 +708,7 @@ defmodule Flamingo.RoomServerTest do
     _ = :sys.get_state(RoomServer.whereis(room_id))
 
     {:ok, state} = RoomServer.get_state(room_id)
-    assert Map.fetch!(state.players, seat_id).connected
+    assert Members.online?(state.members, seat_id)
     refute Map.has_key?(state.disconnect_timers, seat_id)
   end
 
@@ -726,7 +721,7 @@ defmodule Flamingo.RoomServerTest do
     _ = :sys.get_state(RoomServer.whereis(room_id))
 
     {:ok, state} = RoomServer.get_state(room_id)
-    assert Map.fetch!(state.players, seat_id).connected
+    assert Members.online?(state.members, seat_id)
     assert connection_count(state, seat_id) == 1
   end
 
@@ -739,8 +734,8 @@ defmodule Flamingo.RoomServerTest do
     :ok = leave_as(room_id, resume_token_for(state, guesser))
 
     {:ok, state} = RoomServer.get_state(room_id)
-    refute Map.has_key?(state.players, guesser)
-    refute guesser in state.player_order
+    refute match?({:ok, _seat}, Members.fetch(state.members, guesser))
+    refute guesser in Members.ordered_ids(state.members)
     refute Map.has_key?(state.disconnect_timers, guesser)
   end
 
@@ -771,7 +766,7 @@ defmodule Flamingo.RoomServerTest do
 
     # The next drawer in order leaves during the reveal.
     next_in_order =
-      Enum.find(state.player_order, fn pid ->
+      Enum.find([p1, p2, p3], fn pid ->
         not MapSet.member?(state.drawn_this_round, pid)
       end)
 
@@ -945,7 +940,7 @@ defmodule Flamingo.RoomServerTest do
     {:ok, state} = RoomServer.get_state(room_id)
     {:ok, snapshot} = snapshot_as(room_id, resume_token_for(state, guesser))
 
-    refute Map.has_key?(Map.fetch!(state.players, guesser), :score)
+    refute Map.has_key?(Members.fetch!(state.members, guesser), :score)
     assert Map.fetch!(state.scores, guesser) > 0
     assert Map.fetch!(snapshot.players, guesser).score == Map.fetch!(state.scores, guesser)
   end
