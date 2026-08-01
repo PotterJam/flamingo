@@ -44,6 +44,14 @@ defmodule Flamingo.RoomServerTest do
     {child_id, pid, snapshot}
   end
 
+  defp flush_room_snapshots do
+    receive do
+      {:room_snapshot, _revision, _snapshot} -> flush_room_snapshots()
+    after
+      0 -> :ok
+    end
+  end
+
   test "first player becomes host", %{room_id: room_id} do
     {:ok, _resume_token, %{viewer_id: player_id} = state} = join_connected(room_id, "Alice")
     assert state.mode == :scribble
@@ -85,10 +93,11 @@ defmodule Flamingo.RoomServerTest do
     assert state.host_id == p1
   end
 
-  test "join broadcasts players_updated", %{room_id: room_id} do
-    Phoenix.PubSub.subscribe(Flamingo.PubSub, "game:#{room_id}")
-    join_connected(room_id, "Alice")
-    assert_receive {:players_updated, _players, _order, _host}
+  test "join and connect advance the authoritative revision", %{room_id: room_id} do
+    {:ok, _resume_token, snapshot} = join_connected(room_id, "Alice")
+
+    assert snapshot.revision == 2
+    assert {:ok, %{revision: 2}} = RoomServer.get_state(room_id)
   end
 
   test "start_game fails if not host", %{room_id: room_id} do
@@ -151,8 +160,7 @@ defmodule Flamingo.RoomServerTest do
     assert state.turn_length == 120
   end
 
-  test "start_game succeeds and broadcasts", %{room_id: room_id} do
-    Phoenix.PubSub.subscribe(Flamingo.PubSub, "game:#{room_id}")
+  test "start_game enters word choice", %{room_id: room_id} do
     {:ok, p1_token, %{viewer_id: p1}} = join_connected(room_id, "Alice")
     {:ok, p2_token, %{viewer_id: p2}} = join_connected(room_id, "Bob")
 
@@ -164,10 +172,10 @@ defmodule Flamingo.RoomServerTest do
                turn_length: 45
              })
 
-    assert_receive {:word_choice_started, _drawer_id, _turn_end_time, 2, 45, 0}
-
     {:ok, state} = RoomServer.get_state(room_id)
     assert state.phase == :word_choice
+    assert state.round_count == 2
+    assert state.turn_length == 45
     assert length(state.word_choices) == 3
   end
 
@@ -228,6 +236,66 @@ defmodule Flamingo.RoomServerTest do
 
     assert p2 in guesser_ids
     assert p3 in guesser_ids
+  end
+
+  test "direct notifications share a revision without sharing secret projections", %{
+    room_id: room_id
+  } do
+    {:ok, alice_token, %{viewer_id: alice}} = join_connected(room_id, "Alice")
+    {:ok, bob_token, %{viewer_id: bob}} = join_connected(room_id, "Bob")
+    tokens = %{alice => alice_token, bob => bob_token}
+    flush_room_snapshots()
+
+    :ok =
+      RoomServer.start_game(room_id, alice_token, %{
+        custom_words: ["secret", "other", "third"]
+      })
+
+    assert_receive {:room_snapshot, revision, first_snapshot}
+    assert_receive {:room_snapshot, ^revision, second_snapshot}
+
+    snapshots = %{
+      first_snapshot.viewer_id => first_snapshot,
+      second_snapshot.viewer_id => second_snapshot
+    }
+
+    {:ok, state} = RoomServer.get_state(room_id)
+    drawer_id = state.drawer_id
+    guesser_id = if drawer_id == alice, do: bob, else: alice
+
+    assert Map.fetch!(snapshots, drawer_id).word_choices == state.word_choices
+    assert Map.fetch!(snapshots, guesser_id).word_choices == []
+
+    flush_room_snapshots()
+    word = List.first(state.word_choices)
+    :ok = RoomServer.select_word(room_id, Map.fetch!(tokens, drawer_id), word)
+
+    assert_receive {:room_snapshot, next_revision, first_snapshot}
+    assert_receive {:room_snapshot, ^next_revision, second_snapshot}
+    assert next_revision == revision + 1
+
+    snapshots = %{
+      first_snapshot.viewer_id => first_snapshot,
+      second_snapshot.viewer_id => second_snapshot
+    }
+
+    assert Map.fetch!(snapshots, drawer_id).word == word
+    assert Map.fetch!(snapshots, drawer_id).word_visible?
+    refute Map.fetch!(snapshots, guesser_id).word_visible?
+    refute Map.fetch!(snapshots, guesser_id).word == word
+  end
+
+  test "rejected commands and stale timers do not advance revision", %{room_id: room_id} do
+    {:ok, alice_token, snapshot} = join_connected(room_id, "Alice")
+    revision = snapshot.revision
+
+    assert {:error, :not_enough_players} = RoomServer.start_game(room_id, alice_token, %{})
+    assert {:ok, %{revision: ^revision}} = RoomServer.get_state(room_id)
+
+    send(RoomServer.whereis(room_id), {:word_choice_timeout, make_ref()})
+    _ = :sys.get_state(RoomServer.whereis(room_id))
+
+    assert {:ok, %{revision: ^revision}} = RoomServer.get_state(room_id)
   end
 
   test "snapshot rejects an unknown player", %{room_id: room_id} do
@@ -390,17 +458,14 @@ defmodule Flamingo.RoomServerTest do
   end
 
   test "hints reveal letters while playing", %{room_id: room_id} do
-    Phoenix.PubSub.subscribe(Flamingo.PubSub, "game:#{room_id}")
     {_p1, _p2, word, state} = start_playing(room_id)
 
     pid = RoomServer.whereis(room_id)
     send(pid, {:reveal_hint, state.hint_timer_ref})
 
-    assert_receive {:hint_revealed, [index]}
-    assert index in 0..(String.length(word) - 1)
-
     {:ok, state} = RoomServer.get_state(room_id)
-    assert state.revealed_indices == [index]
+    assert [index] = state.revealed_indices
+    assert index in 0..(String.length(word) - 1)
   end
 
   test "turn reveal clears pending hint timer", %{room_id: room_id} do
@@ -575,55 +640,58 @@ defmodule Flamingo.RoomServerTest do
     assert state.phase_timer_ref != nil
   end
 
-  test "correct guess records and broadcasts", %{room_id: room_id} do
-    Phoenix.PubSub.subscribe(Flamingo.PubSub, "game:#{room_id}")
+  test "correct guess records the guesser", %{room_id: room_id} do
     {_p1, p2, word, state} = start_playing(room_id)
 
     guesser = if p2 == state.drawer_id, do: elem(start_playing(room_id), 0), else: p2
     guesser = if guesser == state.drawer_id, do: p2, else: guesser
 
     assert :correct = RoomServer.guess(room_id, resume_token_for(state, guesser), word)
-    assert_receive {:correct_guess, ^guesser}
+
+    {:ok, state} = RoomServer.get_state(room_id)
+    assert Map.has_key?(state.correct_guesses, guesser)
   end
 
-  test "incorrect guess broadcasts", %{room_id: room_id} do
-    Phoenix.PubSub.subscribe(Flamingo.PubSub, "game:#{room_id}")
+  test "incorrect guess is added to the safe feed", %{room_id: room_id} do
     {p1, p2, _word, state} = start_playing(room_id)
     guesser = if p1 == state.drawer_id, do: p2, else: p1
 
     assert :incorrect =
              RoomServer.guess(room_id, resume_token_for(state, guesser), "wrong-answer")
 
-    assert_receive {:incorrect_guess, ^guesser, "wrong-answer"}
+    {:ok, snapshot} = RoomServer.snapshot(room_id, resume_token_for(state, guesser))
+    assert %{kind: :guess, text: text} = List.last(snapshot.feed)
+    assert text =~ "wrong-answer"
   end
 
   test "close guess sends private feedback instead of public chat", %{room_id: room_id} do
-    Phoenix.PubSub.subscribe(Flamingo.PubSub, "game:#{room_id}")
     {p1, p2, word, state} = start_playing(room_id)
     guesser = if p1 == state.drawer_id, do: p2, else: p1
     other_player = if guesser == p1, do: p2, else: p1
-    close_guess = String.replace_suffix(word, String.last(word), "z")
+    replacement = if String.downcase(String.last(word)) == "z", do: "q", else: "z"
+    close_guess = String.replace_suffix(word, String.last(word), replacement)
 
     assert :close =
              RoomServer.guess(room_id, resume_token_for(state, guesser), close_guess)
 
-    refute_receive {:incorrect_guess, ^guesser, ^close_guess}
-    assert_receive {:feed_event, %{event: {:close_guess, ^guesser}} = entry}
+    {:ok, guesser_snapshot} = RoomServer.snapshot(room_id, resume_token_for(state, guesser))
+    {:ok, other_snapshot} = RoomServer.snapshot(room_id, resume_token_for(state, other_player))
 
-    assert %{kind: :close, text: "You were close"} = Flamingo.Feed.format(entry, guesser)
-    assert nil == Flamingo.Feed.format(entry, other_player)
+    assert %{kind: :close, text: "You were close"} = List.last(guesser_snapshot.feed)
+    refute Enum.any?(other_snapshot.feed, &(&1.kind == :close))
   end
 
   test "close guess ignores case spacing and punctuation for same-length typos", %{
     room_id: room_id
   } do
-    Phoenix.PubSub.subscribe(Flamingo.PubSub, "game:#{room_id}")
     {p1, p2, word, state} = start_playing(room_id)
     guesser = if p1 == state.drawer_id, do: p2, else: p1
 
+    replacement = if String.downcase(String.last(word)) == "z", do: "q", else: "z"
+
     close_guess =
       word
-      |> String.replace_suffix(String.last(word), "z")
+      |> String.replace_suffix(String.last(word), replacement)
       |> String.upcase()
       |> String.graphemes()
       |> Enum.join(" ")
@@ -632,12 +700,11 @@ defmodule Flamingo.RoomServerTest do
     assert :close =
              RoomServer.guess(room_id, resume_token_for(state, guesser), close_guess)
 
-    refute_receive {:incorrect_guess, ^guesser, ^close_guess}
-    assert_receive {:feed_event, %{event: {:close_guess, ^guesser}}}
+    {:ok, snapshot} = RoomServer.snapshot(room_id, resume_token_for(state, guesser))
+    assert List.last(snapshot.feed).kind == :close
   end
 
   test "wrong-length guesses are normal incorrect guesses", %{room_id: room_id} do
-    Phoenix.PubSub.subscribe(Flamingo.PubSub, "game:#{room_id}")
     {p1, p2, word, state} = start_playing(room_id)
     guesser = if p1 == state.drawer_id, do: p2, else: p1
     wrong_length_guess = word <> "zz"
@@ -649,12 +716,11 @@ defmodule Flamingo.RoomServerTest do
                wrong_length_guess
              )
 
-    assert_receive {:incorrect_guess, ^guesser, ^wrong_length_guess}
-    refute_receive {:feed_event, %{event: {:close_guess, ^guesser}}}
+    {:ok, snapshot} = RoomServer.snapshot(room_id, resume_token_for(state, guesser))
+    assert List.last(snapshot.feed).kind == :guess
   end
 
   test "one-character insertion is a close guess", %{room_id: room_id} do
-    Phoenix.PubSub.subscribe(Flamingo.PubSub, "game:#{room_id}")
     {p1, p2, word, state} = start_playing(room_id)
     guesser = if p1 == state.drawer_id, do: p2, else: p1
     close_guess = word <> "z"
@@ -662,12 +728,11 @@ defmodule Flamingo.RoomServerTest do
     assert :close =
              RoomServer.guess(room_id, resume_token_for(state, guesser), close_guess)
 
-    refute_receive {:incorrect_guess, ^guesser, ^close_guess}
-    assert_receive {:feed_event, %{event: {:close_guess, ^guesser}}}
+    {:ok, snapshot} = RoomServer.snapshot(room_id, resume_token_for(state, guesser))
+    assert List.last(snapshot.feed).kind == :close
   end
 
   test "one-character deletion is a close guess", %{room_id: room_id} do
-    Phoenix.PubSub.subscribe(Flamingo.PubSub, "game:#{room_id}")
     {p1, p2, word, state} = start_playing(room_id)
     guesser = if p1 == state.drawer_id, do: p2, else: p1
     close_guess = String.slice(word, 0, String.length(word) - 1)
@@ -675,8 +740,8 @@ defmodule Flamingo.RoomServerTest do
     assert :close =
              RoomServer.guess(room_id, resume_token_for(state, guesser), close_guess)
 
-    refute_receive {:incorrect_guess, ^guesser, ^close_guess}
-    assert_receive {:feed_event, %{event: {:close_guess, ^guesser}}}
+    {:ok, snapshot} = RoomServer.snapshot(room_id, resume_token_for(state, guesser))
+    assert List.last(snapshot.feed).kind == :close
   end
 
   test "drawer cannot guess", %{room_id: room_id} do
@@ -692,7 +757,6 @@ defmodule Flamingo.RoomServerTest do
   end
 
   test "all guessed triggers turn_reveal", %{room_id: room_id} do
-    Phoenix.PubSub.subscribe(Flamingo.PubSub, "game:#{room_id}")
     {p1, p2, word, state} = start_playing(room_id)
     guesser = if p1 == state.drawer_id, do: p2, else: p1
 
@@ -700,7 +764,7 @@ defmodule Flamingo.RoomServerTest do
 
     {:ok, state} = RoomServer.get_state(room_id)
     assert state.phase == :turn_reveal
-    assert_receive {:turn_reveal, ^word, _turn_end_time, _score_gains, _players}
+    assert state.word == word
   end
 
   test "turn_reveal tracks drawn_this_round", %{room_id: room_id} do
@@ -775,8 +839,6 @@ defmodule Flamingo.RoomServerTest do
   end
 
   test "game ends after all players draw in all rounds", %{room_id: room_id} do
-    Phoenix.PubSub.subscribe(Flamingo.PubSub, "game:#{room_id}")
-
     {:ok, p1_token, %{viewer_id: p1}} = join_connected(room_id, "Alice")
     {:ok, p2_token, %{viewer_id: p2}} = join_connected(room_id, "Bob")
     resume_tokens = %{p1 => p1_token, p2 => p2_token}
@@ -816,7 +878,7 @@ defmodule Flamingo.RoomServerTest do
 
     {:ok, state} = RoomServer.get_state(room_id)
     assert state.phase == :game_ended
-    assert_receive {:game_ended, _players, _final_drawings}
+    assert length(state.final_drawings) == 2
   end
 
   test "round increments after all players draw", %{room_id: room_id} do

@@ -23,6 +23,7 @@ defmodule Flamingo.RoomServer do
     :word,
     :phase_timer_ref,
     :turn_end_time,
+    revision: 0,
     mode: :scribble,
     phase: :lobby,
     players: %{},
@@ -149,18 +150,20 @@ defmodule Flamingo.RoomServer do
         host_id: host_id
     }
 
-    {feed, entry} = Feed.player_joined(new_state.feed, player_id, player_name)
+    {feed, _entry} = Feed.player_joined(new_state.feed, player_id, player_name)
     new_state = %{new_state | feed: feed}
 
-    broadcast_players_updated(new_state)
-    broadcast(state.room_id, {:feed_event, entry})
-
+    new_state = commit(new_state)
     {:reply, {:ok, resume_token, snapshot_for(new_state, player_id)}, new_state}
   end
 
   def handle_call({:connect, resume_token}, {pid, _tag}, state) do
     with {:ok, player_id} <- resolve_token(state, resume_token) do
       new_state = connect_pid(state, player_id, pid)
+
+      new_state =
+        if new_state.players != state.players, do: commit(new_state, pid), else: new_state
+
       {:reply, {:ok, snapshot_for(new_state, player_id)}, new_state}
     else
       :error -> {:reply, {:error, :not_found}, state}
@@ -211,6 +214,7 @@ defmodule Flamingo.RoomServer do
         }
         |> enter_word_choice()
 
+      new_state = commit(new_state)
       {:reply, :ok, new_state}
     else
       :error -> {:reply, {:error, :not_found}, state}
@@ -231,7 +235,7 @@ defmodule Flamingo.RoomServer do
           {:reply, {:error, :invalid_word}, state}
 
         true ->
-          new_state = enter_playing(state, word)
+          new_state = state |> enter_playing(word) |> commit()
           {:reply, :ok, new_state}
       end
     else
@@ -257,31 +261,26 @@ defmodule Flamingo.RoomServer do
         String.downcase(String.trim(text)) == String.downcase(state.word) ->
           player = Map.get(state.players, player_id)
           correct_guesses = Map.put(state.correct_guesses, player_id, DateTime.utc_now())
-          {feed, entry} = Feed.correct_guess(state.feed, player_id, player.name)
+          {feed, _entry} = Feed.correct_guess(state.feed, player_id, player.name)
           new_state = %{state | correct_guesses: correct_guesses, feed: feed}
-          broadcast(state.room_id, {:correct_guess, player_id})
-          broadcast(state.room_id, {:feed_event, entry})
 
           new_state =
             if all_connected_guessed?(new_state),
               do: enter_turn_reveal(new_state),
               else: new_state
 
-          {:reply, :correct, new_state}
+          {:reply, :correct, commit(new_state)}
 
         close_guess?(text, state.word) ->
-          {feed, entry} = Feed.close_guess(state.feed, player_id)
+          {feed, _entry} = Feed.close_guess(state.feed, player_id)
           new_state = %{state | feed: feed}
-          broadcast(state.room_id, {:feed_event, entry})
-          {:reply, :close, new_state}
+          {:reply, :close, commit(new_state)}
 
         true ->
           player = Map.get(state.players, player_id)
-          {feed, entry} = Feed.guess(state.feed, player_id, player.name, text)
+          {feed, _entry} = Feed.guess(state.feed, player_id, player.name, text)
           new_state = %{state | feed: feed}
-          broadcast(state.room_id, {:incorrect_guess, player_id, text})
-          broadcast(state.room_id, {:feed_event, entry})
-          {:reply, :incorrect, new_state}
+          {:reply, :incorrect, commit(new_state)}
       end
     else
       :error -> {:reply, {:error, :not_found}, state}
@@ -299,7 +298,7 @@ defmodule Flamingo.RoomServer do
   def handle_call({:leave, resume_token}, _from, state) do
     case resolve_token(state, resume_token) do
       {:ok, player_id} ->
-        {:reply, :ok, remove_player(state, player_id)}
+        {:reply, :ok, state |> remove_player(player_id) |> commit()}
 
       :error ->
         {:reply, :ok, state}
@@ -309,7 +308,7 @@ defmodule Flamingo.RoomServer do
   @impl true
   def handle_info({:word_choice_timeout, ref}, %{phase_timer_ref: ref} = state) do
     word = Enum.random(state.word_choices)
-    {:noreply, enter_playing(state, word)}
+    {:noreply, state |> enter_playing(word) |> commit()}
   end
 
   def handle_info({:word_choice_timeout, _stale_ref}, state) do
@@ -317,7 +316,7 @@ defmodule Flamingo.RoomServer do
   end
 
   def handle_info({:playing_timeout, ref}, %{phase_timer_ref: ref} = state) do
-    {:noreply, enter_turn_reveal(state)}
+    {:noreply, state |> enter_turn_reveal() |> commit()}
   end
 
   def handle_info({:playing_timeout, _stale_ref}, state) do
@@ -325,7 +324,7 @@ defmodule Flamingo.RoomServer do
   end
 
   def handle_info({:turn_reveal_timeout, ref}, %{phase_timer_ref: ref} = state) do
-    {:noreply, enter_next_turn(state)}
+    {:noreply, state |> enter_next_turn() |> commit()}
   end
 
   def handle_info({:turn_reveal_timeout, _stale_ref}, state) do
@@ -335,8 +334,7 @@ defmodule Flamingo.RoomServer do
   def handle_info({:reveal_hint, ref}, %{phase: :playing, hint_timer_ref: ref} = state) do
     case maybe_reveal_letter(state) do
       {:ok, new_state} ->
-        broadcast(state.room_id, {:hint_revealed, new_state.revealed_indices})
-        {:noreply, schedule_next_hint(new_state)}
+        {:noreply, new_state |> schedule_next_hint() |> commit()}
 
       :maxed ->
         {:noreply, %{state | hint_timer_ref: nil, pending_hint_delays: []}}
@@ -351,7 +349,7 @@ defmodule Flamingo.RoomServer do
     player = Map.get(state.players, player_id)
 
     if player && !player.connected && Map.get(state.disconnect_timers, player_id) == ref do
-      {:noreply, remove_player(state, player_id)}
+      {:noreply, state |> remove_player(player_id) |> commit()}
     else
       {:noreply, state}
     end
@@ -374,7 +372,7 @@ defmodule Flamingo.RoomServer do
         state = %{state | connections: connections, monitor_refs: monitor_refs}
 
         if map_size(seat_connections) == 0 and Map.has_key?(state.players, player_id) do
-          {:noreply, mark_disconnected(state, player_id)}
+          {:noreply, state |> mark_disconnected(player_id) |> commit()}
         else
           {:noreply, state}
         end
@@ -404,9 +402,11 @@ defmodule Flamingo.RoomServer do
           n -> Enum.take(state.current_drawing, length(state.current_drawing) - n - 1)
         end
 
-      new_state = %{state | current_drawing: new_drawing}
-      broadcast(state.room_id, {:draw_event, player_id, %{"event_type" => "undo"}})
-      {:noreply, new_state}
+      if new_drawing == state.current_drawing do
+        {:noreply, state}
+      else
+        {:noreply, %{state | current_drawing: new_drawing} |> commit()}
+      end
     end
   end
 
@@ -414,8 +414,7 @@ defmodule Flamingo.RoomServer do
     case Map.get(state.resume_tokens, resume_token) do
       player_id when not is_nil(player_id) and player_id == state.drawer_id ->
         new_state = %{state | current_drawing: state.current_drawing ++ [event]}
-        broadcast(state.room_id, {:draw_event, player_id, event})
-        {:noreply, new_state}
+        {:noreply, commit(new_state)}
 
       _ ->
         {:noreply, state}
@@ -449,7 +448,6 @@ defmodule Flamingo.RoomServer do
       players = Map.put(state.players, player_id, %{player | connected: true})
       disconnect_timers = Map.delete(state.disconnect_timers, player_id)
       new_state = %{state | players: players, disconnect_timers: disconnect_timers}
-      broadcast_players_updated(new_state)
       new_state
     end
   end
@@ -463,8 +461,6 @@ defmodule Flamingo.RoomServer do
     disconnect_timers = Map.put(state.disconnect_timers, player_id, ref)
 
     new_state = %{state | players: players, disconnect_timers: disconnect_timers}
-    broadcast_players_updated(new_state)
-
     reconcile_turn_completion(new_state, player_id)
   end
 
@@ -505,11 +501,8 @@ defmodule Flamingo.RoomServer do
         monitor_refs: monitor_refs
     }
 
-    {feed, entry} = Feed.player_left(new_state.feed, player_id, player_name)
+    {feed, _entry} = Feed.player_left(new_state.feed, player_id, player_name)
     new_state = %{new_state | feed: feed}
-
-    broadcast_players_updated(new_state)
-    broadcast(state.room_id, {:feed_event, entry})
 
     cond do
       state.phase in [:word_choice, :playing] and player_id == state.drawer_id ->
@@ -582,16 +575,8 @@ defmodule Flamingo.RoomServer do
     }
 
     drawer_name = Map.get(new_state.players, new_state.drawer_id).name
-    {feed, entry} = Feed.new_turn(new_state.feed, new_state.drawer_id, drawer_name)
+    {feed, _entry} = Feed.new_turn(new_state.feed, new_state.drawer_id, drawer_name)
     new_state = %{new_state | feed: feed}
-
-    broadcast(
-      new_state.room_id,
-      {:word_choice_started, new_state.drawer_id, turn_end_time, new_state.round_count,
-       new_state.turn_length, new_state.current_round}
-    )
-
-    broadcast(new_state.room_id, {:feed_event, entry})
 
     new_state
   end
@@ -618,7 +603,6 @@ defmodule Flamingo.RoomServer do
       }
       |> schedule_next_hint()
 
-    broadcast(state.room_id, {:turn_started, state.drawer_id, turn_end_time})
     new_state
   end
 
@@ -655,11 +639,9 @@ defmodule Flamingo.RoomServer do
         pending_hint_delays: []
     }
 
-    {feed, entry} = Feed.word_revealed(new_state.feed, state.word)
+    {feed, _entry} = Feed.word_revealed(new_state.feed, state.word)
     new_state = %{new_state | feed: feed}
 
-    broadcast(state.room_id, {:turn_reveal, state.word, turn_end_time, score_gains, players})
-    broadcast(state.room_id, {:feed_event, entry})
     new_state
   end
 
@@ -710,7 +692,6 @@ defmodule Flamingo.RoomServer do
         pending_hint_delays: []
     }
 
-    broadcast(state.room_id, {:game_ended, state.players, state.final_drawings})
     new_state
   end
 
@@ -802,19 +783,13 @@ defmodule Flamingo.RoomServer do
     end
   end
 
-  defp broadcast_players_updated(state) do
-    broadcast(
-      state.room_id,
-      {:players_updated, state.players, state.player_order, state.host_id}
-    )
-  end
-
   defp snapshot_for(state, player_id) do
     word_visible? =
       player_id == state.drawer_id or Map.has_key?(state.correct_guesses, player_id) or
         state.phase in [:turn_reveal, :game_ended]
 
     %{
+      revision: state.revision,
       mode: state.mode,
       phase: state.phase,
       viewer_id: player_id,
@@ -864,8 +839,18 @@ defmodule Flamingo.RoomServer do
     end)
   end
 
-  defp broadcast(room_id, message) do
-    Phoenix.PubSub.broadcast(Flamingo.PubSub, "game:#{room_id}", message)
+  defp commit(state, excluded_pid \\ nil) do
+    state = %{state | revision: state.revision + 1}
+
+    Enum.each(state.connections, fn {player_id, seat_connections} ->
+      snapshot = snapshot_for(state, player_id)
+
+      Enum.each(seat_connections, fn {pid, _ref} ->
+        if pid != excluded_pid, do: send(pid, {:room_snapshot, state.revision, snapshot})
+      end)
+    end)
+
+    state
   end
 
   defp close_guess?(guess, word) do

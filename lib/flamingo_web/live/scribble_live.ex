@@ -1,7 +1,7 @@
 defmodule FlamingoWeb.ScribbleLive do
   use FlamingoWeb, :live_view
 
-  alias Flamingo.{DrawingShare, Feed, Rooms, Words}
+  alias Flamingo.{DrawingShare, Rooms, Words}
 
   @min_turn_length 15
   @max_turn_length 120
@@ -20,6 +20,7 @@ defmodule FlamingoWeb.ScribbleLive do
      |> assign(
        room_id: room_id,
        resume_token: nil,
+       revision: 0,
        player_id: nil,
        phase: :lobby,
        players: %{},
@@ -52,6 +53,7 @@ defmodule FlamingoWeb.ScribbleLive do
        current_round: 0,
        correct_guesses: MapSet.new(),
        revealed_indices: [],
+       feed_ids: MapSet.new(),
        guess_form: to_form(%{"guess" => ""}, as: :guess_form),
        score_gains: %{}
      )
@@ -65,84 +67,12 @@ defmodule FlamingoWeb.ScribbleLive do
     if connected?(socket) do
       case Rooms.connect(room_id, resume_token) do
         {:ok, snapshot} ->
-          Rooms.subscribe(room_id)
-
-          final_players =
-            if snapshot.phase == :game_ended, do: snapshot.players, else: %{}
-
-          final_player_order =
-            if snapshot.phase == :game_ended, do: snapshot.player_order, else: []
-
-          final_drawings =
-            if snapshot.phase == :game_ended, do: snapshot.final_drawings, else: []
-
-          selected_player_id =
-            if snapshot.phase == :game_ended,
-              do: winning_player_id(final_players, final_player_order),
-              else: nil
-
           socket =
             socket
-            |> assign(
-              resume_token: resume_token,
-              player_id: snapshot.viewer_id,
-              phase: snapshot.phase,
-              players: snapshot.players,
-              player_order: snapshot.player_order,
-              host_id: snapshot.host_id,
-              drawer_id: snapshot.drawer_id,
-              final_players: final_players,
-              final_player_order: final_player_order,
-              final_drawings: final_drawings,
-              selected_player_id: selected_player_id,
-              round_count: snapshot.round_count,
-              turn_length: snapshot.turn_length,
-              custom_words: Enum.join(snapshot.custom_words, "\n"),
-              custom_word_count: length(snapshot.custom_words),
-              custom_words_error: nil,
-              settings_form:
-                to_form(
-                  %{
-                    "round_count" => Integer.to_string(snapshot.round_count),
-                    "turn_length" => Integer.to_string(snapshot.turn_length),
-                    "custom_words" => Enum.join(snapshot.custom_words, "\n"),
-                    "include_default_words" => snapshot.include_default_words
-                  },
-                  as: :settings
-                ),
-              current_round: snapshot.current_round,
-              word_choices: snapshot.word_choices,
-              turn_end_time: snapshot.turn_end_time,
-              word: snapshot.word,
-              show_word: snapshot.word_visible?,
-              correct_guesses: snapshot.correct_guesses,
-              revealed_indices: snapshot.revealed_indices,
-              score_gains: snapshot.score_gains
-            )
-            |> stream(:feed, snapshot.feed, reset: true)
+            |> assign(resume_token: resume_token)
+            |> apply_snapshot(snapshot)
 
-          socket =
-            if snapshot.phase in [:word_choice, :playing, :turn_reveal] and snapshot.turn_end_time do
-              push_event(socket, "set_timer", %{
-                end_time: DateTime.to_iso8601(snapshot.turn_end_time)
-              })
-            else
-              socket
-            end
-
-          socket =
-            if snapshot.phase == :playing and snapshot.current_drawing != [] do
-              push_event(socket, "drawing_state", %{events: snapshot.current_drawing})
-            else
-              socket
-            end
-
-          socket =
-            socket
-            |> sync_round_audio()
-            |> push_event("play_sound", %{sound: "join"})
-
-          {:noreply, socket}
+          {:noreply, push_event(socket, "play_sound", %{sound: "join"})}
 
         {:error, :not_found} ->
           {:noreply, push_navigate(socket, to: ~p"/")}
@@ -854,7 +784,12 @@ defmodule FlamingoWeb.ScribbleLive do
   end
 
   def handle_event("guess", %{"guess_form" => %{"guess" => text}}, socket) do
-    Rooms.guess(socket.assigns.room_id, socket.assigns.resume_token, text)
+    socket =
+      case Rooms.guess(socket.assigns.room_id, socket.assigns.resume_token, text) do
+        :incorrect -> push_event(socket, "play_sound", %{sound: "wrongGuess"})
+        _result -> socket
+      end
+
     {:noreply, socket}
   end
 
@@ -888,213 +823,164 @@ defmodule FlamingoWeb.ScribbleLive do
     |> Enum.count(&(String.trim(&1) != ""))
   end
 
-  def handle_info({:players_updated, players, player_order, host_id}, socket) do
-    old_count = map_size(socket.assigns.players)
-    new_count = map_size(players)
-
-    socket = assign(socket, players: players, player_order: player_order, host_id: host_id)
-
-    socket =
-      if socket.assigns.phase != :game_ended and new_count > old_count do
-        push_event(socket, "play_sound", %{sound: "join"})
-      else
-        socket
-      end
-
+  def handle_info({:room_snapshot, revision, _snapshot}, socket)
+      when revision <= socket.assigns.revision do
     {:noreply, socket}
   end
 
-  def handle_info(
-        {:word_choice_started, _drawer_id, _turn_end_time, _round_count, _turn_length,
-         _current_round},
-        socket
-      ) do
-    case Rooms.snapshot(socket.assigns.room_id, socket.assigns.resume_token) do
-      {:ok, %{phase: :word_choice} = snapshot} ->
-        socket =
-          if socket.assigns.phase in [:lobby, :game_ended] do
-            stream(socket, :feed, snapshot.feed, reset: true)
-          else
-            socket
-          end
-
-        socket =
-          assign(socket,
-            phase: snapshot.phase,
-            drawer_id: snapshot.drawer_id,
-            turn_end_time: snapshot.turn_end_time,
-            round_count: snapshot.round_count,
-            turn_length: snapshot.turn_length,
-            current_round: snapshot.current_round,
-            final_players: %{},
-            final_player_order: [],
-            final_drawings: [],
-            selected_player_id: nil,
-            word_choices: snapshot.word_choices,
-            word: snapshot.word,
-            show_word: snapshot.word_visible?,
-            correct_guesses: snapshot.correct_guesses,
-            revealed_indices: snapshot.revealed_indices,
-            score_gains: snapshot.score_gains
-          )
-
-        socket =
-          socket
-          |> push_event("set_timer", %{end_time: DateTime.to_iso8601(snapshot.turn_end_time)})
-          |> sync_round_audio()
-
-        {:noreply, socket}
-
-      {:ok, _newer_snapshot} ->
-        {:noreply, socket}
-
-      {:error, :not_found} ->
-        {:noreply, push_navigate(socket, to: ~p"/")}
+  def handle_info({:room_snapshot, revision, snapshot}, socket) do
+    if revision == socket.assigns.revision + 1 do
+      {:noreply, apply_snapshot(socket, snapshot)}
+    else
+      case Rooms.snapshot(socket.assigns.room_id, socket.assigns.resume_token) do
+        {:ok, authoritative} -> {:noreply, apply_snapshot(socket, authoritative)}
+        {:error, :not_found} -> {:noreply, push_navigate(socket, to: ~p"/")}
+      end
     end
   end
 
-  def handle_info({:turn_started, _drawer_id, _turn_end_time}, socket) do
-    case Rooms.snapshot(socket.assigns.room_id, socket.assigns.resume_token) do
-      {:ok, %{phase: :playing} = snapshot} ->
-        socket =
-          assign(socket,
-            phase: snapshot.phase,
-            drawer_id: snapshot.drawer_id,
-            final_players: %{},
-            final_player_order: [],
-            final_drawings: [],
-            selected_player_id: nil,
-            word_choices: snapshot.word_choices,
-            turn_end_time: snapshot.turn_end_time,
-            word: snapshot.word,
-            show_word: snapshot.word_visible?,
-            correct_guesses: snapshot.correct_guesses,
-            revealed_indices: snapshot.revealed_indices
-          )
+  defp apply_snapshot(socket, snapshot) do
+    initial? = is_nil(socket.assigns.player_id)
+    old_phase = socket.assigns.phase
+    old_turn_end_time = socket.assigns.turn_end_time
+    old_drawing = Map.get(socket.assigns, :current_drawing, [])
+    old_count = map_size(socket.assigns.players)
+    old_feed_ids = socket.assigns.feed_ids
+    feed_ids = MapSet.new(snapshot.feed, & &1.id)
+    feed_changed? = feed_ids != old_feed_ids
+    newly_correct = MapSet.difference(snapshot.correct_guesses, socket.assigns.correct_guesses)
+    game_ended? = snapshot.phase == :game_ended
+    entering_game_end? = game_ended? and old_phase != :game_ended
+    custom_words = Enum.join(snapshot.custom_words, "\n")
+    sync_settings? = initial? or old_phase != :lobby or snapshot.phase != :lobby
 
-        socket =
-          socket
-          |> push_event("set_timer", %{end_time: DateTime.to_iso8601(snapshot.turn_end_time)})
-          |> sync_round_audio()
+    round_count = if sync_settings?, do: snapshot.round_count, else: socket.assigns.round_count
+    turn_length = if sync_settings?, do: snapshot.turn_length, else: socket.assigns.turn_length
+    custom_words = if sync_settings?, do: custom_words, else: socket.assigns.custom_words
 
-        {:noreply, socket}
+    custom_word_count =
+      if sync_settings?, do: length(snapshot.custom_words), else: socket.assigns.custom_word_count
 
-      {:ok, _newer_snapshot} ->
-        {:noreply, socket}
+    custom_words_error =
+      if sync_settings?, do: nil, else: socket.assigns.custom_words_error
 
-      {:error, :not_found} ->
-        {:noreply, push_navigate(socket, to: ~p"/")}
-    end
-  end
+    settings_form =
+      if sync_settings? do
+        to_form(
+          %{
+            "round_count" => Integer.to_string(snapshot.round_count),
+            "turn_length" => Integer.to_string(snapshot.turn_length),
+            "custom_words" => custom_words,
+            "include_default_words" => snapshot.include_default_words
+          },
+          as: :settings
+        )
+      else
+        socket.assigns.settings_form
+      end
 
-  def handle_info({:turn_reveal, word, turn_end_time, score_gains, players}, socket) do
-    socket =
-      assign(socket,
-        phase: :turn_reveal,
-        final_players: %{},
-        final_player_order: [],
-        selected_player_id: nil,
-        word: word,
-        show_word: true,
-        turn_end_time: turn_end_time,
-        score_gains: score_gains,
-        players: players
-      )
+    final_players =
+      cond do
+        entering_game_end? -> snapshot.players
+        game_ended? -> socket.assigns.final_players
+        true -> %{}
+      end
+
+    final_player_order =
+      cond do
+        entering_game_end? -> snapshot.player_order
+        game_ended? -> socket.assigns.final_player_order
+        true -> []
+      end
+
+    final_drawings =
+      cond do
+        entering_game_end? -> snapshot.final_drawings
+        game_ended? -> socket.assigns.final_drawings
+        true -> []
+      end
 
     socket =
       socket
-      |> push_event("set_timer", %{end_time: DateTime.to_iso8601(turn_end_time)})
-      |> sync_round_audio()
-
-    {:noreply, socket}
-  end
-
-  def handle_info({:game_ended, players, final_drawings}, socket) do
-    final_player_order = socket.assigns.player_order
-
-    {:noreply,
-     assign(socket,
-       phase: :game_ended,
-       final_players: players,
-       final_player_order: final_player_order,
-       final_drawings: final_drawings,
-       selected_player_id: winning_player_id(players, final_player_order),
-       turn_end_time: nil
-     )
-     |> sync_round_audio()}
-  end
-
-  def handle_info({:hint_revealed, _revealed_indices}, socket) do
-    if socket.assigns.show_word or
-         MapSet.member?(socket.assigns.correct_guesses, socket.assigns.player_id) do
-      {:noreply, socket}
-    else
-      case Rooms.snapshot(socket.assigns.room_id, socket.assigns.resume_token) do
-        {:ok, snapshot} ->
-          {:noreply,
-           assign(socket,
-             word: snapshot.word,
-             show_word: snapshot.word_visible?,
-             revealed_indices: snapshot.revealed_indices
-           )}
-
-        {:error, :not_found} ->
-          {:noreply, push_navigate(socket, to: ~p"/")}
-      end
-    end
-  end
-
-  def handle_info({:correct_guess, player_id}, socket) do
-    sound =
-      if player_id == socket.assigns.player_id,
-        do: "correctGuess",
-        else: "otherPlayerCorrect"
+      |> assign(
+        revision: snapshot.revision,
+        player_id: snapshot.viewer_id,
+        phase: snapshot.phase,
+        players: snapshot.players,
+        player_order: snapshot.player_order,
+        host_id: snapshot.host_id,
+        drawer_id: snapshot.drawer_id,
+        final_players: final_players,
+        final_player_order: final_player_order,
+        final_drawings: final_drawings,
+        selected_player_id:
+          if(game_ended?,
+            do:
+              selected_or_winning_player_id(
+                final_players,
+                final_player_order,
+                socket.assigns.selected_player_id
+              ),
+            else: nil
+          ),
+        round_count: round_count,
+        turn_length: turn_length,
+        custom_words: custom_words,
+        custom_word_count: custom_word_count,
+        custom_words_error: custom_words_error,
+        settings_form: settings_form,
+        current_round: snapshot.current_round,
+        word_choices: snapshot.word_choices,
+        turn_end_time: snapshot.turn_end_time,
+        word: snapshot.word,
+        show_word: snapshot.word_visible?,
+        correct_guesses: snapshot.correct_guesses,
+        revealed_indices: snapshot.revealed_indices,
+        feed_ids: feed_ids,
+        score_gains: snapshot.score_gains,
+        current_drawing: snapshot.current_drawing
+      )
 
     socket =
-      assign(socket, :correct_guesses, MapSet.put(socket.assigns.correct_guesses, player_id))
-
-    socket =
-      if player_id == socket.assigns.player_id do
-        case Rooms.snapshot(socket.assigns.room_id, socket.assigns.resume_token) do
-          {:ok, snapshot} ->
-            assign(socket, word: snapshot.word, show_word: snapshot.word_visible?)
-
-          {:error, :not_found} ->
-            socket
-        end
+      if feed_changed? do
+        socket
+        |> stream(:feed, snapshot.feed, reset: true)
+        |> push_event("scroll_feed", %{})
       else
         socket
       end
 
-    {:noreply, push_event(socket, "play_sound", %{sound: sound})}
-  end
+    socket =
+      if snapshot.turn_end_time && snapshot.phase in [:word_choice, :playing, :turn_reveal] &&
+           (initial? || old_phase != snapshot.phase || old_turn_end_time != snapshot.turn_end_time) do
+        push_event(socket, "set_timer", %{end_time: DateTime.to_iso8601(snapshot.turn_end_time)})
+      else
+        socket
+      end
 
-  def handle_info({:incorrect_guess, player_id, _text}, socket) do
-    if player_id == socket.assigns.player_id do
-      {:noreply, push_event(socket, "play_sound", %{sound: "wrongGuess"})}
-    else
-      {:noreply, socket}
-    end
-  end
+    socket =
+      if snapshot.phase == :playing &&
+           (snapshot.current_drawing != old_drawing || old_phase != :playing) do
+        push_event(socket, "drawing_state", %{events: snapshot.current_drawing})
+      else
+        socket
+      end
 
-  def handle_info({:feed_event, entry}, socket) do
-    case Feed.format(entry, socket.assigns.player_id) do
-      nil ->
-        {:noreply, socket}
+    socket =
+      if initial? or old_phase != snapshot.phase, do: sync_round_audio(socket), else: socket
 
-      item ->
-        {:noreply,
-         socket
-         |> stream_insert(:feed, item)
-         |> push_event("scroll_feed", %{})}
-    end
-  end
+    socket =
+      if not initial? and snapshot.phase != :game_ended and map_size(snapshot.players) > old_count,
+        do: push_event(socket, "play_sound", %{sound: "join"}),
+        else: socket
 
-  def handle_info({:draw_event, from_player_id, event}, socket) do
-    if from_player_id == socket.assigns.player_id do
-      {:noreply, socket}
-    else
-      {:noreply, push_event(socket, "draw_event", event)}
+    case if(initial?, do: [], else: MapSet.to_list(newly_correct)) do
+      [player_id | _] ->
+        sound = if player_id == snapshot.viewer_id, do: "correctGuess", else: "otherPlayerCorrect"
+        push_event(socket, "play_sound", %{sound: sound})
+
+      [] ->
+        socket
     end
   end
 end

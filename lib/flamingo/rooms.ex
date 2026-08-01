@@ -34,8 +34,4 @@ defmodule Flamingo.Rooms do
   def guess(room_id, resume_token, text) do
     RoomServer.guess(room_id, resume_token, text)
   end
-
-  def subscribe(room_id) do
-    Phoenix.PubSub.subscribe(Flamingo.PubSub, "game:#{room_id}")
-  end
 end

@@ -86,6 +86,53 @@ defmodule FlamingoWeb.ScribbleLiveTest do
     assert has_element?(view, "#custom-words-error")
   end
 
+  test "a lobby update does not replace the host's unsaved settings", %{
+    conn: conn,
+    room_id: room_id
+  } do
+    {:ok, host_token, _snapshot} = join_connected(room_id, "Alice")
+    {:ok, view, _html} = live(conn, ~p"/game/#{room_id}?resume_token=#{host_token}")
+
+    view
+    |> element("#settings-form")
+    |> render_change(%{
+      "settings" => %{
+        "round_count" => "5",
+        "turn_length" => "90",
+        "custom_words" => "saved locally"
+      }
+    })
+
+    {:ok, _bob_token, _snapshot} = join_connected(room_id, "Bob")
+
+    assert has_element?(view, "#round-count-slider[value='5']")
+    assert has_element?(view, "#round-length-input[value='90']")
+    assert has_element?(view, "#custom-words-input", "saved locally")
+  end
+
+  test "versioned snapshots ignore stale delivery and recover revision gaps", %{
+    conn: conn,
+    room_id: room_id
+  } do
+    {:ok, resume_token, %{viewer_id: seat_id}} = join_connected(room_id, "Alice")
+    {:ok, view, _html} = live(conn, ~p"/game/#{room_id}?resume_token=#{resume_token}")
+    {:ok, snapshot} = RoomServer.snapshot(room_id, resume_token)
+
+    altered_snapshot = put_in(snapshot.players[seat_id].name, "Mallory")
+
+    send(view.pid, {:room_snapshot, snapshot.revision, altered_snapshot})
+    refute has_element?(view, "li", "Mallory")
+
+    ordered_revision = snapshot.revision + 1
+    ordered_snapshot = %{altered_snapshot | revision: ordered_revision}
+    send(view.pid, {:room_snapshot, ordered_revision, ordered_snapshot})
+    assert has_element?(view, "li", "Mallory")
+
+    send(view.pid, {:room_snapshot, ordered_revision + 2, ordered_snapshot})
+    assert has_element?(view, "li", "Alice")
+    refute has_element?(view, "li", "Mallory")
+  end
+
   test "guesser receives a projected word while the drawer sees the selected word", %{
     conn: conn,
     room_id: room_id
@@ -115,6 +162,12 @@ defmodule FlamingoWeb.ScribbleLiveTest do
     assert render(drawer_view) =~ word
     refute render(guesser_view) =~ word
     assert has_element?(guesser_view, "#guess-input")
+
+    guesser_view
+    |> form("#guess-form", %{"guess_form" => %{"guess" => "wrong answer"}})
+    |> render_submit()
+
+    assert_push_event(guesser_view, "play_sound", %{sound: "wrongGuess"})
   end
 
   test "game end screen keeps final scores visible after a player leaves", %{
@@ -287,21 +340,19 @@ defmodule FlamingoWeb.ScribbleLiveTest do
     refute html =~ "phx-click=\"replay_final_drawings\""
   end
 
-  test "final score row with no drawings remains selectable and shows an empty state", %{
+  test "final score row with an empty drawing remains selectable", %{
     conn: conn,
     room_id: room_id
   } do
     {:ok, p1_token, %{viewer_id: p1}} = join_connected(room_id, "Alice")
-    {:ok, _p2_token, %{viewer_id: p2}} = join_connected(room_id, "Bob")
+    {:ok, p2_token, %{viewer_id: p2}} = join_connected(room_id, "Bob")
 
     {:ok, view, _html} = live(conn, ~p"/game/#{room_id}?resume_token=#{p1_token}")
 
-    players = %{
-      p1 => %{id: p1, name: "Alice", score: 100},
-      p2 => %{id: p2, name: "Bob", score: 50}
-    }
+    :ok = RoomServer.start_game(room_id, p1_token, %{round_count: 1, turn_length: 30})
 
-    send(view.pid, {:game_ended, players, []})
+    play_turn(room_id, p1, p1_token, p2, p2_token)
+    play_turn(room_id, p1, p1_token, p2, p2_token)
 
     html =
       view
@@ -309,7 +360,7 @@ defmodule FlamingoWeb.ScribbleLiveTest do
       |> render_click()
 
     assert html =~ "Bob"
-    assert html =~ "No drawings to show"
+    assert html =~ "aria-label=\"Round 1\""
     assert html =~ "data-selected=\"true\""
   end
 
@@ -333,6 +384,7 @@ defmodule FlamingoWeb.ScribbleLiveTest do
     })
 
     assert is_binary(word_choice_end_time)
+    assert_push_event(view, "set_timer", %{end_time: ^word_choice_end_time})
 
     {:ok, state} = RoomServer.get_state(room_id)
     word = List.first(state.word_choices)
@@ -350,8 +402,14 @@ defmodule FlamingoWeb.ScribbleLiveTest do
     })
 
     assert is_binary(playing_end_time)
+    assert_push_event(view, "set_timer", %{end_time: ^playing_end_time})
 
     {:ok, state} = RoomServer.get_state(room_id)
+    drawer_token = if(state.drawer_id == p1, do: p1_token, else: p2_token)
+    RoomServer.draw_event(room_id, drawer_token, %{"event_type" => "clear"})
+    _ = :sys.get_state(RoomServer.whereis(room_id))
+    refute_push_event(view, "set_timer", %{})
+
     guesser = if(p1 == state.drawer_id, do: p2, else: p1)
     :correct = RoomServer.guess(room_id, if(guesser == p1, do: p1_token, else: p2_token), word)
 
