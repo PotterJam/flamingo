@@ -35,13 +35,13 @@ defmodule Flamingo.Room.MembersTest do
     assert Members.host_id(members) == nil
   end
 
-  test "duplicate seat IDs and credentials are rejected" do
+  test "duplicate seat IDs and resume tokens are rejected" do
     {:ok, members} = Members.add(Members.new(), "alice", "alice-token", "Alice")
 
     assert {:error, :duplicate_seat} =
              Members.add(members, "alice", "other-token", "Other Alice")
 
-    assert {:error, :duplicate_credential} =
+    assert {:error, :duplicate_resume_token} =
              Members.add(members, "bob", "alice-token", "Bob")
   end
 
@@ -66,7 +66,7 @@ defmodule Flamingo.Room.MembersTest do
     assert :error = Members.connection_added(members, "missing")
   end
 
-  test "public views omit credentials and connection counts" do
+  test "public views omit resume tokens and connection counts" do
     members = members_fixture()
     {:ok, members, :became_online} = Members.connection_added(members, "alice")
 

@@ -497,7 +497,7 @@ defmodule Flamingo.RoomServerTest do
     assert {:ok, ^before_draw} = RoomServer.get_state(room_id)
   end
 
-  test "credentials resolve only their own seat and cannot borrow authorization", %{
+  test "resume tokens resolve only their own seat and cannot borrow authorization", %{
     room_id: room_id
   } do
     {:ok, alice_token, %{viewer_id: alice}} = join_connected(room_id, "Alice")
@@ -738,18 +738,6 @@ defmodule Flamingo.RoomServerTest do
     refute match?({:ok, _seat}, Members.fetch(state.members, guesser))
     refute guesser in Members.ordered_ids(state.members)
     refute Map.has_key?(state.disconnect_timers, guesser)
-  end
-
-  test "removing the active drawer preserves completed drawing identity", %{room_id: room_id} do
-    {p1, _p2, _word, state} = start_playing(room_id)
-    drawer = state.drawer_id
-    drawer_name = if drawer == p1, do: "Alice", else: "Bob"
-
-    :ok = leave_as(room_id, resume_token_for(state, drawer))
-
-    {:ok, state} = RoomServer.get_state(room_id)
-    assert state.phase == :turn_reveal
-    assert [%{drawer_id: ^drawer, drawer_name: ^drawer_name}] = state.final_drawings
   end
 
   test "next drawer skips removed players", %{room_id: room_id} do

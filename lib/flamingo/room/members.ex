@@ -1,5 +1,5 @@
 defmodule Flamingo.Room.Members do
-  defstruct seats: %{}, credentials: %{}, order: [], host_id: nil
+  defstruct seats: %{}, resume_tokens: %{}, order: [], host_id: nil
 
   def new, do: %__MODULE__{}
 
@@ -8,8 +8,8 @@ defmodule Flamingo.Room.Members do
       Map.has_key?(members.seats, seat_id) ->
         {:error, :duplicate_seat}
 
-      Map.has_key?(members.credentials, resume_token) ->
-        {:error, :duplicate_credential}
+      Map.has_key?(members.resume_tokens, resume_token) ->
+        {:error, :duplicate_resume_token}
 
       true ->
         seat = %{id: seat_id, name: name, connection_count: 0}
@@ -18,7 +18,7 @@ defmodule Flamingo.Room.Members do
          %{
            members
            | seats: Map.put(members.seats, seat_id, seat),
-             credentials: Map.put(members.credentials, resume_token, seat_id),
+             resume_tokens: Map.put(members.resume_tokens, resume_token, seat_id),
              order: members.order ++ [seat_id],
              host_id: members.host_id || seat_id
          }}
@@ -26,7 +26,7 @@ defmodule Flamingo.Room.Members do
   end
 
   def resolve(%__MODULE__{} = members, resume_token) do
-    Map.fetch(members.credentials, resume_token)
+    Map.fetch(members.resume_tokens, resume_token)
   end
 
   def fetch(%__MODULE__{} = members, seat_id), do: Map.fetch(members.seats, seat_id)
@@ -42,14 +42,14 @@ defmodule Flamingo.Room.Members do
             do: List.first(order),
             else: members.host_id
 
-        credentials =
-          Map.reject(members.credentials, fn {_resume_token, id} -> id == seat_id end)
+        resume_tokens =
+          Map.reject(members.resume_tokens, fn {_resume_token, id} -> id == seat_id end)
 
         {:ok,
          %{
            members
            | seats: Map.delete(members.seats, seat_id),
-             credentials: credentials,
+             resume_tokens: resume_tokens,
              order: order,
              host_id: host_id
          }, seat}

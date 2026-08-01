@@ -103,8 +103,13 @@ defmodule FlamingoWeb.ScribbleLive do
     |> Enum.sort_by(& &1.round_number)
   end
 
-  defp drawing_share_url(drawing) do
-    encoded = DrawingShare.encode(drawing)
+  defp drawing_share_url(drawing, players) do
+    player = Map.fetch!(players, drawing.drawer_id)
+
+    encoded =
+      drawing
+      |> Map.put(:drawer_name, player.name)
+      |> DrawingShare.encode()
 
     url(~p"/drawing") <> "##{encoded}"
   end
@@ -534,7 +539,7 @@ defmodule FlamingoWeb.ScribbleLive do
                     </div>
                   <% end %>
                   <%= for drawing <- selected_drawings do %>
-                    <% share_url = drawing_share_url(drawing) %>
+                    <% share_url = drawing_share_url(drawing, @final_players) %>
                     <div class="border-2 border-border bg-white p-3">
                       <div class="mb-2 flex items-center justify-between gap-3">
                         <span
