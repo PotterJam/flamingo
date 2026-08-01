@@ -19,7 +19,6 @@ defmodule FlamingoWeb.ScribbleLive do
      socket
      |> assign(
        room_id: room_id,
-       resume_token: nil,
        revision: 0,
        player_id: nil,
        phase: :lobby,
@@ -69,7 +68,6 @@ defmodule FlamingoWeb.ScribbleLive do
         {:ok, snapshot} ->
           socket =
             socket
-            |> assign(resume_token: resume_token)
             |> apply_snapshot(snapshot)
 
           {:noreply, push_event(socket, "play_sound", %{sound: "join"})}
@@ -78,7 +76,7 @@ defmodule FlamingoWeb.ScribbleLive do
           {:noreply, push_navigate(socket, to: ~p"/")}
       end
     else
-      {:noreply, assign(socket, resume_token: resume_token)}
+      {:noreply, socket}
     end
   end
 
@@ -752,7 +750,7 @@ defmodule FlamingoWeb.ScribbleLive do
           include_default_words: params["include_default_words"] == "true"
         }
 
-        case Rooms.start_game(socket.assigns.room_id, socket.assigns.resume_token, settings) do
+        case Rooms.start_game(socket.assigns.room_id, settings) do
           :ok ->
             {:noreply, socket}
 
@@ -774,18 +772,18 @@ defmodule FlamingoWeb.ScribbleLive do
   end
 
   def handle_event("select_word", %{"word" => word}, socket) do
-    Rooms.select_word(socket.assigns.room_id, socket.assigns.resume_token, word)
+    Rooms.select_word(socket.assigns.room_id, word)
     {:noreply, socket}
   end
 
   def handle_event("draw_event", event, socket) do
-    Rooms.draw_event(socket.assigns.room_id, socket.assigns.resume_token, event)
+    Rooms.draw_event(socket.assigns.room_id, event)
     {:noreply, socket}
   end
 
   def handle_event("guess", %{"guess_form" => %{"guess" => text}}, socket) do
     socket =
-      case Rooms.guess(socket.assigns.room_id, socket.assigns.resume_token, text) do
+      case Rooms.guess(socket.assigns.room_id, text) do
         :incorrect -> push_event(socket, "play_sound", %{sound: "wrongGuess"})
         _result -> socket
       end
@@ -832,7 +830,7 @@ defmodule FlamingoWeb.ScribbleLive do
     if revision == socket.assigns.revision + 1 do
       {:noreply, apply_snapshot(socket, snapshot)}
     else
-      case Rooms.snapshot(socket.assigns.room_id, socket.assigns.resume_token) do
+      case Rooms.snapshot(socket.assigns.room_id) do
         {:ok, authoritative} -> {:noreply, apply_snapshot(socket, authoritative)}
         {:error, :not_found} -> {:noreply, push_navigate(socket, to: ~p"/")}
       end

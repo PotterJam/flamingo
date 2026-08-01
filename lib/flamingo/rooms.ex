@@ -11,27 +11,27 @@ defmodule Flamingo.Rooms do
 
   def connect(room_id, resume_token), do: RoomServer.connect(room_id, resume_token)
 
-  def leave(room_id, resume_token) do
-    RoomServer.leave(room_id, resume_token)
+  def leave(room_id) do
+    RoomServer.leave(room_id)
   end
 
-  def snapshot(room_id, resume_token) do
-    RoomServer.snapshot(room_id, resume_token)
+  def snapshot(room_id) do
+    RoomServer.snapshot(room_id)
   end
 
-  def start_game(room_id, resume_token, settings) do
-    RoomServer.start_game(room_id, resume_token, settings)
+  def start_game(room_id, settings) do
+    RoomServer.start_game(room_id, settings)
   end
 
-  def select_word(room_id, resume_token, word) do
-    RoomServer.select_word(room_id, resume_token, word)
+  def select_word(room_id, word) do
+    RoomServer.select_word(room_id, word)
   end
 
-  def draw_event(room_id, resume_token, event) do
-    RoomServer.draw_event(room_id, resume_token, event)
+  def draw_event(room_id, event) do
+    RoomServer.draw_event(room_id, event)
   end
 
-  def guess(room_id, resume_token, text) do
-    RoomServer.guess(room_id, resume_token, text)
+  def guess(room_id, text) do
+    RoomServer.guess(room_id, text)
   end
 end

@@ -44,6 +44,7 @@ defmodule Flamingo.RoomServer do
     pending_hint_delays: [],
     disconnect_timers: %{},
     connections: %{},
+    connection_players: %{},
     monitor_refs: %{},
     score_gains: %{},
     final_drawings: [],
@@ -66,26 +67,26 @@ defmodule Flamingo.RoomServer do
     :exit, {:noproc, _} -> {:error, :not_found}
   end
 
-  def leave(room_id, resume_token) do
-    GenServer.call(via(room_id), {:leave, resume_token})
+  def leave(room_id) do
+    GenServer.call(via(room_id), {:leave, self()})
   catch
     :exit, {:noproc, _} -> :ok
   end
 
-  def start_game(room_id, resume_token, settings) do
-    GenServer.call(via(room_id), {:start_game, resume_token, settings})
+  def start_game(room_id, settings) do
+    GenServer.call(via(room_id), {:start_game, self(), settings})
   end
 
-  def select_word(room_id, resume_token, word) do
-    GenServer.call(via(room_id), {:select_word, resume_token, word})
+  def select_word(room_id, word) do
+    GenServer.call(via(room_id), {:select_word, self(), word})
   end
 
-  def draw_event(room_id, resume_token, event) do
-    GenServer.cast(via(room_id), {:draw_event, resume_token, event})
+  def draw_event(room_id, event) do
+    GenServer.cast(via(room_id), {:draw_event, self(), event})
   end
 
-  def guess(room_id, resume_token, text) do
-    GenServer.call(via(room_id), {:guess, resume_token, text})
+  def guess(room_id, text) do
+    GenServer.call(via(room_id), {:guess, self(), text})
   end
 
   def get_state(room_id) do
@@ -94,8 +95,8 @@ defmodule Flamingo.RoomServer do
     :exit, {:noproc, _} -> {:error, :not_found}
   end
 
-  def snapshot(room_id, resume_token) do
-    GenServer.call(via(room_id), {:snapshot, resume_token})
+  def snapshot(room_id) do
+    GenServer.call(via(room_id), {:snapshot, self()})
   catch
     :exit, {:noproc, _} -> {:error, :not_found}
   end
@@ -158,15 +159,14 @@ defmodule Flamingo.RoomServer do
   end
 
   def handle_call({:connect, resume_token}, {pid, _tag}, state) do
-    with {:ok, player_id} <- resolve_token(state, resume_token) do
-      new_state = connect_pid(state, player_id, pid)
-
+    with {:ok, player_id} <- resolve_token(state, resume_token),
+         {:ok, new_state} <- connect_pid(state, player_id, pid) do
       new_state =
         if new_state.players != state.players, do: commit(new_state, pid), else: new_state
 
       {:reply, {:ok, snapshot_for(new_state, player_id)}, new_state}
     else
-      :error -> {:reply, {:error, :not_found}, state}
+      _error -> {:reply, {:error, :not_found}, state}
     end
   end
 
@@ -174,15 +174,21 @@ defmodule Flamingo.RoomServer do
     {:reply, {:ok, state}, state}
   end
 
-  def handle_call({:snapshot, resume_token}, _from, state) do
-    with {:ok, player_id} <- resolve_token(state, resume_token) do
-      {:reply, {:ok, snapshot_for(state, player_id)}, state}
-    else
-      :error -> {:reply, {:error, :not_found}, state}
-    end
+  def handle_call({:snapshot, pid}, _from, %{connection_players: connections} = state)
+      when is_map_key(connections, pid) do
+    {:reply, {:ok, snapshot_for(state, Map.fetch!(connections, pid))}, state}
   end
 
-  def handle_call({:start_game, resume_token, settings}, _from, state) do
+  def handle_call({:snapshot, _pid}, _from, state),
+    do: {:reply, {:error, :not_found}, state}
+
+  def handle_call(
+        {:start_game, pid, settings},
+        _from,
+        %{connection_players: connections} = state
+      )
+      when is_map_key(connections, pid) do
+    player_id = Map.fetch!(connections, pid)
     round_count = Map.get(settings, :round_count, state.round_count)
     turn_length = Map.get(settings, :turn_length, state.turn_length)
     custom_words = Map.get(settings, :custom_words, state.custom_words)
@@ -190,8 +196,7 @@ defmodule Flamingo.RoomServer do
     include_default_words =
       Map.get(settings, :include_default_words, state.include_default_words)
 
-    with {:ok, player_id} <- resolve_token(state, resume_token),
-         :ok <- validate_host(state, player_id),
+    with :ok <- validate_host(state, player_id),
          :ok <- validate_player_count(state),
          :ok <- validate_round_count(round_count),
          :ok <- validate_turn_length(turn_length),
@@ -217,93 +222,101 @@ defmodule Flamingo.RoomServer do
       new_state = commit(new_state)
       {:reply, :ok, new_state}
     else
-      :error -> {:reply, {:error, :not_found}, state}
       {:error, _} = error -> {:reply, error, state}
     end
   end
 
-  def handle_call({:select_word, resume_token, word}, _from, state) do
-    with {:ok, player_id} <- resolve_token(state, resume_token) do
-      cond do
-        state.phase != :word_choice ->
-          {:reply, {:error, :not_word_choice}, state}
+  def handle_call({:start_game, _pid, _settings}, _from, state),
+    do: {:reply, {:error, :not_found}, state}
 
-        player_id != state.drawer_id ->
-          {:reply, {:error, :not_drawer}, state}
+  def handle_call(
+        {:select_word, pid, word},
+        _from,
+        %{connection_players: connections} = state
+      )
+      when is_map_key(connections, pid) do
+    player_id = Map.fetch!(connections, pid)
 
-        word not in state.word_choices ->
-          {:reply, {:error, :invalid_word}, state}
+    cond do
+      state.phase != :word_choice ->
+        {:reply, {:error, :not_word_choice}, state}
 
-        true ->
-          new_state = state |> enter_playing(word) |> commit()
-          {:reply, :ok, new_state}
-      end
-    else
-      :error -> {:reply, {:error, :not_found}, state}
+      player_id != state.drawer_id ->
+        {:reply, {:error, :not_drawer}, state}
+
+      word not in state.word_choices ->
+        {:reply, {:error, :invalid_word}, state}
+
+      true ->
+        new_state = state |> enter_playing(word) |> commit()
+        {:reply, :ok, new_state}
     end
   end
 
-  def handle_call({:guess, resume_token, text}, _from, state) when is_binary(text) do
-    with {:ok, player_id} <- resolve_token(state, resume_token) do
-      cond do
-        state.phase != :playing ->
-          {:reply, {:error, :not_playing}, state}
+  def handle_call({:select_word, _pid, _word}, _from, state),
+    do: {:reply, {:error, :not_found}, state}
 
-        not Map.has_key?(state.players, player_id) ->
-          {:reply, {:error, :not_found}, state}
+  def handle_call(
+        {:guess, pid, text},
+        _from,
+        %{connection_players: connections} = state
+      )
+      when is_map_key(connections, pid) and is_binary(text) do
+    player_id = Map.fetch!(connections, pid)
 
-        player_id == state.drawer_id ->
-          {:reply, {:error, :drawer_cannot_guess}, state}
+    cond do
+      state.phase != :playing ->
+        {:reply, {:error, :not_playing}, state}
 
-        Map.has_key?(state.correct_guesses, player_id) ->
-          {:reply, {:error, :already_guessed}, state}
+      not Map.has_key?(state.players, player_id) ->
+        {:reply, {:error, :not_found}, state}
 
-        String.downcase(String.trim(text)) == String.downcase(state.word) ->
-          player = Map.get(state.players, player_id)
-          correct_guesses = Map.put(state.correct_guesses, player_id, DateTime.utc_now())
-          {feed, _entry} = Feed.correct_guess(state.feed, player_id, player.name)
-          new_state = %{state | correct_guesses: correct_guesses, feed: feed}
+      player_id == state.drawer_id ->
+        {:reply, {:error, :drawer_cannot_guess}, state}
 
-          new_state =
-            if all_connected_guessed?(new_state),
-              do: enter_turn_reveal(new_state),
-              else: new_state
+      Map.has_key?(state.correct_guesses, player_id) ->
+        {:reply, {:error, :already_guessed}, state}
 
-          {:reply, :correct, commit(new_state)}
+      String.downcase(String.trim(text)) == String.downcase(state.word) ->
+        player = Map.get(state.players, player_id)
+        correct_guesses = Map.put(state.correct_guesses, player_id, DateTime.utc_now())
+        {feed, _entry} = Feed.correct_guess(state.feed, player_id, player.name)
+        new_state = %{state | correct_guesses: correct_guesses, feed: feed}
 
-        close_guess?(text, state.word) ->
-          {feed, _entry} = Feed.close_guess(state.feed, player_id)
-          new_state = %{state | feed: feed}
-          {:reply, :close, commit(new_state)}
+        new_state =
+          if all_connected_guessed?(new_state),
+            do: enter_turn_reveal(new_state),
+            else: new_state
 
-        true ->
-          player = Map.get(state.players, player_id)
-          {feed, _entry} = Feed.guess(state.feed, player_id, player.name, text)
-          new_state = %{state | feed: feed}
-          {:reply, :incorrect, commit(new_state)}
-      end
-    else
-      :error -> {:reply, {:error, :not_found}, state}
+        {:reply, :correct, commit(new_state)}
+
+      close_guess?(text, state.word) ->
+        {feed, _entry} = Feed.close_guess(state.feed, player_id)
+        new_state = %{state | feed: feed}
+        {:reply, :close, commit(new_state)}
+
+      true ->
+        player = Map.get(state.players, player_id)
+        {feed, _entry} = Feed.guess(state.feed, player_id, player.name, text)
+        new_state = %{state | feed: feed}
+        {:reply, :incorrect, commit(new_state)}
     end
   end
 
-  def handle_call({:guess, resume_token, _text}, _from, state) do
-    if Map.has_key?(state.resume_tokens, resume_token) do
-      {:reply, {:error, :invalid_guess}, state}
-    else
-      {:reply, {:error, :not_found}, state}
-    end
+  def handle_call({:guess, pid, _text}, _from, %{connection_players: connections} = state)
+      when is_map_key(connections, pid),
+      do: {:reply, {:error, :invalid_guess}, state}
+
+  def handle_call({:guess, _pid, _text}, _from, state),
+    do: {:reply, {:error, :not_found}, state}
+
+  def handle_call({:leave, pid}, _from, %{connection_players: connections} = state)
+      when is_map_key(connections, pid) do
+    player_id = Map.fetch!(connections, pid)
+    {:reply, :ok, state |> remove_player(player_id) |> commit()}
   end
 
-  def handle_call({:leave, resume_token}, _from, state) do
-    case resolve_token(state, resume_token) do
-      {:ok, player_id} ->
-        {:reply, :ok, state |> remove_player(player_id) |> commit()}
-
-      :error ->
-        {:reply, :ok, state}
-    end
-  end
+  def handle_call({:leave, _pid}, _from, state), do: {:reply, :ok, state}
 
   @impl true
   def handle_info({:word_choice_timeout, ref}, %{phase_timer_ref: ref} = state) do
@@ -369,7 +382,12 @@ defmodule Flamingo.RoomServer do
             do: Map.delete(state.connections, player_id),
             else: Map.put(state.connections, player_id, seat_connections)
 
-        state = %{state | connections: connections, monitor_refs: monitor_refs}
+        state = %{
+          state
+          | connections: connections,
+            connection_players: Map.delete(state.connection_players, pid),
+            monitor_refs: monitor_refs
+        }
 
         if map_size(seat_connections) == 0 and Map.has_key?(state.players, player_id) do
           {:noreply, state |> mark_disconnected(player_id) |> commit()}
@@ -381,12 +399,13 @@ defmodule Flamingo.RoomServer do
 
   @impl true
   def handle_cast(
-        {:draw_event, resume_token, %{"event_type" => "undo"}},
-        state
-      ) do
-    player_id = Map.get(state.resume_tokens, resume_token)
+        {:draw_event, pid, %{"event_type" => "undo"}},
+        %{connection_players: connections} = state
+      )
+      when is_map_key(connections, pid) do
+    player_id = Map.fetch!(connections, pid)
 
-    if is_nil(player_id) or player_id != state.drawer_id do
+    if player_id != state.drawer_id do
       {:noreply, state}
     else
       boundary_types = MapSet.new(["start", "fill", "clear"])
@@ -410,9 +429,13 @@ defmodule Flamingo.RoomServer do
     end
   end
 
-  def handle_cast({:draw_event, resume_token, event}, state) do
-    case Map.get(state.resume_tokens, resume_token) do
-      player_id when not is_nil(player_id) and player_id == state.drawer_id ->
+  def handle_cast(
+        {:draw_event, pid, event},
+        %{connection_players: connections} = state
+      )
+      when is_map_key(connections, pid) do
+    case Map.fetch!(connections, pid) do
+      player_id when player_id == state.drawer_id ->
         new_state = %{state | current_drawing: state.current_drawing ++ [event]}
         {:noreply, commit(new_state)}
 
@@ -421,21 +444,29 @@ defmodule Flamingo.RoomServer do
     end
   end
 
+  def handle_cast({:draw_event, _pid, _event}, state), do: {:noreply, state}
+
   defp connect_pid(state, player_id, pid) do
-    seat_connections = Map.get(state.connections, player_id, %{})
+    case Map.fetch(state.connection_players, pid) do
+      {:ok, ^player_id} ->
+        {:ok, state}
 
-    if Map.has_key?(seat_connections, pid) do
-      state
-    else
-      ref = Process.monitor(pid)
+      {:ok, _other_player_id} ->
+        {:error, :already_connected}
 
-      state = %{
-        state
-        | connections: Map.put(state.connections, player_id, Map.put(seat_connections, pid, ref)),
-          monitor_refs: Map.put(state.monitor_refs, ref, {player_id, pid})
-      }
+      :error ->
+        seat_connections = Map.get(state.connections, player_id, %{})
+        ref = Process.monitor(pid)
 
-      mark_connected(state, player_id)
+        state = %{
+          state
+          | connections:
+              Map.put(state.connections, player_id, Map.put(seat_connections, pid, ref)),
+            connection_players: Map.put(state.connection_players, pid, player_id),
+            monitor_refs: Map.put(state.monitor_refs, ref, {player_id, pid})
+        }
+
+        {:ok, mark_connected(state, player_id)}
     end
   end
 
@@ -472,6 +503,9 @@ defmodule Flamingo.RoomServer do
 
     removed_refs = seat_connections |> Map.values() |> MapSet.new()
 
+    connection_players =
+      Map.reject(state.connection_players, fn {_pid, seat_id} -> seat_id == player_id end)
+
     monitor_refs =
       Map.reject(state.monitor_refs, fn {ref, _seat} -> MapSet.member?(removed_refs, ref) end)
 
@@ -498,6 +532,7 @@ defmodule Flamingo.RoomServer do
         correct_guesses: correct_guesses,
         disconnect_timers: disconnect_timers,
         connections: Map.delete(state.connections, player_id),
+        connection_players: connection_players,
         monitor_refs: monitor_refs
     }
 

@@ -18,11 +18,68 @@ defmodule Flamingo.RoomServerTest do
   end
 
   defp join_connected(room_id, player_name) do
-    with {:ok, resume_token, _snapshot} <- RoomServer.join(room_id, player_name),
-         {:ok, snapshot} <- RoomServer.connect(room_id, resume_token) do
-      {:ok, resume_token, snapshot}
+    parent = self()
+    child_id = {:player, make_ref()}
+
+    pid =
+      start_supervised!(
+        Supervisor.child_spec(
+          {Task, fn -> join_player(parent, room_id, player_name) end},
+          id: child_id
+        )
+      )
+
+    assert_receive {:player_connected, ^pid, {:ok, resume_token, snapshot}}
+    Process.put({:player, resume_token}, pid)
+    {:ok, resume_token, snapshot}
+  end
+
+  defp join_player(parent, room_id, player_name) do
+    result =
+      with {:ok, resume_token, _snapshot} <- RoomServer.join(room_id, player_name),
+           {:ok, snapshot} <- RoomServer.connect(room_id, resume_token) do
+        {:ok, resume_token, snapshot}
+      end
+
+    send(parent, {:player_connected, self(), result})
+    player_loop(parent)
+  end
+
+  defp player_loop(parent) do
+    receive do
+      {:call, caller, ref, operation} ->
+        send(caller, {ref, operation.()})
+        player_loop(parent)
+
+      {:room_snapshot, revision, snapshot} ->
+        send(parent, {:room_snapshot, revision, snapshot})
+        player_loop(parent)
     end
   end
+
+  defp as_player(resume_token, operation) do
+    pid = Process.get({:player, resume_token})
+    ref = make_ref()
+    send(pid, {:call, self(), ref, operation})
+    assert_receive {^ref, result}
+    result
+  end
+
+  defp snapshot_as(room_id, token), do: as_player(token, fn -> RoomServer.snapshot(room_id) end)
+
+  defp start_game_as(room_id, token, settings),
+    do: as_player(token, fn -> RoomServer.start_game(room_id, settings) end)
+
+  defp select_word_as(room_id, token, word),
+    do: as_player(token, fn -> RoomServer.select_word(room_id, word) end)
+
+  defp guess_as(room_id, token, guess),
+    do: as_player(token, fn -> RoomServer.guess(room_id, guess) end)
+
+  defp draw_event_as(room_id, token, event),
+    do: as_player(token, fn -> RoomServer.draw_event(room_id, event) end)
+
+  defp leave_as(room_id, token), do: as_player(token, fn -> RoomServer.leave(room_id) end)
 
   defp start_connection(room_id, resume_token) do
     parent = self()
@@ -73,7 +130,7 @@ defmodule Flamingo.RoomServerTest do
 
     resume_tokens = %{p1 => p1_token, p2 => p2_token}
 
-    :ok = RoomServer.leave(room_id, Map.fetch!(resume_tokens, p1))
+    :ok = leave_as(room_id, Map.fetch!(resume_tokens, p1))
 
     {:ok, state} = RoomServer.get_state(room_id)
     assert state.host_id == p2
@@ -87,7 +144,7 @@ defmodule Flamingo.RoomServerTest do
 
     resume_tokens = %{p1 => p1_token, p2 => p2_token}
 
-    :ok = RoomServer.leave(room_id, Map.fetch!(resume_tokens, p2))
+    :ok = leave_as(room_id, Map.fetch!(resume_tokens, p2))
 
     {:ok, state} = RoomServer.get_state(room_id)
     assert state.host_id == p1
@@ -106,7 +163,7 @@ defmodule Flamingo.RoomServerTest do
     resume_tokens = %{p1 => p1_token, p2 => p2_token}
 
     assert {:error, :not_host} =
-             RoomServer.start_game(room_id, Map.fetch!(resume_tokens, p2), %{})
+             start_game_as(room_id, Map.fetch!(resume_tokens, p2), %{})
   end
 
   test "start_game fails with fewer than 2 players", %{room_id: room_id} do
@@ -114,7 +171,7 @@ defmodule Flamingo.RoomServerTest do
     resume_tokens = %{p1 => p1_token}
 
     assert {:error, :not_enough_players} =
-             RoomServer.start_game(room_id, Map.fetch!(resume_tokens, p1), %{})
+             start_game_as(room_id, Map.fetch!(resume_tokens, p1), %{})
   end
 
   test "start_game fails with invalid round_count", %{room_id: room_id} do
@@ -123,10 +180,10 @@ defmodule Flamingo.RoomServerTest do
     resume_tokens = %{p1 => p1_token, p2 => p2_token}
 
     assert {:error, :invalid_round_count} =
-             RoomServer.start_game(room_id, Map.fetch!(resume_tokens, p1), %{round_count: 0})
+             start_game_as(room_id, Map.fetch!(resume_tokens, p1), %{round_count: 0})
 
     assert {:error, :invalid_round_count} =
-             RoomServer.start_game(room_id, Map.fetch!(resume_tokens, p1), %{round_count: 6})
+             start_game_as(room_id, Map.fetch!(resume_tokens, p1), %{round_count: 6})
   end
 
   test "start_game fails with invalid turn_length", %{room_id: room_id} do
@@ -136,10 +193,10 @@ defmodule Flamingo.RoomServerTest do
     resume_tokens = %{p1 => p1_token, p2 => p2_token}
 
     assert {:error, :invalid_turn_length} =
-             RoomServer.start_game(room_id, Map.fetch!(resume_tokens, p1), %{turn_length: 14})
+             start_game_as(room_id, Map.fetch!(resume_tokens, p1), %{turn_length: 14})
 
     assert {:error, :invalid_turn_length} =
-             RoomServer.start_game(room_id, Map.fetch!(resume_tokens, p1), %{turn_length: 121})
+             start_game_as(room_id, Map.fetch!(resume_tokens, p1), %{turn_length: 121})
   end
 
   test "start_game accepts turn_length boundaries", %{room_id: room_id} do
@@ -148,13 +205,13 @@ defmodule Flamingo.RoomServerTest do
 
     resume_tokens = %{p1 => p1_token, p2 => p2_token}
 
-    assert :ok = RoomServer.start_game(room_id, Map.fetch!(resume_tokens, p1), %{turn_length: 15})
+    assert :ok = start_game_as(room_id, Map.fetch!(resume_tokens, p1), %{turn_length: 15})
 
     {:ok, state} = RoomServer.get_state(room_id)
     assert state.turn_length == 15
 
     assert :ok =
-             RoomServer.start_game(room_id, Map.fetch!(resume_tokens, p1), %{turn_length: 120})
+             start_game_as(room_id, Map.fetch!(resume_tokens, p1), %{turn_length: 120})
 
     {:ok, state} = RoomServer.get_state(room_id)
     assert state.turn_length == 120
@@ -167,7 +224,7 @@ defmodule Flamingo.RoomServerTest do
     resume_tokens = %{p1 => p1_token, p2 => p2_token}
 
     assert :ok =
-             RoomServer.start_game(room_id, Map.fetch!(resume_tokens, p1), %{
+             start_game_as(room_id, Map.fetch!(resume_tokens, p1), %{
                round_count: 2,
                turn_length: 45
              })
@@ -187,7 +244,7 @@ defmodule Flamingo.RoomServerTest do
     resume_tokens = %{p1 => p1_token, p2 => p2_token, p3 => p3_token}
 
     :ok =
-      RoomServer.start_game(room_id, Map.fetch!(resume_tokens, p1), %{
+      start_game_as(room_id, Map.fetch!(resume_tokens, p1), %{
         custom_words: ["secret", "other", "third"],
         round_count: 1,
         turn_length: 30
@@ -198,10 +255,10 @@ defmodule Flamingo.RoomServerTest do
     guesser_ids = Enum.reject(state.player_order, &(&1 == drawer_id))
     [first_guesser_id, second_guesser_id] = guesser_ids
 
-    {:ok, drawer_snapshot} = RoomServer.snapshot(room_id, Map.fetch!(resume_tokens, drawer_id))
+    {:ok, drawer_snapshot} = snapshot_as(room_id, Map.fetch!(resume_tokens, drawer_id))
 
     {:ok, guesser_snapshot} =
-      RoomServer.snapshot(room_id, Map.fetch!(resume_tokens, first_guesser_id))
+      snapshot_as(room_id, Map.fetch!(resume_tokens, first_guesser_id))
 
     assert drawer_snapshot.mode == :scribble
     assert drawer_snapshot.word_choices == state.word_choices
@@ -210,25 +267,25 @@ defmodule Flamingo.RoomServerTest do
     refute Map.has_key?(guesser_snapshot, :used_words)
 
     word = List.first(state.word_choices)
-    :ok = RoomServer.select_word(room_id, Map.fetch!(resume_tokens, drawer_id), word)
+    :ok = select_word_as(room_id, Map.fetch!(resume_tokens, drawer_id), word)
 
-    {:ok, drawer_snapshot} = RoomServer.snapshot(room_id, Map.fetch!(resume_tokens, drawer_id))
+    {:ok, drawer_snapshot} = snapshot_as(room_id, Map.fetch!(resume_tokens, drawer_id))
 
     {:ok, hidden_snapshot} =
-      RoomServer.snapshot(room_id, Map.fetch!(resume_tokens, second_guesser_id))
+      snapshot_as(room_id, Map.fetch!(resume_tokens, second_guesser_id))
 
     assert drawer_snapshot.word == word
     assert drawer_snapshot.word_visible?
     assert hidden_snapshot.word == String.replace(word, ~r/[^ ]/u, "_")
     refute hidden_snapshot.word_visible?
 
-    assert :correct = RoomServer.guess(room_id, Map.fetch!(resume_tokens, first_guesser_id), word)
+    assert :correct = guess_as(room_id, Map.fetch!(resume_tokens, first_guesser_id), word)
 
     {:ok, correct_guesser_snapshot} =
-      RoomServer.snapshot(room_id, Map.fetch!(resume_tokens, first_guesser_id))
+      snapshot_as(room_id, Map.fetch!(resume_tokens, first_guesser_id))
 
     {:ok, still_hidden_snapshot} =
-      RoomServer.snapshot(room_id, Map.fetch!(resume_tokens, second_guesser_id))
+      snapshot_as(room_id, Map.fetch!(resume_tokens, second_guesser_id))
 
     assert correct_guesser_snapshot.word == word
     assert correct_guesser_snapshot.word_visible?
@@ -247,7 +304,7 @@ defmodule Flamingo.RoomServerTest do
     flush_room_snapshots()
 
     :ok =
-      RoomServer.start_game(room_id, alice_token, %{
+      start_game_as(room_id, alice_token, %{
         custom_words: ["secret", "other", "third"]
       })
 
@@ -268,7 +325,7 @@ defmodule Flamingo.RoomServerTest do
 
     flush_room_snapshots()
     word = List.first(state.word_choices)
-    :ok = RoomServer.select_word(room_id, Map.fetch!(tokens, drawer_id), word)
+    :ok = select_word_as(room_id, Map.fetch!(tokens, drawer_id), word)
 
     assert_receive {:room_snapshot, next_revision, first_snapshot}
     assert_receive {:room_snapshot, ^next_revision, second_snapshot}
@@ -289,7 +346,7 @@ defmodule Flamingo.RoomServerTest do
     {:ok, alice_token, snapshot} = join_connected(room_id, "Alice")
     revision = snapshot.revision
 
-    assert {:error, :not_enough_players} = RoomServer.start_game(room_id, alice_token, %{})
+    assert {:error, :not_enough_players} = start_game_as(room_id, alice_token, %{})
     assert {:ok, %{revision: ^revision}} = RoomServer.get_state(room_id)
 
     send(RoomServer.whereis(room_id), {:word_choice_timeout, make_ref()})
@@ -298,8 +355,8 @@ defmodule Flamingo.RoomServerTest do
     assert {:ok, %{revision: ^revision}} = RoomServer.get_state(room_id)
   end
 
-  test "snapshot rejects an unknown player", %{room_id: room_id} do
-    assert {:error, :not_found} = RoomServer.snapshot(room_id, "unknown")
+  test "snapshot rejects an unregistered caller", %{room_id: room_id} do
+    assert {:error, :not_found} = RoomServer.snapshot(room_id)
   end
 
   test "join separates the opaque credential from the public seat identity", %{room_id: room_id} do
@@ -314,18 +371,17 @@ defmodule Flamingo.RoomServerTest do
     refute Map.has_key?(snapshot, :resume_tokens)
   end
 
-  test "unknown tokens cannot inspect or mutate a game", %{room_id: room_id} do
+  test "unregistered callers cannot inspect or mutate a game", %{room_id: room_id} do
     {:ok, _alice_token, %{viewer_id: alice}} = join_connected(room_id, "Alice")
     {:ok, _bob_token, _bob_snapshot} = join_connected(room_id, "Bob")
-    unknown = "unknown-token"
 
-    assert {:error, :not_found} = RoomServer.snapshot(room_id, unknown)
-    assert {:error, :not_found} = RoomServer.start_game(room_id, unknown, %{})
-    assert {:error, :not_found} = RoomServer.select_word(room_id, unknown, "cat")
-    assert {:error, :not_found} = RoomServer.guess(room_id, unknown, "cat")
+    assert {:error, :not_found} = RoomServer.snapshot(room_id)
+    assert {:error, :not_found} = RoomServer.start_game(room_id, %{})
+    assert {:error, :not_found} = RoomServer.select_word(room_id, "cat")
+    assert {:error, :not_found} = RoomServer.guess(room_id, "cat")
 
     {:ok, before_draw} = RoomServer.get_state(room_id)
-    :ok = RoomServer.draw_event(room_id, unknown, %{"event_type" => "clear"})
+    :ok = RoomServer.draw_event(room_id, %{"event_type" => "clear"})
     _ = :sys.get_state(RoomServer.whereis(room_id))
     assert {:ok, ^before_draw} = RoomServer.get_state(room_id)
 
@@ -338,18 +394,18 @@ defmodule Flamingo.RoomServerTest do
     {:ok, alice_token, %{viewer_id: alice}} = join_connected(room_id, "Alice")
     {:ok, bob_token, %{viewer_id: bob}} = join_connected(room_id, "Bob")
 
-    assert {:ok, %{viewer_id: ^alice}} = RoomServer.snapshot(room_id, alice_token)
+    assert {:ok, %{viewer_id: ^alice}} = snapshot_as(room_id, alice_token)
 
-    assert {:ok, %{viewer_id: ^bob}} = RoomServer.snapshot(room_id, bob_token)
-    assert {:error, :not_host} = RoomServer.start_game(room_id, bob_token, %{})
+    assert {:ok, %{viewer_id: ^bob}} = snapshot_as(room_id, bob_token)
+    assert {:error, :not_host} = start_game_as(room_id, bob_token, %{})
 
-    :ok = RoomServer.start_game(room_id, alice_token, %{})
+    :ok = start_game_as(room_id, alice_token, %{})
     {:ok, state} = RoomServer.get_state(room_id)
     word = List.first(state.word_choices)
 
     if state.drawer_id == alice do
       assert {:error, :not_drawer} =
-               RoomServer.select_word(room_id, bob_token, word)
+               select_word_as(room_id, bob_token, word)
     end
   end
 
@@ -359,9 +415,9 @@ defmodule Flamingo.RoomServerTest do
 
     resume_tokens = %{alice => alice_token}
 
-    :ok = RoomServer.leave(room_id, Map.fetch!(resume_tokens, alice))
+    :ok = leave_as(room_id, Map.fetch!(resume_tokens, alice))
 
-    assert {:error, :not_found} = RoomServer.snapshot(room_id, token)
+    assert {:error, :not_found} = snapshot_as(room_id, token)
     assert {:error, :not_found} = RoomServer.connect(room_id, token)
   end
 
@@ -373,7 +429,7 @@ defmodule Flamingo.RoomServerTest do
     resume_tokens = %{p1 => p1_token, p2 => p2_token}
 
     assert :ok =
-             RoomServer.start_game(room_id, Map.fetch!(resume_tokens, p1), %{
+             start_game_as(room_id, Map.fetch!(resume_tokens, p1), %{
                custom_words: custom_words
              })
 
@@ -389,7 +445,7 @@ defmodule Flamingo.RoomServerTest do
     resume_tokens = %{p1 => p1_token, p2 => p2_token}
 
     assert :ok =
-             RoomServer.start_game(room_id, Map.fetch!(resume_tokens, p1), %{
+             start_game_as(room_id, Map.fetch!(resume_tokens, p1), %{
                custom_words: ["apple", "orbital llama"],
                include_default_words: true
              })
@@ -408,12 +464,12 @@ defmodule Flamingo.RoomServerTest do
     resume_tokens = %{p1 => p1_token, p2 => p2_token}
 
     assert {:error, :invalid_custom_words} =
-             RoomServer.start_game(room_id, Map.fetch!(resume_tokens, p1), %{
+             start_game_as(room_id, Map.fetch!(resume_tokens, p1), %{
                custom_words: ["cat, dog"]
              })
 
     assert {:error, :too_many_custom_words} =
-             RoomServer.start_game(room_id, Map.fetch!(resume_tokens, p1), %{
+             start_game_as(room_id, Map.fetch!(resume_tokens, p1), %{
                custom_words: Enum.map(1..3001, &"word #{&1}")
              })
   end
@@ -423,11 +479,11 @@ defmodule Flamingo.RoomServerTest do
     {:ok, p2_token, %{viewer_id: p2}} = join_connected(room_id, "Bob")
     resume_tokens = %{p1 => p1_token, p2 => p2_token}
 
-    :ok = RoomServer.start_game(room_id, Map.fetch!(resume_tokens, p1), %{turn_length: 15})
+    :ok = start_game_as(room_id, Map.fetch!(resume_tokens, p1), %{turn_length: 15})
 
     {:ok, state} = RoomServer.get_state(room_id)
     word = List.first(state.word_choices)
-    :ok = RoomServer.select_word(room_id, Map.fetch!(resume_tokens, state.drawer_id), word)
+    :ok = select_word_as(room_id, Map.fetch!(resume_tokens, state.drawer_id), word)
 
     {:ok, state} = RoomServer.get_state(room_id)
 
@@ -475,7 +531,7 @@ defmodule Flamingo.RoomServerTest do
 
     assert is_reference(state.hint_timer_ref)
 
-    :correct = RoomServer.guess(room_id, resume_token_for(state, guesser), word)
+    :correct = guess_as(room_id, resume_token_for(state, guesser), word)
 
     {:ok, state} = RoomServer.get_state(room_id)
     assert state.phase == :turn_reveal
@@ -567,7 +623,7 @@ defmodule Flamingo.RoomServerTest do
     {p1, p2, _word, state} = start_playing(room_id)
     guesser = if p1 == state.drawer_id, do: p2, else: p1
 
-    :ok = RoomServer.leave(room_id, resume_token_for(state, guesser))
+    :ok = leave_as(room_id, resume_token_for(state, guesser))
 
     {:ok, state} = RoomServer.get_state(room_id)
     refute Map.has_key?(state.players, guesser)
@@ -582,20 +638,20 @@ defmodule Flamingo.RoomServerTest do
     resume_tokens = %{p1 => p1_token, p2 => p2_token, p3 => p3_token}
 
     :ok =
-      RoomServer.start_game(room_id, Map.fetch!(resume_tokens, p1), %{
+      start_game_as(room_id, Map.fetch!(resume_tokens, p1), %{
         round_count: 1,
         turn_length: 30
       })
 
     {:ok, state} = RoomServer.get_state(room_id)
     word = List.first(state.word_choices)
-    :ok = RoomServer.select_word(room_id, Map.fetch!(resume_tokens, state.drawer_id), word)
+    :ok = select_word_as(room_id, Map.fetch!(resume_tokens, state.drawer_id), word)
 
     {:ok, state} = RoomServer.get_state(room_id)
     [g1, g2] = Enum.reject([p1, p2, p3], &(&1 == state.drawer_id))
 
-    :correct = RoomServer.guess(room_id, Map.fetch!(resume_tokens, g1), word)
-    :correct = RoomServer.guess(room_id, Map.fetch!(resume_tokens, g2), word)
+    :correct = guess_as(room_id, Map.fetch!(resume_tokens, g1), word)
+    :correct = guess_as(room_id, Map.fetch!(resume_tokens, g2), word)
 
     {:ok, state} = RoomServer.get_state(room_id)
     assert state.phase == :turn_reveal
@@ -606,7 +662,7 @@ defmodule Flamingo.RoomServerTest do
         not MapSet.member?(state.drawn_this_round, pid)
       end)
 
-    :ok = RoomServer.leave(room_id, Map.fetch!(resume_tokens, next_in_order))
+    :ok = leave_as(room_id, Map.fetch!(resume_tokens, next_in_order))
 
     pid = RoomServer.whereis(room_id)
     {:ok, state} = RoomServer.get_state(room_id)
@@ -623,11 +679,11 @@ defmodule Flamingo.RoomServerTest do
     {:ok, p2_token, %{viewer_id: p2}} = join_connected(room_id, "Bob")
     resume_tokens = %{p1 => p1_token, p2 => p2_token}
 
-    :ok = RoomServer.start_game(room_id, Map.fetch!(resume_tokens, p1), settings)
+    :ok = start_game_as(room_id, Map.fetch!(resume_tokens, p1), settings)
 
     {:ok, state} = RoomServer.get_state(room_id)
     word = List.first(state.word_choices)
-    :ok = RoomServer.select_word(room_id, Map.fetch!(resume_tokens, state.drawer_id), word)
+    :ok = select_word_as(room_id, Map.fetch!(resume_tokens, state.drawer_id), word)
 
     {:ok, state} = RoomServer.get_state(room_id)
     {p1, p2, word, state}
@@ -646,7 +702,7 @@ defmodule Flamingo.RoomServerTest do
     guesser = if p2 == state.drawer_id, do: elem(start_playing(room_id), 0), else: p2
     guesser = if guesser == state.drawer_id, do: p2, else: guesser
 
-    assert :correct = RoomServer.guess(room_id, resume_token_for(state, guesser), word)
+    assert :correct = guess_as(room_id, resume_token_for(state, guesser), word)
 
     {:ok, state} = RoomServer.get_state(room_id)
     assert Map.has_key?(state.correct_guesses, guesser)
@@ -657,9 +713,9 @@ defmodule Flamingo.RoomServerTest do
     guesser = if p1 == state.drawer_id, do: p2, else: p1
 
     assert :incorrect =
-             RoomServer.guess(room_id, resume_token_for(state, guesser), "wrong-answer")
+             guess_as(room_id, resume_token_for(state, guesser), "wrong-answer")
 
-    {:ok, snapshot} = RoomServer.snapshot(room_id, resume_token_for(state, guesser))
+    {:ok, snapshot} = snapshot_as(room_id, resume_token_for(state, guesser))
     assert %{kind: :guess, text: text} = List.last(snapshot.feed)
     assert text =~ "wrong-answer"
   end
@@ -672,10 +728,10 @@ defmodule Flamingo.RoomServerTest do
     close_guess = String.replace_suffix(word, String.last(word), replacement)
 
     assert :close =
-             RoomServer.guess(room_id, resume_token_for(state, guesser), close_guess)
+             guess_as(room_id, resume_token_for(state, guesser), close_guess)
 
-    {:ok, guesser_snapshot} = RoomServer.snapshot(room_id, resume_token_for(state, guesser))
-    {:ok, other_snapshot} = RoomServer.snapshot(room_id, resume_token_for(state, other_player))
+    {:ok, guesser_snapshot} = snapshot_as(room_id, resume_token_for(state, guesser))
+    {:ok, other_snapshot} = snapshot_as(room_id, resume_token_for(state, other_player))
 
     assert %{kind: :close, text: "You were close"} = List.last(guesser_snapshot.feed)
     refute Enum.any?(other_snapshot.feed, &(&1.kind == :close))
@@ -698,9 +754,9 @@ defmodule Flamingo.RoomServerTest do
       |> Kernel.<>("!")
 
     assert :close =
-             RoomServer.guess(room_id, resume_token_for(state, guesser), close_guess)
+             guess_as(room_id, resume_token_for(state, guesser), close_guess)
 
-    {:ok, snapshot} = RoomServer.snapshot(room_id, resume_token_for(state, guesser))
+    {:ok, snapshot} = snapshot_as(room_id, resume_token_for(state, guesser))
     assert List.last(snapshot.feed).kind == :close
   end
 
@@ -710,13 +766,13 @@ defmodule Flamingo.RoomServerTest do
     wrong_length_guess = word <> "zz"
 
     assert :incorrect =
-             RoomServer.guess(
+             guess_as(
                room_id,
                resume_token_for(state, guesser),
                wrong_length_guess
              )
 
-    {:ok, snapshot} = RoomServer.snapshot(room_id, resume_token_for(state, guesser))
+    {:ok, snapshot} = snapshot_as(room_id, resume_token_for(state, guesser))
     assert List.last(snapshot.feed).kind == :guess
   end
 
@@ -726,9 +782,9 @@ defmodule Flamingo.RoomServerTest do
     close_guess = word <> "z"
 
     assert :close =
-             RoomServer.guess(room_id, resume_token_for(state, guesser), close_guess)
+             guess_as(room_id, resume_token_for(state, guesser), close_guess)
 
-    {:ok, snapshot} = RoomServer.snapshot(room_id, resume_token_for(state, guesser))
+    {:ok, snapshot} = snapshot_as(room_id, resume_token_for(state, guesser))
     assert List.last(snapshot.feed).kind == :close
   end
 
@@ -738,9 +794,9 @@ defmodule Flamingo.RoomServerTest do
     close_guess = String.slice(word, 0, String.length(word) - 1)
 
     assert :close =
-             RoomServer.guess(room_id, resume_token_for(state, guesser), close_guess)
+             guess_as(room_id, resume_token_for(state, guesser), close_guess)
 
-    {:ok, snapshot} = RoomServer.snapshot(room_id, resume_token_for(state, guesser))
+    {:ok, snapshot} = snapshot_as(room_id, resume_token_for(state, guesser))
     assert List.last(snapshot.feed).kind == :close
   end
 
@@ -748,19 +804,19 @@ defmodule Flamingo.RoomServerTest do
     {_p1, _p2, word, state} = start_playing(room_id)
 
     assert {:error, :drawer_cannot_guess} =
-             RoomServer.guess(room_id, resume_token_for(state, state.drawer_id), word)
+             guess_as(room_id, resume_token_for(state, state.drawer_id), word)
   end
 
-  test "non-member cannot guess", %{room_id: room_id} do
+  test "unregistered caller cannot guess", %{room_id: room_id} do
     {_p1, _p2, word, _state} = start_playing(room_id)
-    assert {:error, :not_found} = RoomServer.guess(room_id, "not-a-player", word)
+    assert {:error, :not_found} = RoomServer.guess(room_id, word)
   end
 
   test "all guessed triggers turn_reveal", %{room_id: room_id} do
     {p1, p2, word, state} = start_playing(room_id)
     guesser = if p1 == state.drawer_id, do: p2, else: p1
 
-    assert :correct = RoomServer.guess(room_id, resume_token_for(state, guesser), word)
+    assert :correct = guess_as(room_id, resume_token_for(state, guesser), word)
 
     {:ok, state} = RoomServer.get_state(room_id)
     assert state.phase == :turn_reveal
@@ -772,7 +828,7 @@ defmodule Flamingo.RoomServerTest do
     drawer = state.drawer_id
     guesser = if p1 == drawer, do: p2, else: p1
 
-    RoomServer.guess(room_id, resume_token_for(state, guesser), word)
+    guess_as(room_id, resume_token_for(state, guesser), word)
 
     {:ok, state} = RoomServer.get_state(room_id)
     assert MapSet.member?(state.drawn_this_round, drawer)
@@ -801,9 +857,9 @@ defmodule Flamingo.RoomServerTest do
       "line_width" => 9
     }
 
-    RoomServer.draw_event(room_id, resume_token_for(state, drawer), start_event)
-    RoomServer.draw_event(room_id, resume_token_for(state, drawer), draw_event)
-    :correct = RoomServer.guess(room_id, resume_token_for(state, guesser), word)
+    draw_event_as(room_id, resume_token_for(state, drawer), start_event)
+    draw_event_as(room_id, resume_token_for(state, drawer), draw_event)
+    :correct = guess_as(room_id, resume_token_for(state, guesser), word)
 
     {:ok, state} = RoomServer.get_state(room_id)
 
@@ -824,7 +880,7 @@ defmodule Flamingo.RoomServerTest do
     drawer = state.drawer_id
     guesser = if p1 == drawer, do: p2, else: p1
 
-    :correct = RoomServer.guess(room_id, resume_token_for(state, guesser), word)
+    :correct = guess_as(room_id, resume_token_for(state, guesser), word)
 
     {:ok, state} = RoomServer.get_state(room_id)
 
@@ -844,7 +900,7 @@ defmodule Flamingo.RoomServerTest do
     resume_tokens = %{p1 => p1_token, p2 => p2_token}
 
     :ok =
-      RoomServer.start_game(room_id, Map.fetch!(resume_tokens, p1), %{
+      start_game_as(room_id, Map.fetch!(resume_tokens, p1), %{
         round_count: 1,
         turn_length: 30
       })
@@ -852,11 +908,11 @@ defmodule Flamingo.RoomServerTest do
     play_turn = fn ->
       {:ok, state} = RoomServer.get_state(room_id)
       word = List.first(state.word_choices)
-      :ok = RoomServer.select_word(room_id, Map.fetch!(resume_tokens, state.drawer_id), word)
+      :ok = select_word_as(room_id, Map.fetch!(resume_tokens, state.drawer_id), word)
 
       {:ok, state} = RoomServer.get_state(room_id)
       guesser = if p1 == state.drawer_id, do: p2, else: p1
-      :correct = RoomServer.guess(room_id, Map.fetch!(resume_tokens, guesser), word)
+      :correct = guess_as(room_id, Map.fetch!(resume_tokens, guesser), word)
 
       pid = RoomServer.whereis(room_id)
       _ = :sys.get_state(pid)
@@ -887,7 +943,7 @@ defmodule Flamingo.RoomServerTest do
     resume_tokens = %{p1 => p1_token, p2 => p2_token}
 
     :ok =
-      RoomServer.start_game(room_id, Map.fetch!(resume_tokens, p1), %{
+      start_game_as(room_id, Map.fetch!(resume_tokens, p1), %{
         round_count: 2,
         turn_length: 30
       })
@@ -897,11 +953,11 @@ defmodule Flamingo.RoomServerTest do
     play_turn = fn ->
       {:ok, state} = RoomServer.get_state(room_id)
       word = List.first(state.word_choices)
-      :ok = RoomServer.select_word(room_id, Map.fetch!(resume_tokens, state.drawer_id), word)
+      :ok = select_word_as(room_id, Map.fetch!(resume_tokens, state.drawer_id), word)
 
       {:ok, state} = RoomServer.get_state(room_id)
       guesser = if p1 == state.drawer_id, do: p2, else: p1
-      :correct = RoomServer.guess(room_id, Map.fetch!(resume_tokens, guesser), word)
+      :correct = guess_as(room_id, Map.fetch!(resume_tokens, guesser), word)
 
       {:ok, state} = RoomServer.get_state(room_id)
       send(pid, {:turn_reveal_timeout, state.phase_timer_ref})
@@ -923,7 +979,7 @@ defmodule Flamingo.RoomServerTest do
     resume_tokens = %{p1 => p1_token, p2 => p2_token}
 
     :ok =
-      RoomServer.start_game(room_id, Map.fetch!(resume_tokens, p1), %{
+      start_game_as(room_id, Map.fetch!(resume_tokens, p1), %{
         round_count: 1,
         turn_length: 30
       })
@@ -932,11 +988,11 @@ defmodule Flamingo.RoomServerTest do
 
     {:ok, state} = RoomServer.get_state(room_id)
     word = List.first(state.word_choices)
-    :ok = RoomServer.select_word(room_id, Map.fetch!(resume_tokens, state.drawer_id), word)
+    :ok = select_word_as(room_id, Map.fetch!(resume_tokens, state.drawer_id), word)
 
     {:ok, state} = RoomServer.get_state(room_id)
     guesser = if p1 == state.drawer_id, do: p2, else: p1
-    :correct = RoomServer.guess(room_id, Map.fetch!(resume_tokens, guesser), word)
+    :correct = guess_as(room_id, Map.fetch!(resume_tokens, guesser), word)
 
     {:ok, state} = RoomServer.get_state(room_id)
     assert MapSet.member?(state.used_words, word)
@@ -954,7 +1010,7 @@ defmodule Flamingo.RoomServerTest do
     resume_tokens = %{p1 => p1_token, p2 => p2_token}
 
     :ok =
-      RoomServer.start_game(room_id, Map.fetch!(resume_tokens, p1), %{
+      start_game_as(room_id, Map.fetch!(resume_tokens, p1), %{
         round_count: 1,
         turn_length: 30
       })
@@ -964,11 +1020,11 @@ defmodule Flamingo.RoomServerTest do
     play_turn = fn ->
       {:ok, state} = RoomServer.get_state(room_id)
       word = List.first(state.word_choices)
-      :ok = RoomServer.select_word(room_id, Map.fetch!(resume_tokens, state.drawer_id), word)
+      :ok = select_word_as(room_id, Map.fetch!(resume_tokens, state.drawer_id), word)
 
       {:ok, state} = RoomServer.get_state(room_id)
       guesser = if p1 == state.drawer_id, do: p2, else: p1
-      :correct = RoomServer.guess(room_id, Map.fetch!(resume_tokens, guesser), word)
+      :correct = guess_as(room_id, Map.fetch!(resume_tokens, guesser), word)
 
       {:ok, state} = RoomServer.get_state(room_id)
       send(pid, {:turn_reveal_timeout, state.phase_timer_ref})
@@ -985,7 +1041,7 @@ defmodule Flamingo.RoomServerTest do
     assert MapSet.member?(state.used_words, first_word)
 
     :ok =
-      RoomServer.start_game(room_id, Map.fetch!(resume_tokens, p1), %{
+      start_game_as(room_id, Map.fetch!(resume_tokens, p1), %{
         round_count: 1,
         turn_length: 30
       })
@@ -1002,25 +1058,25 @@ defmodule Flamingo.RoomServerTest do
     resume_tokens = %{p1 => p1_token, p2 => p2_token, p3 => p3_token}
 
     :ok =
-      RoomServer.start_game(room_id, Map.fetch!(resume_tokens, p1), %{
+      start_game_as(room_id, Map.fetch!(resume_tokens, p1), %{
         round_count: 1,
         turn_length: 30
       })
 
     {:ok, state} = RoomServer.get_state(room_id)
     word = List.first(state.word_choices)
-    :ok = RoomServer.select_word(room_id, Map.fetch!(resume_tokens, state.drawer_id), word)
+    :ok = select_word_as(room_id, Map.fetch!(resume_tokens, state.drawer_id), word)
 
     {:ok, state} = RoomServer.get_state(room_id)
     drawer = state.drawer_id
     [g1, g2] = Enum.reject([p1, p2, p3], &(&1 == drawer))
 
-    :correct = RoomServer.guess(room_id, Map.fetch!(resume_tokens, g1), word)
+    :correct = guess_as(room_id, Map.fetch!(resume_tokens, g1), word)
 
     {:ok, state} = RoomServer.get_state(room_id)
     assert state.phase == :playing
 
-    :ok = RoomServer.leave(room_id, Map.fetch!(resume_tokens, g2))
+    :ok = leave_as(room_id, Map.fetch!(resume_tokens, g2))
 
     {:ok, state} = RoomServer.get_state(room_id)
     assert state.phase == :turn_reveal
@@ -1033,20 +1089,20 @@ defmodule Flamingo.RoomServerTest do
     resume_tokens = %{p1 => p1_token, p2 => p2_token, p3 => p3_token}
 
     :ok =
-      RoomServer.start_game(room_id, Map.fetch!(resume_tokens, p1), %{
+      start_game_as(room_id, Map.fetch!(resume_tokens, p1), %{
         round_count: 1,
         turn_length: 30
       })
 
     {:ok, state} = RoomServer.get_state(room_id)
     word = List.first(state.word_choices)
-    :ok = RoomServer.select_word(room_id, Map.fetch!(resume_tokens, state.drawer_id), word)
+    :ok = select_word_as(room_id, Map.fetch!(resume_tokens, state.drawer_id), word)
 
     {:ok, state} = RoomServer.get_state(room_id)
     drawer = state.drawer_id
     [g1, _g2] = Enum.reject([p1, p2, p3], &(&1 == drawer))
 
-    :ok = RoomServer.leave(room_id, Map.fetch!(resume_tokens, g1))
+    :ok = leave_as(room_id, Map.fetch!(resume_tokens, g1))
 
     {:ok, state} = RoomServer.get_state(room_id)
     assert state.phase == :playing
