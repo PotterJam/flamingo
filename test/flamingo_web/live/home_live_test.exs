@@ -20,8 +20,8 @@ defmodule FlamingoWeb.HomeLiveTest do
     uri = URI.parse(path)
 
     assert uri.path == ~p"/game/#{room_id}"
-    assert %{"player_id" => player_id} = URI.decode_query(uri.query)
-    assert player_id != ""
+    assert %{"resume_token" => resume_token} = URI.decode_query(uri.query)
+    assert resume_token != ""
   end
 
   test "submitting the lobby form creates when room name is empty", %{conn: conn} do
@@ -35,8 +35,8 @@ defmodule FlamingoWeb.HomeLiveTest do
     uri = URI.parse(path)
 
     assert uri.path =~ ~r(^/game/.+)
-    assert %{"player_id" => player_id} = URI.decode_query(uri.query)
-    assert player_id != ""
+    assert %{"resume_token" => resume_token} = URI.decode_query(uri.query)
+    assert resume_token != ""
   end
 
   test "home action buttons are submit buttons", %{conn: conn} do

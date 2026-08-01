@@ -138,8 +138,8 @@ defmodule FlamingoWeb.HomeLive do
       {:noreply, assign(socket, error: "Name cannot be empty")}
     else
       with {:ok, room_id} <- Rooms.create_room(),
-           {:ok, player_id, _state} <- Rooms.join(room_id, name) do
-        {:noreply, push_navigate(socket, to: ~p"/game/#{room_id}?player_id=#{player_id}")}
+           {:ok, resume_token, _snapshot} <- Rooms.join(room_id, name) do
+        {:noreply, push_navigate(socket, to: ~p"/game/#{room_id}?resume_token=#{resume_token}")}
       else
         _ -> {:noreply, assign(socket, error: "Failed to create room")}
       end
@@ -159,8 +159,8 @@ defmodule FlamingoWeb.HomeLive do
 
       true ->
         case Rooms.join(code, name) do
-          {:ok, player_id, _state} ->
-            {:noreply, push_navigate(socket, to: ~p"/game/#{code}?player_id=#{player_id}")}
+          {:ok, resume_token, _snapshot} ->
+            {:noreply, push_navigate(socket, to: ~p"/game/#{code}?resume_token=#{resume_token}")}
 
           {:error, :not_found} ->
             {:noreply, assign(socket, error: "Room not found")}

@@ -6,40 +6,33 @@ defmodule Flamingo.Rooms do
   end
 
   def join(room_id, player_name) do
-    with {:ok, player_id, _state} <- RoomServer.join(room_id, player_name),
-         {:ok, snapshot} <- RoomServer.snapshot(room_id, player_id) do
-      {:ok, player_id, snapshot}
-    end
+    RoomServer.join(room_id, player_name)
   end
 
-  def rejoin(room_id, player_id) do
-    with {:ok, _state} <- RoomServer.rejoin(room_id, player_id) do
-      RoomServer.snapshot(room_id, player_id)
-    end
+  def rejoin(room_id, resume_token), do: RoomServer.rejoin(room_id, resume_token)
+
+  def leave(room_id, resume_token) do
+    RoomServer.leave(room_id, resume_token)
   end
 
-  def leave(room_id, player_id) do
-    RoomServer.leave(room_id, player_id)
+  def snapshot(room_id, resume_token) do
+    RoomServer.snapshot(room_id, resume_token)
   end
 
-  def snapshot(room_id, player_id) do
-    RoomServer.snapshot(room_id, player_id)
+  def start_game(room_id, resume_token, settings) do
+    RoomServer.start_game(room_id, resume_token, settings)
   end
 
-  def start_game(room_id, player_id, settings) do
-    RoomServer.start_game(room_id, player_id, settings)
+  def select_word(room_id, resume_token, word) do
+    RoomServer.select_word(room_id, resume_token, word)
   end
 
-  def select_word(room_id, player_id, word) do
-    RoomServer.select_word(room_id, player_id, word)
+  def draw_event(room_id, resume_token, event) do
+    RoomServer.draw_event(room_id, resume_token, event)
   end
 
-  def draw_event(room_id, player_id, event) do
-    RoomServer.draw_event(room_id, player_id, event)
-  end
-
-  def guess(room_id, player_id, text) do
-    RoomServer.guess(room_id, player_id, text)
+  def guess(room_id, resume_token, text) do
+    RoomServer.guess(room_id, resume_token, text)
   end
 
   def subscribe(room_id) do

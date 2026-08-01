@@ -19,6 +19,7 @@ defmodule FlamingoWeb.ScribbleLive do
      socket
      |> assign(
        room_id: room_id,
+       resume_token: nil,
        player_id: nil,
        phase: :lobby,
        players: %{},
@@ -58,13 +59,13 @@ defmodule FlamingoWeb.ScribbleLive do
      |> stream(:feed, [])}
   end
 
-  def handle_params(%{"player_id" => player_id}, _uri, socket) do
+  def handle_params(%{"resume_token" => resume_token}, _uri, socket) do
     room_id = socket.assigns.room_id
 
     if connected?(socket) do
       # Rejoin (rather than just reading state) so a reconnecting player is
       # marked connected again before their disconnect grace period expires.
-      case Rooms.rejoin(room_id, player_id) do
+      case Rooms.rejoin(room_id, resume_token) do
         {:ok, snapshot} ->
           Rooms.subscribe(room_id)
 
@@ -85,7 +86,8 @@ defmodule FlamingoWeb.ScribbleLive do
           socket =
             socket
             |> assign(
-              player_id: player_id,
+              resume_token: resume_token,
+              player_id: snapshot.viewer_id,
               phase: snapshot.phase,
               players: snapshot.players,
               player_order: snapshot.player_order,
@@ -148,7 +150,7 @@ defmodule FlamingoWeb.ScribbleLive do
           {:noreply, push_navigate(socket, to: ~p"/")}
       end
     else
-      {:noreply, assign(socket, player_id: player_id)}
+      {:noreply, assign(socket, resume_token: resume_token)}
     end
   end
 
@@ -822,7 +824,7 @@ defmodule FlamingoWeb.ScribbleLive do
           include_default_words: params["include_default_words"] == "true"
         }
 
-        case Rooms.start_game(socket.assigns.room_id, socket.assigns.player_id, settings) do
+        case Rooms.start_game(socket.assigns.room_id, socket.assigns.resume_token, settings) do
           :ok ->
             {:noreply, socket}
 
@@ -844,17 +846,17 @@ defmodule FlamingoWeb.ScribbleLive do
   end
 
   def handle_event("select_word", %{"word" => word}, socket) do
-    Rooms.select_word(socket.assigns.room_id, socket.assigns.player_id, word)
+    Rooms.select_word(socket.assigns.room_id, socket.assigns.resume_token, word)
     {:noreply, socket}
   end
 
   def handle_event("draw_event", event, socket) do
-    Rooms.draw_event(socket.assigns.room_id, socket.assigns.player_id, event)
+    Rooms.draw_event(socket.assigns.room_id, socket.assigns.resume_token, event)
     {:noreply, socket}
   end
 
   def handle_event("guess", %{"guess_form" => %{"guess" => text}}, socket) do
-    Rooms.guess(socket.assigns.room_id, socket.assigns.player_id, text)
+    Rooms.guess(socket.assigns.room_id, socket.assigns.resume_token, text)
     {:noreply, socket}
   end
 
@@ -909,7 +911,7 @@ defmodule FlamingoWeb.ScribbleLive do
          _current_round},
         socket
       ) do
-    case Rooms.snapshot(socket.assigns.room_id, socket.assigns.player_id) do
+    case Rooms.snapshot(socket.assigns.room_id, socket.assigns.resume_token) do
       {:ok, %{phase: :word_choice} = snapshot} ->
         socket =
           if socket.assigns.phase in [:lobby, :game_ended] do
@@ -954,7 +956,7 @@ defmodule FlamingoWeb.ScribbleLive do
   end
 
   def handle_info({:turn_started, _drawer_id, _turn_end_time}, socket) do
-    case Rooms.snapshot(socket.assigns.room_id, socket.assigns.player_id) do
+    case Rooms.snapshot(socket.assigns.room_id, socket.assigns.resume_token) do
       {:ok, %{phase: :playing} = snapshot} ->
         socket =
           assign(socket,
@@ -1029,7 +1031,7 @@ defmodule FlamingoWeb.ScribbleLive do
          MapSet.member?(socket.assigns.correct_guesses, socket.assigns.player_id) do
       {:noreply, socket}
     else
-      case Rooms.snapshot(socket.assigns.room_id, socket.assigns.player_id) do
+      case Rooms.snapshot(socket.assigns.room_id, socket.assigns.resume_token) do
         {:ok, snapshot} ->
           {:noreply,
            assign(socket,
@@ -1055,7 +1057,7 @@ defmodule FlamingoWeb.ScribbleLive do
 
     socket =
       if player_id == socket.assigns.player_id do
-        case Rooms.snapshot(socket.assigns.room_id, socket.assigns.player_id) do
+        case Rooms.snapshot(socket.assigns.room_id, socket.assigns.resume_token) do
           {:ok, snapshot} ->
             assign(socket, word: snapshot.word, show_word: snapshot.word_visible?)
 
@@ -1099,8 +1101,8 @@ defmodule FlamingoWeb.ScribbleLive do
   end
 
   def terminate(_reason, socket) do
-    if Map.has_key?(socket.assigns, :room_id) and Map.has_key?(socket.assigns, :player_id) do
-      Rooms.leave(socket.assigns.room_id, socket.assigns.player_id)
+    if Map.has_key?(socket.assigns, :room_id) and socket.assigns.resume_token do
+      Rooms.leave(socket.assigns.room_id, socket.assigns.resume_token)
     end
   end
 end
