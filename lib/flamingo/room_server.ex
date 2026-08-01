@@ -171,22 +171,35 @@ defmodule Flamingo.RoomServer do
     {:reply, {:ok, state}, state}
   end
 
-  def handle_call({:snapshot, pid}, _from, %{connections: connections} = state)
-      when is_map_key(connections, pid) do
-    player_id = Map.fetch!(connections, pid).player_id
+  def handle_call({:snapshot, pid}, _from, state) do
+    snapshot_reply(state, player_id_for_connection(state, pid))
+  end
+
+  def handle_call({:start_game, pid, settings}, _from, state) do
+    start_game(state, player_id_for_connection(state, pid), settings)
+  end
+
+  def handle_call({:select_word, pid, word}, _from, state) do
+    select_word(state, player_id_for_connection(state, pid), word)
+  end
+
+  def handle_call({:guess, pid, text}, _from, state) do
+    guess(state, player_id_for_connection(state, pid), text)
+  end
+
+  def handle_call({:leave, pid}, _from, state) do
+    leave(state, player_id_for_connection(state, pid))
+  end
+
+  defp snapshot_reply(state, nil), do: {:reply, {:error, :not_found}, state}
+
+  defp snapshot_reply(state, player_id) do
     {:reply, {:ok, snapshot_for(state, player_id)}, state}
   end
 
-  def handle_call({:snapshot, _pid}, _from, state),
-    do: {:reply, {:error, :not_found}, state}
+  defp start_game(state, nil, _settings), do: {:reply, {:error, :not_found}, state}
 
-  def handle_call(
-        {:start_game, pid, settings},
-        _from,
-        %{connections: connections} = state
-      )
-      when is_map_key(connections, pid) do
-    player_id = Map.fetch!(connections, pid).player_id
+  defp start_game(state, player_id, settings) do
     round_count = Map.get(settings, :round_count, state.round_count)
     turn_length = Map.get(settings, :turn_length, state.turn_length)
     custom_words = Map.get(settings, :custom_words, state.custom_words)
@@ -224,17 +237,9 @@ defmodule Flamingo.RoomServer do
     end
   end
 
-  def handle_call({:start_game, _pid, _settings}, _from, state),
-    do: {:reply, {:error, :not_found}, state}
+  defp select_word(state, nil, _word), do: {:reply, {:error, :not_found}, state}
 
-  def handle_call(
-        {:select_word, pid, word},
-        _from,
-        %{connections: connections} = state
-      )
-      when is_map_key(connections, pid) do
-    player_id = Map.fetch!(connections, pid).player_id
-
+  defp select_word(state, player_id, word) do
     cond do
       state.phase != :word_choice ->
         {:reply, {:error, :not_word_choice}, state}
@@ -251,17 +256,9 @@ defmodule Flamingo.RoomServer do
     end
   end
 
-  def handle_call({:select_word, _pid, _word}, _from, state),
-    do: {:reply, {:error, :not_found}, state}
+  defp guess(state, nil, _text), do: {:reply, {:error, :not_found}, state}
 
-  def handle_call(
-        {:guess, pid, text},
-        _from,
-        %{connections: connections} = state
-      )
-      when is_map_key(connections, pid) and is_binary(text) do
-    player_id = Map.fetch!(connections, pid).player_id
-
+  defp guess(state, player_id, text) when is_binary(text) do
     cond do
       state.phase != :playing ->
         {:reply, {:error, :not_playing}, state}
@@ -301,20 +298,13 @@ defmodule Flamingo.RoomServer do
     end
   end
 
-  def handle_call({:guess, pid, _text}, _from, %{connections: connections} = state)
-      when is_map_key(connections, pid),
-      do: {:reply, {:error, :invalid_guess}, state}
+  defp guess(state, _player_id, _text), do: {:reply, {:error, :invalid_guess}, state}
 
-  def handle_call({:guess, _pid, _text}, _from, state),
-    do: {:reply, {:error, :not_found}, state}
+  defp leave(state, nil), do: {:reply, :ok, state}
 
-  def handle_call({:leave, pid}, _from, %{connections: connections} = state)
-      when is_map_key(connections, pid) do
-    player_id = Map.fetch!(connections, pid).player_id
+  defp leave(state, player_id) do
     {:reply, :ok, state |> remove_player(player_id) |> commit()}
   end
-
-  def handle_call({:leave, _pid}, _from, state), do: {:reply, :ok, state}
 
   @impl true
   def handle_info({:word_choice_timeout, ref}, %{phase_timer_ref: ref} = state) do
@@ -384,15 +374,15 @@ defmodule Flamingo.RoomServer do
   end
 
   @impl true
-  def handle_cast(
-        {:draw_event, pid, %{"event_type" => "undo"}},
-        %{connections: connections} = state
-      )
-      when is_map_key(connections, pid) do
-    player_id = Map.fetch!(connections, pid).player_id
+  def handle_cast({:draw_event, pid, event}, state) do
+    {:noreply, draw_event(state, player_id_for_connection(state, pid), event)}
+  end
 
+  defp draw_event(state, nil, _event), do: state
+
+  defp draw_event(state, player_id, %{"event_type" => "undo"}) do
     if player_id != state.drawer_id do
-      {:noreply, state}
+      state
     else
       boundary_types = MapSet.new(["start", "fill", "clear"])
 
@@ -408,29 +398,21 @@ defmodule Flamingo.RoomServer do
         end
 
       if new_drawing == state.current_drawing do
-        {:noreply, state}
+        state
       else
-        {:noreply, %{state | current_drawing: new_drawing} |> commit()}
+        %{state | current_drawing: new_drawing} |> commit()
       end
     end
   end
 
-  def handle_cast(
-        {:draw_event, pid, event},
-        %{connections: connections} = state
-      )
-      when is_map_key(connections, pid) do
-    case Map.fetch!(connections, pid).player_id do
-      player_id when player_id == state.drawer_id ->
-        new_state = %{state | current_drawing: state.current_drawing ++ [event]}
-        {:noreply, commit(new_state)}
-
-      _ ->
-        {:noreply, state}
+  defp draw_event(state, player_id, event) do
+    if player_id == state.drawer_id do
+      new_state = %{state | current_drawing: state.current_drawing ++ [event]}
+      commit(new_state)
+    else
+      state
     end
   end
-
-  def handle_cast({:draw_event, _pid, _event}, state), do: {:noreply, state}
 
   defp connect_pid(state, player_id, pid) do
     case Map.fetch(state.connections, pid) do
@@ -450,6 +432,13 @@ defmodule Flamingo.RoomServer do
         }
 
         {:ok, mark_connected(state, player_id)}
+    end
+  end
+
+  defp player_id_for_connection(state, pid) do
+    case Map.get(state.connections, pid) do
+      %{player_id: player_id} -> player_id
+      nil -> nil
     end
   end
 
