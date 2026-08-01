@@ -309,6 +309,18 @@ defmodule FlamingoWeb.ScribbleLiveTest do
     assert html =~ "Game finished"
     assert html =~ "Alice"
     assert html =~ "Bob"
+
+    {:ok, snapshot} = snapshot_as(room_id, p1_token)
+    refute Map.has_key?(snapshot.players, p2)
+    assert snapshot.final_player_order == [p1, p2]
+    assert Map.fetch!(snapshot.final_players, p1).score > 0
+    assert Map.fetch!(snapshot.final_players, p2).score > 0
+
+    {:ok, reconnected_view, _html} =
+      live(conn, ~p"/game/#{room_id}?resume_token=#{p1_token}")
+
+    assert has_element?(reconnected_view, "#final-score-rows [data-player-id='#{p1}']")
+    assert has_element?(reconnected_view, "#final-score-rows [data-player-id='#{p2}']")
   end
 
   test "game end screen shows the winning player's drawings", %{conn: conn, room_id: room_id} do

@@ -44,6 +44,7 @@ defmodule Flamingo.RoomServer do
     scores: %{},
     score_gains: %{},
     final_drawings: [],
+    final_result: nil,
     feed: Feed.new()
   ]
 
@@ -214,7 +215,8 @@ defmodule Flamingo.RoomServer do
             current_round: 0,
             drawn_this_round: MapSet.new(),
             used_words: MapSet.new(),
-            final_drawings: []
+            final_drawings: [],
+            final_result: nil
         }
         |> enter_word_choice()
 
@@ -492,7 +494,7 @@ defmodule Flamingo.RoomServer do
 
     cond do
       state.phase in [:word_choice, :playing] and player_id == state.drawer_id ->
-        skip_removed_drawer(new_state)
+        skip_removed_drawer(new_state, seat.name)
 
       state.phase == :playing ->
         reconcile_turn_completion(new_state, player_id)
@@ -502,10 +504,10 @@ defmodule Flamingo.RoomServer do
     end
   end
 
-  defp skip_removed_drawer(state) do
+  defp skip_removed_drawer(state, drawer_name) do
     case state.phase do
       :word_choice -> enter_next_turn(state)
-      :playing -> enter_turn_reveal(state)
+      :playing -> enter_turn_reveal(state, drawer_name)
     end
   end
 
@@ -592,10 +594,11 @@ defmodule Flamingo.RoomServer do
     new_state
   end
 
-  defp enter_turn_reveal(state) do
+  defp enter_turn_reveal(state, drawer_name \\ nil) do
     ref = make_ref()
     Process.send_after(self(), {:turn_reveal_timeout, ref}, 5_000)
     turn_end_time = DateTime.add(DateTime.utc_now(), 5, :second)
+    drawer_name = drawer_name || Members.fetch!(state.members, state.drawer_id).name
 
     score_gains =
       Flamingo.Scoring.calculate_round_scores(
@@ -618,7 +621,7 @@ defmodule Flamingo.RoomServer do
         phase_timer_ref: ref,
         turn_end_time: turn_end_time,
         drawn_this_round: MapSet.put(state.drawn_this_round, state.drawer_id),
-        final_drawings: state.final_drawings ++ [completed_drawing(state)],
+        final_drawings: state.final_drawings ++ [completed_drawing(state, drawer_name)],
         score_gains: score_gains,
         scores: scores,
         hint_timer_ref: nil,
@@ -667,13 +670,30 @@ defmodule Flamingo.RoomServer do
   end
 
   defp enter_game_ended(state) do
+    member_view = Members.public_view(state.members)
+
+    final_players =
+      Map.new(member_view.players, fn {player_id, player} ->
+        {player_id,
+         player
+         |> Map.take([:id, :name])
+         |> Map.put(:score, Map.fetch!(state.scores, player_id))}
+      end)
+
+    final_result = %{
+      players: final_players,
+      player_order: member_view.player_order,
+      drawings: state.final_drawings
+    }
+
     new_state = %{
       state
       | phase: :game_ended,
         phase_timer_ref: nil,
         turn_end_time: nil,
         hint_timer_ref: nil,
-        pending_hint_delays: []
+        pending_hint_delays: [],
+        final_result: final_result
     }
 
     new_state
@@ -681,9 +701,10 @@ defmodule Flamingo.RoomServer do
 
   # Raw draw events are dropped here: the compact ops are all the game-end
   # screen and share links need, and they're orders of magnitude smaller.
-  defp completed_drawing(state) do
+  defp completed_drawing(state, drawer_name) do
     %{
       drawer_id: state.drawer_id,
+      drawer_name: drawer_name,
       word: state.word,
       round_number: state.current_round + 1,
       ops: Flamingo.DrawingShare.compact_ops(state.current_drawing)
@@ -771,6 +792,7 @@ defmodule Flamingo.RoomServer do
         state.phase in [:turn_reveal, :game_ended]
 
     member_view = Members.public_view(state.members)
+    final_result = if state.phase == :game_ended, do: state.final_result
 
     %{
       mode: state.mode,
@@ -801,7 +823,9 @@ defmodule Flamingo.RoomServer do
       revealed_indices: state.revealed_indices,
       score_gains: if(state.phase == :turn_reveal, do: state.score_gains, else: %{}),
       current_drawing: state.current_drawing,
-      final_drawings: if(state.phase == :game_ended, do: state.final_drawings, else: []),
+      final_players: if(final_result, do: final_result.players, else: %{}),
+      final_player_order: if(final_result, do: final_result.player_order, else: []),
+      final_drawings: if(final_result, do: final_result.drawings, else: []),
       feed:
         state.feed.events
         |> Enum.map(&Feed.format(&1, player_id))

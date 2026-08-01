@@ -33,6 +33,7 @@ defmodule Flamingo.RoomServerTest do
 
     assert_receive {:player_connected, ^pid, {:ok, resume_token, snapshot}}
     Process.put({:player, resume_token}, pid)
+    Process.put({:player_child, resume_token}, child_id)
     Process.put({:resume_token, snapshot.viewer_id}, resume_token)
     {:ok, resume_token, snapshot}
   end
@@ -739,6 +740,18 @@ defmodule Flamingo.RoomServerTest do
     refute Map.has_key?(state.disconnect_timers, guesser)
   end
 
+  test "removing the active drawer preserves completed drawing identity", %{room_id: room_id} do
+    {p1, _p2, _word, state} = start_playing(room_id)
+    drawer = state.drawer_id
+    drawer_name = if drawer == p1, do: "Alice", else: "Bob"
+
+    :ok = leave_as(room_id, resume_token_for(state, drawer))
+
+    {:ok, state} = RoomServer.get_state(room_id)
+    assert state.phase == :turn_reveal
+    assert [%{drawer_id: ^drawer, drawer_name: ^drawer_name}] = state.final_drawings
+  end
+
   test "next drawer skips removed players", %{room_id: room_id} do
     {:ok, p1_token, %{viewer_id: p1}} = join_connected(room_id, "Alice")
     {:ok, p2_token, %{viewer_id: p2}} = join_connected(room_id, "Bob")
@@ -943,6 +956,47 @@ defmodule Flamingo.RoomServerTest do
     refute Map.has_key?(Members.fetch!(state.members, guesser), :score)
     assert Map.fetch!(state.scores, guesser) > 0
     assert Map.fetch!(snapshot.players, guesser).score == Map.fetch!(state.scores, guesser)
+  end
+
+  test "disconnect and reconnect preserve Scribble score", %{room_id: room_id} do
+    {p1, p2, word, state} = start_playing(room_id)
+    drawer = state.drawer_id
+    guesser = if p1 == drawer, do: p2, else: p1
+    drawer_token = resume_token_for(state, drawer)
+    guesser_token = resume_token_for(state, guesser)
+
+    assert :correct = guess_as(room_id, guesser_token, word)
+    {:ok, scored_snapshot} = snapshot_as(room_id, drawer_token)
+    score = Map.fetch!(scored_snapshot.players, guesser).score
+    assert score > 0
+
+    stop_supervised!(Process.get({:player_child, guesser_token}))
+    _ = :sys.get_state(RoomServer.whereis(room_id))
+
+    {:ok, offline_snapshot} = snapshot_as(room_id, drawer_token)
+    refute Map.fetch!(offline_snapshot.players, guesser).connected
+    assert Map.fetch!(offline_snapshot.players, guesser).score == score
+
+    {_connection_id, _pid, reconnected_snapshot} = start_connection(room_id, guesser_token)
+    assert Map.fetch!(reconnected_snapshot.players, guesser).connected
+    assert Map.fetch!(reconnected_snapshot.players, guesser).score == score
+  end
+
+  test "host succession does not change Scribble score", %{room_id: room_id} do
+    {host, successor, word, state} = start_playing(room_id)
+    assert state.drawer_id == host
+    successor_token = resume_token_for(state, successor)
+
+    assert :correct = guess_as(room_id, successor_token, word)
+    {:ok, scored_snapshot} = snapshot_as(room_id, successor_token)
+    score = Map.fetch!(scored_snapshot.players, successor).score
+    assert score > 0
+
+    :ok = leave_as(room_id, resume_token_for(state, host))
+
+    {:ok, successor_snapshot} = snapshot_as(room_id, successor_token)
+    assert successor_snapshot.host_id == successor
+    assert Map.fetch!(successor_snapshot.players, successor).score == score
   end
 
   test "turn_reveal tracks drawn_this_round", %{room_id: room_id} do

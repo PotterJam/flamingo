@@ -103,13 +103,8 @@ defmodule FlamingoWeb.ScribbleLive do
     |> Enum.sort_by(& &1.round_number)
   end
 
-  defp drawing_share_url(drawing, players) do
-    player = Map.fetch!(players, drawing.drawer_id)
-
-    encoded =
-      drawing
-      |> Map.put(:drawer_name, player.name)
-      |> DrawingShare.encode()
+  defp drawing_share_url(drawing) do
+    encoded = DrawingShare.encode(drawing)
 
     url(~p"/drawing") <> "##{encoded}"
   end
@@ -539,7 +534,7 @@ defmodule FlamingoWeb.ScribbleLive do
                     </div>
                   <% end %>
                   <%= for drawing <- selected_drawings do %>
-                    <% share_url = drawing_share_url(drawing, @final_players) %>
+                    <% share_url = drawing_share_url(drawing) %>
                     <div class="border-2 border-border bg-white p-3">
                       <div class="mb-2 flex items-center justify-between gap-3">
                         <span
@@ -838,7 +833,6 @@ defmodule FlamingoWeb.ScribbleLive do
     feed_changed? = feed_ids != old_feed_ids
     newly_correct = MapSet.difference(snapshot.correct_guesses, socket.assigns.correct_guesses)
     game_ended? = snapshot.phase == :game_ended
-    entering_game_end? = game_ended? and old_phase != :game_ended
     custom_words = Enum.join(snapshot.custom_words, "\n")
     sync_settings? = initial? or old_phase != :lobby or snapshot.phase != :lobby
 
@@ -867,26 +861,9 @@ defmodule FlamingoWeb.ScribbleLive do
         socket.assigns.settings_form
       end
 
-    final_players =
-      cond do
-        entering_game_end? -> snapshot.players
-        game_ended? -> socket.assigns.final_players
-        true -> %{}
-      end
-
-    final_player_order =
-      cond do
-        entering_game_end? -> snapshot.player_order
-        game_ended? -> socket.assigns.final_player_order
-        true -> []
-      end
-
-    final_drawings =
-      cond do
-        entering_game_end? -> snapshot.final_drawings
-        game_ended? -> socket.assigns.final_drawings
-        true -> []
-      end
+    final_players = if game_ended?, do: snapshot.final_players, else: %{}
+    final_player_order = if game_ended?, do: snapshot.final_player_order, else: []
+    final_drawings = if game_ended?, do: snapshot.final_drawings, else: []
 
     socket =
       socket
