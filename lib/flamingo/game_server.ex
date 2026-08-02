@@ -1,7 +1,7 @@
 defmodule Flamingo.GameServer do
   use GenServer
 
-  alias Flamingo.Feed
+  alias Flamingo.{Avatar, Feed}
 
   @min_turn_length 15
   @max_turn_length 120
@@ -49,8 +49,10 @@ defmodule Flamingo.GameServer do
     GenServer.start_link(__MODULE__, room_id, name: via(room_id))
   end
 
-  def join(room_id, player_name) do
-    GenServer.call(via(room_id), {:join, player_name})
+  def join(room_id, player_name), do: join(room_id, player_name, Avatar.default())
+
+  def join(room_id, player_name, avatar) do
+    GenServer.call(via(room_id), {:join, player_name, Avatar.normalize(avatar)})
   catch
     :exit, {:noproc, _} -> {:error, :not_found}
   end
@@ -121,9 +123,9 @@ defmodule Flamingo.GameServer do
   end
 
   @impl true
-  def handle_call({:join, player_name}, _from, state) do
+  def handle_call({:join, player_name, avatar}, _from, state) do
     player_id = generate_player_id()
-    player = %{id: player_id, name: player_name, score: 0, connected: true}
+    player = %{id: player_id, name: player_name, avatar: avatar, score: 0, connected: true}
 
     players = Map.put(state.players, player_id, player)
     player_order = state.player_order ++ [player_id]

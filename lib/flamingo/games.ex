@@ -5,8 +5,10 @@ defmodule Flamingo.Games do
     GameSupervisor.start_game()
   end
 
-  def join(room_id, player_name) do
-    GameServer.join(room_id, player_name)
+  def join(room_id, player_name), do: join(room_id, player_name, Flamingo.Avatar.default())
+
+  def join(room_id, player_name, avatar) do
+    GameServer.join(room_id, player_name, avatar)
   end
 
   def rejoin(room_id, player_id) do

@@ -4,7 +4,7 @@ defmodule FlamingoWeb.HomeLiveTest do
   import Phoenix.Component
   import Phoenix.LiveViewTest
 
-  alias Flamingo.GameSupervisor
+  alias Flamingo.{GameServer, GameSupervisor}
 
   test "submitting the lobby form joins when a room name is present", %{conn: conn} do
     room_id = "home-#{System.unique_integer([:positive])}"
@@ -13,7 +13,18 @@ defmodule FlamingoWeb.HomeLiveTest do
     {:ok, view, _html} = live(conn, ~p"/")
 
     view
-    |> form("#lobby-form", lobby: %{name: "Alice", room_code: room_id})
+    |> form("#lobby-form",
+      lobby: %{
+        name: "Alice",
+        room_code: room_id,
+        body: "4",
+        neck: "3",
+        beak: "1",
+        eyes: "0",
+        tuft: "2",
+        accessory: "5"
+      }
+    )
     |> render_submit()
 
     {path, _flash} = assert_redirect(view)
@@ -22,6 +33,17 @@ defmodule FlamingoWeb.HomeLiveTest do
     assert uri.path == ~p"/game/#{room_id}"
     assert %{"player_id" => player_id} = URI.decode_query(uri.query)
     assert player_id != ""
+
+    assert {:ok, state} = GameServer.get_state(room_id)
+
+    assert state.players[player_id].avatar == %{
+             "body" => 4,
+             "neck" => 3,
+             "beak" => 1,
+             "eyes" => 0,
+             "tuft" => 2,
+             "accessory" => 5
+           }
   end
 
   test "submitting the lobby form creates when room name is empty", %{conn: conn} do
@@ -40,11 +62,28 @@ defmodule FlamingoWeb.HomeLiveTest do
   end
 
   test "home action buttons are submit buttons", %{conn: conn} do
-    {:ok, _view, html} = live(conn, ~p"/")
+    {:ok, view, _html} = live(conn, ~p"/")
 
-    assert html =~ ~s(id="join-button")
-    assert html =~ ~s(id="create-room-button")
-    assert html =~ ~s(type="submit")
+    assert has_element?(view, "#join-button[type='submit']")
+    assert has_element?(view, "#create-room-button[type='submit']")
+  end
+
+  test "home includes flamingo chaos controls", %{conn: conn} do
+    {:ok, view, _html} = live(conn, ~p"/")
+
+    assert has_element?(view, "#avatar-customizer svg[aria-label='Your customized flamingo']")
+    assert has_element?(view, "#randomize-avatar-button[type='button']")
+
+    for trait <- ~w(neck beak eyes tuft accessory) do
+      assert has_element?(view, "#avatar-#{trait}-control[type='range']")
+    end
+
+    for body <- 0..5 do
+      assert has_element?(
+               view,
+               "input[type='radio'][name='lobby[body]'][value='#{body}']"
+             )
+    end
   end
 
   test "app layout sound control is a volume slider initialized to full volume" do

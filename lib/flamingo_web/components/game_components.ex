@@ -1,6 +1,8 @@
 defmodule FlamingoWeb.GameComponents do
   use Phoenix.Component
 
+  alias Flamingo.Avatar
+
   import FlamingoWeb.CoreComponents, only: [icon: 1, button_group: 1]
 
   attr :class, :any, default: nil
@@ -82,6 +84,142 @@ defmodule FlamingoWeb.GameComponents do
     <h1 class="font-retro-display text-2xl font-bold text-pink-400">
       flamin<span class="text-purple-500">go</span>
     </h1>
+    """
+  end
+
+  attr :avatar, :map, default: %{}
+  attr :class, :any, default: nil
+  attr :label, :string, default: "Flamingo avatar"
+
+  def flamingo_avatar(assigns) do
+    avatar = Avatar.normalize(assigns.avatar)
+    body_colors = ~w(#f472b6 #fb7185 #c084fc #fb923c #2dd4bf #facc15)
+
+    neck_paths = [
+      "M51 80 C34 66 38 47 58 37",
+      "M51 80 C72 64 33 51 58 37",
+      "M51 80 C51 62 52 48 58 37",
+      "M51 80 L38 64 L67 50 L58 37",
+      "M51 80 C25 68 75 62 44 52 C31 47 43 37 58 37"
+    ]
+
+    tuft_paths = [
+      [],
+      ["M55 15 Q48 4 60 10"],
+      ["M54 15 Q44 4 58 10", "M61 10 Q61 0 68 10"],
+      ["M53 15 L51 1 L62 11", "M62 11 L69 0 L70 14"],
+      ["M52 15 L44 3 L59 10", "M59 11 L63 0 L69 10", "M68 11 L79 3 L74 17"]
+    ]
+
+    assigns =
+      assign(assigns,
+        avatar: avatar,
+        body_color: Enum.at(body_colors, avatar["body"]),
+        neck_path: Enum.at(neck_paths, avatar["neck"]),
+        beak_end: Enum.at([94, 101, 109, 118, 127], avatar["beak"]),
+        eye_offset: Enum.at([0, 2, 4, 6, 8], avatar["eyes"]),
+        tuft_paths: Enum.at(tuft_paths, avatar["tuft"])
+      )
+
+    ~H"""
+    <svg
+      viewBox="0 0 130 145"
+      role="img"
+      aria-label={@label}
+      class={@class}
+      xmlns="http://www.w3.org/2000/svg"
+    >
+      <path
+        d={@neck_path}
+        fill="none"
+        stroke="#111827"
+        stroke-width="19"
+        stroke-linecap="round"
+        stroke-linejoin="round"
+      />
+      <path
+        d={@neck_path}
+        fill="none"
+        stroke={@body_color}
+        stroke-width="14"
+        stroke-linecap="round"
+        stroke-linejoin="round"
+      />
+
+      <g fill="none" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M48 96 L47 135 L38 139" stroke="#111827" stroke-width="7" />
+        <path d="M48 96 L47 135 L38 139" stroke={@body_color} stroke-width="3" />
+        <path d="M68 96 L69 116 L83 124 L74 139" stroke="#111827" stroke-width="7" />
+        <path d="M68 96 L69 116 L83 124 L74 139" stroke={@body_color} stroke-width="3" />
+      </g>
+
+      <path
+        d="M28 77 L9 68 L17 84 Q20 102 52 105 Q79 107 94 88 Q83 68 55 67 Q37 67 28 77 Z"
+        fill={@body_color}
+        stroke="#111827"
+        stroke-width="4"
+        stroke-linejoin="round"
+      />
+      <path
+        d="M31 78 Q53 68 78 81 Q67 99 41 98 Q32 92 31 78 Z"
+        fill="white"
+        fill-opacity="0.28"
+        stroke="#111827"
+        stroke-width="3"
+      />
+      <circle cx="65" cy="27" r="21" fill="#111827" />
+      <circle cx="65" cy="27" r="18" fill={@body_color} />
+
+      <path
+        :for={path <- @tuft_paths}
+        d={path}
+        fill="none"
+        stroke="#111827"
+        stroke-width="5"
+        stroke-linecap="round"
+        stroke-linejoin="round"
+      />
+
+      <circle cx={67 + @eye_offset} cy="23" r="5.5" fill="white" stroke="#111827" stroke-width="2" />
+      <circle cx={68 + @eye_offset} cy="24" r="2.3" fill="#111827" />
+
+      <path
+        d={"M79 23 Q#{@beak_end - 5} 18 #{@beak_end} 27 Q#{@beak_end - 2} 39 #{@beak_end - 11} 46 Q#{@beak_end - 9} 35 79 35 Z"}
+        fill="#fb923c"
+        stroke="#111827"
+        stroke-width="3"
+        stroke-linejoin="round"
+      />
+      <path
+        d={"M#{@beak_end - 11} 22 Q#{@beak_end - 2} 20 #{@beak_end} 27 Q#{@beak_end - 2} 39 #{@beak_end - 11} 46 Q#{@beak_end - 8} 34 #{@beak_end - 11} 22 Z"}
+        fill="#111827"
+      />
+
+      <g :if={@avatar["accessory"] == 1} stroke="#111827" stroke-width="3" stroke-linejoin="round">
+        <path d="M49 13 L48 1 L57 8 L64 0 L70 9 L80 2 L77 15 Z" fill="#facc15" />
+      </g>
+      <g :if={@avatar["accessory"] == 2} stroke="#111827" stroke-width="3" stroke-linejoin="round">
+        <path d="M49 43 Q36 36 38 52 Q42 59 51 49 Z" fill="#c084fc" />
+        <path d="M52 43 Q63 36 62 51 Q59 58 50 49 Z" fill="#c084fc" />
+        <circle cx="51" cy="47" r="4" fill="#facc15" />
+      </g>
+      <g :if={@avatar["accessory"] == 3} stroke="#111827" stroke-width="3">
+        <ellipse cx="63" cy="12" rx="21" ry="7" fill="#c084fc" transform="rotate(-8 63 12)" />
+        <path d="M64 7 Q68 1 73 4" fill="none" stroke-linecap="round" />
+      </g>
+      <g :if={@avatar["accessory"] == 4} fill="none" stroke="#111827" stroke-width="3">
+        <circle cx={67 + @eye_offset} cy="23" r="8" />
+        <path d={"M#{75 + @eye_offset} 23 L82 25"} />
+      </g>
+      <g :if={@avatar["accessory"] == 5} stroke="#111827" stroke-width="2">
+        <circle cx="49" cy="20" r="6" fill="#facc15" />
+        <circle cx="49" cy="10" r="6" fill="#fb7185" />
+        <circle cx="58" cy="16" r="6" fill="#fb7185" />
+        <circle cx="55" cy="26" r="6" fill="#fb7185" />
+        <circle cx="43" cy="26" r="6" fill="#fb7185" />
+        <circle cx="40" cy="16" r="6" fill="#fb7185" />
+      </g>
+    </svg>
     """
   end
 
@@ -173,16 +311,24 @@ defmodule FlamingoWeb.GameComponents do
   def player_list_panel(assigns) do
     ~H"""
     <.box class="flex w-full flex-1 flex-col bg-white p-0">
-      <div class="min-h-0 flex-grow overflow-y-auto">
+      <div id="player-list-scroll" class="min-h-0 flex-grow overflow-y-auto overflow-x-hidden">
         <ul>
           <%= for pid <- @player_order do %>
             <% connected = Map.get(Map.get(@players, pid), :connected, true) %>
-            <li class={[
-              "flex items-center gap-2 px-3 py-2 transition-opacity",
-              pid == @drawer_id && "bg-pink-100 font-semibold",
-              pid != @drawer_id && MapSet.member?(@correct_guesses, pid) && "bg-green-100",
-              !connected && "opacity-40"
-            ]}>
+            <li
+              id={"player-row-#{pid}"}
+              class={[
+                "flex min-w-0 items-center gap-2 px-3 py-2 transition-opacity",
+                pid == @drawer_id && "bg-pink-100 font-semibold",
+                pid != @drawer_id && MapSet.member?(@correct_guesses, pid) && "bg-green-100",
+                !connected && "opacity-40"
+              ]}
+            >
+              <.flamingo_avatar
+                avatar={Map.get(Map.get(@players, pid), :avatar, %{})}
+                class="h-10 w-10 shrink-0"
+                label={"#{Map.get(@players, pid).name}'s avatar"}
+              />
               <span class="inline-flex h-5 w-5 shrink-0 items-center justify-center">
                 <%= cond do %>
                   <% !connected -> %>
@@ -194,8 +340,8 @@ defmodule FlamingoWeb.GameComponents do
                   <% true -> %>
                 <% end %>
               </span>
-              <span class="truncate">{Map.get(@players, pid).name}</span>
-              <span class="ml-auto text-sm font-semibold">{Map.get(@players, pid).score}</span>
+              <span class="min-w-0 flex-1 truncate">{Map.get(@players, pid).name}</span>
+              <span class="shrink-0 text-sm font-semibold">{Map.get(@players, pid).score}</span>
             </li>
           <% end %>
         </ul>

@@ -15,6 +15,29 @@ defmodule Flamingo.GameServerTest do
     assert state.host_id == player_id
     assert map_size(state.players) == 1
     assert state.player_order == [player_id]
+    assert state.players[player_id].avatar == Flamingo.Avatar.default()
+  end
+
+  test "join stores a normalized avatar", %{room_id: room_id} do
+    avatar = %{
+      "body" => "4",
+      "neck" => "3",
+      "beak" => "99",
+      "eyes" => "0",
+      "tuft" => "2",
+      "accessory" => "5"
+    }
+
+    {:ok, player_id, state} = GameServer.join(room_id, "Alice", avatar)
+
+    assert state.players[player_id].avatar == %{
+             "body" => 4,
+             "neck" => 3,
+             "beak" => 2,
+             "eyes" => 0,
+             "tuft" => 2,
+             "accessory" => 5
+           }
   end
 
   test "second player does not change host", %{room_id: room_id} do

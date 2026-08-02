@@ -76,6 +76,47 @@ defmodule FlamingoWeb.GameLiveTest do
     assert has_element?(view, "#custom-words-error")
   end
 
+  test "player rows constrain long names without displacing status and scores", %{
+    conn: conn,
+    room_id: room_id
+  } do
+    {:ok, p1, _} = GameServer.join(room_id, "TwentyCharacterNameOne")
+    {:ok, p2, _} = GameServer.join(room_id, "TwentyCharacterNameTwo")
+
+    {:ok, view, _html} = live(conn, ~p"/game/#{room_id}?player_id=#{p1}")
+
+    assert has_element?(view, "#lobby-player-row-#{p1}.min-w-0 .min-w-0.flex-1.truncate")
+
+    :ok = GameServer.start_game(room_id, p1, %{round_count: 1, turn_length: 30})
+
+    assert has_element?(view, "#player-list-scroll.overflow-y-auto.overflow-x-hidden")
+
+    for player_id <- [p1, p2] do
+      assert has_element?(
+               view,
+               "#player-row-#{player_id}.min-w-0 .min-w-0.flex-1.truncate"
+             )
+
+      assert has_element?(view, "#player-row-#{player_id} .shrink-0.text-sm")
+    end
+
+    players = %{
+      p1 => %{id: p1, name: "TwentyCharacterNameOne", score: 9_999_999},
+      p2 => %{id: p2, name: "TwentyCharacterNameTwo", score: 8_888_888}
+    }
+
+    send(view.pid, {:game_ended, players, []})
+
+    for player_id <- [p1, p2] do
+      assert has_element?(
+               view,
+               "#final-score-row-#{player_id}.min-w-0 .min-w-0.flex-1.truncate"
+             )
+
+      assert has_element?(view, "#final-score-row-#{player_id} .shrink-0.text-pink-500")
+    end
+  end
+
   test "game end screen keeps final scores visible after a player leaves", %{
     conn: conn,
     room_id: room_id
