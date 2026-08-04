@@ -325,6 +325,41 @@ defmodule FlamingoWeb.GameLiveTest do
     assert is_binary(reveal_end_time)
   end
 
+  test "turn reveal score gains flow into columns after five players", %{
+    conn: conn,
+    room_id: room_id
+  } do
+    {:ok, player_id, _} = GameServer.join(room_id, "Alice")
+    {:ok, view, _html} = live(conn, ~p"/game/#{room_id}?player_id=#{player_id}")
+
+    players =
+      2..6
+      |> Map.new(fn index ->
+        id = "player-#{index}"
+        {id, %{id: id, name: "Player #{index}", score: 0}}
+      end)
+      |> Map.put(player_id, %{id: player_id, name: "Alice", score: 0, connected: true})
+
+    score_gains =
+      players
+      |> Map.keys()
+      |> Map.new(fn id -> {id, 50} end)
+
+    send(
+      view.pid,
+      {:turn_reveal, "quicksand", DateTime.add(DateTime.utc_now(), 5), score_gains, players}
+    )
+
+    assert has_element?(
+             view,
+             "#turn-reveal-score-gains.grid.grid-flow-col.grid-rows-5"
+           )
+
+    for id <- Map.keys(players) do
+      assert has_element?(view, "#score-gain-row-#{id}")
+    end
+  end
+
   defp play_turn(room_id, p1, p2, drawing_events \\ []) do
     {:ok, state} = GameServer.get_state(room_id)
     word = List.first(state.word_choices)
