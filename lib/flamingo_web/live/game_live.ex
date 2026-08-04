@@ -584,7 +584,7 @@ defmodule FlamingoWeb.GameLive do
           ) %>
         <% selected_drawings = drawings_for_player(@final_drawings, selected_player_id) %>
         <div class="flex h-screen w-full items-center justify-center">
-          <div class="grid h-full w-fit grid-cols-[320px_320px] items-center justify-center gap-28">
+          <div class="grid h-full w-fit grid-cols-[500px_320px] items-center justify-center gap-28">
             <.card class="flex h-fit w-full flex-col items-center gap-6 bg-white p-8">
               <h2 class="text-3xl font-bold">Game finished</h2>
               <ul
