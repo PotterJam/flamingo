@@ -237,7 +237,7 @@ defmodule Flamingo.GameServer do
         {:reply, :correct, new_state}
 
       close_guess?(text, state.word) ->
-        {feed, entry} = Feed.close_guess(state.feed, player_id)
+        {feed, entry} = Feed.close_guess(state.feed, player_id, text)
         new_state = %{state | feed: feed}
         broadcast(state.room_id, {:feed_event, entry})
         {:reply, :close, new_state}

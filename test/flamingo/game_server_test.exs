@@ -437,9 +437,14 @@ defmodule Flamingo.GameServerTest do
     assert :close = GameServer.guess(room_id, guesser, close_guess)
 
     refute_receive {:incorrect_guess, ^guesser, ^close_guess}
-    assert_receive {:feed_event, %{event: {:close_guess, ^guesser}} = entry}
+    assert_receive {:feed_event, %{event: {:close_guess, ^guesser, ^close_guess}} = entry}
 
-    assert %{kind: :close, text: "You were close"} = Flamingo.Feed.format(entry, guesser)
+    assert Flamingo.Feed.format(entry, guesser) == %{
+             id: entry.id,
+             kind: :close,
+             text: "#{close_guess} was close!"
+           }
+
     assert nil == Flamingo.Feed.format(entry, other_player)
   end
 
@@ -461,7 +466,7 @@ defmodule Flamingo.GameServerTest do
     assert :close = GameServer.guess(room_id, guesser, close_guess)
 
     refute_receive {:incorrect_guess, ^guesser, ^close_guess}
-    assert_receive {:feed_event, %{event: {:close_guess, ^guesser}}}
+    assert_receive {:feed_event, %{event: {:close_guess, ^guesser, ^close_guess}}}
   end
 
   test "wrong-length guesses are normal incorrect guesses", %{room_id: room_id} do
@@ -473,7 +478,7 @@ defmodule Flamingo.GameServerTest do
     assert :incorrect = GameServer.guess(room_id, guesser, wrong_length_guess)
 
     assert_receive {:incorrect_guess, ^guesser, ^wrong_length_guess}
-    refute_receive {:feed_event, %{event: {:close_guess, ^guesser}}}
+    refute_receive {:feed_event, %{event: {:close_guess, ^guesser, _guess}}}
   end
 
   test "one-character insertion is a close guess", %{room_id: room_id} do
@@ -485,7 +490,7 @@ defmodule Flamingo.GameServerTest do
     assert :close = GameServer.guess(room_id, guesser, close_guess)
 
     refute_receive {:incorrect_guess, ^guesser, ^close_guess}
-    assert_receive {:feed_event, %{event: {:close_guess, ^guesser}}}
+    assert_receive {:feed_event, %{event: {:close_guess, ^guesser, ^close_guess}}}
   end
 
   test "one-character deletion is a close guess", %{room_id: room_id} do
@@ -497,7 +502,7 @@ defmodule Flamingo.GameServerTest do
     assert :close = GameServer.guess(room_id, guesser, close_guess)
 
     refute_receive {:incorrect_guess, ^guesser, ^close_guess}
-    assert_receive {:feed_event, %{event: {:close_guess, ^guesser}}}
+    assert_receive {:feed_event, %{event: {:close_guess, ^guesser, ^close_guess}}}
   end
 
   test "drawer cannot guess", %{room_id: room_id} do
