@@ -17,6 +17,11 @@ defmodule FlamingoWeb.GameLiveTest do
 
     {:ok, view, _html} = live(conn, ~p"/game/#{room_id}?player_id=#{p1}")
 
+    assert has_element?(
+             view,
+             "#round-count-slider.range-input[type='range'][min='1'][max='5'][value='3']"
+           )
+
     assert has_element?(view, "#round-length-input[min='15'][max='120']")
 
     view

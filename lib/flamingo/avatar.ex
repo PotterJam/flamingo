@@ -1,41 +1,26 @@
 defmodule Flamingo.Avatar do
   @moduledoc """
-  Defines the interchangeable parts used to build a player's flamingo avatar.
+  Defines the interchangeable animal parts used to build a player's avatar.
   """
 
-  @traits %{
-    "body" => 0..5,
-    "neck" => 0..4,
-    "beak" => 0..4,
-    "eyes" => 0..4,
-    "tuft" => 0..4,
-    "accessory" => 0..5
-  }
+  @parts ~w(head body legs feet)
+  @animals ~w(flamingo cat frog bunny duck)
+  @colors ~w(#f472b6 #fb7185 #c084fc #fb923c #2dd4bf #facc15 #60a5fa #a3e635)
 
-  @trait_atoms %{
-    "body" => :body,
-    "neck" => :neck,
-    "beak" => :beak,
-    "eyes" => :eyes,
-    "tuft" => :tuft,
-    "accessory" => :accessory
-  }
+  @traits Map.new(@parts, &{&1, 0..(length(@animals) - 1)})
+          |> Map.merge(Map.new(@parts, &{"#{&1}_color", 0..(length(@colors) - 1)}))
+
+  @trait_atoms Map.new(@traits, fn {trait, _range} -> {trait, String.to_atom(trait)} end)
 
   @default %{
+    "head" => 0,
+    "head_color" => 0,
     "body" => 0,
-    "neck" => 0,
-    "beak" => 2,
-    "eyes" => 2,
-    "tuft" => 1,
-    "accessory" => 0
-  }
-
-  @labels %{
-    "neck" => ~w(classic swoop straight zigzag pretzel),
-    "beak" => ~w(tiny petite classic grand absurd),
-    "eyes" => ~w(close cozy classic wide bewildered),
-    "tuft" => ~w(smooth flick fluffy punk chaos),
-    "accessory" => ["none", "crown", "bow", "beret", "glasses", "flower"]
+    "body_color" => 0,
+    "legs" => 0,
+    "legs_color" => 0,
+    "feet" => 0,
+    "feet_color" => 0
   }
 
   def default, do: @default
@@ -55,11 +40,15 @@ defmodule Flamingo.Avatar do
     end)
   end
 
-  def label(trait, value) do
-    @labels
-    |> Map.fetch!(trait)
-    |> Enum.at(normalize_value(value, Map.fetch!(@default, trait), Map.fetch!(@traits, trait)))
-  end
+  def parts, do: @parts
+  def animals, do: Enum.with_index(@animals)
+  def colors, do: Enum.with_index(@colors)
+
+  def animal_label(value),
+    do: Enum.at(@animals, normalize_value(value, 0, 0..(length(@animals) - 1)))
+
+  def color(value),
+    do: Enum.at(@colors, normalize_value(value, 0, 0..(length(@colors) - 1)))
 
   def max(trait), do: @traits |> Map.fetch!(trait) |> Enum.max()
 

@@ -20,23 +20,27 @@ defmodule Flamingo.GameServerTest do
 
   test "join stores a normalized avatar", %{room_id: room_id} do
     avatar = %{
+      "head" => "1",
+      "head_color" => "6",
       "body" => "4",
-      "neck" => "3",
-      "beak" => "99",
-      "eyes" => "0",
-      "tuft" => "2",
-      "accessory" => "5"
+      "body_color" => "3",
+      "legs" => "99",
+      "legs_color" => "7",
+      "feet" => "3",
+      "feet_color" => "5"
     }
 
     {:ok, player_id, state} = GameServer.join(room_id, "Alice", avatar)
 
     assert state.players[player_id].avatar == %{
+             "head" => 1,
+             "head_color" => 6,
              "body" => 4,
-             "neck" => 3,
-             "beak" => 2,
-             "eyes" => 0,
-             "tuft" => 2,
-             "accessory" => 5
+             "body_color" => 3,
+             "legs" => 0,
+             "legs_color" => 7,
+             "feet" => 3,
+             "feet_color" => 5
            }
   end
 

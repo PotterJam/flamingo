@@ -11,6 +11,7 @@ defmodule FlamingoWeb.HomeLive do
        name: "",
        room_code: room_code,
        avatar: Avatar.random(),
+       active_part: "head",
        error: nil
      )}
   end
@@ -18,14 +19,14 @@ defmodule FlamingoWeb.HomeLive do
   def render(assigns) do
     ~H"""
     <Layouts.app flash={@flash}>
-      <div class="flex h-full min-h-screen w-full flex-col items-center justify-center gap-4">
+      <div class="flex min-h-screen w-full flex-col items-center justify-center gap-4 px-4 py-8">
         <.card class="w-full max-w-xs bg-white px-6 py-4">
           <div class="flex justify-center">
             <.logo />
           </div>
         </.card>
 
-        <.card class="w-full max-w-2xl p-6">
+        <.card class="w-full max-w-4xl overflow-hidden bg-white p-0">
           <.form
             for={%{}}
             as={:lobby}
@@ -43,126 +44,202 @@ defmodule FlamingoWeb.HomeLive do
             >
               Submit
             </button>
-            <div class="grid gap-6 sm:grid-cols-[220px_1fr]">
+            <div class="grid lg:grid-cols-[minmax(270px,0.8fr)_minmax(440px,1.2fr)]">
               <section
                 id="avatar-customizer"
-                class="flex flex-col gap-3 border-b-2 border-border pb-6 sm:border-r-2 sm:border-b-0 sm:pr-6 sm:pb-0"
+                class="relative flex flex-col items-center justify-center overflow-hidden border-b-2 border-border bg-pink-100 p-6 lg:border-r-2 lg:border-b-0"
               >
-                <div class="flex items-center justify-between gap-2">
-                  <h2 class="font-hero text-2xl leading-none font-black">Your flamingo</h2>
+                <div class="absolute inset-x-0 top-0 flex items-center justify-between p-4">
+                  <span class="rounded-full border-2 border-border bg-white px-3 py-1 text-[11px] font-black uppercase tracking-[0.18em]">
+                    Your creature
+                  </span>
                   <button
                     type="button"
                     phx-click="randomize_avatar"
                     id="randomize-avatar-button"
-                    class="border-2 border-border bg-yellow-200 px-2 py-1 text-xs font-bold shadow-[2px_2px_0_#000] transition-transform hover:-translate-y-0.5 active:translate-x-0.5 active:translate-y-0.5 active:shadow-none"
+                    class="group flex items-center gap-1.5 rounded-full border-2 border-border bg-yellow-200 px-3 py-1 text-xs font-black shadow-[2px_2px_0_#000] transition-all hover:-translate-y-0.5 hover:shadow-[3px_3px_0_#000] active:translate-x-0.5 active:translate-y-0.5 active:shadow-none"
                   >
-                    Surprise me
+                    <.icon
+                      name={:sparkles}
+                      class="size-3.5 transition-transform group-hover:rotate-12"
+                    /> Remix
                   </button>
                 </div>
 
-                <div class="mx-auto flex h-32 w-32 items-center justify-center border-2 border-border bg-pink-100 shadow-[3px_3px_0_#000]">
+                <div class="mt-9 flex size-56 items-center justify-center rounded-full border-2 border-border bg-white shadow-[6px_6px_0_#000] sm:size-64">
                   <.flamingo_avatar
                     avatar={@avatar}
-                    class="h-28 w-28"
-                    label="Your customized flamingo"
+                    class="h-48 w-48 drop-shadow-sm sm:h-56 sm:w-56"
+                    label="Your customized creature"
                   />
                 </div>
 
-                <fieldset>
-                  <legend class="mb-1 text-xs font-bold uppercase tracking-wide">Feathers</legend>
-                  <div class="flex justify-between gap-1">
-                    <label
-                      :for={
-                        {color, index} <-
-                          Enum.with_index(~w(#f472b6 #fb7185 #c084fc #fb923c #2dd4bf #facc15))
-                      }
-                      class="relative cursor-pointer"
-                    >
-                      <input
-                        type="radio"
-                        name="lobby[body]"
-                        value={index}
-                        checked={@avatar["body"] == index}
-                        aria-label={"Feather color #{index + 1}"}
-                        class="peer sr-only"
-                      />
-                      <span
-                        class="block h-6 w-6 border-2 border-border transition-transform peer-checked:-translate-y-1 peer-checked:shadow-[2px_2px_0_#000]"
-                        style={"background-color: #{color}"}
-                      >
-                      </span>
-                    </label>
-                  </div>
-                </fieldset>
-
-                <div :for={trait <- ~w(neck beak eyes tuft accessory)} class="space-y-1">
-                  <label
-                    for={"avatar-#{trait}-control"}
-                    class="flex justify-between text-xs font-bold uppercase tracking-wide"
+                <div
+                  class="mt-5 flex flex-wrap justify-center gap-2"
+                  aria-label="Current creature recipe"
+                >
+                  <button
+                    :for={part <- Avatar.parts()}
+                    type="button"
+                    phx-click="select_avatar_part"
+                    phx-value-part={part}
+                    class={[
+                      "rounded-full border-2 border-border px-2.5 py-1 text-xs font-bold capitalize transition-all hover:-translate-y-0.5",
+                      @active_part == part && "bg-pink-300 shadow-[2px_2px_0_#000]",
+                      @active_part != part && "bg-white"
+                    ]}
                   >
-                    <span>{trait}</span>
-                    <span class="text-pink-500">{Avatar.label(trait, @avatar[trait])}</span>
-                  </label>
-                  <input
-                    type="range"
-                    min="0"
-                    max={Avatar.max(trait)}
-                    value={@avatar[trait]}
-                    name={"lobby[#{trait}]"}
-                    class="nb-slider w-full"
-                    id={"avatar-#{trait}-control"}
-                  />
+                    {part}: {Avatar.animal_label(@avatar[part])}
+                  </button>
                 </div>
               </section>
 
-              <div class="flex flex-col justify-center gap-6 text-center">
-                <input
-                  type="text"
-                  value={@name}
-                  name="lobby[name]"
-                  placeholder="Enter your name"
-                  maxlength="20"
-                  class="rounded-base border-2 border-border bg-white px-3 py-2 text-sm placeholder:text-gray-400 focus:ring-2 focus:ring-ring focus:ring-offset-2 focus:outline-none"
-                  id="name-input"
-                />
+              <div class="flex flex-col">
+                <section class="border-b-2 border-border p-5 sm:p-6">
+                  <div class="mb-5">
+                    <p class="text-xs font-black uppercase tracking-[0.2em] text-pink-500">
+                      Build your own
+                    </p>
+                    <h2 class="font-hero text-3xl leading-tight font-black">
+                      Mix. Match. Make it weird.
+                    </h2>
+                    <p class="mt-1 text-sm text-gray-600">
+                      Choose one part at a time — your creature updates instantly.
+                    </p>
+                  </div>
 
-                <.separator />
+                  <div
+                    class="grid grid-cols-4 border-2 border-border bg-white"
+                    role="tablist"
+                    aria-label="Creature parts"
+                  >
+                    <button
+                      :for={{part, index} <- Enum.with_index(Avatar.parts())}
+                      type="button"
+                      role="tab"
+                      aria-selected={@active_part == part}
+                      phx-click="select_avatar_part"
+                      phx-value-part={part}
+                      id={"avatar-part-#{part}"}
+                      class={[
+                        "relative px-2 py-3 text-xs font-black uppercase tracking-wide transition-colors sm:text-sm",
+                        index > 0 && "border-l-2 border-border",
+                        @active_part == part && "bg-pink-300",
+                        @active_part != part && "hover:bg-pink-100"
+                      ]}
+                    >
+                      <span class="block capitalize">{part}</span>
+                      <span
+                        :if={@active_part == part}
+                        class="absolute inset-x-3 -bottom-0.5 h-1 bg-black"
+                      >
+                      </span>
+                    </button>
+                  </div>
 
-                <div>
-                  <p :if={@error} class="mb-2 text-sm text-red-400">{@error}</p>
-                  <div class="flex flex-row items-start gap-2">
-                    <input
-                      type="text"
-                      value={@room_code}
-                      name="lobby[room_code]"
-                      placeholder="Room name"
-                      class="min-w-0 flex-1 rounded-base border-2 border-border bg-white px-3 py-2 text-sm placeholder:text-gray-400 focus:ring-2 focus:ring-ring focus:ring-offset-2 focus:outline-none"
-                      id="room-code-input"
-                    />
+                  <div
+                    :for={part <- Avatar.parts()}
+                    id={"avatar-#{part}-panel"}
+                    role="tabpanel"
+                    hidden={@active_part != part}
+                    class="pt-5"
+                  >
+                    <fieldset>
+                      <legend class="mb-2 text-xs font-black uppercase tracking-[0.16em] text-gray-500">
+                        Pick an animal
+                      </legend>
+                      <div class="grid grid-cols-5 gap-2">
+                        <label :for={{animal, index} <- Avatar.animals()} class="group cursor-pointer">
+                          <input
+                            type="radio"
+                            name={"lobby[#{part}]"}
+                            value={index}
+                            checked={@avatar[part] == index}
+                            aria-label={"#{part} animal: #{animal}"}
+                            class="peer sr-only"
+                          />
+                          <span class="flex min-h-16 flex-col items-center justify-center gap-1 border-2 border-gray-300 bg-white px-1 py-2 text-center text-[10px] font-black uppercase transition-all group-hover:-translate-y-0.5 group-hover:border-black peer-checked:-translate-y-1 peer-checked:border-black peer-checked:bg-yellow-100 peer-checked:shadow-[3px_3px_0_#000] sm:text-xs">
+                            <span class="text-lg leading-none" aria-hidden="true">
+                              {Enum.at(["🦩", "🐱", "🐸", "🐰", "🦆"], index)}
+                            </span>
+                            {animal}
+                          </span>
+                        </label>
+                      </div>
+                    </fieldset>
+
+                    <fieldset class="mt-5">
+                      <legend class="mb-2 text-xs font-black uppercase tracking-[0.16em] text-gray-500">
+                        Pick a colour
+                      </legend>
+                      <div class="flex flex-wrap gap-2.5">
+                        <label :for={{color, index} <- Avatar.colors()} class="group cursor-pointer">
+                          <input
+                            type="radio"
+                            name={"lobby[#{part}_color]"}
+                            value={index}
+                            checked={@avatar["#{part}_color"] == index}
+                            aria-label={"#{part} colour #{index + 1}"}
+                            class="peer sr-only"
+                          />
+                          <span
+                            class="block size-8 rounded-full border-2 border-border transition-all group-hover:scale-110 peer-checked:-translate-y-1 peer-checked:shadow-[2px_3px_0_#000] peer-focus-visible:outline-2 peer-focus-visible:outline-offset-2"
+                            style={"background-color: #{color}"}
+                          >
+                          </span>
+                        </label>
+                      </div>
+                    </fieldset>
+                  </div>
+                </section>
+
+                <section class="grid gap-4 bg-gray-50 p-5 sm:grid-cols-2 sm:p-6">
+                  <input
+                    type="text"
+                    value={@name}
+                    name="lobby[name]"
+                    placeholder="Enter your name"
+                    maxlength="20"
+                    class="rounded-base border-2 border-border bg-white px-3 py-2 text-sm placeholder:text-gray-400 focus:ring-2 focus:ring-ring focus:ring-offset-2 focus:outline-none"
+                    id="name-input"
+                  />
+
+                  <div class="sm:col-span-2">
+                    <p :if={@error} class="mb-2 text-sm text-red-400">{@error}</p>
+                    <div class="flex flex-row items-start gap-2">
+                      <input
+                        type="text"
+                        value={@room_code}
+                        name="lobby[room_code]"
+                        placeholder="Room name"
+                        class="min-w-0 flex-1 rounded-base border-2 border-border bg-white px-3 py-2 text-sm placeholder:text-gray-400 focus:ring-2 focus:ring-ring focus:ring-offset-2 focus:outline-none"
+                        id="room-code-input"
+                      />
+                      <.button
+                        type="submit"
+                        name="lobby[action]"
+                        value="join"
+                        variant="neutral"
+                        disabled={String.trim(@name) == "" || String.trim(@room_code) == ""}
+                        id="join-button"
+                      >
+                        Join
+                      </.button>
+                    </div>
+                    <p class="p-2 text-gray-700">or</p>
                     <.button
                       type="submit"
                       name="lobby[action]"
-                      value="join"
-                      variant="neutral"
-                      disabled={String.trim(@name) == "" || String.trim(@room_code) == ""}
-                      id="join-button"
+                      value="create"
+                      variant="default"
+                      class="w-full"
+                      disabled={String.trim(@name) == "" || String.trim(@room_code) != ""}
+                      id="create-room-button"
                     >
-                      Join
+                      Create room
                     </.button>
                   </div>
-                  <p class="p-2 text-gray-700">or</p>
-                  <.button
-                    type="submit"
-                    name="lobby[action]"
-                    value="create"
-                    variant="default"
-                    class="w-full"
-                    disabled={String.trim(@name) == "" || String.trim(@room_code) != ""}
-                    id="create-room-button"
-                  >
-                    Create room
-                  </.button>
-                </div>
+                </section>
               </div>
             </div>
           </.form>
@@ -184,6 +261,14 @@ defmodule FlamingoWeb.HomeLive do
 
   def handle_event("randomize_avatar", _params, socket) do
     {:noreply, assign(socket, avatar: Avatar.random())}
+  end
+
+  def handle_event("select_avatar_part", %{"part" => part}, socket) do
+    if part in Avatar.parts() do
+      {:noreply, assign(socket, active_part: part)}
+    else
+      {:noreply, socket}
+    end
   end
 
   def handle_event("create_room", _params, socket) do

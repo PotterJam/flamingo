@@ -89,36 +89,18 @@ defmodule FlamingoWeb.GameComponents do
 
   attr :avatar, :map, default: %{}
   attr :class, :any, default: nil
-  attr :label, :string, default: "Flamingo avatar"
+  attr :label, :string, default: "Creature avatar"
 
   def flamingo_avatar(assigns) do
     avatar = Avatar.normalize(assigns.avatar)
-    body_colors = ~w(#f472b6 #fb7185 #c084fc #fb923c #2dd4bf #facc15)
-
-    neck_paths = [
-      "M51 80 C34 66 38 47 58 37",
-      "M51 80 C72 64 33 51 58 37",
-      "M51 80 C51 62 52 48 58 37",
-      "M51 80 L38 64 L67 50 L58 37",
-      "M51 80 C25 68 75 62 44 52 C31 47 43 37 58 37"
-    ]
-
-    tuft_paths = [
-      [],
-      ["M55 15 Q48 4 60 10"],
-      ["M54 15 Q44 4 58 10", "M61 10 Q61 0 68 10"],
-      ["M53 15 L51 1 L62 11", "M62 11 L69 0 L70 14"],
-      ["M52 15 L44 3 L59 10", "M59 11 L63 0 L69 10", "M68 11 L79 3 L74 17"]
-    ]
 
     assigns =
       assign(assigns,
         avatar: avatar,
-        body_color: Enum.at(body_colors, avatar["body"]),
-        neck_path: Enum.at(neck_paths, avatar["neck"]),
-        beak_end: Enum.at([94, 101, 109, 118, 127], avatar["beak"]),
-        eye_offset: Enum.at([0, 2, 4, 6, 8], avatar["eyes"]),
-        tuft_paths: Enum.at(tuft_paths, avatar["tuft"])
+        head_color: Avatar.color(avatar["head_color"]),
+        body_color: Avatar.color(avatar["body_color"]),
+        legs_color: Avatar.color(avatar["legs_color"]),
+        feet_color: Avatar.color(avatar["feet_color"])
       )
 
     ~H"""
@@ -129,95 +111,184 @@ defmodule FlamingoWeb.GameComponents do
       class={@class}
       xmlns="http://www.w3.org/2000/svg"
     >
-      <path
-        d={@neck_path}
-        fill="none"
-        stroke="#111827"
-        stroke-width="19"
-        stroke-linecap="round"
-        stroke-linejoin="round"
-      />
-      <path
-        d={@neck_path}
-        fill="none"
-        stroke={@body_color}
-        stroke-width="14"
-        stroke-linecap="round"
-        stroke-linejoin="round"
-      />
-
+      <%!-- Feet --%>
       <g fill="none" stroke-linecap="round" stroke-linejoin="round">
-        <path d="M48 96 L47 135 L38 139" stroke="#111827" stroke-width="7" />
-        <path d="M48 96 L47 135 L38 139" stroke={@body_color} stroke-width="3" />
-        <path d="M68 96 L69 116 L83 124 L74 139" stroke="#111827" stroke-width="7" />
-        <path d="M68 96 L69 116 L83 124 L74 139" stroke={@body_color} stroke-width="3" />
+        <g :if={@avatar["feet"] == 0} stroke-width="5">
+          <path d="M45 134 L34 140 M45 134 L45 141 M83 134 L72 140 M83 134 L85 141" stroke="#111827" />
+          <path
+            d="M45 134 L34 140 M45 134 L45 141 M83 134 L72 140 M83 134 L85 141"
+            stroke={@feet_color}
+            stroke-width="2"
+          />
+        </g>
+        <g :if={@avatar["feet"] == 1} fill={@feet_color} stroke="#111827" stroke-width="3">
+          <path d="M45 131 Q28 132 29 141 Q39 145 51 139 Z" />
+          <path d="M83 131 Q66 132 67 141 Q77 145 89 139 Z" />
+        </g>
+        <g :if={@avatar["feet"] == 2} fill={@feet_color} stroke="#111827" stroke-width="3">
+          <ellipse cx="43" cy="137" rx="13" ry="6" /><ellipse cx="82" cy="137" rx="13" ry="6" />
+        </g>
+        <g :if={@avatar["feet"] == 3} fill={@feet_color} stroke="#111827" stroke-width="3">
+          <ellipse cx="42" cy="137" rx="15" ry="7" /><ellipse cx="83" cy="137" rx="15" ry="7" />
+          <path d="M35 135 L35 140 M42 134 L42 141 M76 135 L76 140 M83 134 L83 141" />
+        </g>
+        <g :if={@avatar["feet"] == 4} fill={@feet_color} stroke="#111827" stroke-width="3">
+          <path d="M45 132 Q26 132 24 141 Q39 146 53 139 Z" />
+          <path d="M83 132 Q64 132 62 141 Q77 146 91 139 Z" />
+        </g>
       </g>
 
-      <path
-        d="M28 77 L9 68 L17 84 Q20 102 52 105 Q79 107 94 88 Q83 68 55 67 Q37 67 28 77 Z"
-        fill={@body_color}
-        stroke="#111827"
-        stroke-width="4"
-        stroke-linejoin="round"
-      />
-      <path
-        d="M31 78 Q53 68 78 81 Q67 99 41 98 Q32 92 31 78 Z"
-        fill="white"
-        fill-opacity="0.28"
-        stroke="#111827"
-        stroke-width="3"
-      />
-      <circle cx="65" cy="27" r="21" fill="#111827" />
-      <circle cx="65" cy="27" r="18" fill={@body_color} />
-
-      <path
-        :for={path <- @tuft_paths}
-        d={path}
-        fill="none"
-        stroke="#111827"
-        stroke-width="5"
-        stroke-linecap="round"
-        stroke-linejoin="round"
-      />
-
-      <circle cx={67 + @eye_offset} cy="23" r="5.5" fill="white" stroke="#111827" stroke-width="2" />
-      <circle cx={68 + @eye_offset} cy="24" r="2.3" fill="#111827" />
-
-      <path
-        d={"M79 23 Q#{@beak_end - 5} 18 #{@beak_end} 27 Q#{@beak_end - 2} 39 #{@beak_end - 11} 46 Q#{@beak_end - 9} 35 79 35 Z"}
-        fill="#fb923c"
-        stroke="#111827"
-        stroke-width="3"
-        stroke-linejoin="round"
-      />
-      <path
-        d={"M#{@beak_end - 11} 22 Q#{@beak_end - 2} 20 #{@beak_end} 27 Q#{@beak_end - 2} 39 #{@beak_end - 11} 46 Q#{@beak_end - 8} 34 #{@beak_end - 11} 22 Z"}
-        fill="#111827"
-      />
-
-      <g :if={@avatar["accessory"] == 1} stroke="#111827" stroke-width="3" stroke-linejoin="round">
-        <path d="M49 13 L48 1 L57 8 L64 0 L70 9 L80 2 L77 15 Z" fill="#facc15" />
+      <%!-- Legs --%>
+      <g fill="none" stroke-linecap="round" stroke-linejoin="round">
+        <g :if={@avatar["legs"] == 0}>
+          <path d="M48 96 L45 134 M72 96 L83 134" stroke="#111827" stroke-width="8" />
+          <path d="M48 96 L45 134 M72 96 L83 134" stroke={@legs_color} stroke-width="4" />
+        </g>
+        <g :if={@avatar["legs"] == 1}>
+          <path d="M47 96 Q40 113 45 134 M73 96 Q80 113 83 134" stroke="#111827" stroke-width="12" />
+          <path d="M47 96 Q40 113 45 134 M73 96 Q80 113 83 134" stroke={@legs_color} stroke-width="7" />
+        </g>
+        <g :if={@avatar["legs"] == 2}>
+          <path d="M47 96 Q31 110 45 134 M73 96 Q96 109 83 134" stroke="#111827" stroke-width="14" />
+          <path d="M47 96 Q31 110 45 134 M73 96 Q96 109 83 134" stroke={@legs_color} stroke-width="9" />
+        </g>
+        <g :if={@avatar["legs"] == 3}>
+          <path d="M47 96 L40 116 L45 134 M73 96 L88 115 L83 134" stroke="#111827" stroke-width="12" />
+          <path
+            d="M47 96 L40 116 L45 134 M73 96 L88 115 L83 134"
+            stroke={@legs_color}
+            stroke-width="7"
+          />
+        </g>
+        <g :if={@avatar["legs"] == 4}>
+          <path d="M47 96 Q46 114 45 134 M73 96 Q82 113 83 134" stroke="#111827" stroke-width="10" />
+          <path d="M47 96 Q46 114 45 134 M73 96 Q82 113 83 134" stroke={@legs_color} stroke-width="5" />
+        </g>
       </g>
-      <g :if={@avatar["accessory"] == 2} stroke="#111827" stroke-width="3" stroke-linejoin="round">
-        <path d="M49 43 Q36 36 38 52 Q42 59 51 49 Z" fill="#c084fc" />
-        <path d="M52 43 Q63 36 62 51 Q59 58 50 49 Z" fill="#c084fc" />
-        <circle cx="51" cy="47" r="4" fill="#facc15" />
+
+      <%!-- Body --%>
+      <g stroke="#111827" stroke-width="4" stroke-linejoin="round">
+        <g :if={@avatar["body"] == 0}>
+          <path
+            d="M28 72 L10 64 L18 82 Q22 103 62 105 Q94 105 103 82 Q86 65 55 65 Q37 65 28 72 Z"
+            fill={@body_color}
+          />
+          <path
+            d="M35 76 Q58 65 86 80 Q72 99 42 96 Z"
+            fill="white"
+            fill-opacity="0.3"
+            stroke-width="3"
+          />
+        </g>
+        <g :if={@avatar["body"] == 1}>
+          <path d="M28 68 Q16 79 23 101 Q34 110 92 102 Q101 83 91 68 Z" fill={@body_color} />
+          <path
+            d="M38 70 L34 91 M58 68 L57 94 M79 70 L84 91"
+            fill="none"
+            stroke-width="3"
+            opacity="0.45"
+          />
+        </g>
+        <g :if={@avatar["body"] == 2}>
+          <ellipse cx="60" cy="84" rx="45" ry="25" fill={@body_color} />
+          <circle cx="35" cy="79" r="5" fill="white" fill-opacity="0.35" stroke="none" />
+          <circle cx="77" cy="91" r="7" fill="white" fill-opacity="0.35" stroke="none" />
+        </g>
+        <g :if={@avatar["body"] == 3}>
+          <ellipse cx="60" cy="83" rx="34" ry="31" fill={@body_color} />
+          <ellipse cx="60" cy="88" rx="20" ry="19" fill="white" fill-opacity="0.3" stroke-width="3" />
+          <circle cx="94" cy="77" r="10" fill="white" />
+        </g>
+        <g :if={@avatar["body"] == 4}>
+          <path
+            d="M18 75 Q31 56 72 63 Q97 66 105 84 Q93 105 55 105 Q22 104 18 75 Z"
+            fill={@body_color}
+          />
+          <path
+            d="M50 72 Q75 66 91 83 Q75 99 52 96 Q42 84 50 72 Z"
+            fill="white"
+            fill-opacity="0.3"
+            stroke-width="3"
+          />
+        </g>
       </g>
-      <g :if={@avatar["accessory"] == 3} stroke="#111827" stroke-width="3">
-        <ellipse cx="63" cy="12" rx="21" ry="7" fill="#c084fc" transform="rotate(-8 63 12)" />
-        <path d="M64 7 Q68 1 73 4" fill="none" stroke-linecap="round" />
-      </g>
-      <g :if={@avatar["accessory"] == 4} fill="none" stroke="#111827" stroke-width="3">
-        <circle cx={67 + @eye_offset} cy="23" r="8" />
-        <path d={"M#{75 + @eye_offset} 23 L82 25"} />
-      </g>
-      <g :if={@avatar["accessory"] == 5} stroke="#111827" stroke-width="2">
-        <circle cx="49" cy="20" r="6" fill="#facc15" />
-        <circle cx="49" cy="10" r="6" fill="#fb7185" />
-        <circle cx="58" cy="16" r="6" fill="#fb7185" />
-        <circle cx="55" cy="26" r="6" fill="#fb7185" />
-        <circle cx="43" cy="26" r="6" fill="#fb7185" />
-        <circle cx="40" cy="16" r="6" fill="#fb7185" />
+
+      <%!-- Head --%>
+      <g stroke="#111827" stroke-width="4" stroke-linecap="round" stroke-linejoin="round">
+        <g :if={@avatar["head"] == 0}>
+          <path d="M51 68 Q36 51 54 38" fill="none" stroke="#111827" stroke-width="19" />
+          <path d="M51 68 Q36 51 54 38" fill="none" stroke={@head_color} stroke-width="13" />
+          <circle cx="61" cy="29" r="20" fill={@head_color} />
+          <circle cx="68" cy="25" r="5" fill="white" stroke-width="2" /><circle
+            cx="69"
+            cy="26"
+            r="2"
+            fill="#111827"
+            stroke="none"
+          />
+          <path d="M78 25 Q100 19 111 28 Q100 39 78 36 Z" fill="#fb923c" stroke-width="3" />
+          <path d="M99 23 Q109 24 111 28 Q104 37 98 38 Z" fill="#111827" stroke="none" />
+        </g>
+        <g :if={@avatar["head"] == 1}>
+          <path
+            d="M51 45 Q64 51 78 45 L80 73 Q65 79 48 72 Z"
+            fill={@head_color}
+            stroke="none"
+          />
+          <path
+            d="M39 20 L43 4 L56 15 Q67 10 78 15 L91 5 L89 29 Q88 49 65 54 Q40 50 39 20 Z"
+            fill={@head_color}
+          />
+          <circle cx="56" cy="29" r="3" fill="#111827" stroke="none" /><circle
+            cx="75"
+            cy="29"
+            r="3"
+            fill="#111827"
+            stroke="none"
+          />
+          <path d="M61 37 Q66 41 71 37 M66 38 L66 43" fill="none" stroke-width="2.5" />
+        </g>
+        <g :if={@avatar["head"] == 2}>
+          <ellipse cx="64" cy="34" rx="29" ry="21" fill={@head_color} />
+          <circle cx="48" cy="14" r="10" fill={@head_color} /><circle
+            cx="80"
+            cy="14"
+            r="10"
+            fill={@head_color}
+          />
+          <circle cx="48" cy="14" r="4" fill="#111827" stroke="none" /><circle
+            cx="80"
+            cy="14"
+            r="4"
+            fill="#111827"
+            stroke="none"
+          />
+          <path d="M52 39 Q64 48 76 39" fill="none" stroke-width="2.5" />
+        </g>
+        <g :if={@avatar["head"] == 3}>
+          <ellipse cx="52" cy="14" rx="9" ry="22" fill={@head_color} transform="rotate(-8 52 14)" />
+          <ellipse cx="77" cy="14" rx="9" ry="22" fill={@head_color} transform="rotate(8 77 14)" />
+          <ellipse cx="64" cy="36" rx="26" ry="22" fill={@head_color} />
+          <circle cx="55" cy="32" r="3" fill="#111827" stroke="none" /><circle
+            cx="73"
+            cy="32"
+            r="3"
+            fill="#111827"
+            stroke="none"
+          />
+          <path d="M60 40 Q64 44 68 40" fill="none" stroke-width="2.5" />
+        </g>
+        <g :if={@avatar["head"] == 4}>
+          <circle cx="61" cy="30" r="23" fill={@head_color} />
+          <circle cx="54" cy="26" r="3" fill="#111827" stroke="none" /><circle
+            cx="69"
+            cy="26"
+            r="3"
+            fill="#111827"
+            stroke="none"
+          />
+          <path d="M45 34 Q64 26 85 36 Q68 48 45 40 Z" fill="#fb923c" stroke-width="3" />
+        </g>
       </g>
     </svg>
     """

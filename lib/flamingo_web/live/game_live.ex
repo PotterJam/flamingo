@@ -254,18 +254,16 @@ defmodule FlamingoWeb.GameLive do
                 >
                   <div class="space-y-1">
                     <div class="flex w-full justify-between">
-                      <label class="text-sm">Rounds</label>
+                      <label for="round-count-slider" class="text-sm">Rounds</label>
                       <span class="text-sm">{@round_count}</span>
                     </div>
-                    <input
+                    <.input
+                      field={@settings_form[:round_count]}
                       type="range"
                       min="1"
                       max="5"
                       value={@round_count}
-                      name={@settings_form[:round_count].name}
-                      class="nb-slider w-full"
-                      style={"--slider-progress: #{(@round_count - 1) / 4 * 100}%"}
-                      phx-hook=".RoundSlider"
+                      class="w-full"
                       id="round-count-slider"
                     />
                   </div>
@@ -762,21 +760,6 @@ defmodule FlamingoWeb.GameLive do
                 input.focus()
               }, 0)
             })
-          }
-        }
-      </script>
-      <script :type={Phoenix.LiveView.ColocatedHook} name=".RoundSlider">
-        export default {
-          mounted() {
-            const update = () => {
-              const min = parseInt(this.el.min)
-              const max = parseInt(this.el.max)
-              const val = parseInt(this.el.value)
-              const progress = ((val - min) / (max - min)) * 100
-              this.el.style.setProperty("--slider-progress", progress + "%")
-            }
-            update()
-            this.el.addEventListener("input", () => update())
           }
         }
       </script>
