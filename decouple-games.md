@@ -133,17 +133,17 @@ Use full projected views for connection, phase changes, membership changes, and 
 
 ## Scribble late joining
 
-Scribble allows room members to join while a game is active. A member joining after the current round has begun spectates until the next round.
+Scribble allows room members to join while a game is active. A member joining after the current turn has begun spectates until the next turn.
 
-During the current round, the late member:
+During the current turn, the late member:
 
 - can see the room, drawing, and public game state;
 - cannot guess or draw;
 - does not count toward turn completion;
-- is not in current-round drawer selection;
+- cannot become the current drawer;
 - has a Scribble score of zero.
 
-At the next round transition, Scribble promotes eligible spectators before selecting the first drawer. They can then guess and enter drawer rotation. A member joining during the final round remains a spectator through game end and becomes a normal participant in a rematch.
+At the next turn transition, Scribble promotes eligible spectators before selecting the next drawer. They can then guess and enter drawer rotation during the current round. If the existing participants had otherwise completed the final turn, a promoted participant still receives their turn before the game ends.
 
 ## Vertical migration slices
 
@@ -286,30 +286,30 @@ Play the complete two-player game and check settings, word visibility, canvas de
 
 #### Change
 
-Implement `Scribble.admit_member/3` so a member joining after the round begins is recorded as spectating until the next round. Promote eligible spectators at the next round transition before selecting the first drawer.
+Implement `Scribble.admit_member/3` so a member joining after the turn begins is recorded as spectating until the next turn. Promote eligible spectators at the next turn transition before selecting the next drawer.
 
 #### Automated verification
 
 - Joining during play creates a spectator.
 - Spectators cannot guess or draw.
 - Spectators do not block turn completion.
-- Spectators are not selected as current-round drawers.
-- The next round promotes eligible spectators.
-- Promoted players can guess and enter drawer rotation with score zero.
-- Final-round joiners remain spectators through game end.
+- Spectators cannot become the current drawer.
+- The next turn promotes eligible spectators.
+- Promoted players can guess and enter the current round's drawer rotation with score zero.
+- A promoted player receives a turn before game end when the existing players had otherwise completed the final turn.
 - Reconnect does not change eligibility.
 - Run `mix precommit`.
 
 #### Browser acceptance
 
-1. Alice creates a two-round game and Bob joins.
+1. Alice creates a one-round game and Bob joins.
 2. Start Scribble and begin drawing in the first round.
 3. Charlie joins during `:playing`.
 4. Verify Charlie sees the game and a spectator state but has no guess or drawing controls.
 5. Verify Charlie does not prevent the current turn from finishing.
-6. Complete the remaining first-round turns.
-7. Verify Charlie is promoted when the next round starts.
-8. Verify Charlie can guess and later enters drawer rotation.
+6. Verify Charlie is promoted when the next turn starts.
+7. Verify Charlie can guess during Bob's turn and then enters drawer rotation in the same round.
+8. Verify Charlie receives a drawing turn before the game ends.
 9. Complete the game and verify all three players' results.
 
 ### Slice 6: remove migration scaffolding

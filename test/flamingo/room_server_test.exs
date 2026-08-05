@@ -813,6 +813,44 @@ defmodule Flamingo.RoomServerTest do
     assert state.game.drawer_id != next_in_order
   end
 
+  test "a late joiner spectates only the current turn", %{room_id: room_id} do
+    {p1, p2, word, state} = start_playing(room_id)
+    drawer = state.game.drawer_id
+    guesser = if p1 == drawer, do: p2, else: p1
+    guesser_token = resume_token_for(state, guesser)
+
+    {:ok, spectator_token, %{viewer_id: spectator, participation: :spectator}} =
+      join_connected(room_id, "Charlie")
+
+    {:ok, spectator_snapshot} = snapshot_as(room_id, spectator_token)
+    assert spectator_snapshot.participation == :spectator
+    assert {:error, :spectator} = guess_as(room_id, spectator_token, word)
+
+    :ok = draw_event_as(room_id, spectator_token, %{"event_type" => "clear"})
+    _ = :sys.get_state(RoomServer.whereis(room_id))
+
+    {:ok, state} = game_state(room_id)
+    assert state.game.current_drawing == []
+    assert state.game.participants[spectator] == :spectator
+
+    assert :correct = guess_as(room_id, guesser_token, word)
+    {:ok, state} = game_state(room_id)
+    assert state.game.phase == :turn_reveal
+
+    send(
+      RoomServer.whereis(room_id),
+      {:game_timeout, :phase, :turn_reveal, state.phase_timer.generation}
+    )
+
+    _ = :sys.get_state(RoomServer.whereis(room_id))
+
+    {:ok, state} = game_state(room_id)
+    assert state.game.phase == :word_choice
+    assert state.game.drawer_id == guesser
+    assert state.game.participants[spectator] == :active
+    assert state.game.scores[spectator] == 0
+  end
+
   defp start_playing(room_id, settings \\ %{round_count: 1, turn_length: 30}) do
     {:ok, p1_token, %{viewer_id: p1}} = join_connected(room_id, "Alice")
     {:ok, p2_token, %{viewer_id: p2}} = join_connected(room_id, "Bob")

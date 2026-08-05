@@ -20,6 +20,7 @@ defmodule FlamingoWeb.ScribbleLive do
      |> assign(
        room_id: room_id,
        player_id: nil,
+       participation: :active,
        phase: :lobby,
        players: %{},
        player_order: [],
@@ -276,6 +277,13 @@ defmodule FlamingoWeb.ScribbleLive do
         <.flamingo_background />
         <div class="flex h-screen w-full items-center justify-center p-6">
           <div class="flex h-[675px] w-full max-w-[1200px] flex-col gap-6">
+            <div
+              :if={@participation == :spectator}
+              id="spectator-notice"
+              class="mx-auto -mb-3 flex items-center gap-2 rounded-full border-2 border-pink-300 bg-white px-4 py-2 text-sm font-bold text-pink-700 shadow-sm"
+            >
+              <.icon name={:eye} class="h-4 w-4" /> Spectating this turn
+            </div>
             <.game_header
               word={@word}
               show_word={@show_word or MapSet.member?(@correct_guesses, @player_id)}
@@ -295,7 +303,7 @@ defmodule FlamingoWeb.ScribbleLive do
               <%= cond do %>
                 <% @phase == :word_choice -> %>
                   <.box class="flex w-[704px] shrink-0 items-center justify-center bg-white">
-                    <%= if @player_id == @drawer_id do %>
+                    <%= if @player_id == @drawer_id and @participation == :active do %>
                       <div class="relative flex flex-col items-center gap-8">
                         <.starburst_timer
                           position_class="absolute -top-36 -right-16"
@@ -373,7 +381,9 @@ defmodule FlamingoWeb.ScribbleLive do
                       id="drawing-canvas"
                       phx-hook="DrawingCanvas"
                       phx-update="ignore"
-                      data-is-drawer={to_string(@player_id == @drawer_id)}
+                      data-is-drawer={
+                        to_string(@player_id == @drawer_id and @participation == :active)
+                      }
                       class="flex flex-col gap-2"
                     >
                       <.box class="bg-white p-0">
@@ -382,7 +392,7 @@ defmodule FlamingoWeb.ScribbleLive do
                           height="500"
                           class={[
                             "bg-white",
-                            if(@player_id == @drawer_id,
+                            if(@player_id == @drawer_id and @participation == :active,
                               do: "cursor-crosshair",
                               else: "cursor-default"
                             )
@@ -391,14 +401,14 @@ defmodule FlamingoWeb.ScribbleLive do
                         </canvas>
                       </.box>
 
-                      <%= if @phase == :playing and @player_id == @drawer_id do %>
+                      <%= if @phase == :playing and @player_id == @drawer_id and @participation == :active do %>
                         <.box class="bg-white p-0">
                           <.drawing_toolbar palette={palette()} />
                         </.box>
                       <% end %>
                     </div>
 
-                    <%= if @phase == :playing and @player_id != @drawer_id do %>
+                    <%= if @phase == :playing and @player_id != @drawer_id and @participation == :active do %>
                       <%= if MapSet.member?(@correct_guesses, @player_id) do %>
                         <.box class="bg-green-100 p-3 text-center font-bold text-green-800">
                           You guessed it!
@@ -874,6 +884,7 @@ defmodule FlamingoWeb.ScribbleLive do
       socket
       |> assign(
         player_id: snapshot.viewer_id,
+        participation: snapshot.participation,
         phase: snapshot.phase,
         players: snapshot.players,
         player_order: snapshot.player_order,
@@ -926,8 +937,11 @@ defmodule FlamingoWeb.ScribbleLive do
         socket
       end
 
+    drawing_visible? = snapshot.phase in [:playing, :turn_reveal]
+    drawing_was_visible? = old_phase in [:playing, :turn_reveal]
+
     socket =
-      if snapshot.phase == :playing && (initial? || old_phase != :playing) do
+      if drawing_visible? && (initial? || not drawing_was_visible?) do
         push_event(socket, "drawing_state", %{events: snapshot.current_drawing})
       else
         socket

@@ -71,13 +71,16 @@ defmodule Flamingo.GameModes.ScribbleTest do
     assert restarted.used_words == MapSet.new()
   end
 
-  test "late admits are active and final results remain immutable on removal" do
+  test "lobby and game-ended admits are active and final results remain immutable on removal" do
     state = admitted()
     {:ok, %{state: state}} = Scribble.admit_member(state, %{id: "c", name: "Cara"}, context())
     assert state.participants["c"] == :active
 
     final = %{players: %{}, player_order: [], drawings: []}
     state = %{state | phase: :game_ended, final_result: final}
+    {:ok, %{state: state}} = Scribble.admit_member(state, %{id: "c", name: "Cara"}, context())
+    assert state.participants["c"] == :active
+
     post = %{roster() | players: Map.delete(roster().players, "b"), player_order: ["a"]}
 
     {:ok, %{state: state}} =
@@ -85,6 +88,133 @@ defmodule Flamingo.GameModes.ScribbleTest do
 
     assert state.final_result == final
     refute Map.has_key?(state.participants, "b")
+  end
+
+  test "in-progress admits spectate only until the next turn" do
+    three_player_roster = %{
+      roster()
+      | players: Map.put(roster().players, "c", %{id: "c", name: "Cara", connected: true}),
+        player_order: ["a", "b", "c"]
+    }
+
+    for phase <- [:word_choice, :playing, :turn_reveal] do
+      state = %{admitted() | phase: phase, drawer_id: "a", word: "cat"}
+
+      {:ok, %{state: state}} =
+        Scribble.admit_member(
+          state,
+          %{id: "c", name: "Cara"},
+          context(roster: three_player_roster)
+        )
+
+      assert state.participants["c"] == :spectator
+      assert state.scores["c"] == 0
+      assert Scribble.view(state, "c", three_player_roster).participation == :spectator
+    end
+
+    state = %{admitted() | phase: :playing, drawer_id: "a", word: "cat"}
+
+    {:ok, %{state: state}} =
+      Scribble.admit_member(state, %{id: "c", name: "Cara"}, context(roster: three_player_roster))
+
+    spectator_context = context(roster: three_player_roster)
+
+    assert {:error, :spectator} =
+             Scribble.command(state, "c", {:guess, "cat"}, spectator_context)
+
+    assert :ignored =
+             Scribble.command(state, "c", {:draw, %{"event_type" => "clear"}}, spectator_context)
+
+    {:ok, %{state: reveal}} =
+      Scribble.command(state, "b", {:guess, "cat"}, spectator_context)
+
+    assert reveal.phase == :turn_reveal
+    refute Map.has_key?(reveal.score_gains, "c")
+
+    {:ok, %{state: next}} =
+      Scribble.timeout(reveal, :turn_reveal, context(roster: three_player_roster))
+
+    assert next.participants["c"] == :active
+    assert next.drawer_id == "b"
+    assert next.phase == :word_choice
+  end
+
+  test "a spectator admitted on the final existing turn extends the current round" do
+    three_player_roster = %{
+      roster()
+      | players: Map.put(roster().players, "c", %{id: "c", name: "Cara", connected: true}),
+        player_order: ["a", "b", "c"]
+    }
+
+    state = %{
+      admitted()
+      | phase: :turn_reveal,
+        drawer_id: "b",
+        current_round: 0,
+        round_count: 1,
+        drawn_this_round: MapSet.new(["a", "b"])
+    }
+
+    {:ok, %{state: state}} =
+      Scribble.admit_member(state, %{id: "c", name: "Cara"}, context(roster: three_player_roster))
+
+    {:ok, %{state: next, status: :continue}} =
+      Scribble.timeout(state, :turn_reveal, context(roster: three_player_roster))
+
+    assert next.phase == :word_choice
+    assert next.drawer_id == "c"
+    assert next.participants["c"] == :active
+    assert next.current_round == 0
+  end
+
+  test "spectators do not affect the drawer scoring denominator" do
+    four_player_roster = %{
+      players: %{
+        "a" => %{id: "a", name: "Alice", connected: true},
+        "b" => %{id: "b", name: "Bob", connected: true},
+        "c" => %{id: "c", name: "Cara", connected: true},
+        "d" => %{id: "d", name: "Drew", connected: true}
+      },
+      player_order: ["a", "b", "c", "d"],
+      host_id: "a"
+    }
+
+    {:ok, %{state: state}} =
+      Scribble.admit_member(admitted(), %{id: "c", name: "Cara"}, context())
+
+    state = %{state | phase: :playing, drawer_id: "a", word: "cat"}
+
+    {:ok, %{state: state}} =
+      Scribble.admit_member(
+        state,
+        %{id: "d", name: "Drew"},
+        context(roster: four_player_roster)
+      )
+
+    game_context = context(roster: four_player_roster)
+    {:ok, %{state: state}} = Scribble.command(state, "b", {:guess, "cat"}, game_context)
+    {:ok, %{state: reveal}} = Scribble.command(state, "c", {:guess, "cat"}, game_context)
+
+    assert reveal.phase == :turn_reveal
+    assert reveal.score_gains["a"] == 350
+    refute Map.has_key?(reveal.score_gains, "d")
+  end
+
+  test "reconnect preserves spectator status and start promotes all participants" do
+    state = %{admitted() | phase: :playing, drawer_id: "a", word: "cat"}
+    {:ok, %{state: state}} = Scribble.admit_member(state, %{id: "c", name: "Cara"}, context())
+
+    {:ok, %{state: reconnected}} = Scribble.connection_changed(state, "c", :online, context())
+    assert reconnected.participants["c"] == :spectator
+
+    rematch_roster = %{
+      roster()
+      | players: Map.put(roster().players, "c", %{id: "c", name: "Cara", connected: true}),
+        player_order: ["a", "b", "c"]
+    }
+
+    {:ok, %{state: restarted}} = Scribble.start(reconnected, %{}, context(roster: rematch_roster))
+    assert Enum.all?(restarted.participants, fn {_id, status} -> status == :active end)
   end
 
   test "deterministic hints reveal candidates and schedule the next hint" do

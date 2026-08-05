@@ -36,9 +36,12 @@ defmodule Flamingo.GameModes.Scribble do
   end
 
   def admit_member(state, %{id: id} = candidate, _context) do
+    participation =
+      if state.phase in [:word_choice, :playing, :turn_reveal], do: :spectator, else: :active
+
     state = %{
       state
-      | participants: Map.put(state.participants, id, :active),
+      | participants: Map.put(state.participants, id, participation),
         scores: Map.put(state.scores, id, 0)
     }
 
@@ -95,13 +98,16 @@ defmodule Flamingo.GameModes.Scribble do
            turn_length in @min_turn_length..@max_turn_length || {:error, :invalid_turn_length},
          {:ok, custom_words} <- Words.validate_custom_words(custom_words),
          true <- is_boolean(defaults) || {:error, :invalid_include_default_words} do
+      participants = Map.new(state.participants, fn {id, _} -> {id, :active} end)
+
       state = %{
         state
         | round_count: round_count,
           turn_length: turn_length,
           custom_words: custom_words,
           include_default_words: defaults,
-          drawer_id: List.first(roster.player_order),
+          participants: participants,
+          drawer_id: Enum.find(roster.player_order, &active?(participants, &1)),
           current_round: 0,
           drawn_this_round: MapSet.new(),
           used_words: MapSet.new(),
@@ -125,7 +131,7 @@ defmodule Flamingo.GameModes.Scribble do
   end
 
   def command(state, actor, {:draw, event}, _context) do
-    if state.phase == :playing and actor == state.drawer_id do
+    if state.phase == :playing and actor == state.drawer_id and active?(state, actor) do
       drawing =
         if event["event_type"] == "undo",
           do: undo(state.current_drawing),
@@ -143,6 +149,9 @@ defmodule Flamingo.GameModes.Scribble do
     cond do
       state.phase != :playing ->
         {:error, :not_playing}
+
+      Map.get(state.participants, actor) == :spectator ->
+        {:error, :spectator}
 
       Map.get(state.participants, actor) != :active ->
         {:error, :not_found}
@@ -220,6 +229,7 @@ defmodule Flamingo.GameModes.Scribble do
       mode: :scribble,
       phase: state.phase,
       viewer_id: viewer,
+      participation: Map.get(state.participants, viewer),
       players:
         Map.new(roster.players, fn {id, p} ->
           {id, Map.put(p, :score, Map.fetch!(state.scores, id))}
@@ -321,11 +331,13 @@ defmodule Flamingo.GameModes.Scribble do
   defp schedule_hint(state), do: ok(state, :ok, [:cancel_hint_timeout])
 
   defp enter_reveal(state, context) do
+    active_order = Enum.filter(context.roster.player_order, &active?(state, &1))
+
     gains =
       Scoring.calculate_round_scores(
         state.correct_guesses,
         state.drawer_id,
-        context.roster.player_order,
+        active_order,
         state.turn_length
       )
       |> Map.filter(fn {id, _} -> Map.has_key?(state.scores, id) end)
@@ -354,12 +366,14 @@ defmodule Flamingo.GameModes.Scribble do
   end
 
   defp next_turn(state, context) do
-    state = %{state | score_gains: %{}}
+    participants = Map.new(state.participants, fn {id, _} -> {id, :active} end)
+    state = %{state | score_gains: %{}, participants: participants}
 
     next =
       Enum.find(
         context.roster.player_order,
-        &(not MapSet.member?(state.drawn_this_round, &1) and online?(context.roster, &1))
+        &(active?(state, &1) and not MapSet.member?(state.drawn_this_round, &1) and
+            online?(context.roster, &1))
       )
 
     cond do
@@ -369,7 +383,11 @@ defmodule Flamingo.GameModes.Scribble do
       state.current_round + 1 >= state.round_count ->
         game_ended(state, context.roster)
 
-      first = Enum.find(context.roster.player_order, &online?(context.roster, &1)) ->
+      first =
+          Enum.find(
+            context.roster.player_order,
+            &(active?(state, &1) and online?(context.roster, &1))
+          ) ->
         enter_word_choice(
           %{
             state
@@ -413,9 +431,17 @@ defmodule Flamingo.GameModes.Scribble do
       )
 
   defp all_online_guessed?(state, roster) do
-    ids = Enum.filter(roster.player_order, &(&1 != state.drawer_id and online?(roster, &1)))
+    ids =
+      Enum.filter(
+        roster.player_order,
+        &(&1 != state.drawer_id and active?(state, &1) and online?(roster, &1))
+      )
+
     ids != [] and Enum.all?(ids, &Map.has_key?(state.correct_guesses, &1))
   end
+
+  defp active?(%{participants: participants}, id), do: active?(participants, id)
+  defp active?(participants, id), do: Map.get(participants, id) == :active
 
   defp online?(roster, id), do: roster.players[id].connected
   defp online_count(roster), do: Enum.count(roster.players, fn {_, p} -> p.connected end)

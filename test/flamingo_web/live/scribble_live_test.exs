@@ -278,6 +278,90 @@ defmodule FlamingoWeb.ScribbleLiveTest do
     assert_push_event(guesser_view, "drawing_state", %{events: [^first_event, ^second_event]})
   end
 
+  test "a spectator joining during turn reveal receives the drawing baseline", %{
+    conn: conn,
+    room_id: room_id
+  } do
+    {:ok, drawer_token, _drawer_snapshot} = join_connected(room_id, "Alice")
+    {:ok, guesser_token, _guesser_snapshot} = join_connected(room_id, "Bob")
+
+    :ok =
+      start_game_as(room_id, drawer_token, %{
+        custom_words: ["secret", "other", "third"]
+      })
+
+    {:ok, state} = RoomServer.get_state(room_id)
+    word = List.first(state.game.word_choices)
+    :ok = select_word_as(room_id, drawer_token, word)
+
+    event = %{"event_type" => "clear"}
+    draw_event_as(room_id, drawer_token, event)
+    _ = :sys.get_state(RoomServer.whereis(room_id))
+    assert :correct = guess_as(room_id, guesser_token, word)
+
+    {:ok, spectator_token, %{participation: :spectator}} =
+      RoomServer.join(room_id, "Charlie")
+
+    {:ok, spectator_view, _html} =
+      live(conn, ~p"/game/#{room_id}?resume_token=#{spectator_token}")
+
+    assert_push_event(spectator_view, "drawing_state", %{events: [^event]})
+    assert has_element?(spectator_view, "#spectator-notice")
+    refute has_element?(spectator_view, "#guess-form")
+  end
+
+  test "a late joiner spectates until the next turn", %{conn: conn, room_id: room_id} do
+    {:ok, drawer_token, %{viewer_id: drawer}} = join_connected(room_id, "Alice")
+    {:ok, guesser_token, %{viewer_id: guesser}} = join_connected(room_id, "Bob")
+
+    :ok =
+      start_game_as(room_id, drawer_token, %{
+        round_count: 1,
+        custom_words: ["secret", "other", "third"]
+      })
+
+    {:ok, state} = RoomServer.get_state(room_id)
+    word = List.first(state.game.word_choices)
+    assert state.game.drawer_id == drawer
+    :ok = select_word_as(room_id, drawer_token, word)
+
+    event = %{"event_type" => "clear"}
+    draw_event_as(room_id, drawer_token, event)
+    _ = :sys.get_state(RoomServer.whereis(room_id))
+
+    {:ok, spectator_token, %{viewer_id: spectator, participation: :spectator}} =
+      RoomServer.join(room_id, "Charlie")
+
+    {:ok, spectator_view, _html} =
+      live(conn, ~p"/game/#{room_id}?resume_token=#{spectator_token}")
+
+    assert_push_event(spectator_view, "drawing_state", %{events: [^event]})
+    assert has_element?(spectator_view, "#spectator-notice")
+    assert has_element?(spectator_view, "#drawing-canvas[data-is-drawer='false']")
+    refute has_element?(spectator_view, "#guess-form")
+    refute has_element?(spectator_view, "#drawing-canvas [data-action='undo']")
+
+    assert :correct = guess_as(room_id, guesser_token, word)
+    {:ok, state} = RoomServer.get_state(room_id)
+
+    send(
+      RoomServer.whereis(room_id),
+      {:game_timeout, :phase, :turn_reveal, state.phase_timer.generation}
+    )
+
+    _ = :sys.get_state(RoomServer.whereis(room_id))
+
+    {:ok, state} = RoomServer.get_state(room_id)
+    assert state.game.drawer_id == guesser
+    assert state.game.participants[spectator] == :active
+
+    :ok =
+      select_word_as(room_id, guesser_token, List.first(state.game.word_choices))
+
+    refute has_element?(spectator_view, "#spectator-notice")
+    assert has_element?(spectator_view, "#guess-form")
+  end
+
   test "game end screen keeps final scores visible after a player leaves", %{
     conn: conn,
     room_id: room_id
