@@ -121,8 +121,8 @@ defmodule FlamingoWeb.ScribbleLiveTest do
     |> render_submit()
 
     {:ok, state} = RoomServer.get_state(room_id)
-    assert state.custom_words == ["orbital llama", "velvet cactus", "disco teapot"]
-    assert state.include_default_words
+    assert state.game.custom_words == ["orbital llama", "velvet cactus", "disco teapot"]
+    assert state.game.include_default_words
   end
 
   test "custom word validation is shown before starting", %{conn: conn, room_id: room_id} do
@@ -191,7 +191,7 @@ defmodule FlamingoWeb.ScribbleLiveTest do
       })
 
     {:ok, state} = RoomServer.get_state(room_id)
-    word = List.first(state.word_choices)
+    word = List.first(state.game.word_choices)
     :ok = select_word_as(room_id, Map.fetch!(resume_tokens, drawer_id), word)
 
     assert render(drawer_view) =~ word
@@ -222,7 +222,7 @@ defmodule FlamingoWeb.ScribbleLiveTest do
       })
 
     {:ok, state} = RoomServer.get_state(room_id)
-    word = List.first(state.word_choices)
+    word = List.first(state.game.word_choices)
     :ok = select_word_as(room_id, drawer_token, word)
 
     assert_push_event(drawer_view, "drawing_state", %{events: []})
@@ -249,7 +249,7 @@ defmodule FlamingoWeb.ScribbleLiveTest do
     refute_push_event(guesser_view, "drawing_state", %{})
 
     {:ok, state} = RoomServer.get_state(room_id)
-    assert state.current_drawing == [event]
+    assert state.game.current_drawing == [event]
   end
 
   test "a late connection receives the complete drawing baseline", %{
@@ -265,7 +265,7 @@ defmodule FlamingoWeb.ScribbleLiveTest do
       })
 
     {:ok, state} = RoomServer.get_state(room_id)
-    :ok = select_word_as(room_id, drawer_token, List.first(state.word_choices))
+    :ok = select_word_as(room_id, drawer_token, List.first(state.game.word_choices))
 
     first_event = %{"event_type" => "clear"}
     second_event = %{"event_type" => "fill", "x" => 10, "y" => 20, "color" => "#000000"}
@@ -510,12 +510,12 @@ defmodule FlamingoWeb.ScribbleLiveTest do
     assert_push_event(view, "set_timer", %{end_time: ^word_choice_end_time})
 
     {:ok, state} = RoomServer.get_state(room_id)
-    word = List.first(state.word_choices)
+    word = List.first(state.game.word_choices)
 
     :ok =
       select_word_as(
         room_id,
-        if(state.drawer_id == p1, do: p1_token, else: p2_token),
+        if(state.game.drawer_id == p1, do: p1_token, else: p2_token),
         word
       )
 
@@ -528,12 +528,12 @@ defmodule FlamingoWeb.ScribbleLiveTest do
     assert_push_event(view, "set_timer", %{end_time: ^playing_end_time})
 
     {:ok, state} = RoomServer.get_state(room_id)
-    drawer_token = if(state.drawer_id == p1, do: p1_token, else: p2_token)
+    drawer_token = if(state.game.drawer_id == p1, do: p1_token, else: p2_token)
     draw_event_as(room_id, drawer_token, %{"event_type" => "clear"})
     _ = :sys.get_state(RoomServer.whereis(room_id))
     refute_push_event(view, "set_timer", %{})
 
-    guesser = if(p1 == state.drawer_id, do: p2, else: p1)
+    guesser = if(p1 == state.game.drawer_id, do: p2, else: p1)
     :correct = guess_as(room_id, if(guesser == p1, do: p1_token, else: p2_token), word)
 
     assert_push_event(view, "sync_round_audio", %{
@@ -546,12 +546,12 @@ defmodule FlamingoWeb.ScribbleLiveTest do
 
   defp play_turn(room_id, p1, p1_token, p2, p2_token, drawing_events \\ []) do
     {:ok, state} = RoomServer.get_state(room_id)
-    word = List.first(state.word_choices)
+    word = List.first(state.game.word_choices)
 
     :ok =
       select_word_as(
         room_id,
-        if(state.drawer_id == p1, do: p1_token, else: p2_token),
+        if(state.game.drawer_id == p1, do: p1_token, else: p2_token),
         word
       )
 
@@ -559,17 +559,17 @@ defmodule FlamingoWeb.ScribbleLiveTest do
 
     Enum.each(
       drawing_events,
-      &draw_event_as(room_id, if(state.drawer_id == p1, do: p1_token, else: p2_token), &1)
+      &draw_event_as(room_id, if(state.game.drawer_id == p1, do: p1_token, else: p2_token), &1)
     )
 
-    guesser = if(p1 == state.drawer_id, do: p2, else: p1)
+    guesser = if(p1 == state.game.drawer_id, do: p2, else: p1)
     :correct = guess_as(room_id, if(guesser == p1, do: p1_token, else: p2_token), word)
 
     pid = RoomServer.whereis(room_id)
     _ = :sys.get_state(pid)
 
     {:ok, state} = RoomServer.get_state(room_id)
-    send(pid, {:turn_reveal_timeout, state.phase_timer_ref})
+    send(pid, {:game_timeout, :phase, :turn_reveal, state.phase_timer.generation})
     _ = :sys.get_state(pid)
 
     word
