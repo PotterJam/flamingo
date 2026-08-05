@@ -67,6 +67,10 @@ A standalone `Room.Lobby` module is not currently justified. `RoomServer` owns t
 - `Room.Members` owns pure member and connection-count semantics.
 - `ScribbleLive` renders Scribble settings, participation, scores, controls, and results. Future modes receive their own mode-specific LiveViews.
 
+## Things for me to check
+
+- [ ] Review the `Feed` ownership in `Scribble` once migrated.
+
 ## Game-mode interface
 
 Commands, admission, connection changes, permanent removal, and timeouts have different invariants and should not be placed into one unstructured transition function.
