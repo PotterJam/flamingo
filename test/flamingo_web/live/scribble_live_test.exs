@@ -4,7 +4,7 @@ defmodule FlamingoWeb.ScribbleLiveTest do
   import Phoenix.LiveViewTest
 
   alias Flamingo.DrawingShare
-  alias Flamingo.RoomServer
+  alias Flamingo.Rooms
 
   defp join_connected(room_id, player_name) do
     parent = self()
@@ -24,8 +24,8 @@ defmodule FlamingoWeb.ScribbleLiveTest do
   end
 
   defp join_player(parent, room_id, player_name) do
-    {:ok, resume_token, _snapshot} = RoomServer.join(room_id, player_name)
-    {:ok, snapshot} = RoomServer.connect(room_id, resume_token)
+    {:ok, resume_token, _snapshot} = Rooms.join(room_id, player_name)
+    {:ok, snapshot} = Rooms.connect(room_id, resume_token)
     send(parent, {:player_connected, self(), {:ok, resume_token, snapshot}})
     player_loop(parent)
   end
@@ -55,21 +55,40 @@ defmodule FlamingoWeb.ScribbleLiveTest do
   end
 
   defp start_game_as(room_id, token, settings),
-    do: as_player(token, fn -> RoomServer.start_game(room_id, settings) end)
+    do: as_player(token, fn -> Rooms.start_game(room_id, settings) end)
 
   defp select_word_as(room_id, token, word),
-    do: as_player(token, fn -> RoomServer.select_word(room_id, word) end)
+    do: as_player(token, fn -> Rooms.select_word(room_id, word) end)
 
   defp guess_as(room_id, token, guess),
-    do: as_player(token, fn -> RoomServer.guess(room_id, guess) end)
+    do: as_player(token, fn -> Rooms.guess(room_id, guess) end)
 
   defp draw_event_as(room_id, token, event),
-    do: as_player(token, fn -> RoomServer.draw_event(room_id, event) end)
+    do: as_player(token, fn -> Rooms.draw_event(room_id, event) end)
 
   defp snapshot_as(room_id, token),
-    do: as_player(token, fn -> RoomServer.snapshot(room_id) end)
+    do: as_player(token, fn -> Rooms.snapshot(room_id) end)
 
-  defp leave_as(room_id, token), do: as_player(token, fn -> RoomServer.leave(room_id) end)
+  defp leave_as(room_id, token), do: as_player(token, fn -> Rooms.leave(room_id) end)
+
+  defp room_snapshot(room_id) do
+    snapshots =
+      for {{:player, token}, _pid} <- Process.get() do
+        {:ok, snapshot} = snapshot_as(room_id, token)
+        snapshot
+      end
+
+    {:ok, Enum.find(snapshots, List.first(snapshots), &(&1.word_choices != []))}
+  end
+
+  defp room_pid(room_id), do: :global.whereis_name({:flamingo_room, room_id})
+
+  defp finish_reveal(room_id) do
+    pid = room_pid(room_id)
+    state = :sys.get_state(pid)
+    send(pid, {:game_timeout, :phase, :turn_reveal, state.phase_timer.generation})
+    _ = :sys.get_state(pid)
+  end
 
   alias Flamingo.RoomSupervisor
 
@@ -120,9 +139,9 @@ defmodule FlamingoWeb.ScribbleLiveTest do
     })
     |> render_submit()
 
-    {:ok, state} = RoomServer.get_state(room_id)
-    assert state.game.custom_words == ["orbital llama", "velvet cactus", "disco teapot"]
-    assert state.game.include_default_words
+    {:ok, state} = room_snapshot(room_id)
+    assert state.custom_words == ["orbital llama", "velvet cactus", "disco teapot"]
+    assert state.include_default_words
   end
 
   test "custom word validation is shown before starting", %{conn: conn, room_id: room_id} do
@@ -190,8 +209,8 @@ defmodule FlamingoWeb.ScribbleLiveTest do
         turn_length: 30
       })
 
-    {:ok, state} = RoomServer.get_state(room_id)
-    word = List.first(state.game.word_choices)
+    {:ok, state} = room_snapshot(room_id)
+    word = List.first(state.word_choices)
     :ok = select_word_as(room_id, Map.fetch!(resume_tokens, drawer_id), word)
 
     assert render(drawer_view) =~ word
@@ -221,8 +240,8 @@ defmodule FlamingoWeb.ScribbleLiveTest do
         custom_words: ["secret", "other", "third"]
       })
 
-    {:ok, state} = RoomServer.get_state(room_id)
-    word = List.first(state.game.word_choices)
+    {:ok, state} = room_snapshot(room_id)
+    word = List.first(state.word_choices)
     :ok = select_word_as(room_id, drawer_token, word)
 
     assert_push_event(drawer_view, "drawing_state", %{events: []})
@@ -231,7 +250,7 @@ defmodule FlamingoWeb.ScribbleLiveTest do
 
     event = %{"event_type" => "clear"}
     render_hook(drawer_view, "draw_event", event)
-    _ = :sys.get_state(RoomServer.whereis(room_id))
+    _ = :sys.get_state(room_pid(room_id))
 
     refute_push_event(drawer_view, "draw_event", ^event)
     assert_push_event(duplicate_view, "draw_event", ^event)
@@ -248,8 +267,8 @@ defmodule FlamingoWeb.ScribbleLiveTest do
     refute_push_event(duplicate_view, "drawing_state", %{})
     refute_push_event(guesser_view, "drawing_state", %{})
 
-    {:ok, state} = RoomServer.get_state(room_id)
-    assert state.game.current_drawing == [event]
+    {:ok, state} = room_snapshot(room_id)
+    assert state.current_drawing == [event]
   end
 
   test "a late connection receives the complete drawing baseline", %{
@@ -264,14 +283,14 @@ defmodule FlamingoWeb.ScribbleLiveTest do
         custom_words: ["secret", "other", "third"]
       })
 
-    {:ok, state} = RoomServer.get_state(room_id)
-    :ok = select_word_as(room_id, drawer_token, List.first(state.game.word_choices))
+    {:ok, state} = room_snapshot(room_id)
+    :ok = select_word_as(room_id, drawer_token, List.first(state.word_choices))
 
     first_event = %{"event_type" => "clear"}
     second_event = %{"event_type" => "fill", "x" => 10, "y" => 20, "color" => "#000000"}
     draw_event_as(room_id, drawer_token, first_event)
     draw_event_as(room_id, drawer_token, second_event)
-    _ = :sys.get_state(RoomServer.whereis(room_id))
+    _ = :sys.get_state(room_pid(room_id))
 
     {:ok, guesser_view, _html} = live(conn, ~p"/game/#{room_id}?resume_token=#{guesser_token}")
 
@@ -290,17 +309,17 @@ defmodule FlamingoWeb.ScribbleLiveTest do
         custom_words: ["secret", "other", "third"]
       })
 
-    {:ok, state} = RoomServer.get_state(room_id)
-    word = List.first(state.game.word_choices)
+    {:ok, state} = room_snapshot(room_id)
+    word = List.first(state.word_choices)
     :ok = select_word_as(room_id, drawer_token, word)
 
     event = %{"event_type" => "clear"}
     draw_event_as(room_id, drawer_token, event)
-    _ = :sys.get_state(RoomServer.whereis(room_id))
+    _ = :sys.get_state(room_pid(room_id))
     assert :correct = guess_as(room_id, guesser_token, word)
 
     {:ok, spectator_token, %{participation: :spectator}} =
-      RoomServer.join(room_id, "Charlie")
+      Rooms.join(room_id, "Charlie")
 
     {:ok, spectator_view, _html} =
       live(conn, ~p"/game/#{room_id}?resume_token=#{spectator_token}")
@@ -320,17 +339,17 @@ defmodule FlamingoWeb.ScribbleLiveTest do
         custom_words: ["secret", "other", "third"]
       })
 
-    {:ok, state} = RoomServer.get_state(room_id)
-    word = List.first(state.game.word_choices)
-    assert state.game.drawer_id == drawer
+    {:ok, state} = room_snapshot(room_id)
+    word = List.first(state.word_choices)
+    assert state.drawer_id == drawer
     :ok = select_word_as(room_id, drawer_token, word)
 
     event = %{"event_type" => "clear"}
     draw_event_as(room_id, drawer_token, event)
-    _ = :sys.get_state(RoomServer.whereis(room_id))
+    _ = :sys.get_state(room_pid(room_id))
 
-    {:ok, spectator_token, %{viewer_id: spectator, participation: :spectator}} =
-      RoomServer.join(room_id, "Charlie")
+    {:ok, spectator_token, %{participation: :spectator}} =
+      Rooms.join(room_id, "Charlie")
 
     {:ok, spectator_view, _html} =
       live(conn, ~p"/game/#{room_id}?resume_token=#{spectator_token}")
@@ -342,21 +361,14 @@ defmodule FlamingoWeb.ScribbleLiveTest do
     refute has_element?(spectator_view, "#drawing-canvas [data-action='undo']")
 
     assert :correct = guess_as(room_id, guesser_token, word)
-    {:ok, state} = RoomServer.get_state(room_id)
+    finish_reveal(room_id)
 
-    send(
-      RoomServer.whereis(room_id),
-      {:game_timeout, :phase, :turn_reveal, state.phase_timer.generation}
-    )
-
-    _ = :sys.get_state(RoomServer.whereis(room_id))
-
-    {:ok, state} = RoomServer.get_state(room_id)
-    assert state.game.drawer_id == guesser
-    assert state.game.participants[spectator] == :active
+    {:ok, state} = room_snapshot(room_id)
+    assert state.drawer_id == guesser
+    assert Map.fetch!(state.players, state.viewer_id).connected
 
     :ok =
-      select_word_as(room_id, guesser_token, List.first(state.game.word_choices))
+      select_word_as(room_id, guesser_token, List.first(state.word_choices))
 
     refute has_element?(spectator_view, "#spectator-notice")
     assert has_element?(spectator_view, "#guess-form")
@@ -593,13 +605,13 @@ defmodule FlamingoWeb.ScribbleLiveTest do
     assert is_binary(word_choice_end_time)
     assert_push_event(view, "set_timer", %{end_time: ^word_choice_end_time})
 
-    {:ok, state} = RoomServer.get_state(room_id)
-    word = List.first(state.game.word_choices)
+    {:ok, state} = room_snapshot(room_id)
+    word = List.first(state.word_choices)
 
     :ok =
       select_word_as(
         room_id,
-        if(state.game.drawer_id == p1, do: p1_token, else: p2_token),
+        if(state.drawer_id == p1, do: p1_token, else: p2_token),
         word
       )
 
@@ -611,13 +623,13 @@ defmodule FlamingoWeb.ScribbleLiveTest do
     assert is_binary(playing_end_time)
     assert_push_event(view, "set_timer", %{end_time: ^playing_end_time})
 
-    {:ok, state} = RoomServer.get_state(room_id)
-    drawer_token = if(state.game.drawer_id == p1, do: p1_token, else: p2_token)
+    {:ok, state} = room_snapshot(room_id)
+    drawer_token = if(state.drawer_id == p1, do: p1_token, else: p2_token)
     draw_event_as(room_id, drawer_token, %{"event_type" => "clear"})
-    _ = :sys.get_state(RoomServer.whereis(room_id))
+    _ = :sys.get_state(room_pid(room_id))
     refute_push_event(view, "set_timer", %{})
 
-    guesser = if(p1 == state.game.drawer_id, do: p2, else: p1)
+    guesser = if(p1 == state.drawer_id, do: p2, else: p1)
     :correct = guess_as(room_id, if(guesser == p1, do: p1_token, else: p2_token), word)
 
     assert_push_event(view, "sync_round_audio", %{
@@ -629,32 +641,27 @@ defmodule FlamingoWeb.ScribbleLiveTest do
   end
 
   defp play_turn(room_id, p1, p1_token, p2, p2_token, drawing_events \\ []) do
-    {:ok, state} = RoomServer.get_state(room_id)
-    word = List.first(state.game.word_choices)
+    {:ok, state} = room_snapshot(room_id)
+    word = List.first(state.word_choices)
 
     :ok =
       select_word_as(
         room_id,
-        if(state.game.drawer_id == p1, do: p1_token, else: p2_token),
+        if(state.drawer_id == p1, do: p1_token, else: p2_token),
         word
       )
 
-    {:ok, state} = RoomServer.get_state(room_id)
+    {:ok, state} = room_snapshot(room_id)
 
     Enum.each(
       drawing_events,
-      &draw_event_as(room_id, if(state.game.drawer_id == p1, do: p1_token, else: p2_token), &1)
+      &draw_event_as(room_id, if(state.drawer_id == p1, do: p1_token, else: p2_token), &1)
     )
 
-    guesser = if(p1 == state.game.drawer_id, do: p2, else: p1)
+    guesser = if(p1 == state.drawer_id, do: p2, else: p1)
     :correct = guess_as(room_id, if(guesser == p1, do: p1_token, else: p2_token), word)
 
-    pid = RoomServer.whereis(room_id)
-    _ = :sys.get_state(pid)
-
-    {:ok, state} = RoomServer.get_state(room_id)
-    send(pid, {:game_timeout, :phase, :turn_reveal, state.phase_timer.generation})
-    _ = :sys.get_state(pid)
+    finish_reveal(room_id)
 
     word
   end

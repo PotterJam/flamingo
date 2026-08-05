@@ -35,6 +35,23 @@ defmodule Flamingo.GameModes.ScribbleTest do
     state
   end
 
+  defp complete_turn(state, game_context, drawing_events \\ []) do
+    word = List.first(state.word_choices)
+    drawer = state.drawer_id
+    guesser = if drawer == "a", do: "b", else: "a"
+    {:ok, %{state: state}} = Scribble.command(state, drawer, {:select_word, word}, game_context)
+
+    state =
+      Enum.reduce(drawing_events, state, fn event, state ->
+        {:ok, %{state: state}} = Scribble.command(state, drawer, {:draw, event}, game_context)
+        state
+      end)
+
+    {:ok, %{state: state}} = Scribble.command(state, guesser, {:guess, word}, game_context)
+    {:ok, result} = Scribble.timeout(state, :turn_reveal, game_context)
+    {result, word}
+  end
+
   test "start, drawing, guessing, and viewer projection are pure" do
     {:ok, %{state: state, timers: timers}} =
       Scribble.start(admitted(), %{round_count: 1}, context())
@@ -225,6 +242,25 @@ defmodule Flamingo.GameModes.ScribbleTest do
     assert match?([{:schedule_hint_timeout, :reveal_hint, _}], timers)
   end
 
+  test "hint schedule spreads reveals across the turn for every round length" do
+    for turn_length <- [15, 30, 45, 120] do
+      schedule = Scribble.hint_schedule("flamingo", turn_length)
+      turn_ms = turn_length * 1000
+
+      # 8 letters -> up to half revealed
+      assert length(schedule) == 4
+      assert schedule == Enum.sort(schedule)
+      assert Enum.all?(schedule, &(&1 >= trunc(turn_ms * 0.3)))
+      assert Enum.all?(schedule, &(&1 < turn_ms))
+    end
+  end
+
+  test "hint schedule reveals at most half the letters" do
+    assert length(Scribble.hint_schedule("cat", 45)) == 1
+    assert length(Scribble.hint_schedule("Pac-Man", 45)) == 3
+    assert Scribble.hint_schedule("a", 45) == []
+  end
+
   test "online is an unchanged continuing transition while offline reconciles completion" do
     three_player_roster = %{
       roster()
@@ -260,6 +296,86 @@ defmodule Flamingo.GameModes.ScribbleTest do
 
     assert offline.phase == :turn_reveal
     assert {:schedule_phase_timeout, :turn_reveal, 5_000} in timers
+  end
+
+  test "removing guessers reconciles completion without ending an active turn early" do
+    three_player_roster = %{
+      players: %{
+        "a" => %{id: "a", name: "Alice", connected: true},
+        "b" => %{id: "b", name: "Bob", connected: true},
+        "c" => %{id: "c", name: "Cara", connected: true}
+      },
+      player_order: ["a", "b", "c"],
+      host_id: "a"
+    }
+
+    {:ok, %{state: state}} =
+      Scribble.admit_member(admitted(), %{id: "c", name: "Cara"}, context())
+
+    playing = %{
+      state
+      | phase: :playing,
+        drawer_id: "a",
+        word: "cat",
+        correct_guesses: %{"b" => @now}
+    }
+
+    without_c = %{
+      three_player_roster
+      | players: Map.delete(three_player_roster.players, "c"),
+        player_order: ["a", "b"]
+    }
+
+    {:ok, %{state: completed}} =
+      Scribble.remove_member(playing, "c", %{name: "Cara"}, context(roster: without_c))
+
+    assert completed.phase == :turn_reveal
+
+    without_b = %{
+      three_player_roster
+      | players: Map.delete(three_player_roster.players, "b"),
+        player_order: ["a", "c"]
+    }
+
+    {:ok, %{state: continuing}} =
+      Scribble.remove_member(playing, "b", %{name: "Bob"}, context(roster: without_b))
+
+    assert continuing.phase == :playing
+  end
+
+  test "a removed next drawer is skipped after reveal" do
+    three_player_roster = %{
+      players: %{
+        "a" => %{id: "a", name: "Alice", connected: true},
+        "b" => %{id: "b", name: "Bob", connected: true},
+        "c" => %{id: "c", name: "Cara", connected: true}
+      },
+      player_order: ["a", "b", "c"],
+      host_id: "a"
+    }
+
+    {:ok, %{state: state}} =
+      Scribble.admit_member(admitted(), %{id: "c", name: "Cara"}, context())
+
+    reveal = %{
+      state
+      | phase: :turn_reveal,
+        drawer_id: "a",
+        drawn_this_round: MapSet.new(["a"])
+    }
+
+    without_b = %{
+      three_player_roster
+      | players: Map.delete(three_player_roster.players, "b"),
+        player_order: ["a", "c"]
+    }
+
+    {:ok, %{state: state}} =
+      Scribble.remove_member(reveal, "b", %{name: "Bob"}, context(roster: without_b))
+
+    {:ok, %{state: next}} = Scribble.timeout(state, :turn_reveal, context(roster: without_b))
+    assert next.phase == :word_choice
+    assert next.drawer_id == "c"
   end
 
   test "drawing undo removes the latest operation and empty undo is ignored" do
@@ -337,6 +453,66 @@ defmodule Flamingo.GameModes.ScribbleTest do
     assert finished.phase == :game_ended
     assert result.player_order == ["a", "b"]
     assert length(result.drawings) == 2
+  end
+
+  test "a deterministic two-round game resets round state and retains drawing history" do
+    words = ["cat", "dog", "bird", "fish"]
+
+    game_context = %{
+      context()
+      | word_choices: fn _count, used, _custom, _defaults ->
+          Enum.reject(words, &MapSet.member?(used, &1))
+        end
+    }
+
+    {:ok, %{state: state}} = Scribble.start(admitted(), %{round_count: 2}, game_context)
+
+    start_event = %{
+      "event_type" => "start",
+      "x" => 10,
+      "y" => 20,
+      "color" => "#000000",
+      "line_width" => 9
+    }
+
+    draw_event = %{
+      "event_type" => "draw",
+      "start_x" => 10,
+      "start_y" => 20,
+      "end_x" => 30,
+      "end_y" => 40,
+      "color" => "#000000",
+      "line_width" => 9
+    }
+
+    {%{state: state}, "cat"} = complete_turn(state, game_context, [start_event, draw_event])
+    refute "cat" in state.word_choices
+
+    {%{state: state}, "dog"} = complete_turn(state, game_context)
+    assert state.phase == :word_choice
+    assert state.current_round == 1
+    assert state.drawn_this_round == MapSet.new()
+    assert state.drawer_id == "a"
+    refute "cat" in state.word_choices
+    refute "dog" in state.word_choices
+
+    {%{state: state}, "bird"} = complete_turn(state, game_context)
+
+    {%{state: finished, status: {:finished, result}}, "fish"} =
+      complete_turn(state, game_context)
+
+    assert finished.phase == :game_ended
+    assert length(result.drawings) == 4
+
+    assert [
+             %{
+               drawer_id: "a",
+               word: "cat",
+               round_number: 1,
+               ops: [["p", "#000000", 9, [10, 20, 20, 20]]]
+             }
+             | _
+           ] = result.drawings
   end
 
   test "word exhaustion finishes without scheduling another phase" do

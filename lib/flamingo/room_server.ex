@@ -26,10 +26,7 @@ defmodule Flamingo.RoomServer do
   def select_word(id, word), do: GenServer.call(via(id), {:select_word, self(), word})
   def draw_event(id, event), do: GenServer.cast(via(id), {:draw_event, self(), event})
   def guess(id, text), do: GenServer.call(via(id), {:guess, self(), text})
-  def get_state(id), do: call(id, :get_state, {:error, :not_found})
   def snapshot(id), do: call(id, {:snapshot, self()}, {:error, :not_found})
-  def whereis(id), do: GenServer.whereis(via(id))
-  def hint_schedule(word, length), do: Scribble.hint_schedule(word, length)
 
   defp call(id, message, fallback) do
     GenServer.call(via(id), message)
@@ -73,8 +70,6 @@ defmodule Flamingo.RoomServer do
       _ -> {:reply, {:error, :not_found}, state}
     end
   end
-
-  def handle_call(:get_state, _, state), do: {:reply, {:ok, state}, state}
 
   def handle_call({:snapshot, pid}, _, state) do
     case player_id(state, pid) do
