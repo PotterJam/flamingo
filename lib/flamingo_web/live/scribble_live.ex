@@ -303,6 +303,8 @@ defmodule FlamingoWeb.ScribbleLive do
                 player_order={@player_order}
                 drawer_id={@drawer_id}
                 correct_guesses={@correct_guesses}
+                current_round={@current_round + 1}
+                round_count={@round_count}
               />
 
               <%= cond do %>

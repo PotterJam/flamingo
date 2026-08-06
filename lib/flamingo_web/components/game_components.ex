@@ -378,46 +378,56 @@ defmodule FlamingoWeb.GameComponents do
   attr :player_order, :list, required: true
   attr :drawer_id, :string, default: nil
   attr :correct_guesses, :any, default: MapSet.new()
+  attr :current_round, :integer, required: true
+  attr :round_count, :integer, required: true
 
   def player_list_panel(assigns) do
     ~H"""
-    <.box class="flex w-full flex-1 flex-col bg-white p-0">
-      <div id="player-list-scroll" class="min-h-0 flex-grow overflow-y-auto overflow-x-hidden">
-        <ul>
-          <%= for pid <- @player_order do %>
-            <% connected = Map.get(Map.get(@players, pid), :connected, true) %>
-            <li
-              id={"player-row-#{pid}"}
-              class={[
-                "flex min-w-0 items-center gap-2 px-3 py-2 transition-opacity",
-                pid == @drawer_id && "bg-pink-100 font-semibold",
-                pid != @drawer_id && MapSet.member?(@correct_guesses, pid) && "bg-green-100",
-                !connected && "opacity-40"
-              ]}
-            >
-              <.flamingo_avatar
-                avatar={Map.get(Map.get(@players, pid), :avatar, %{})}
-                class="h-10 w-10 shrink-0"
-                label={"#{Map.get(@players, pid).name}'s avatar"}
-              />
-              <span class="inline-flex h-5 w-5 shrink-0 items-center justify-center">
-                <%= cond do %>
-                  <% !connected -> %>
-                    <.icon name={:wifi_off} class="h-4 w-4 text-gray-500" />
-                  <% pid == @drawer_id -> %>
-                    <.icon name={:paintbrush} class="h-4 w-4" />
-                  <% MapSet.member?(@correct_guesses, pid) -> %>
-                    <.icon name={:check} class="h-4 w-4 text-green-600" />
-                  <% true -> %>
-                <% end %>
-              </span>
-              <span class="min-w-0 flex-1 truncate">{Map.get(@players, pid).name}</span>
-              <span class="shrink-0 text-sm font-semibold">{Map.get(@players, pid).score}</span>
-            </li>
-          <% end %>
-        </ul>
-      </div>
-    </.box>
+    <div class="relative flex w-full flex-1 flex-col">
+      <p
+        id="round-progress"
+        class="absolute -top-8 left-1 text-xl leading-none font-black text-black"
+      >
+        Round {@current_round} of {@round_count}
+      </p>
+      <.box class="flex min-h-0 flex-1 flex-col bg-white p-0">
+        <div id="player-list-scroll" class="min-h-0 flex-grow overflow-y-auto overflow-x-hidden">
+          <ul>
+            <%= for pid <- @player_order do %>
+              <% connected = Map.get(Map.get(@players, pid), :connected, true) %>
+              <li
+                id={"player-row-#{pid}"}
+                class={[
+                  "flex min-w-0 items-center gap-2 px-3 py-2 transition-opacity",
+                  pid == @drawer_id && "bg-pink-100 font-semibold",
+                  pid != @drawer_id && MapSet.member?(@correct_guesses, pid) && "bg-green-100",
+                  !connected && "opacity-40"
+                ]}
+              >
+                <.flamingo_avatar
+                  avatar={Map.get(Map.get(@players, pid), :avatar, %{})}
+                  class="h-10 w-10 shrink-0"
+                  label={"#{Map.get(@players, pid).name}'s avatar"}
+                />
+                <span class="inline-flex h-5 w-5 shrink-0 items-center justify-center">
+                  <%= cond do %>
+                    <% !connected -> %>
+                      <.icon name={:wifi_off} class="h-4 w-4 text-gray-500" />
+                    <% pid == @drawer_id -> %>
+                      <.icon name={:paintbrush} class="h-4 w-4" />
+                    <% MapSet.member?(@correct_guesses, pid) -> %>
+                      <.icon name={:check} class="h-4 w-4 text-green-600" />
+                    <% true -> %>
+                  <% end %>
+                </span>
+                <span class="min-w-0 flex-1 truncate">{Map.get(@players, pid).name}</span>
+                <span class="shrink-0 text-sm font-semibold">{Map.get(@players, pid).score}</span>
+              </li>
+            <% end %>
+          </ul>
+        </div>
+      </.box>
+    </div>
     """
   end
 
