@@ -1,7 +1,7 @@
 defmodule FlamingoWeb.HomeLive do
   use FlamingoWeb, :live_view
 
-  alias Flamingo.{Avatar, Games}
+  alias Flamingo.{Avatar, Rooms}
 
   def mount(params, _session, socket) do
     room_code = params["room"] || ""
@@ -308,9 +308,9 @@ defmodule FlamingoWeb.HomeLive do
     if name == "" do
       {:noreply, assign(socket, error: "Name cannot be empty")}
     else
-      with {:ok, room_id} <- Games.create_room(),
-           {:ok, player_id, _state} <- Games.join(room_id, name, socket.assigns.avatar) do
-        {:noreply, push_navigate(socket, to: ~p"/game/#{room_id}?player_id=#{player_id}")}
+      with {:ok, room_id} <- Rooms.create_room(),
+           {:ok, resume_token, _snapshot} <- Rooms.join(room_id, name, socket.assigns.avatar) do
+        {:noreply, push_navigate(socket, to: ~p"/game/#{room_id}?resume_token=#{resume_token}")}
       else
         _ -> {:noreply, assign(socket, error: "Failed to create room")}
       end
@@ -329,9 +329,9 @@ defmodule FlamingoWeb.HomeLive do
         {:noreply, assign(socket, error: "Room code cannot be empty")}
 
       true ->
-        case Games.join(code, name, socket.assigns.avatar) do
-          {:ok, player_id, _state} ->
-            {:noreply, push_navigate(socket, to: ~p"/game/#{code}?player_id=#{player_id}")}
+        case Rooms.join(code, name, socket.assigns.avatar) do
+          {:ok, resume_token, _snapshot} ->
+            {:noreply, push_navigate(socket, to: ~p"/game/#{code}?resume_token=#{resume_token}")}
 
           {:error, :not_found} ->
             {:noreply, assign(socket, error: "Room not found")}

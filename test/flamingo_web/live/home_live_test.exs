@@ -4,11 +4,11 @@ defmodule FlamingoWeb.HomeLiveTest do
   import Phoenix.Component
   import Phoenix.LiveViewTest
 
-  alias Flamingo.{GameServer, GameSupervisor}
+  alias Flamingo.{Rooms, RoomSupervisor}
 
   test "submitting the lobby form joins when a room name is present", %{conn: conn} do
     room_id = "home-#{System.unique_integer([:positive])}"
-    {:ok, ^room_id} = GameSupervisor.start_game(room_id)
+    {:ok, ^room_id} = RoomSupervisor.start_room(room_id)
 
     {:ok, view, _html} = live(conn, ~p"/")
 
@@ -33,12 +33,12 @@ defmodule FlamingoWeb.HomeLiveTest do
     uri = URI.parse(path)
 
     assert uri.path == ~p"/game/#{room_id}"
-    assert %{"player_id" => player_id} = URI.decode_query(uri.query)
-    assert player_id != ""
+    assert %{"resume_token" => resume_token} = URI.decode_query(uri.query)
+    assert resume_token != ""
 
-    assert {:ok, state} = GameServer.get_state(room_id)
+    assert {:ok, state} = Rooms.connect(room_id, resume_token)
 
-    assert state.players[player_id].avatar == %{
+    assert state.players[state.viewer_id].avatar == %{
              "head" => 1,
              "head_color" => 6,
              "body" => 4,
@@ -61,8 +61,8 @@ defmodule FlamingoWeb.HomeLiveTest do
     uri = URI.parse(path)
 
     assert uri.path =~ ~r(^/game/.+)
-    assert %{"player_id" => player_id} = URI.decode_query(uri.query)
-    assert player_id != ""
+    assert %{"resume_token" => resume_token} = URI.decode_query(uri.query)
+    assert resume_token != ""
   end
 
   test "home action buttons are submit buttons", %{conn: conn} do

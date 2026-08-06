@@ -1,7 +1,7 @@
-defmodule FlamingoWeb.GameLive do
+defmodule FlamingoWeb.ScribbleLive do
   use FlamingoWeb, :live_view
 
-  alias Flamingo.{DrawingShare, Feed, Games, Words}
+  alias Flamingo.{DrawingShare, Rooms, Words}
 
   @min_turn_length 15
   @max_turn_length 120
@@ -20,6 +20,7 @@ defmodule FlamingoWeb.GameLive do
      |> assign(
        room_id: room_id,
        player_id: nil,
+       participation: :active,
        phase: :lobby,
        players: %{},
        player_order: [],
@@ -51,6 +52,7 @@ defmodule FlamingoWeb.GameLive do
        current_round: 0,
        correct_guesses: MapSet.new(),
        revealed_indices: [],
+       feed_ids: MapSet.new(),
        guess_form: to_form(%{"guess" => ""}, as: :guess_form),
        score_gains: %{}
      )
@@ -58,108 +60,23 @@ defmodule FlamingoWeb.GameLive do
      |> stream(:feed, [])}
   end
 
-  def handle_params(%{"player_id" => player_id}, _uri, socket) do
+  def handle_params(%{"resume_token" => resume_token}, _uri, socket) do
     room_id = socket.assigns.room_id
 
     if connected?(socket) do
-      # Rejoin (rather than just reading state) so a reconnecting player is
-      # marked connected again before their disconnect grace period expires.
-      case Games.rejoin(room_id, player_id) do
-        {:ok, state} ->
-          Games.subscribe(room_id)
-
-          word_choices =
-            if state.phase == :word_choice and player_id == state.drawer_id,
-              do: state.word_choices,
-              else: nil
-
-          is_drawer = player_id == state.drawer_id
-          show_word = is_drawer or state.phase == :turn_reveal or state.phase == :game_ended
-
-          score_gains =
-            if state.phase == :turn_reveal, do: state.score_gains, else: %{}
-
-          final_players =
-            if state.phase == :game_ended, do: state.players, else: %{}
-
-          final_player_order =
-            if state.phase == :game_ended, do: state.player_order, else: []
-
-          final_drawings =
-            if state.phase == :game_ended, do: state.final_drawings, else: []
-
-          selected_player_id =
-            if state.phase == :game_ended,
-              do: winning_player_id(final_players, final_player_order),
-              else: nil
-
+      case Rooms.connect(room_id, resume_token) do
+        {:ok, snapshot} ->
           socket =
             socket
-            |> assign(
-              player_id: player_id,
-              phase: state.phase,
-              players: state.players,
-              player_order: state.player_order,
-              host_id: state.host_id,
-              drawer_id: state.drawer_id,
-              final_players: final_players,
-              final_player_order: final_player_order,
-              final_drawings: final_drawings,
-              selected_player_id: selected_player_id,
-              round_count: state.round_count,
-              turn_length: state.turn_length,
-              custom_words: Enum.join(state.custom_words, "\n"),
-              custom_word_count: length(state.custom_words),
-              custom_words_error: nil,
-              settings_form:
-                to_form(
-                  %{
-                    "round_count" => Integer.to_string(state.round_count),
-                    "turn_length" => Integer.to_string(state.turn_length),
-                    "custom_words" => Enum.join(state.custom_words, "\n"),
-                    "include_default_words" => state.include_default_words
-                  },
-                  as: :settings
-                ),
-              current_round: state.current_round,
-              word_choices: word_choices,
-              turn_end_time: state.turn_end_time,
-              word: state.word,
-              show_word: show_word,
-              correct_guesses: MapSet.new(Map.keys(state.correct_guesses)),
-              revealed_indices: state.revealed_indices,
-              score_gains: score_gains
-            )
-            |> stream(:feed, formatted_feed(state.feed, player_id), reset: true)
+            |> apply_snapshot(snapshot)
 
-          socket =
-            if state.phase in [:word_choice, :playing, :turn_reveal] and state.turn_end_time do
-              push_event(socket, "set_timer", %{
-                end_time: DateTime.to_iso8601(state.turn_end_time)
-              })
-            else
-              socket
-            end
-
-          socket =
-            if state.phase == :playing and state.current_drawing != [] do
-              push_event(socket, "drawing_state", %{events: state.current_drawing})
-            else
-              socket
-            end
-
-          socket =
-            socket
-            |> sync_round_audio()
-            |> push_event("play_sound", %{sound: "join"})
-
-          {:noreply, socket}
+          {:noreply, push_event(socket, "play_sound", %{sound: "join"})}
 
         {:error, :not_found} ->
           {:noreply, push_navigate(socket, to: ~p"/")}
       end
     else
-      {:noreply, assign(socket, player_id: player_id)}
+      {:noreply, socket}
     end
   end
 
@@ -168,12 +85,6 @@ defmodule FlamingoWeb.GameLive do
   end
 
   defp palette, do: @palette
-
-  defp formatted_feed(feed, player_id) do
-    feed.events
-    |> Enum.map(&Feed.format(&1, player_id))
-    |> Enum.reject(&is_nil/1)
-  end
 
   defp winning_player_id(players, player_order) do
     Enum.max_by(player_order, fn pid -> Map.get(players, pid).score end, fn -> nil end)
@@ -371,6 +282,13 @@ defmodule FlamingoWeb.GameLive do
         <.flamingo_background />
         <div class="flex h-screen w-full items-center justify-center p-6">
           <div class="flex h-[675px] w-full max-w-[1200px] flex-col gap-6">
+            <div
+              :if={@participation == :spectator}
+              id="spectator-notice"
+              class="mx-auto -mb-3 flex items-center gap-2 rounded-full border-2 border-pink-300 bg-white px-4 py-2 text-sm font-bold text-pink-700 shadow-sm"
+            >
+              <.icon name={:eye} class="h-4 w-4" /> Spectating this turn
+            </div>
             <.game_header
               word={@word}
               show_word={@show_word or MapSet.member?(@correct_guesses, @player_id)}
@@ -390,12 +308,12 @@ defmodule FlamingoWeb.GameLive do
               <%= cond do %>
                 <% @phase == :word_choice -> %>
                   <.box class="flex w-[704px] shrink-0 items-center justify-center bg-white">
-                    <%= if @player_id == @drawer_id do %>
+                    <%= if @player_id == @drawer_id and @participation == :active do %>
                       <div class="relative flex flex-col items-center gap-8">
                         <.starburst_timer
                           position_class="absolute -top-36 -right-16"
                           timer_id="word-choice-timer"
-                          timer_hook="FlamingoWeb.GameLive.Timer"
+                          timer_hook="FlamingoWeb.ScribbleLive.Timer"
                           end_time={@turn_end_time && DateTime.to_iso8601(@turn_end_time)}
                         />
                         <h2 class="text-3xl font-black">Choose a word</h2>
@@ -417,7 +335,7 @@ defmodule FlamingoWeb.GameLive do
                           size_class="h-28 w-28"
                           text_class="text-2xl"
                           timer_id="word-choice-timer"
-                          timer_hook="FlamingoWeb.GameLive.Timer"
+                          timer_hook="FlamingoWeb.ScribbleLive.Timer"
                           end_time={@turn_end_time && DateTime.to_iso8601(@turn_end_time)}
                         />
                         <p class="text-3xl font-black">
@@ -471,7 +389,7 @@ defmodule FlamingoWeb.GameLive do
                             size_class="h-20 w-20"
                             text_class="text-xl"
                             timer_id="turn-reveal-timer"
-                            timer_hook="FlamingoWeb.GameLive.Timer"
+                            timer_hook="FlamingoWeb.ScribbleLive.Timer"
                             end_time={@turn_end_time && DateTime.to_iso8601(@turn_end_time)}
                           />
                         </div>
@@ -482,7 +400,9 @@ defmodule FlamingoWeb.GameLive do
                       id="drawing-canvas"
                       phx-hook="DrawingCanvas"
                       phx-update="ignore"
-                      data-is-drawer={to_string(@player_id == @drawer_id)}
+                      data-is-drawer={
+                        to_string(@player_id == @drawer_id and @participation == :active)
+                      }
                       class="flex flex-col gap-2"
                     >
                       <.box class="bg-white p-0">
@@ -491,7 +411,7 @@ defmodule FlamingoWeb.GameLive do
                           height="500"
                           class={[
                             "bg-white",
-                            if(@player_id == @drawer_id,
+                            if(@player_id == @drawer_id and @participation == :active,
                               do: "cursor-crosshair",
                               else: "cursor-default"
                             )
@@ -500,14 +420,14 @@ defmodule FlamingoWeb.GameLive do
                         </canvas>
                       </.box>
 
-                      <%= if @phase == :playing and @player_id == @drawer_id do %>
+                      <%= if @phase == :playing and @player_id == @drawer_id and @participation == :active do %>
                         <.box class="bg-white p-0">
                           <.drawing_toolbar palette={palette()} />
                         </.box>
                       <% end %>
                     </div>
 
-                    <%= if @phase == :playing and @player_id != @drawer_id do %>
+                    <%= if @phase == :playing and @player_id != @drawer_id and @participation == :active do %>
                       <%= if MapSet.member?(@correct_guesses, @player_id) do %>
                         <.box class="bg-green-100 p-3 text-center font-bold text-green-800">
                           You guessed it!
@@ -853,7 +773,7 @@ defmodule FlamingoWeb.GameLive do
           include_default_words: params["include_default_words"] == "true"
         }
 
-        case Games.start_game(socket.assigns.room_id, socket.assigns.player_id, settings) do
+        case Rooms.start_game(socket.assigns.room_id, settings) do
           :ok ->
             {:noreply, socket}
 
@@ -875,17 +795,22 @@ defmodule FlamingoWeb.GameLive do
   end
 
   def handle_event("select_word", %{"word" => word}, socket) do
-    Games.select_word(socket.assigns.room_id, socket.assigns.player_id, word)
+    Rooms.select_word(socket.assigns.room_id, word)
     {:noreply, socket}
   end
 
   def handle_event("draw_event", event, socket) do
-    Games.draw_event(socket.assigns.room_id, socket.assigns.player_id, event)
+    Rooms.draw_event(socket.assigns.room_id, event)
     {:noreply, socket}
   end
 
   def handle_event("guess", %{"guess_form" => %{"guess" => text}}, socket) do
-    Games.guess(socket.assigns.room_id, socket.assigns.player_id, text)
+    socket =
+      case Rooms.guess(socket.assigns.room_id, text) do
+        :incorrect -> push_event(socket, "play_sound", %{sound: "wrongGuess"})
+        _result -> socket
+      end
+
     {:noreply, socket}
   end
 
@@ -919,194 +844,138 @@ defmodule FlamingoWeb.GameLive do
     |> Enum.count(&(String.trim(&1) != ""))
   end
 
-  def handle_info({:players_updated, players, player_order, host_id}, socket) do
-    old_count = map_size(socket.assigns.players)
-    new_count = map_size(players)
-
-    socket = assign(socket, players: players, player_order: player_order, host_id: host_id)
-
-    socket =
-      if socket.assigns.phase != :game_ended and new_count > old_count do
-        push_event(socket, "play_sound", %{sound: "join"})
-      else
-        socket
-      end
-
-    {:noreply, socket}
+  def handle_info({:room_snapshot, snapshot}, socket) do
+    {:noreply, apply_snapshot(socket, snapshot)}
   end
 
-  def handle_info(
-        {:word_choice_started, drawer_id, word_choices, turn_end_time, round_count, turn_length,
-         current_round},
-        socket
-      ) do
-    is_drawer = socket.assigns.player_id == drawer_id
+  def handle_info({:draw_event, event}, socket) do
+    {:noreply, push_event(socket, "draw_event", event)}
+  end
 
-    # The feed container isn't rendered in the lobby or game-end screens, so
-    # any stream items pushed while it was absent never reached the DOM.
-    # Re-seed the stream from the server when the game (re)starts.
-    socket =
-      if socket.assigns.phase in [:lobby, :game_ended] do
-        case Games.get_state(socket.assigns.room_id) do
-          {:ok, state} ->
-            stream(
-              socket,
-              :feed,
-              formatted_feed(state.feed, socket.assigns.player_id),
-              reset: true
-            )
+  defp apply_snapshot(socket, snapshot) do
+    initial? = is_nil(socket.assigns.player_id)
+    old_phase = socket.assigns.phase
+    old_turn_end_time = socket.assigns.turn_end_time
+    old_count = map_size(socket.assigns.players)
+    old_feed_ids = socket.assigns.feed_ids
+    feed_ids = MapSet.new(snapshot.feed, & &1.id)
+    feed_changed? = feed_ids != old_feed_ids
+    newly_correct = MapSet.difference(snapshot.correct_guesses, socket.assigns.correct_guesses)
+    game_ended? = snapshot.phase == :game_ended
+    custom_words = Enum.join(snapshot.custom_words, "\n")
+    sync_settings? = initial? or old_phase != :lobby or snapshot.phase != :lobby
 
-          {:error, :not_found} ->
-            socket
-        end
+    round_count = if sync_settings?, do: snapshot.round_count, else: socket.assigns.round_count
+    turn_length = if sync_settings?, do: snapshot.turn_length, else: socket.assigns.turn_length
+    custom_words = if sync_settings?, do: custom_words, else: socket.assigns.custom_words
+
+    custom_word_count =
+      if sync_settings?, do: length(snapshot.custom_words), else: socket.assigns.custom_word_count
+
+    custom_words_error =
+      if sync_settings?, do: nil, else: socket.assigns.custom_words_error
+
+    settings_form =
+      if sync_settings? do
+        to_form(
+          %{
+            "round_count" => Integer.to_string(snapshot.round_count),
+            "turn_length" => Integer.to_string(snapshot.turn_length),
+            "custom_words" => custom_words,
+            "include_default_words" => snapshot.include_default_words
+          },
+          as: :settings
+        )
       else
-        socket
+        socket.assigns.settings_form
       end
 
+    final_players = if game_ended?, do: snapshot.final_players, else: %{}
+    final_player_order = if game_ended?, do: snapshot.final_player_order, else: []
+    final_drawings = if game_ended?, do: snapshot.final_drawings, else: []
+
     socket =
-      assign(socket,
-        phase: :word_choice,
-        drawer_id: drawer_id,
-        turn_end_time: turn_end_time,
+      socket
+      |> assign(
+        player_id: snapshot.viewer_id,
+        participation: snapshot.participation,
+        phase: snapshot.phase,
+        players: snapshot.players,
+        player_order: snapshot.player_order,
+        host_id: snapshot.host_id,
+        drawer_id: snapshot.drawer_id,
+        final_players: final_players,
+        final_player_order: final_player_order,
+        final_drawings: final_drawings,
+        selected_player_id:
+          if(game_ended?,
+            do:
+              selected_or_winning_player_id(
+                final_players,
+                final_player_order,
+                socket.assigns.selected_player_id
+              ),
+            else: nil
+          ),
         round_count: round_count,
         turn_length: turn_length,
-        current_round: current_round,
-        final_players: %{},
-        final_player_order: [],
-        final_drawings: [],
-        selected_player_id: nil,
-        word_choices: if(is_drawer, do: word_choices, else: nil),
-        word: nil,
-        show_word: false,
-        correct_guesses: MapSet.new(),
-        score_gains: %{}
+        custom_words: custom_words,
+        custom_word_count: custom_word_count,
+        custom_words_error: custom_words_error,
+        settings_form: settings_form,
+        current_round: snapshot.current_round,
+        word_choices: snapshot.word_choices,
+        turn_end_time: snapshot.turn_end_time,
+        word: snapshot.word,
+        show_word: snapshot.word_visible?,
+        correct_guesses: snapshot.correct_guesses,
+        revealed_indices: snapshot.revealed_indices,
+        feed_ids: feed_ids,
+        score_gains: snapshot.score_gains
       )
 
     socket =
-      socket
-      |> push_event("set_timer", %{end_time: DateTime.to_iso8601(turn_end_time)})
-      |> sync_round_audio()
-
-    {:noreply, socket}
-  end
-
-  def handle_info({:turn_started, drawer_id, word, turn_end_time}, socket) do
-    is_drawer = socket.assigns.player_id == drawer_id
+      if feed_changed? do
+        socket
+        |> stream(:feed, snapshot.feed, reset: true)
+        |> push_event("scroll_feed", %{})
+      else
+        socket
+      end
 
     socket =
-      assign(socket,
-        phase: :playing,
-        drawer_id: drawer_id,
-        final_players: %{},
-        final_player_order: [],
-        final_drawings: [],
-        selected_player_id: nil,
-        word_choices: nil,
-        turn_end_time: turn_end_time,
-        word: word,
-        show_word: is_drawer,
-        correct_guesses: MapSet.new(),
-        revealed_indices: []
-      )
+      if snapshot.turn_end_time && snapshot.phase in [:word_choice, :playing, :turn_reveal] &&
+           (initial? || old_phase != snapshot.phase || old_turn_end_time != snapshot.turn_end_time) do
+        push_event(socket, "set_timer", %{end_time: DateTime.to_iso8601(snapshot.turn_end_time)})
+      else
+        socket
+      end
+
+    drawing_visible? = snapshot.phase in [:playing, :turn_reveal]
+    drawing_was_visible? = old_phase in [:playing, :turn_reveal]
 
     socket =
-      socket
-      |> push_event("set_timer", %{end_time: DateTime.to_iso8601(turn_end_time)})
-      |> sync_round_audio()
-
-    {:noreply, socket}
-  end
-
-  def handle_info({:turn_reveal, word, turn_end_time, score_gains, players}, socket) do
-    socket =
-      assign(socket,
-        phase: :turn_reveal,
-        final_players: %{},
-        final_player_order: [],
-        selected_player_id: nil,
-        word: word,
-        show_word: true,
-        turn_end_time: turn_end_time,
-        score_gains: score_gains,
-        players: players
-      )
+      if drawing_visible? && (initial? || not drawing_was_visible?) do
+        push_event(socket, "drawing_state", %{events: snapshot.current_drawing})
+      else
+        socket
+      end
 
     socket =
-      socket
-      |> push_event("set_timer", %{end_time: DateTime.to_iso8601(turn_end_time)})
-      |> sync_round_audio()
+      if initial? or old_phase != snapshot.phase, do: sync_round_audio(socket), else: socket
 
-    {:noreply, socket}
-  end
+    socket =
+      if not initial? and snapshot.phase != :game_ended and map_size(snapshot.players) > old_count,
+        do: push_event(socket, "play_sound", %{sound: "join"}),
+        else: socket
 
-  def handle_info({:game_ended, players, final_drawings}, socket) do
-    final_player_order = socket.assigns.player_order
+    case if(initial?, do: [], else: MapSet.to_list(newly_correct)) do
+      [player_id | _] ->
+        sound = if player_id == snapshot.viewer_id, do: "correctGuess", else: "otherPlayerCorrect"
+        push_event(socket, "play_sound", %{sound: sound})
 
-    {:noreply,
-     assign(socket,
-       phase: :game_ended,
-       final_players: players,
-       final_player_order: final_player_order,
-       final_drawings: final_drawings,
-       selected_player_id: winning_player_id(players, final_player_order),
-       turn_end_time: nil
-     )
-     |> sync_round_audio()}
-  end
-
-  def handle_info({:hint_revealed, revealed_indices}, socket) do
-    if socket.assigns.show_word or
-         MapSet.member?(socket.assigns.correct_guesses, socket.assigns.player_id) do
-      {:noreply, socket}
-    else
-      {:noreply, assign(socket, revealed_indices: revealed_indices)}
-    end
-  end
-
-  def handle_info({:correct_guess, player_id}, socket) do
-    sound =
-      if player_id == socket.assigns.player_id,
-        do: "correctGuess",
-        else: "otherPlayerCorrect"
-
-    {:noreply,
-     socket
-     |> assign(:correct_guesses, MapSet.put(socket.assigns.correct_guesses, player_id))
-     |> push_event("play_sound", %{sound: sound})}
-  end
-
-  def handle_info({:incorrect_guess, player_id, _text}, socket) do
-    if player_id == socket.assigns.player_id do
-      {:noreply, push_event(socket, "play_sound", %{sound: "wrongGuess"})}
-    else
-      {:noreply, socket}
-    end
-  end
-
-  def handle_info({:feed_event, entry}, socket) do
-    case Feed.format(entry, socket.assigns.player_id) do
-      nil ->
-        {:noreply, socket}
-
-      item ->
-        {:noreply,
-         socket
-         |> stream_insert(:feed, item)
-         |> push_event("scroll_feed", %{})}
-    end
-  end
-
-  def handle_info({:draw_event, from_player_id, event}, socket) do
-    if from_player_id == socket.assigns.player_id do
-      {:noreply, socket}
-    else
-      {:noreply, push_event(socket, "draw_event", event)}
-    end
-  end
-
-  def terminate(_reason, socket) do
-    if Map.has_key?(socket.assigns, :room_id) and Map.has_key?(socket.assigns, :player_id) do
-      Games.leave(socket.assigns.room_id, socket.assigns.player_id)
+      [] ->
+        socket
     end
   end
 end
