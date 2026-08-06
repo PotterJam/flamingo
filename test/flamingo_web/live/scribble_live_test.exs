@@ -185,6 +185,7 @@ defmodule FlamingoWeb.ScribbleLiveTest do
 
     :ok = start_game_as(room_id, p1_token, %{round_count: 1, turn_length: 30})
 
+    assert has_element?(view, "#round-progress.font-black", "Round 1 of 1")
     assert has_element?(view, "#player-list-scroll.overflow-y-auto.overflow-x-hidden")
 
     for player_id <- [p1, p2] do
