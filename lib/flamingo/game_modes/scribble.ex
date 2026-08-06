@@ -178,7 +178,7 @@ defmodule Flamingo.GameModes.Scribble do
         )
 
       close?(text, state.word) ->
-        {feed, _} = Feed.close_guess(state.feed, actor)
+        {feed, _} = Feed.close_guess(state.feed, actor, text)
         ok(%{state | feed: feed}, :close)
 
       true ->
@@ -406,7 +406,8 @@ defmodule Flamingo.GameModes.Scribble do
   defp game_ended(state, roster) do
     players =
       Map.new(roster.players, fn {id, p} ->
-        {id, p |> Map.take([:id, :name]) |> Map.put(:score, Map.fetch!(state.scores, id))}
+        {id,
+         p |> Map.take([:id, :name, :avatar]) |> Map.put(:score, Map.fetch!(state.scores, id))}
       end)
 
     {%{

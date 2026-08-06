@@ -142,7 +142,14 @@ defmodule FlamingoWeb.ScribbleLive do
               <h2 class="text-xl font-bold">Players</h2>
               <ul class="space-y-2">
                 <%= for pid <- @player_order do %>
-                  <li>{Map.get(@players, pid).name}</li>
+                  <li id={"lobby-player-row-#{pid}"} class="flex min-w-0 items-center gap-2">
+                    <.flamingo_avatar
+                      avatar={Map.get(Map.get(@players, pid), :avatar, %{})}
+                      class="h-12 w-12 shrink-0"
+                      label={"#{Map.get(@players, pid).name}'s avatar"}
+                    />
+                    <span class="min-w-0 flex-1 truncate">{Map.get(@players, pid).name}</span>
+                  </li>
                 <% end %>
               </ul>
             </div>
@@ -158,18 +165,16 @@ defmodule FlamingoWeb.ScribbleLive do
                 >
                   <div class="space-y-1">
                     <div class="flex w-full justify-between">
-                      <label class="text-sm">Rounds</label>
+                      <label for="round-count-slider" class="text-sm">Rounds</label>
                       <span class="text-sm">{@round_count}</span>
                     </div>
-                    <input
+                    <.input
+                      field={@settings_form[:round_count]}
                       type="range"
                       min="1"
                       max="5"
                       value={@round_count}
-                      name={@settings_form[:round_count].name}
-                      class="nb-slider w-full"
-                      style={"--slider-progress: #{(@round_count - 1) / 4 * 100}%"}
-                      phx-hook=".RoundSlider"
+                      class="w-full"
                       id="round-count-slider"
                     />
                   </div>
@@ -343,18 +348,32 @@ defmodule FlamingoWeb.ScribbleLive do
                   <div class="relative flex w-[704px] shrink-0 flex-col gap-4">
                     <%= if @phase == :turn_reveal do %>
                       <div class="absolute inset-x-0 top-0 z-10 m-[2px] flex h-[500px] items-center justify-center bg-white/75 text-center backdrop-blur-[2px]">
-                        <div class="flex w-80 flex-col items-center gap-4">
+                        <div class="flex w-full flex-col items-center gap-4 px-6">
                           <div>
                             <p class="text-xl font-black">The word was</p>
                             <p class="font-hero text-5xl leading-none font-black text-pink-400">
                               {@word}
                             </p>
                           </div>
-                          <ul class="w-64 space-y-1">
+                          <ul
+                            id="turn-reveal-score-gains"
+                            class="grid w-fit grid-flow-col grid-rows-5 auto-cols-[18rem] gap-x-4 gap-y-1"
+                          >
                             <%= for {pid, gain} <- Enum.sort_by(@score_gains, fn {_pid, g} -> -g end) do %>
-                              <li class="flex items-center justify-between px-3 py-1">
-                                <span class="truncate">{Map.get(@players, pid).name}</span>
+                              <li
+                                id={"score-gain-row-#{pid}"}
+                                class="flex min-w-0 items-center gap-2 px-3 py-1"
+                              >
+                                <.flamingo_avatar
+                                  avatar={Map.get(Map.get(@players, pid), :avatar, %{})}
+                                  class="h-8 w-8 shrink-0"
+                                  label={"#{Map.get(@players, pid).name}'s avatar"}
+                                />
+                                <span class="min-w-0 flex-1 truncate">
+                                  {Map.get(@players, pid).name}
+                                </span>
                                 <span class={[
+                                  "shrink-0",
                                   "font-semibold",
                                   if(gain > 0, do: "text-green-700"),
                                   if(gain < 0, do: "text-red-600"),
@@ -483,7 +502,7 @@ defmodule FlamingoWeb.ScribbleLive do
           ) %>
         <% selected_drawings = drawings_for_player(@final_drawings, selected_player_id) %>
         <div class="flex h-screen w-full items-center justify-center">
-          <div class="grid h-full w-fit grid-cols-[320px_320px] items-center justify-center gap-28">
+          <div class="grid h-full w-fit grid-cols-[500px_320px] items-center justify-center gap-28">
             <.card class="flex h-fit w-full flex-col items-center gap-6 bg-white p-8">
               <h2 class="text-3xl font-bold">Game finished</h2>
               <ul
@@ -493,11 +512,14 @@ defmodule FlamingoWeb.ScribbleLive do
                 data-selected-player-id={selected_player_id}
               >
                 <%= for {pid, idx} <- @final_player_order |> Enum.sort_by(fn pid -> -(Map.get(@final_players, pid).score) end) |> Enum.with_index() do %>
-                  <li class={[
-                    "flex items-center transition-colors",
-                    pid == selected_player_id && "bg-pink-100",
-                    pid != selected_player_id && "hover:bg-pink-50"
-                  ]}>
+                  <li
+                    id={"final-score-row-#{pid}"}
+                    class={[
+                      "flex min-w-0 items-center transition-colors",
+                      pid == selected_player_id && "bg-pink-100",
+                      pid != selected_player_id && "hover:bg-pink-50"
+                    ]}
+                  >
                     <button
                       type="button"
                       class={[
@@ -520,8 +542,15 @@ defmodule FlamingoWeb.ScribbleLive do
                             {idx + 1}
                         <% end %>
                       </span>
-                      <span class="font-bold">{Map.get(@final_players, pid).name}</span>
-                      <span class="ml-auto text-pink-500 font-semibold">
+                      <.flamingo_avatar
+                        avatar={Map.get(Map.get(@final_players, pid), :avatar, %{})}
+                        class="h-10 w-10 shrink-0"
+                        label={"#{Map.get(@final_players, pid).name}'s avatar"}
+                      />
+                      <span class="min-w-0 flex-1 truncate font-bold">
+                        {Map.get(@final_players, pid).name}
+                      </span>
+                      <span class="shrink-0 text-pink-500 font-semibold">
                         {Map.get(@final_players, pid).score}
                       </span>
                     </button>
@@ -651,21 +680,6 @@ defmodule FlamingoWeb.ScribbleLive do
                 input.focus()
               }, 0)
             })
-          }
-        }
-      </script>
-      <script :type={Phoenix.LiveView.ColocatedHook} name=".RoundSlider">
-        export default {
-          mounted() {
-            const update = () => {
-              const min = parseInt(this.el.min)
-              const max = parseInt(this.el.max)
-              const val = parseInt(this.el.value)
-              const progress = ((val - min) / (max - min)) * 100
-              this.el.style.setProperty("--slider-progress", progress + "%")
-            }
-            update()
-            this.el.addEventListener("input", () => update())
           }
         }
       </script>

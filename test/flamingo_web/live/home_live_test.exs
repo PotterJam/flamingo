@@ -4,7 +4,7 @@ defmodule FlamingoWeb.HomeLiveTest do
   import Phoenix.Component
   import Phoenix.LiveViewTest
 
-  alias Flamingo.RoomSupervisor
+  alias Flamingo.{Rooms, RoomSupervisor}
 
   test "submitting the lobby form joins when a room name is present", %{conn: conn} do
     room_id = "home-#{System.unique_integer([:positive])}"
@@ -13,7 +13,20 @@ defmodule FlamingoWeb.HomeLiveTest do
     {:ok, view, _html} = live(conn, ~p"/")
 
     view
-    |> form("#lobby-form", lobby: %{name: "Alice", room_code: room_id})
+    |> form("#lobby-form",
+      lobby: %{
+        name: "Alice",
+        room_code: room_id,
+        head: "1",
+        head_color: "6",
+        body: "4",
+        body_color: "3",
+        legs: "2",
+        legs_color: "7",
+        feet: "3",
+        feet_color: "5"
+      }
+    )
     |> render_submit()
 
     {path, _flash} = assert_redirect(view)
@@ -22,6 +35,19 @@ defmodule FlamingoWeb.HomeLiveTest do
     assert uri.path == ~p"/game/#{room_id}"
     assert %{"resume_token" => resume_token} = URI.decode_query(uri.query)
     assert resume_token != ""
+
+    assert {:ok, state} = Rooms.connect(room_id, resume_token)
+
+    assert state.players[state.viewer_id].avatar == %{
+             "head" => 1,
+             "head_color" => 6,
+             "body" => 4,
+             "body_color" => 3,
+             "legs" => 2,
+             "legs_color" => 7,
+             "feet" => 3,
+             "feet_color" => 5
+           }
   end
 
   test "submitting the lobby form creates when room name is empty", %{conn: conn} do
@@ -40,11 +66,44 @@ defmodule FlamingoWeb.HomeLiveTest do
   end
 
   test "home action buttons are submit buttons", %{conn: conn} do
-    {:ok, _view, html} = live(conn, ~p"/")
+    {:ok, view, _html} = live(conn, ~p"/")
 
-    assert html =~ ~s(id="join-button")
-    assert html =~ ~s(id="create-room-button")
-    assert html =~ ~s(type="submit")
+    assert has_element?(view, "#join-button[type='submit']")
+    assert has_element?(view, "#create-room-button[type='submit']")
+  end
+
+  test "home lets players mix animal parts and colors without showing every panel", %{conn: conn} do
+    {:ok, view, _html} = live(conn, ~p"/")
+
+    assert has_element?(view, "#avatar-customizer svg[aria-label='Your customized creature']")
+    assert has_element?(view, "#randomize-avatar-button[type='button']")
+
+    for part <- ~w(head body legs feet) do
+      assert has_element?(view, "#avatar-part-#{part}[role='tab']")
+      assert has_element?(view, "#avatar-#{part}-panel[role='tabpanel']")
+
+      for animal <- 0..4 do
+        assert has_element?(
+                 view,
+                 "input[type='radio'][name='lobby[#{part}]'][value='#{animal}']"
+               )
+      end
+
+      for color <- 0..7 do
+        assert has_element?(
+                 view,
+                 "input[type='radio'][name='lobby[#{part}_color]'][value='#{color}']"
+               )
+      end
+    end
+
+    assert has_element?(view, "#avatar-head-panel:not([hidden])")
+    assert has_element?(view, "#avatar-body-panel[hidden]")
+
+    view |> element("#avatar-part-body") |> render_click()
+
+    assert has_element?(view, "#avatar-head-panel[hidden]")
+    assert has_element?(view, "#avatar-body-panel:not([hidden])")
   end
 
   test "app layout sound control is a volume slider initialized to full volume" do
@@ -75,7 +134,7 @@ defmodule FlamingoWeb.HomeLiveTest do
 
     assert document
            |> LazyHTML.query(
-             "#sound-volume-slider.nb-slider[type='range'][min='0'][max='100'][step='1'][value='100']"
+             "#sound-volume-slider.range-input[type='range'][min='0'][max='100'][step='1'][value='100']"
            )
            |> Enum.any?()
 

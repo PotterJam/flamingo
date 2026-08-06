@@ -1,9 +1,11 @@
 defmodule Flamingo.Room.Members do
+  alias Flamingo.Avatar
+
   defstruct seats: %{}, resume_tokens: %{}, order: [], host_id: nil
 
   def new, do: %__MODULE__{}
 
-  def add(%__MODULE__{} = members, seat_id, resume_token, name) do
+  def add(%__MODULE__{} = members, seat_id, resume_token, name, avatar \\ Avatar.default()) do
     cond do
       Map.has_key?(members.seats, seat_id) ->
         {:error, :duplicate_seat}
@@ -12,7 +14,7 @@ defmodule Flamingo.Room.Members do
         {:error, :duplicate_resume_token}
 
       true ->
-        seat = %{id: seat_id, name: name, connection_count: 0}
+        seat = %{id: seat_id, name: name, avatar: Avatar.normalize(avatar), connection_count: 0}
 
         {:ok,
          %{
@@ -98,7 +100,13 @@ defmodule Flamingo.Room.Members do
     %{
       players:
         Map.new(members.seats, fn {seat_id, seat} ->
-          {seat_id, %{id: seat.id, name: seat.name, connected: seat.connection_count > 0}}
+          {seat_id,
+           %{
+             id: seat.id,
+             name: seat.name,
+             avatar: seat.avatar,
+             connected: seat.connection_count > 0
+           }}
         end),
       player_order: members.order,
       host_id: members.host_id

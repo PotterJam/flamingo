@@ -19,7 +19,7 @@ defmodule Flamingo.RoomServer do
   ]
 
   def start_link(id), do: GenServer.start_link(__MODULE__, id, name: via(id))
-  def join(id, name), do: call(id, {:join, name}, {:error, :not_found})
+  def join(id, name, avatar), do: call(id, {:join, name, avatar}, {:error, :not_found})
   def connect(id, token), do: call(id, {:connect, token}, {:error, :not_found})
   def leave(id), do: call(id, {:leave, self()}, :ok)
   def start_game(id, settings), do: GenServer.call(via(id), {:start_game, self(), settings})
@@ -39,11 +39,11 @@ defmodule Flamingo.RoomServer do
   def init(id), do: {:ok, %__MODULE__{room_id: id}}
 
   @impl true
-  def handle_call({:join, name}, _from, state) do
+  def handle_call({:join, name, avatar}, _from, state) do
     id = random(8)
     token = random(32)
 
-    with {:ok, members} <- Members.add(state.members, id, token, name),
+    with {:ok, members} <- Members.add(state.members, id, token, name, avatar),
          context = context(state, members),
          {:ok, result} <-
            Scribble.admit_member(state.game, %{id: id, name: name}, context) do

@@ -242,7 +242,7 @@ defmodule FlamingoWeb.CoreComponents do
   attr :type, :string,
     default: "text",
     values: ~w(checkbox color date datetime-local email file month number password
-               search select tel text textarea time url week hidden)
+               range search select tel text textarea time url week hidden)
 
   attr :field, Phoenix.HTML.FormField,
     doc: "a form field struct retrieved from the form, for example: @form[:email]"
@@ -351,6 +351,54 @@ defmodule FlamingoWeb.CoreComponents do
     """
   end
 
+  def input(%{type: "range"} = assigns) do
+    min = assigns.rest[:min] || 0
+    max = assigns.rest[:max] || 100
+    value = assigns.value || min
+
+    assigns =
+      assigns
+      |> assign(:value, value)
+      |> assign(:range_progress, range_progress(value, min, max))
+
+    ~H"""
+    <div class="fieldset">
+      <label :if={@label} for={@id} class="label mb-1">{@label}</label>
+      <input
+        type="range"
+        name={@name}
+        id={@id}
+        value={@value}
+        class={["range-input", @class || "w-full"]}
+        style={"--range-progress: #{@range_progress}%"}
+        phx-hook=".RangeInput"
+        {@rest}
+      />
+      <.error :for={msg <- @errors}>{msg}</.error>
+    </div>
+    <script :type={Phoenix.LiveView.ColocatedHook} name=".RangeInput">
+      export default {
+        mounted() {
+          this.updateProgress = () => {
+            const min = Number(this.el.min || 0)
+            const max = Number(this.el.max || 100)
+            const value = Number(this.el.value)
+            const progress = max === min ? 0 : ((value - min) / (max - min)) * 100
+            this.el.style.setProperty("--range-progress", `${Math.min(100, Math.max(0, progress))}%`)
+          }
+
+          this.updateProgress()
+          this.el.addEventListener("input", this.updateProgress)
+        },
+
+        updated() {
+          this.updateProgress()
+        }
+      }
+    </script>
+    """
+  end
+
   # All other inputs text, datetime-local, url, password, etc. are handled here...
   def input(assigns) do
     ~H"""
@@ -383,6 +431,30 @@ defmodule FlamingoWeb.CoreComponents do
       {render_slot(@inner_block)}
     </p>
     """
+  end
+
+  defp range_progress(value, min, max) do
+    value = numeric_value(value)
+    min = numeric_value(min)
+    max = numeric_value(max)
+
+    if max == min do
+      0
+    else
+      value
+      |> then(&((&1 - min) / (max - min) * 100))
+      |> Kernel.max(0)
+      |> Kernel.min(100)
+    end
+  end
+
+  defp numeric_value(value) when is_number(value), do: value
+
+  defp numeric_value(value) do
+    case Float.parse(to_string(value)) do
+      {number, _rest} -> number
+      :error -> 0
+    end
   end
 
   @doc """

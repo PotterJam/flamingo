@@ -12,6 +12,32 @@ defmodule Flamingo.Room.MembersTest do
     assert {:ok, "bob"} = Members.resolve(members, "bob-token")
   end
 
+  test "members own and normalize avatars" do
+    avatar = %{
+      "head" => "1",
+      "head_color" => "6",
+      "body" => "4",
+      "body_color" => "3",
+      "legs" => "99",
+      "legs_color" => "7",
+      "feet" => "3",
+      "feet_color" => "5"
+    }
+
+    {:ok, members} = Members.add(Members.new(), "alice", "alice-token", "Alice", avatar)
+
+    assert Members.fetch!(members, "alice").avatar == %{
+             "head" => 1,
+             "head_color" => 6,
+             "body" => 4,
+             "body_color" => 3,
+             "legs" => 0,
+             "legs_color" => 7,
+             "feet" => 3,
+             "feet_color" => 5
+           }
+  end
+
   test "removing a non-host preserves the host" do
     members = members_fixture()
 
@@ -78,6 +104,9 @@ defmodule Flamingo.Room.MembersTest do
              player_order: ["alice", "bob"],
              host_id: "alice"
            } = Members.snapshot(members)
+
+    assert Members.snapshot(members).players["alice"].avatar == Flamingo.Avatar.default()
+    assert Members.snapshot(members).players["bob"].avatar == Flamingo.Avatar.default()
   end
 
   defp members_fixture do

@@ -104,6 +104,11 @@ defmodule FlamingoWeb.ScribbleLiveTest do
 
     {:ok, view, _html} = live(conn, ~p"/game/#{room_id}?resume_token=#{p1_token}")
 
+    assert has_element?(
+             view,
+             "#round-count-slider.range-input[type='range'][min='1'][max='5'][value='3']"
+           )
+
     assert has_element?(view, "#round-length-input[min='15'][max='120']")
 
     view
@@ -161,6 +166,82 @@ defmodule FlamingoWeb.ScribbleLiveTest do
     })
 
     assert has_element?(view, "#custom-words-error")
+  end
+
+  test "player rows constrain long names without displacing status and scores", %{
+    conn: conn,
+    room_id: room_id
+  } do
+    {:ok, p1_token, %{viewer_id: p1}} =
+      join_connected(room_id, "TwentyCharacterNameOne")
+
+    {:ok, p2_token, %{viewer_id: p2}} =
+      join_connected(room_id, "TwentyCharacterNameTwo")
+
+    {:ok, view, _html} = live(conn, ~p"/game/#{room_id}?resume_token=#{p1_token}")
+
+    assert has_element?(view, "#lobby-player-row-#{p1}.min-w-0 .min-w-0.flex-1.truncate")
+    assert has_element?(view, "#lobby-player-row-#{p1} svg[aria-label*='avatar']")
+
+    :ok = start_game_as(room_id, p1_token, %{round_count: 1, turn_length: 30})
+
+    assert has_element?(view, "#player-list-scroll.overflow-y-auto.overflow-x-hidden")
+
+    for player_id <- [p1, p2] do
+      assert has_element?(
+               view,
+               "#player-row-#{player_id}.min-w-0 .min-w-0.flex-1.truncate"
+             )
+
+      assert has_element?(view, "#player-row-#{player_id} .shrink-0.text-sm")
+      assert has_element?(view, "#player-row-#{player_id} svg[aria-label*='avatar']")
+    end
+
+    play_turn(room_id, p1, p1_token, p2, p2_token)
+    play_turn(room_id, p1, p1_token, p2, p2_token)
+
+    for player_id <- [p1, p2] do
+      assert has_element?(
+               view,
+               "#final-score-row-#{player_id}.min-w-0 .min-w-0.flex-1.truncate"
+             )
+
+      assert has_element?(view, "#final-score-row-#{player_id} .shrink-0.text-pink-500")
+      assert has_element?(view, "#final-score-row-#{player_id} svg[aria-label*='avatar']")
+    end
+  end
+
+  test "turn reveal score gains flow into columns after five players", %{
+    conn: conn,
+    room_id: room_id
+  } do
+    players =
+      for index <- 1..6 do
+        {:ok, token, %{viewer_id: id}} = join_connected(room_id, "Player #{index}")
+        {id, token}
+      end
+
+    [{_host_id, host_token} | _] = players
+    tokens = Map.new(players)
+    {:ok, view, _html} = live(conn, ~p"/game/#{room_id}?resume_token=#{host_token}")
+
+    :ok = start_game_as(room_id, host_token, %{round_count: 1, turn_length: 30})
+    {:ok, state} = room_snapshot(room_id)
+    word = List.first(state.word_choices)
+    :ok = select_word_as(room_id, Map.fetch!(tokens, state.drawer_id), word)
+
+    for {id, token} <- players, id != state.drawer_id do
+      assert :correct = guess_as(room_id, token, word)
+    end
+
+    assert has_element?(
+             view,
+             "#turn-reveal-score-gains.grid.grid-flow-col.grid-rows-5"
+           )
+
+    for {id, _token} <- players do
+      assert has_element?(view, "#score-gain-row-#{id}")
+    end
   end
 
   test "a lobby update does not replace the host's unsaved settings", %{

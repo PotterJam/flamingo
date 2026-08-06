@@ -1,6 +1,8 @@
 defmodule FlamingoWeb.GameComponents do
   use Phoenix.Component
 
+  alias Flamingo.Avatar
+
   import FlamingoWeb.CoreComponents, only: [icon: 1, button_group: 1]
 
   attr :class, :any, default: nil
@@ -82,6 +84,213 @@ defmodule FlamingoWeb.GameComponents do
     <h1 class="font-retro-display text-2xl font-bold text-pink-400">
       flamin<span class="text-purple-500">go</span>
     </h1>
+    """
+  end
+
+  attr :avatar, :map, default: %{}
+  attr :class, :any, default: nil
+  attr :label, :string, default: "Creature avatar"
+
+  def flamingo_avatar(assigns) do
+    avatar = Avatar.normalize(assigns.avatar)
+
+    assigns =
+      assign(assigns,
+        avatar: avatar,
+        head_color: Avatar.color(avatar["head_color"]),
+        body_color: Avatar.color(avatar["body_color"]),
+        legs_color: Avatar.color(avatar["legs_color"]),
+        feet_color: Avatar.color(avatar["feet_color"])
+      )
+
+    ~H"""
+    <svg
+      viewBox="0 0 130 145"
+      role="img"
+      aria-label={@label}
+      class={@class}
+      xmlns="http://www.w3.org/2000/svg"
+    >
+      <%!-- Feet --%>
+      <g fill="none" stroke-linecap="round" stroke-linejoin="round">
+        <g :if={@avatar["feet"] == 0} stroke-width="5">
+          <path d="M45 134 L34 140 M45 134 L45 141 M83 134 L72 140 M83 134 L85 141" stroke="#111827" />
+          <path
+            d="M45 134 L34 140 M45 134 L45 141 M83 134 L72 140 M83 134 L85 141"
+            stroke={@feet_color}
+            stroke-width="2"
+          />
+        </g>
+        <g :if={@avatar["feet"] == 1} fill={@feet_color} stroke="#111827" stroke-width="3">
+          <path d="M45 131 Q28 132 29 141 Q39 145 51 139 Z" />
+          <path d="M83 131 Q66 132 67 141 Q77 145 89 139 Z" />
+        </g>
+        <g :if={@avatar["feet"] == 2} fill={@feet_color} stroke="#111827" stroke-width="3">
+          <ellipse cx="43" cy="137" rx="13" ry="6" /><ellipse cx="82" cy="137" rx="13" ry="6" />
+        </g>
+        <g :if={@avatar["feet"] == 3} fill={@feet_color} stroke="#111827" stroke-width="3">
+          <ellipse cx="42" cy="137" rx="15" ry="7" /><ellipse cx="83" cy="137" rx="15" ry="7" />
+          <path d="M35 135 L35 140 M42 134 L42 141 M76 135 L76 140 M83 134 L83 141" />
+        </g>
+        <g :if={@avatar["feet"] == 4} fill={@feet_color} stroke="#111827" stroke-width="3">
+          <path d="M45 132 Q26 132 24 141 Q39 146 53 139 Z" />
+          <path d="M83 132 Q64 132 62 141 Q77 146 91 139 Z" />
+        </g>
+      </g>
+
+      <%!-- Legs --%>
+      <g fill="none" stroke-linecap="round" stroke-linejoin="round">
+        <g :if={@avatar["legs"] == 0}>
+          <path d="M48 96 L45 134 M72 96 L83 134" stroke="#111827" stroke-width="8" />
+          <path d="M48 96 L45 134 M72 96 L83 134" stroke={@legs_color} stroke-width="4" />
+        </g>
+        <g :if={@avatar["legs"] == 1}>
+          <path d="M47 96 Q40 113 45 134 M73 96 Q80 113 83 134" stroke="#111827" stroke-width="12" />
+          <path d="M47 96 Q40 113 45 134 M73 96 Q80 113 83 134" stroke={@legs_color} stroke-width="7" />
+        </g>
+        <g :if={@avatar["legs"] == 2}>
+          <path d="M47 96 Q31 110 45 134 M73 96 Q96 109 83 134" stroke="#111827" stroke-width="14" />
+          <path d="M47 96 Q31 110 45 134 M73 96 Q96 109 83 134" stroke={@legs_color} stroke-width="9" />
+        </g>
+        <g :if={@avatar["legs"] == 3}>
+          <path d="M47 96 L40 116 L45 134 M73 96 L88 115 L83 134" stroke="#111827" stroke-width="12" />
+          <path
+            d="M47 96 L40 116 L45 134 M73 96 L88 115 L83 134"
+            stroke={@legs_color}
+            stroke-width="7"
+          />
+        </g>
+        <g :if={@avatar["legs"] == 4}>
+          <path d="M47 96 Q46 114 45 134 M73 96 Q82 113 83 134" stroke="#111827" stroke-width="10" />
+          <path d="M47 96 Q46 114 45 134 M73 96 Q82 113 83 134" stroke={@legs_color} stroke-width="5" />
+        </g>
+      </g>
+
+      <%!-- Body --%>
+      <g stroke="#111827" stroke-width="4" stroke-linejoin="round">
+        <g :if={@avatar["body"] == 0}>
+          <path
+            d="M28 72 L10 64 L18 82 Q22 103 62 105 Q94 105 103 82 Q86 65 55 65 Q37 65 28 72 Z"
+            fill={@body_color}
+          />
+          <path
+            d="M35 76 Q58 65 86 80 Q72 99 42 96 Z"
+            fill="white"
+            fill-opacity="0.3"
+            stroke-width="3"
+          />
+        </g>
+        <g :if={@avatar["body"] == 1}>
+          <path d="M28 68 Q16 79 23 101 Q34 110 92 102 Q101 83 91 68 Z" fill={@body_color} />
+          <path
+            d="M38 70 L34 91 M58 68 L57 94 M79 70 L84 91"
+            fill="none"
+            stroke-width="3"
+            opacity="0.45"
+          />
+        </g>
+        <g :if={@avatar["body"] == 2}>
+          <ellipse cx="60" cy="84" rx="45" ry="25" fill={@body_color} />
+          <circle cx="35" cy="79" r="5" fill="white" fill-opacity="0.35" stroke="none" />
+          <circle cx="77" cy="91" r="7" fill="white" fill-opacity="0.35" stroke="none" />
+        </g>
+        <g :if={@avatar["body"] == 3}>
+          <ellipse cx="60" cy="83" rx="34" ry="31" fill={@body_color} />
+          <ellipse cx="60" cy="88" rx="20" ry="19" fill="white" fill-opacity="0.3" stroke-width="3" />
+          <circle cx="94" cy="77" r="10" fill="white" />
+        </g>
+        <g :if={@avatar["body"] == 4}>
+          <path
+            d="M18 75 Q31 56 72 63 Q97 66 105 84 Q93 105 55 105 Q22 104 18 75 Z"
+            fill={@body_color}
+          />
+          <path
+            d="M50 72 Q75 66 91 83 Q75 99 52 96 Q42 84 50 72 Z"
+            fill="white"
+            fill-opacity="0.3"
+            stroke-width="3"
+          />
+        </g>
+      </g>
+
+      <%!-- Head --%>
+      <g stroke="#111827" stroke-width="4" stroke-linecap="round" stroke-linejoin="round">
+        <g :if={@avatar["head"] == 0}>
+          <path d="M51 68 Q36 51 54 38" fill="none" stroke="#111827" stroke-width="19" />
+          <path d="M51 68 Q36 51 54 38" fill="none" stroke={@head_color} stroke-width="13" />
+          <circle cx="61" cy="29" r="20" fill={@head_color} />
+          <circle cx="68" cy="25" r="5" fill="white" stroke-width="2" /><circle
+            cx="69"
+            cy="26"
+            r="2"
+            fill="#111827"
+            stroke="none"
+          />
+          <path d="M78 25 Q100 19 111 28 Q100 39 78 36 Z" fill="#fb923c" stroke-width="3" />
+          <path d="M99 23 Q109 24 111 28 Q104 37 98 38 Z" fill="#111827" stroke="none" />
+        </g>
+        <g :if={@avatar["head"] == 1}>
+          <path
+            d="M51 45 Q64 51 78 45 L80 73 Q65 79 48 72 Z"
+            fill={@head_color}
+            stroke="none"
+          />
+          <path
+            d="M39 20 L43 4 L56 15 Q67 10 78 15 L91 5 L89 29 Q88 49 65 54 Q40 50 39 20 Z"
+            fill={@head_color}
+          />
+          <circle cx="56" cy="29" r="3" fill="#111827" stroke="none" /><circle
+            cx="75"
+            cy="29"
+            r="3"
+            fill="#111827"
+            stroke="none"
+          />
+          <path d="M61 37 Q66 41 71 37 M66 38 L66 43" fill="none" stroke-width="2.5" />
+        </g>
+        <g :if={@avatar["head"] == 2}>
+          <ellipse cx="64" cy="34" rx="29" ry="21" fill={@head_color} />
+          <circle cx="48" cy="14" r="10" fill={@head_color} /><circle
+            cx="80"
+            cy="14"
+            r="10"
+            fill={@head_color}
+          />
+          <circle cx="48" cy="14" r="4" fill="#111827" stroke="none" /><circle
+            cx="80"
+            cy="14"
+            r="4"
+            fill="#111827"
+            stroke="none"
+          />
+          <path d="M52 39 Q64 48 76 39" fill="none" stroke-width="2.5" />
+        </g>
+        <g :if={@avatar["head"] == 3}>
+          <ellipse cx="52" cy="14" rx="9" ry="22" fill={@head_color} transform="rotate(-8 52 14)" />
+          <ellipse cx="77" cy="14" rx="9" ry="22" fill={@head_color} transform="rotate(8 77 14)" />
+          <ellipse cx="64" cy="36" rx="26" ry="22" fill={@head_color} />
+          <circle cx="55" cy="32" r="3" fill="#111827" stroke="none" /><circle
+            cx="73"
+            cy="32"
+            r="3"
+            fill="#111827"
+            stroke="none"
+          />
+          <path d="M60 40 Q64 44 68 40" fill="none" stroke-width="2.5" />
+        </g>
+        <g :if={@avatar["head"] == 4}>
+          <circle cx="61" cy="30" r="23" fill={@head_color} />
+          <circle cx="54" cy="26" r="3" fill="#111827" stroke="none" /><circle
+            cx="69"
+            cy="26"
+            r="3"
+            fill="#111827"
+            stroke="none"
+          />
+          <path d="M45 34 Q64 26 85 36 Q68 48 45 40 Z" fill="#fb923c" stroke-width="3" />
+        </g>
+      </g>
+    </svg>
     """
   end
 
@@ -173,16 +382,24 @@ defmodule FlamingoWeb.GameComponents do
   def player_list_panel(assigns) do
     ~H"""
     <.box class="flex w-full flex-1 flex-col bg-white p-0">
-      <div class="min-h-0 flex-grow overflow-y-auto">
+      <div id="player-list-scroll" class="min-h-0 flex-grow overflow-y-auto overflow-x-hidden">
         <ul>
           <%= for pid <- @player_order do %>
             <% connected = Map.get(Map.get(@players, pid), :connected, true) %>
-            <li class={[
-              "flex items-center gap-2 px-3 py-2 transition-opacity",
-              pid == @drawer_id && "bg-pink-100 font-semibold",
-              pid != @drawer_id && MapSet.member?(@correct_guesses, pid) && "bg-green-100",
-              !connected && "opacity-40"
-            ]}>
+            <li
+              id={"player-row-#{pid}"}
+              class={[
+                "flex min-w-0 items-center gap-2 px-3 py-2 transition-opacity",
+                pid == @drawer_id && "bg-pink-100 font-semibold",
+                pid != @drawer_id && MapSet.member?(@correct_guesses, pid) && "bg-green-100",
+                !connected && "opacity-40"
+              ]}
+            >
+              <.flamingo_avatar
+                avatar={Map.get(Map.get(@players, pid), :avatar, %{})}
+                class="h-10 w-10 shrink-0"
+                label={"#{Map.get(@players, pid).name}'s avatar"}
+              />
               <span class="inline-flex h-5 w-5 shrink-0 items-center justify-center">
                 <%= cond do %>
                   <% !connected -> %>
@@ -194,8 +411,8 @@ defmodule FlamingoWeb.GameComponents do
                   <% true -> %>
                 <% end %>
               </span>
-              <span class="truncate">{Map.get(@players, pid).name}</span>
-              <span class="ml-auto text-sm font-semibold">{Map.get(@players, pid).score}</span>
+              <span class="min-w-0 flex-1 truncate">{Map.get(@players, pid).name}</span>
+              <span class="shrink-0 text-sm font-semibold">{Map.get(@players, pid).score}</span>
             </li>
           <% end %>
         </ul>

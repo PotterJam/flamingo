@@ -741,7 +741,8 @@ defmodule Flamingo.RoomServerTest do
     {:ok, guesser_snapshot} = snapshot_as(room_id, resume_token_for(state, guesser))
     {:ok, other_snapshot} = snapshot_as(room_id, resume_token_for(state, other_player))
 
-    assert %{kind: :close, text: "You were close"} = List.last(guesser_snapshot.feed)
+    assert %{kind: :close, text: text} = List.last(guesser_snapshot.feed)
+    assert text == "#{close_guess} was close!"
     refute Enum.any?(other_snapshot.feed, &(&1.kind == :close))
   end
 

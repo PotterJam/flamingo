@@ -47,16 +47,16 @@ defmodule FlamingoWeb.Layouts do
           </span>
         </button>
         <label for="sound-volume-slider" class="sr-only">Sound volume</label>
-        <input
+        <.input
           type="range"
           id="sound-volume-slider"
+          name="sound-volume"
           min="0"
           max="100"
           step="1"
           value="100"
           aria-label="Sound volume"
-          class="nb-slider w-28"
-          style="--slider-progress: 100%"
+          class="w-28"
         />
       </div>
     </div>
@@ -96,7 +96,7 @@ defmodule FlamingoWeb.Layouts do
             const visibleIcon = iconForVolume(clampedVolume);
 
             slider.value = clampedVolume;
-            slider.style.setProperty("--slider-progress", `${clampedVolume}%`);
+            slider.style.setProperty("--range-progress", `${clampedVolume}%`);
             window.__soundVolume = clampedVolume;
             window.__soundMuted = clampedVolume === 0;
             localStorage.setItem("flamingo_sound_volume", clampedVolume);

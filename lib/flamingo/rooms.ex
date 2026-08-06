@@ -5,8 +5,8 @@ defmodule Flamingo.Rooms do
     RoomSupervisor.start_room()
   end
 
-  def join(room_id, player_name) do
-    RoomServer.join(room_id, player_name)
+  def join(room_id, player_name, avatar \\ Flamingo.Avatar.default()) do
+    RoomServer.join(room_id, player_name, avatar)
   end
 
   def connect(room_id, resume_token), do: RoomServer.connect(room_id, resume_token)
