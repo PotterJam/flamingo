@@ -134,7 +134,7 @@ defmodule FlamingoWeb.HomeLiveTest do
 
     assert document
            |> LazyHTML.query(
-             "#sound-volume-slider.range-input[type='range'][min='0'][max='100'][step='1'][value='100']"
+             "#sound-volume-slider.nb-slider[type='range'][min='0'][max='100'][step='1'][value='100'][style='--slider-progress: 100.0%']"
            )
            |> Enum.any?()
 

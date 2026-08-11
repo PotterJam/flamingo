@@ -96,7 +96,7 @@ defmodule FlamingoWeb.Layouts do
             const visibleIcon = iconForVolume(clampedVolume);
 
             slider.value = clampedVolume;
-            slider.style.setProperty("--range-progress", `${clampedVolume}%`);
+            slider.style.setProperty("--slider-progress", `${clampedVolume}%`);
             window.__soundVolume = clampedVolume;
             window.__soundMuted = clampedVolume === 0;
             localStorage.setItem("flamingo_sound_volume", clampedVolume);
