@@ -212,7 +212,15 @@ defmodule FlamingoWeb.TelephoneLiveTest do
     assert has_element?(host, "#telephone-reveal-phase")
     assert has_element?(host, "#revealed-entries article")
     refute has_element?(host, "#revealed-entries article:nth-child(2)")
-    assert has_element?(host, "#advance-telephone-reveal")
+    assert has_element?(host, "#reveal-chain-progress [data-state='current']")
+    assert has_element?(host, "#reveal-link-progress [data-state='current']")
+
+    assert has_element?(
+             host,
+             "#revealed-entries article[data-current='true'][data-entry-type='prompt']"
+           )
+
+    assert has_element?(host, "#advance-telephone-reveal", "Reveal the first drawing")
 
     {:ok, bob_view, _html} =
       live(build_conn(), ~p"/game/#{room_id}/telephone?resume_token=#{bob_token}")
@@ -263,6 +271,13 @@ defmodule FlamingoWeb.TelephoneLiveTest do
     :ok = command_as(room_id, bob_token, {:submit_guess, "cactus"})
     host |> element("#advance-telephone-reveal") |> render_click()
 
+    assert has_element?(
+             host,
+             "#revealed-entries article[data-current='true'][data-entry-type='drawing']"
+           )
+
+    assert has_element?(host, "#advance-telephone-reveal", "Reveal what they guessed")
+
     {:ok, snapshot} = snapshot_as(room_id, host_token)
     drawing = Enum.find(snapshot.reveal.chain.entries, &(&1.type == :drawing))
     vote_id = "vote-worst_drawing-#{drawing.id}"
@@ -276,6 +291,9 @@ defmodule FlamingoWeb.TelephoneLiveTest do
     end
 
     assert has_element?(host, "#telephone-awards")
+    assert has_element?(host, "#telephone-finale-banner")
+    assert has_element?(host, "#telephone-award-cards > div:nth-child(3)")
+    refute has_element?(host, "#telephone-award-cards > div:nth-child(4)")
     assert has_element?(host, "#telephone-play-again")
     assert has_element?(host, "#telephone-new-room")
   end

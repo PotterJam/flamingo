@@ -7,19 +7,25 @@ defmodule Flamingo.GameModes.TelephoneTest do
     names = %{"a" => "Alice", "b" => "Bob", "c" => "Cara", "s" => "Sam"}
 
     %{
-      players: Map.new(order, &{&1, %{id: &1, name: names[&1], connected: true}}),
+      players:
+        Map.new(
+          order,
+          &{&1, %{id: &1, name: Map.get(names, &1, String.upcase(&1)), connected: true}}
+        ),
       player_order: order,
       host_id: "a"
     }
   end
 
-  defp context(roster, actor \\ "a") do
+  defp context(roster, actor \\ "a", options \\ []) do
     %{
       roster: roster,
       actor_id: actor,
       now: ~U[2026-01-01 00:00:00Z],
-      word_choices: fn _count, _used, _custom, _defaults -> ["cat", "dog", "bird"] end,
-      select_candidate: &List.first/1
+      word_choices: fn count, _used, _custom, _defaults ->
+        Enum.take(["cat", "dog", "bird", "fish", "horse", "frog"], count)
+      end,
+      select_candidate: Keyword.get(options, :select_candidate, &List.first/1)
     }
   end
 
@@ -35,7 +41,7 @@ defmodule Flamingo.GameModes.TelephoneTest do
       end)
 
     {:ok, %{state: state}} =
-      Telephone.start(state, %{turn_length: 15}, context(game_roster))
+      Telephone.start(state, %{turn_length: 15}, context(game_roster, "a", opts))
 
     state =
       if Keyword.get(opts, :choose_prompts, true) do
@@ -122,6 +128,44 @@ defmodule Flamingo.GameModes.TelephoneTest do
     assert state.phase == :telephone_draw
     assert Telephone.view(state, "a", game_roster).assignment.chain_id == "telephone-chain-1"
     assert Telephone.view(state, "a", game_roster).assignment.source.value == "guess c"
+  end
+
+  test "randomizes the pass order while every player contributes to every chain once" do
+    pick_middle = &Enum.at(&1, div(length(&1), 2))
+    order = ["a", "b", "c", "d", "e"]
+    {state, game_roster} = started(order, select_candidate: pick_middle)
+
+    assert state.step_offsets == [0, 3, 2, 4, 1]
+
+    {assignments, reveal} =
+      Enum.map_reduce(1..length(order), state, fn _step, state ->
+        round_assignments =
+          Map.new(order, fn player_id ->
+            assignment = Telephone.view(state, player_id, game_roster).assignment
+            {player_id, assignment.chain_id}
+          end)
+
+        {round_assignments, submit_everyone(state, game_roster)}
+      end)
+
+    chain_ids = MapSet.new(Enum.map(reveal.chains, & &1.id))
+
+    assert Enum.all?(assignments, fn round ->
+             round |> Map.values() |> MapSet.new() == chain_ids
+           end)
+
+    assert Enum.all?(order, fn player_id ->
+             assignments
+             |> Enum.map(&Map.fetch!(&1, player_id))
+             |> MapSet.new() == chain_ids
+           end)
+
+    assert Enum.all?(reveal.chains, fn chain ->
+             chain.entries
+             |> tl()
+             |> Enum.map(& &1.player_id)
+             |> MapSet.new() == MapSet.new(order)
+           end)
   end
 
   test "timeout records placeholders and a disconnect completes the online set" do

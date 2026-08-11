@@ -18,6 +18,7 @@ defmodule Flamingo.GameModes.Telephone do
       prompt_choices: %{},
       selected_prompts: %{},
       chains: [],
+      step_offsets: [],
       current_step: nil,
       current_drawings: %{},
       guesses: %{},
@@ -83,6 +84,8 @@ defmodule Flamingo.GameModes.Telephone do
         |> Enum.with_index()
         |> Map.new(fn {id, index} -> {id, rotated_choices(prompts, index)} end)
 
+      step_offsets = [0 | random_order(Enum.to_list(1..(length(order) - 1)), context)]
+
       state = %{
         state
         | phase: :telephone_prompt,
@@ -96,6 +99,7 @@ defmodule Flamingo.GameModes.Telephone do
           prompt_choices: prompt_choices,
           selected_prompts: %{},
           chains: [],
+          step_offsets: step_offsets,
           current_step: nil,
           current_drawings: %{},
           guesses: %{},
@@ -332,7 +336,7 @@ defmodule Flamingo.GameModes.Telephone do
     chains =
       Enum.with_index(state.player_order)
       |> Enum.reduce(state.chains, fn {actor, actor_index}, chains ->
-        chain_index = Integer.mod(actor_index - state.current_step, n)
+        chain_index = chain_index(state, actor_index)
         value = contribution(state, actor)
         type = if state.phase == :telephone_draw, do: :drawing, else: :guess
 
@@ -393,11 +397,7 @@ defmodule Flamingo.GameModes.Telephone do
         nil
 
       index ->
-        chain =
-          Enum.at(
-            state.chains,
-            Integer.mod(index - state.current_step, length(state.player_order))
-          )
+        chain = Enum.at(state.chains, chain_index(state, index))
 
         source = List.last(chain.entries)
 
@@ -410,6 +410,11 @@ defmodule Flamingo.GameModes.Telephone do
   end
 
   defp assignment(_state, _actor), do: nil
+
+  defp chain_index(state, player_index) do
+    offset = Enum.at(state.step_offsets, state.current_step)
+    Integer.mod(player_index - offset, length(state.player_order))
+  end
 
   defp entry(chain, index, type, player, value),
     do: %{
@@ -443,6 +448,13 @@ defmodule Flamingo.GameModes.Telephone do
     Enum.take(after_index ++ before, 3)
   end
 
+  defp random_order([], _context), do: []
+
+  defp random_order(remaining, context) do
+    selected = context.select_candidate.(remaining)
+    [selected | random_order(List.delete(remaining, selected), context)]
+  end
+
   defp advance_reveal(state) do
     chain = Enum.at(state.chains, state.reveal_chain_index)
 
@@ -463,6 +475,8 @@ defmodule Flamingo.GameModes.Telephone do
     %{
       chain_index: state.reveal_chain_index,
       entry_index: state.reveal_entry_index,
+      chain_count: length(state.chains),
+      entry_count: length(chain.entries),
       chain: %{
         chain
         | entries:
