@@ -8,6 +8,7 @@ defmodule Flamingo.GameModes.Scribble do
 
   @min_turn_length 15
   @max_turn_length 120
+  @constraints [:hidden_canvas, :single_stroke, :straight_lines, :rotating_canvas, :mirror]
 
   def new do
     %{
@@ -18,6 +19,8 @@ defmodule Flamingo.GameModes.Scribble do
       turn_length: 30,
       custom_words: [],
       include_default_words: false,
+      game_variant: :classic,
+      constraint: nil,
       drawer_id: nil,
       current_round: 0,
       drawn_this_round: MapSet.new(),
@@ -89,6 +92,7 @@ defmodule Flamingo.GameModes.Scribble do
     turn_length = Map.get(settings, :turn_length, state.turn_length)
     custom_words = Map.get(settings, :custom_words, state.custom_words)
     defaults = Map.get(settings, :include_default_words, state.include_default_words)
+    game_variant = Map.get(settings, :game_variant, state.game_variant)
     roster = context.roster
 
     with true <- context.actor_id == roster.host_id || {:error, :not_host},
@@ -97,7 +101,9 @@ defmodule Flamingo.GameModes.Scribble do
          true <-
            turn_length in @min_turn_length..@max_turn_length || {:error, :invalid_turn_length},
          {:ok, custom_words} <- Words.validate_custom_words(custom_words),
-         true <- is_boolean(defaults) || {:error, :invalid_include_default_words} do
+         true <- is_boolean(defaults) || {:error, :invalid_include_default_words},
+         true <-
+           game_variant in [:classic, :constraint_roulette] || {:error, :invalid_game_variant} do
       participants = Map.new(state.participants, fn {id, _} -> {id, :active} end)
 
       state = %{
@@ -106,6 +112,8 @@ defmodule Flamingo.GameModes.Scribble do
           turn_length: turn_length,
           custom_words: custom_words,
           include_default_words: defaults,
+          game_variant: game_variant,
+          constraint: nil,
           participants: participants,
           drawer_id: Enum.find(roster.player_order, &active?(participants, &1)),
           current_round: 0,
@@ -130,8 +138,9 @@ defmodule Flamingo.GameModes.Scribble do
     end
   end
 
-  def command(state, actor, {:draw, event}, _context) do
-    if state.phase == :playing and actor == state.drawer_id and active?(state, actor) do
+  def command(state, actor, {:draw, event}, _context) when is_map(event) do
+    if state.phase == :playing and actor == state.drawer_id and active?(state, actor) and
+         constraint_event_allowed?(state, event) do
       drawing =
         if event["event_type"] == "undo",
           do: undo(state.current_drawing),
@@ -144,6 +153,8 @@ defmodule Flamingo.GameModes.Scribble do
       :ignored
     end
   end
+
+  def command(_state, _actor, {:draw, _event}, _context), do: :ignored
 
   def command(state, actor, {:guess, text}, context) when is_binary(text) do
     cond do
@@ -189,6 +200,7 @@ defmodule Flamingo.GameModes.Scribble do
   end
 
   def command(_state, _actor, {:guess, _}, _context), do: {:error, :invalid_guess}
+  def command(_state, _actor, _command, _context), do: {:error, :invalid_command}
 
   def timeout(state, :word_choice, context) when state.phase == :word_choice do
     case choose(context, state.word_choices) do
@@ -243,6 +255,8 @@ defmodule Flamingo.GameModes.Scribble do
       custom_words: if(viewer == roster.host_id, do: state.custom_words, else: []),
       include_default_words:
         if(viewer == roster.host_id, do: state.include_default_words, else: false),
+      game_variant: state.game_variant,
+      constraint: state.constraint,
       word_choices:
         if(state.phase == :word_choice and viewer == state.drawer_id,
           do: state.word_choices,
@@ -269,6 +283,13 @@ defmodule Flamingo.GameModes.Scribble do
   defp enter_word_choice(state, context) do
     choices =
       context.word_choices.(3, state.used_words, state.custom_words, state.include_default_words)
+
+    constraint =
+      if state.game_variant == :constraint_roulette,
+        do: choose(context, @constraints),
+        else: nil
+
+    state = %{state | constraint: constraint}
 
     if choices == [],
       do: game_ended(state, context.roster),
@@ -447,6 +468,33 @@ defmodule Flamingo.GameModes.Scribble do
   defp online?(roster, id), do: roster.players[id].connected
   defp online_count(roster), do: Enum.count(roster.players, fn {_, p} -> p.connected end)
   defp choose(context, candidates), do: context.select_candidate.(candidates)
+
+  defp constraint_event_allowed?(%{constraint: :single_stroke} = state, event) do
+    type = event["event_type"]
+    stroke_started? = Enum.any?(state.current_drawing, &(&1["event_type"] == "start"))
+    stroke_ended? = Enum.any?(state.current_drawing, &(&1["event_type"] == "end"))
+
+    case type do
+      "start" -> not stroke_started?
+      type when type in ["draw", "end"] -> stroke_started? and not stroke_ended?
+      _ -> false
+    end
+  end
+
+  defp constraint_event_allowed?(%{constraint: :straight_lines} = state, event) do
+    open_line? =
+      Enum.count(state.current_drawing, &(&1["event_type"] == "start")) >
+        Enum.count(state.current_drawing, &(&1["event_type"] == "end"))
+
+    case event["event_type"] do
+      "start" -> not open_line?
+      "end" -> open_line?
+      type when type in ["undo", "clear"] -> true
+      _ -> false
+    end
+  end
+
+  defp constraint_event_allowed?(_state, _event), do: true
 
   defp transition(_old, {new, timers}, reply), do: ok(new, reply, timers)
 

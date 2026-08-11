@@ -34,4 +34,8 @@ defmodule Flamingo.Rooms do
   def guess(room_id, text) do
     RoomServer.guess(room_id, text)
   end
+
+  def command(room_id, command) do
+    RoomServer.command(room_id, command)
+  end
 end

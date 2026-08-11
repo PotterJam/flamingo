@@ -61,6 +61,16 @@ defmodule Flamingo.Room.MembersTest do
     assert Members.host_id(members) == nil
   end
 
+  test "removing the host prefers an online successor" do
+    {:ok, members} = Members.add(Members.new(), "alice", "alice-token", "Alice")
+    {:ok, members} = Members.add(members, "bob", "bob-token", "Bob")
+    {:ok, members} = Members.add(members, "cara", "cara-token", "Cara")
+    {:ok, members, :became_online} = Members.connection_added(members, "cara")
+
+    assert {:ok, members, %{id: "alice"}} = Members.remove(members, "alice")
+    assert Members.host_id(members) == "cara"
+  end
+
   test "duplicate seat IDs and resume tokens are rejected" do
     {:ok, members} = Members.add(Members.new(), "alice", "alice-token", "Alice")
 

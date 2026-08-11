@@ -54,13 +54,17 @@ interface Point {
 }
 
 type ActiveTool = "pen" | "fill";
+type DrawingConstraint = "hidden_canvas" | "single_stroke" | "straight_lines" | "rotating_canvas" | "mirror" | "";
 
 interface DrawingCanvasHook {
   el: HTMLElement;
   canvas: HTMLCanvasElement;
   ctx: CanvasRenderingContext2D;
   isDrawer: boolean;
+  constraint: DrawingConstraint;
   isPainting: boolean;
+  strokeUsed: boolean;
+  straightStart: Point | null;
   lastCoord: Point | null;
   selectedColor: string;
   selectedThickness: number;
@@ -144,7 +148,7 @@ export const replayEvents = (
     }
   };
 
-  window.setTimeout(renderNext, delayMs);
+  renderNext();
 };
 
 const findUndoBoundaryIndex = (events: DrawEvent[]): number => {
@@ -156,9 +160,16 @@ const findUndoBoundaryIndex = (events: DrawEvent[]): number => {
   return -1;
 };
 
-const translatePointerToCanvas = (e: PointerEvent, canvas: HTMLCanvasElement): [number, number] => {
-  const rect = canvas.getBoundingClientRect();
-  return [e.clientX - rect.left, e.clientY - rect.top];
+const translatePointerToCanvas = (
+  e: PointerEvent,
+  canvas: HTMLCanvasElement,
+  constraint: DrawingConstraint
+): [number, number] => {
+  const scaleX = CANVAS_WIDTH / canvas.clientWidth;
+  const scaleY = CANVAS_HEIGHT / canvas.clientHeight;
+  const localX = Math.max(0, Math.min(CANVAS_WIDTH, e.offsetX * scaleX));
+  const localY = Math.max(0, Math.min(CANVAS_HEIGHT, e.offsetY * scaleY));
+  return [constraint === "mirror" ? CANVAS_WIDTH - localX : localX, localY];
 };
 
 const DrawingCanvas = {
@@ -166,7 +177,10 @@ const DrawingCanvas = {
     this.canvas = this.el.querySelector("canvas") as HTMLCanvasElement;
     this.ctx = this.canvas.getContext("2d", { willReadFrequently: true })!;
     this.isDrawer = this.el.dataset.isDrawer === "true";
+    this.constraint = (this.el.dataset.constraint ?? "") as DrawingConstraint;
     this.isPainting = false;
+    this.strokeUsed = false;
+    this.straightStart = null;
     this.lastCoord = null as Point | null;
     this.selectedColor = "#000000";
     this.selectedThickness = 9;
@@ -177,10 +191,22 @@ const DrawingCanvas = {
 
     canvasEffect(this.ctx, (imageData: ImageData) => clear(imageData));
 
+    if (this.isDrawer && this.constraint === "hidden_canvas") {
+      this.canvas.classList.add("roulette-hidden-canvas");
+    }
+
+    if (this.isDrawer && this.constraint === "rotating_canvas") {
+      this.canvas.classList.add("roulette-rotating-canvas");
+    }
+
     if (this.el.dataset.finalDrawingEvents) {
       const ops = JSON.parse(this.el.dataset.finalDrawingEvents) as CompactOp[];
       this.eventStack = opsToEvents(ops);
-      this.replayFinalDrawing();
+      renderEvents(this.ctx, this.eventStack);
+
+      if (this.el.dataset.finalDrawingReplay === "true") {
+        this.replayFinalDrawing();
+      }
     }
 
     if (this.isDrawer) {
@@ -243,7 +269,9 @@ const DrawingCanvas = {
 
     canvas.addEventListener("pointerdown", (e: PointerEvent) => {
       e.preventDefault();
-      const [x, y] = translatePointerToCanvas(e, canvas);
+      if (this.constraint === "single_stroke" && this.strokeUsed) return;
+
+      const [x, y] = translatePointerToCanvas(e, canvas, this.constraint);
 
       if (this.activeTool === "fill") {
         const fillEvent: DrawEvent = {
@@ -254,7 +282,10 @@ const DrawingCanvas = {
       }
 
       this.isPainting = true;
+      this.strokeUsed = true;
       this.lastCoord = { x, y };
+      this.straightStart = { x, y };
+      canvas.setPointerCapture(e.pointerId);
 
       const startEvent: DrawEvent = {
         event_type: "start", x, y,
@@ -267,7 +298,21 @@ const DrawingCanvas = {
       if (!this.isPainting) return;
       e.preventDefault();
 
-      const [x, y] = translatePointerToCanvas(e, canvas);
+      const [x, y] = translatePointerToCanvas(e, canvas, this.constraint);
+
+      if (this.constraint === "straight_lines") {
+        const start = this.straightStart ?? { x, y };
+        renderEvents(this.ctx, this.eventStack);
+        canvasEffect(this.ctx, (imageData: ImageData) => {
+          renderDrawEvent(imageData, {
+            event_type: "end",
+            start_x: start.x, start_y: start.y, end_x: x, end_y: y,
+            color: this.selectedColor, line_width: this.selectedThickness,
+          });
+        });
+        return;
+      }
+
       const prev: Point = this.lastCoord ?? { x, y };
       this.lastCoord = { x, y };
 
@@ -283,9 +328,12 @@ const DrawingCanvas = {
       if (!this.isPainting) return;
       this.isPainting = false;
 
-      const [x, y] = translatePointerToCanvas(e, canvas);
-      const prev: Point = this.lastCoord ?? { x, y };
+      const [x, y] = translatePointerToCanvas(e, canvas, this.constraint);
+      const prev: Point = this.constraint === "straight_lines"
+        ? (this.straightStart ?? { x, y })
+        : (this.lastCoord ?? { x, y });
       this.lastCoord = null;
+      this.straightStart = null;
 
       const endEvent: DrawEvent = {
         event_type: "end",
@@ -296,20 +344,7 @@ const DrawingCanvas = {
     };
 
     canvas.addEventListener("pointerup", handlePointerUp);
-    canvas.addEventListener("pointerleave", handlePointerUp);
-
-    canvas.addEventListener("pointerenter", (e: PointerEvent) => {
-      if (e.buttons === 1 && this.activeTool === "pen") {
-        const [x, y] = translatePointerToCanvas(e, canvas);
-        this.isPainting = true;
-        this.lastCoord = { x, y };
-        const startEvent: DrawEvent = {
-          event_type: "start", x, y,
-          color: this.selectedColor, line_width: this.selectedThickness,
-        };
-        pushDrawEvent(startEvent);
-      }
-    });
+    canvas.addEventListener("pointercancel", handlePointerUp);
   },
 
   performUndo(this: DrawingCanvasHook) {
@@ -373,6 +408,21 @@ const DrawingCanvas = {
     this.el.querySelector(`[data-color="#000000"]`)?.classList.add("ring-2", "ring-offset-1");
     this.el.querySelector(`[data-size="9"]`)?.classList.add("bg-pink-300");
     this.el.querySelector(`[data-tool="pen"]`)?.classList.add("bg-pink-300");
+
+    if (this.constraint === "single_stroke") {
+      this.el.querySelectorAll("[data-tool='fill'], [data-action]").forEach((button) => {
+        (button as HTMLButtonElement).disabled = true;
+        button.classList.add("cursor-not-allowed", "opacity-30");
+      });
+    }
+
+    if (this.constraint === "straight_lines") {
+      const fillButton = this.el.querySelector("[data-tool='fill']") as HTMLButtonElement | null;
+      if (fillButton) {
+        fillButton.disabled = true;
+        fillButton.classList.add("cursor-not-allowed", "opacity-30");
+      }
+    }
   },
 
   destroyed(this: DrawingCanvasHook) {
