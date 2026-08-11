@@ -141,6 +141,51 @@ defmodule Flamingo.GameModes.TelephoneTest do
     assert Enum.all?(reveal.chains, &(length(&1.entries) == 3))
   end
 
+  test "timeout and disconnect preserve drawings that already reached the server" do
+    {state, game_roster} = started(["a", "b"])
+
+    event = %{
+      "event_type" => "start",
+      "x" => 10,
+      "y" => 20,
+      "color" => "#000000",
+      "line_width" => 9
+    }
+
+    {:ok, %{state: state}} =
+      Telephone.command(state, "b", {:draw, event}, context(game_roster, "b"))
+
+    {:ok, %{state: state}} =
+      Telephone.command(state, "a", :submit_drawing, context(game_roster, "a"))
+
+    offline_roster = put_in(game_roster.players["b"].connected, false)
+
+    {:ok, %{state: disconnected}} =
+      Telephone.connection_changed(state, "b", :offline, context(offline_roster))
+
+    assert disconnected.phase == :telephone_guess
+
+    assert Telephone.view(disconnected, "a", offline_roster).assignment.source.value == [
+             ["p", "#000000", 9, [10, 20]]
+           ]
+
+    {state, game_roster} = started(["a", "b"])
+
+    {:ok, %{state: state}} =
+      Telephone.command(state, "b", {:draw, event}, context(game_roster, "b"))
+
+    {:ok, %{state: timed_out}} =
+      Telephone.timeout(state, :telephone_step, context(game_roster))
+
+    assert timed_out.phase == :telephone_guess
+
+    assert Telephone.view(timed_out, "a", game_roster).assignment.source.value == [
+             ["p", "#000000", 9, [10, 20]]
+           ]
+
+    assert Enum.at(timed_out.chains, 0).entries |> List.last() |> Map.fetch!(:value) == nil
+  end
+
   test "a transient fully-offline room does not skip a step" do
     {state, game_roster} = started(["a", "b"])
 
