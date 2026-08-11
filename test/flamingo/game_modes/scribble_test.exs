@@ -102,6 +102,14 @@ defmodule Flamingo.GameModes.ScribbleTest do
     assert Scribble.view(roulette, "b", roster()).constraint == :mirror
     assert Scribble.view(roulette, "b", roster()).game_variant == :constraint_roulette
 
+    {:ok, %{state: roulette}} =
+      Scribble.command(roulette, "a", {:select_word, "cat"}, context())
+
+    {:ok, %{state: roulette}} =
+      Scribble.command(roulette, "b", {:guess, "cat"}, context())
+
+    assert [%{constraint: :mirror}] = roulette.final_drawings
+
     {:ok, %{state: classic}} = Scribble.start(admitted(), %{round_count: 1}, context())
     assert classic.constraint == nil
   end
