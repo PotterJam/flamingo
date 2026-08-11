@@ -219,6 +219,10 @@
   opacity: 0;
 }
 
+#drawing-canvas[data-is-drawer="true"][data-phase="turn_reveal"] .roulette-hidden-canvas {
+  opacity: 1;
+}
+
 @keyframes roulette-canvas-rotate {
   0%, 100% { transform: rotate(-5deg) scale(0.96); }
   50% { transform: rotate(5deg) scale(0.96); }

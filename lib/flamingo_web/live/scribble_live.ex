@@ -413,8 +413,24 @@ defmodule FlamingoWeb.ScribbleLive do
                       </span>
                     </div>
                     <%= if @phase == :turn_reveal do %>
-                      <div class="absolute inset-x-0 top-0 z-10 m-[2px] flex h-[500px] items-center justify-center bg-white/75 text-center backdrop-blur-[2px]">
-                        <div class="flex w-full flex-col items-center gap-4 px-6">
+                      <div
+                        id="turn-reveal-overlay"
+                        class={[
+                          "absolute inset-x-0 top-0 z-10 m-[2px] flex h-[500px] items-center justify-center text-center",
+                          if(
+                            @constraint == :hidden_canvas and @player_id == @drawer_id and
+                              @participation == :active,
+                            do: "bg-white/20",
+                            else: "bg-white/75 backdrop-blur-[2px]"
+                          )
+                        ]}
+                      >
+                        <div class={[
+                          "flex w-full flex-col items-center gap-4 px-6",
+                          (@constraint == :hidden_canvas and @player_id == @drawer_id and
+                             @participation == :active) &&
+                            "mx-8 w-auto border-2 border-border bg-white/90 py-4 shadow-shadow"
+                        ]}>
                           <div>
                             <p class="text-xl font-black">The word was</p>
                             <p class="font-hero text-5xl leading-none font-black text-pink-400">
@@ -470,6 +486,7 @@ defmodule FlamingoWeb.ScribbleLive do
                         to_string(@player_id == @drawer_id and @participation == :active)
                       }
                       data-constraint={@constraint}
+                      data-phase={@phase}
                       class="flex flex-col gap-2"
                     >
                       <.box class="bg-white p-0">
