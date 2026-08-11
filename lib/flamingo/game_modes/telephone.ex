@@ -377,8 +377,10 @@ defmodule Flamingo.GameModes.Telephone do
   end
 
   defp contribution(%{phase: :telephone_draw} = state, actor) do
-    if MapSet.member?(state.submitted, actor),
-      do: DrawingShare.compact_ops(Map.get(state.current_drawings, actor, [])),
+    events = Map.get(state.current_drawings, actor, [])
+
+    if MapSet.member?(state.submitted, actor) or events != [],
+      do: DrawingShare.compact_ops(events),
       else: nil
   end
 
