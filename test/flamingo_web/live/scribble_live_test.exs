@@ -149,6 +149,43 @@ defmodule FlamingoWeb.ScribbleLiveTest do
     assert state.include_default_words
   end
 
+  test "host can start constraint roulette", %{conn: conn, room_id: room_id} do
+    {:ok, p1_token, _p1_snapshot} = join_connected(room_id, "Alice")
+    {:ok, _p2_token, _p2_snapshot} = join_connected(room_id, "Bob")
+
+    {:ok, view, _html} = live(conn, ~p"/game/#{room_id}?resume_token=#{p1_token}")
+
+    assert has_element?(view, "input[name='settings[game_mode]'][value='classic']:checked")
+
+    view
+    |> form("#settings-form", %{
+      "settings" => %{
+        "round_count" => "1",
+        "turn_length" => "30",
+        "game_mode" => "constraint_roulette"
+      }
+    })
+    |> render_submit()
+
+    {:ok, state} = room_snapshot(room_id)
+    assert state.game_variant == :constraint_roulette
+
+    assert state.constraint in [
+             :hidden_canvas,
+             :single_stroke,
+             :straight_lines,
+             :rotating_canvas,
+             :mirror
+           ]
+
+    view
+    |> element("button[phx-click='select_word']", List.first(state.word_choices))
+    |> render_click()
+
+    assert has_element?(view, "#constraint-banner")
+    assert has_element?(view, "#drawing-canvas[data-constraint]")
+  end
+
   test "custom word validation is shown before starting", %{conn: conn, room_id: room_id} do
     {:ok, p1_token, _p1_snapshot} = join_connected(room_id, "Alice")
     {:ok, _p2_token, _p2_snapshot} = join_connected(room_id, "Bob")

@@ -24,7 +24,7 @@ defmodule Flamingo.GameModes.ScribbleTest do
       word_choices: fn _count, used, _custom, _defaults ->
         Enum.reject(["cat", "dog", "bird"], &MapSet.member?(used, &1))
       end,
-      select_candidate: &List.first/1
+      select_candidate: Keyword.get(options, :select_candidate, &List.first/1)
     }
   end
 
@@ -86,6 +86,63 @@ defmodule Flamingo.GameModes.ScribbleTest do
     assert restarted.scores == %{"a" => 10, "b" => 20}
     assert Enum.take(restarted.feed.events, length(feed.events)) == feed.events
     assert restarted.used_words == MapSet.new()
+  end
+
+  test "constraint roulette selects and projects a constraint for each turn" do
+    pick_last = fn candidates -> List.last(candidates) end
+
+    {:ok, %{state: roulette}} =
+      Scribble.start(
+        admitted(),
+        %{round_count: 1, game_variant: :constraint_roulette},
+        context(select_candidate: pick_last)
+      )
+
+    assert roulette.constraint == :mirror
+    assert Scribble.view(roulette, "b", roster()).constraint == :mirror
+    assert Scribble.view(roulette, "b", roster()).game_variant == :constraint_roulette
+
+    {:ok, %{state: classic}} = Scribble.start(admitted(), %{round_count: 1}, context())
+    assert classic.constraint == nil
+  end
+
+  test "single-stroke and straight-line constraints are enforced by the game" do
+    drawing_state = %{
+      admitted()
+      | phase: :playing,
+        drawer_id: "a",
+        word: "cat",
+        constraint: :single_stroke
+    }
+
+    start_event = %{"event_type" => "start", "x" => 1, "y" => 1}
+    end_event = %{"event_type" => "end", "end_x" => 2, "end_y" => 2}
+
+    {:ok, %{state: drawing_state}} =
+      Scribble.command(drawing_state, "a", {:draw, start_event}, context())
+
+    {:ok, %{state: drawing_state}} =
+      Scribble.command(drawing_state, "a", {:draw, end_event}, context())
+
+    assert :ignored == Scribble.command(drawing_state, "a", {:draw, start_event}, context())
+
+    assert :ignored ==
+             Scribble.command(drawing_state, "a", {:draw, %{"event_type" => "clear"}}, context())
+
+    straight_state = %{drawing_state | constraint: :straight_lines, current_drawing: []}
+
+    assert :ignored ==
+             Scribble.command(
+               straight_state,
+               "a",
+               {:draw, %{"event_type" => "draw"}},
+               context()
+             )
+
+    assert {:ok, _result} =
+             Scribble.command(straight_state, "a", {:draw, start_event}, context())
+
+    assert :ignored == Scribble.command(straight_state, "a", {:draw, end_event}, context())
   end
 
   test "lobby and game-ended admits are active and final results remain immutable on removal" do

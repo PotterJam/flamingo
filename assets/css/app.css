@@ -215,6 +215,20 @@
   animation: starburst-pulse 2s ease-in-out infinite;
 }
 
+.roulette-hidden-canvas {
+  opacity: 0;
+}
+
+@keyframes roulette-canvas-rotate {
+  0%, 100% { transform: rotate(-5deg) scale(0.96); }
+  50% { transform: rotate(5deg) scale(0.96); }
+}
+
+.roulette-rotating-canvas {
+  animation: roulette-canvas-rotate 8s ease-in-out infinite;
+  transform-origin: center;
+}
+
 .nb-slider {
   -webkit-appearance: none;
   appearance: none;

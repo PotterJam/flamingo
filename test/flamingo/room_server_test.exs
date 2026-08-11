@@ -97,6 +97,9 @@ defmodule Flamingo.RoomServerTest do
   defp guess_as(room_id, token, guess),
     do: as_player(token, fn -> Rooms.guess(room_id, guess) end)
 
+  defp command_as(room_id, token, command),
+    do: as_player(token, fn -> Rooms.command(room_id, command) end)
+
   defp draw_event_as(room_id, token, event),
     do: as_player(token, fn -> Rooms.draw_event(room_id, event) end)
 
@@ -425,6 +428,80 @@ defmodule Flamingo.RoomServerTest do
 
     {:ok, state} = room_snapshot(room_id)
     assert state.current_drawing == [first_event]
+  end
+
+  test "telephone dispatches private drawings and advances simultaneous players", %{
+    room_id: room_id
+  } do
+    {:ok, alice_token, %{viewer_id: alice}} = join_connected(room_id, "Alice")
+    {:ok, bob_token, %{viewer_id: bob}} = join_connected(room_id, "Bob")
+
+    assert :ok =
+             start_game_as(room_id, alice_token, %{
+               game_mode: :telephone,
+               turn_length: 30,
+               custom_words: ["cat", "dog"]
+             })
+
+    {:ok, alice_snapshot} = snapshot_as(room_id, alice_token)
+    {:ok, bob_snapshot} = snapshot_as(room_id, bob_token)
+    assert alice_snapshot.mode == :telephone
+    assert alice_snapshot.phase == :telephone_prompt
+    assert alice_snapshot.prompt_choices != []
+    assert bob_snapshot.prompt_choices != []
+
+    assert :ok =
+             command_as(
+               room_id,
+               alice_token,
+               {:select_prompt, List.first(alice_snapshot.prompt_choices)}
+             )
+
+    assert :ok =
+             command_as(
+               room_id,
+               bob_token,
+               {:select_prompt, List.first(bob_snapshot.prompt_choices)}
+             )
+
+    {:ok, alice_snapshot} = snapshot_as(room_id, alice_token)
+    {:ok, bob_snapshot} = snapshot_as(room_id, bob_token)
+    assert alice_snapshot.phase == :telephone_draw
+    assert alice_snapshot.assignment.chain_id != bob_snapshot.assignment.chain_id
+
+    timer_generation = runtime_state(room_id).phase_timer.generation
+
+    assert {:error, :game_in_progress} =
+             start_game_as(room_id, alice_token, %{game_mode: :scribble})
+
+    assert runtime_state(room_id).game_module == Flamingo.GameModes.Telephone
+    assert runtime_state(room_id).phase_timer.generation == timer_generation
+
+    assert {:error, :invalid_game_mode} =
+             start_game_as(room_id, alice_token, %{game_mode: :unknown})
+
+    flush_room_snapshots()
+    event = %{"event_type" => "clear"}
+    :ok = draw_event_as(room_id, alice_token, event)
+    _ = :sys.get_state(room_pid(room_id))
+
+    bob_pid = Process.get({:player, bob_token})
+    refute_receive {:draw_event, ^bob_pid, _event}
+
+    assert snapshot_as(room_id, alice_token)
+           |> elem(1)
+           |> Map.fetch!(:assignment)
+           |> Map.fetch!(:current_drawing) == [event]
+
+    assert bob not in alice_snapshot.submitted_ids
+    assert alice not in alice_snapshot.submitted_ids
+
+    assert :ok = command_as(room_id, alice_token, :submit_drawing)
+    assert :ok = command_as(room_id, bob_token, :submit_drawing)
+
+    {:ok, next_snapshot} = snapshot_as(room_id, alice_token)
+    assert next_snapshot.phase == :telephone_guess
+    assert next_snapshot.assignment.source.type == :drawing
   end
 
   test "a duplicate drawer connection receives deltas and a reconnect baseline", %{
