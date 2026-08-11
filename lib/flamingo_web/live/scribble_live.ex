@@ -717,6 +717,10 @@ defmodule FlamingoWeb.ScribbleLive do
             // bottom; never yank the feed around while they're reading back.
             this.pinned = true
             this.el.addEventListener("scroll", () => {
+              // A stream reset briefly clamps scrollTop to zero. Preserve the
+              // user's pre-patch position until the replacement has settled.
+              if (this.patching) return
+
               const distanceFromBottom =
                 this.el.scrollHeight - this.el.scrollTop - this.el.clientHeight
               this.pinned = distanceFromBottom < 32
@@ -724,14 +728,31 @@ defmodule FlamingoWeb.ScribbleLive do
             this.scrollToBottom()
             this.handleEvent("scroll_feed", () => this.pinned && this.scrollToBottom())
           },
+          beforeUpdate() {
+            this.previousScrollTop = this.el.scrollTop
+            this.patching = true
+          },
           updated() {
             if (this.pinned) this.scrollToBottom()
+            else this.restoreScrollPosition()
           },
           scrollToBottom() {
             // Wait a frame so layout has settled; scrolling while the panel is
             // mid-patch (height not yet computed) silently clamps to the top.
             requestAnimationFrame(() => {
               this.el.scrollTop = this.el.scrollHeight
+              this.finishScroll()
+            })
+          },
+          restoreScrollPosition() {
+            requestAnimationFrame(() => {
+              this.el.scrollTop = this.previousScrollTop
+              this.finishScroll()
+            })
+          },
+          finishScroll() {
+            requestAnimationFrame(() => {
+              this.patching = false
             })
           }
         }
