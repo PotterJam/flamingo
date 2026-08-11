@@ -106,7 +106,7 @@ defmodule FlamingoWeb.ScribbleLiveTest do
 
     assert has_element?(
              view,
-             "#round-count-slider.range-input[type='range'][min='1'][max='5'][value='3']"
+             "#round-count-slider.nb-slider[type='range'][min='1'][max='5'][value='3'][style='--slider-progress: 50.0%']"
            )
 
     assert has_element?(view, "#round-length-input[min='15'][max='120']")
