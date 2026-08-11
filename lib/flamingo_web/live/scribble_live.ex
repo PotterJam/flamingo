@@ -19,6 +19,7 @@ defmodule FlamingoWeb.ScribbleLive do
      socket
      |> assign(
        room_id: room_id,
+       resume_token: nil,
        player_id: nil,
        participation: :active,
        phase: :lobby,
@@ -30,8 +31,11 @@ defmodule FlamingoWeb.ScribbleLive do
        selected_player_id: nil,
        host_id: nil,
        drawer_id: nil,
+       constraint: nil,
        round_count: 3,
        turn_length: 45,
+       game_mode: :scribble,
+       game_variant: :classic,
        custom_words: "",
        custom_word_count: 0,
        custom_words_error: nil,
@@ -40,6 +44,7 @@ defmodule FlamingoWeb.ScribbleLive do
            %{
              "round_count" => "3",
              "turn_length" => "45",
+             "game_mode" => "classic",
              "custom_words" => "",
              "include_default_words" => false
            },
@@ -65,9 +70,16 @@ defmodule FlamingoWeb.ScribbleLive do
 
     if connected?(socket) do
       case Rooms.connect(room_id, resume_token) do
+        {:ok, %{mode: :telephone}} ->
+          {:noreply,
+           push_navigate(socket,
+             to: ~p"/game/#{room_id}/telephone?resume_token=#{resume_token}"
+           )}
+
         {:ok, snapshot} ->
           socket =
             socket
+            |> assign(:resume_token, resume_token)
             |> apply_snapshot(snapshot)
 
           {:noreply, push_event(socket, "play_sound", %{sound: "join"})}
@@ -76,7 +88,7 @@ defmodule FlamingoWeb.ScribbleLive do
           {:noreply, push_navigate(socket, to: ~p"/")}
       end
     else
-      {:noreply, socket}
+      {:noreply, assign(socket, :resume_token, resume_token)}
     end
   end
 
@@ -85,6 +97,17 @@ defmodule FlamingoWeb.ScribbleLive do
   end
 
   defp palette, do: @palette
+
+  defp constraint_label(:hidden_canvas), do: "Draw blind — your canvas is hidden"
+  defp constraint_label(:single_stroke), do: "One stroke — don't lift your pen"
+  defp constraint_label(:straight_lines), do: "Straight lines only"
+  defp constraint_label(:rotating_canvas), do: "Moving target — the canvas is rotating"
+  defp constraint_label(:mirror), do: "Mirror mode — horizontal movement is reversed"
+  defp constraint_label(_constraint), do: nil
+
+  defp selected_game_mode(:telephone, _variant), do: "telephone"
+  defp selected_game_mode(:scribble, :constraint_roulette), do: "constraint_roulette"
+  defp selected_game_mode(_mode, _variant), do: "classic"
 
   defp winning_player_id(players, player_order) do
     Enum.max_by(player_order, fn pid -> Map.get(players, pid).score end, fn -> nil end)
@@ -163,6 +186,38 @@ defmodule FlamingoWeb.ScribbleLive do
                   class="min-h-0 flex-1 overflow-y-auto p-4"
                   id="settings-form"
                 >
+                  <fieldset class="mb-4">
+                    <legend class="text-sm">Game mode</legend>
+                    <div class="mt-1 grid grid-cols-1 gap-2 sm:grid-cols-3">
+                      <label
+                        :for={
+                          {value, title, description} <- [
+                            {"classic", "Classic", "The original draw-and-guess game"},
+                            {"constraint_roulette", "Constraint roulette",
+                             "A surprise drawing rule every turn"},
+                            {"telephone", "Telephone",
+                             "Everyone draws, guesses, then reveals the chaos"}
+                          ]
+                        }
+                        class={[
+                          "cursor-pointer border-2 border-border p-3 transition-all hover:-translate-y-0.5 hover:shadow-shadow",
+                          selected_game_mode(@game_mode, @game_variant) == value &&
+                            "bg-pink-100 shadow-shadow"
+                        ]}
+                      >
+                        <input
+                          type="radio"
+                          name={@settings_form[:game_mode].name}
+                          value={value}
+                          checked={selected_game_mode(@game_mode, @game_variant) == value}
+                          class="sr-only"
+                        />
+                        <span class="block font-bold">{title}</span>
+                        <span class="block text-xs text-gray-600">{description}</span>
+                      </label>
+                    </div>
+                  </fieldset>
+
                   <div class="space-y-1">
                     <div class="flex w-full justify-between">
                       <label for="round-count-slider" class="text-sm">Rounds</label>
@@ -348,6 +403,15 @@ defmodule FlamingoWeb.ScribbleLive do
                   </.box>
                 <% true -> %>
                   <div class="relative flex w-[704px] shrink-0 flex-col gap-4">
+                    <div
+                      :if={@constraint}
+                      id="constraint-banner"
+                      class="absolute inset-x-8 -top-5 z-20 flex items-center justify-center"
+                    >
+                      <span class="border-2 border-border bg-yellow-200 px-4 py-1 font-hero text-lg font-black shadow-shadow">
+                        {constraint_label(@constraint)}
+                      </span>
+                    </div>
                     <%= if @phase == :turn_reveal do %>
                       <div class="absolute inset-x-0 top-0 z-10 m-[2px] flex h-[500px] items-center justify-center bg-white/75 text-center backdrop-blur-[2px]">
                         <div class="flex w-full flex-col items-center gap-4 px-6">
@@ -405,6 +469,7 @@ defmodule FlamingoWeb.ScribbleLive do
                       data-is-drawer={
                         to_string(@player_id == @drawer_id and @participation == :active)
                       }
+                      data-constraint={@constraint}
                       class="flex flex-col gap-2"
                     >
                       <.box class="bg-white p-0">
@@ -750,12 +815,18 @@ defmodule FlamingoWeb.ScribbleLive do
       end
 
     custom_words = Map.get(params, "custom_words", "")
+
+    {game_mode, game_variant} =
+      parse_game_mode(params["game_mode"], socket.assigns.game_mode, socket.assigns.game_variant)
+
     {custom_word_count, custom_words_error} = custom_words_summary(custom_words)
 
     {:noreply,
      assign(socket,
        round_count: round_count,
        turn_length: turn_length,
+       game_mode: game_mode,
+       game_variant: game_variant,
        custom_words: custom_words,
        custom_word_count: custom_word_count,
        custom_words_error: custom_words_error,
@@ -768,11 +839,20 @@ defmodule FlamingoWeb.ScribbleLive do
 
     case Words.parse_custom_words(custom_words) do
       {:ok, words} ->
+        {game_mode, game_variant} =
+          parse_game_mode(
+            params["game_mode"],
+            socket.assigns.game_mode,
+            socket.assigns.game_variant
+          )
+
         settings = %{
           round_count: socket.assigns.round_count,
           turn_length: socket.assigns.turn_length,
           custom_words: words,
-          include_default_words: params["include_default_words"] == "true"
+          include_default_words: params["include_default_words"] == "true",
+          game_mode: game_mode,
+          game_variant: game_variant
         }
 
         case Rooms.start_game(socket.assigns.room_id, settings) do
@@ -827,6 +907,14 @@ defmodule FlamingoWeb.ScribbleLive do
     end
   end
 
+  defp parse_game_mode("telephone", _mode, _variant), do: {:telephone, :classic}
+
+  defp parse_game_mode("constraint_roulette", _mode, _variant),
+    do: {:scribble, :constraint_roulette}
+
+  defp parse_game_mode("classic", _mode, _variant), do: {:scribble, :classic}
+  defp parse_game_mode(_value, mode, variant), do: {mode, variant}
+
   defp custom_words_summary(custom_words) do
     case Words.parse_custom_words(custom_words) do
       {:ok, words} ->
@@ -844,6 +932,14 @@ defmodule FlamingoWeb.ScribbleLive do
     custom_words
     |> String.split(~r/\R/)
     |> Enum.count(&(String.trim(&1) != ""))
+  end
+
+  def handle_info({:room_snapshot, %{mode: :telephone}}, socket) do
+    {:noreply,
+     push_navigate(socket,
+       to:
+         ~p"/game/#{socket.assigns.room_id}/telephone?resume_token=#{socket.assigns.resume_token}"
+     )}
   end
 
   def handle_info({:room_snapshot, snapshot}, socket) do
@@ -869,6 +965,8 @@ defmodule FlamingoWeb.ScribbleLive do
 
     round_count = if sync_settings?, do: snapshot.round_count, else: socket.assigns.round_count
     turn_length = if sync_settings?, do: snapshot.turn_length, else: socket.assigns.turn_length
+    game_mode = if sync_settings?, do: :scribble, else: socket.assigns.game_mode
+    game_variant = if sync_settings?, do: snapshot.game_variant, else: socket.assigns.game_variant
     custom_words = if sync_settings?, do: custom_words, else: socket.assigns.custom_words
 
     custom_word_count =
@@ -883,6 +981,7 @@ defmodule FlamingoWeb.ScribbleLive do
           %{
             "round_count" => Integer.to_string(snapshot.round_count),
             "turn_length" => Integer.to_string(snapshot.turn_length),
+            "game_mode" => selected_game_mode(:scribble, snapshot.game_variant),
             "custom_words" => custom_words,
             "include_default_words" => snapshot.include_default_words
           },
@@ -921,6 +1020,9 @@ defmodule FlamingoWeb.ScribbleLive do
           ),
         round_count: round_count,
         turn_length: turn_length,
+        game_mode: game_mode,
+        game_variant: game_variant,
+        constraint: snapshot.constraint,
         custom_words: custom_words,
         custom_word_count: custom_word_count,
         custom_words_error: custom_words_error,

@@ -40,9 +40,12 @@ defmodule Flamingo.Room.Members do
         order = List.delete(members.order, seat_id)
 
         host_id =
-          if members.host_id == seat_id,
-            do: List.first(order),
-            else: members.host_id
+          if members.host_id == seat_id do
+            Enum.find(order, fn id -> members.seats[id].connection_count > 0 end) ||
+              List.first(order)
+          else
+            members.host_id
+          end
 
         resume_tokens =
           Map.reject(members.resume_tokens, fn {_resume_token, id} -> id == seat_id end)

@@ -1,7 +1,7 @@
 defmodule Flamingo.RoomServer do
   use GenServer
 
-  alias Flamingo.GameModes.Scribble
+  alias Flamingo.GameModes.{Scribble, Telephone}
   alias Flamingo.Room.Members
 
   @disconnect_grace_ms 60_000
@@ -11,6 +11,7 @@ defmodule Flamingo.RoomServer do
     :phase_timer,
     :hint_timer,
     :turn_end_time,
+    game_module: Scribble,
     lifecycle: :lobby,
     members: Members.new(),
     game: Scribble.new(),
@@ -26,6 +27,7 @@ defmodule Flamingo.RoomServer do
   def select_word(id, word), do: GenServer.call(via(id), {:select_word, self(), word})
   def draw_event(id, event), do: GenServer.cast(via(id), {:draw_event, self(), event})
   def guess(id, text), do: GenServer.call(via(id), {:guess, self(), text})
+  def command(id, command), do: GenServer.call(via(id), {:command, self(), command})
   def snapshot(id), do: call(id, {:snapshot, self()}, {:error, :not_found})
 
   defp call(id, message, fallback) do
@@ -46,7 +48,7 @@ defmodule Flamingo.RoomServer do
     with {:ok, members} <- Members.add(state.members, id, token, name, avatar),
          context = context(state, members),
          {:ok, result} <-
-           Scribble.admit_member(state.game, %{id: id, name: name}, context) do
+           state.game_module.admit_member(state.game, %{id: id, name: name}, context) do
       state =
         %{state | members: members} |> accept(result, context.now) |> commit()
 
@@ -87,6 +89,9 @@ defmodule Flamingo.RoomServer do
   def handle_call({:guess, pid, text}, _, state),
     do: command_call(state, player_id(state, pid), {:guess, text})
 
+  def handle_call({:command, pid, command}, _, state),
+    do: command_call(state, player_id(state, pid), command)
+
   def handle_call({:leave, pid}, _, state) do
     case player_id(state, pid) do
       nil -> {:reply, :ok, state}
@@ -98,10 +103,16 @@ defmodule Flamingo.RoomServer do
   def handle_cast({:draw_event, pid, event}, state) do
     context = context(state)
 
-    case Scribble.command(state.game, player_id(state, pid), {:draw, event}, context) do
+    actor = player_id(state, pid)
+
+    case state.game_module.command(state.game, actor, {:draw, event}, context) do
       {:ok, result} ->
-        Enum.each(state.connections, fn {other, _} ->
-          if other != pid, do: send(other, {:draw_event, result.drawing_delta})
+        Enum.each(state.connections, fn {other, connection} ->
+          deliver? =
+            other != pid and
+              (Map.get(result, :drawing_scope) != :actor or connection.player_id == actor)
+
+          if deliver?, do: send(other, {:draw_event, result.drawing_delta})
         end)
 
         {:noreply, %{state | game: result.state}}
@@ -155,14 +166,23 @@ defmodule Flamingo.RoomServer do
 
   defp command_call(state, id, command) do
     context = context(state)
-    run_call(state, Scribble.command(state.game, id, command, context), context.now)
+    run_call(state, state.game_module.command(state.game, id, command, context), context.now)
   end
 
   defp start_game_call(state, nil, _settings), do: {:reply, {:error, :not_found}, state}
 
   defp start_game_call(state, actor, settings) do
     context = context(state, state.members, actor)
-    run_call(state, Scribble.start(state.game, settings, context), context.now)
+
+    with {:ok, module} <- mode_module(Map.get(settings, :game_mode, :scribble)),
+         :ok <- allow_mode_switch(state, module),
+         {:ok, game} <- game_for_start(state, module, context),
+         {:ok, result} <- module.start(game, settings, context) do
+      state = %{state | game_module: module}
+      run_call(state, {:ok, result}, context.now)
+    else
+      {:error, reason} -> {:reply, {:error, reason}, state}
+    end
   end
 
   defp run_call(state, {:error, reason}, _now), do: {:reply, {:error, reason}, state}
@@ -178,7 +198,7 @@ defmodule Flamingo.RoomServer do
     context = context(state)
 
     state =
-      case Scribble.timeout(state.game, key, context) do
+      case state.game_module.timeout(state.game, key, context) do
         {:ok, result} -> accept(state, result, context.now)
         _ -> state
       end
@@ -216,7 +236,7 @@ defmodule Flamingo.RoomServer do
 
   defp connection_transition(state, id, status) do
     context = context(state)
-    {:ok, result} = Scribble.connection_changed(state.game, id, status, context)
+    {:ok, result} = state.game_module.connection_changed(state.game, id, status, context)
     accept(state, result, context.now)
   end
 
@@ -237,7 +257,9 @@ defmodule Flamingo.RoomServer do
     }
 
     context = context(state)
-    {:ok, result} = Scribble.remove_member(state.game, id, %{id: id, name: seat.name}, context)
+
+    {:ok, result} =
+      state.game_module.remove_member(state.game, id, %{id: id, name: seat.name}, context)
 
     accept(state, result, context.now)
   end
@@ -312,8 +334,32 @@ defmodule Flamingo.RoomServer do
 
   defp snapshot_for(state, id),
     do:
-      Scribble.view(state.game, id, Members.snapshot(state.members))
+      state.game_module.view(state.game, id, Members.snapshot(state.members))
       |> Map.put(:turn_end_time, state.turn_end_time)
+
+  defp mode_module(:telephone), do: {:ok, Telephone}
+  defp mode_module(:scribble), do: {:ok, Scribble}
+  defp mode_module(_mode), do: {:error, :invalid_game_mode}
+
+  defp allow_mode_switch(%{lifecycle: :playing, game_module: current}, requested)
+       when current != requested,
+       do: {:error, :game_in_progress}
+
+  defp allow_mode_switch(_state, _requested), do: :ok
+
+  defp game_for_start(%{game_module: module, game: game}, module, _context), do: {:ok, game}
+
+  defp game_for_start(_state, module, context) do
+    context.roster.player_order
+    |> Enum.reduce_while({:ok, module.new()}, fn id, {:ok, game} ->
+      player = context.roster.players[id]
+
+      case module.admit_member(game, player, context) do
+        {:ok, result} -> {:cont, {:ok, result.state}}
+        {:error, reason} -> {:halt, {:error, reason}}
+      end
+    end)
+  end
 
   defp commit(state, excluded \\ nil) do
     state.connections

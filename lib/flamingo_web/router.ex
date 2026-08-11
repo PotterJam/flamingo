@@ -19,6 +19,7 @@ defmodule FlamingoWeb.Router do
 
     live "/", HomeLive
     live "/game/:room_id", ScribbleLive
+    live "/game/:room_id/telephone", TelephoneLive
     live "/drawing", DrawingLive
   end
 
