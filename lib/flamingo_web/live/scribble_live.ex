@@ -105,6 +105,13 @@ defmodule FlamingoWeb.ScribbleLive do
   defp constraint_label(:mirror), do: "Mirror mode — horizontal movement is reversed"
   defp constraint_label(_constraint), do: nil
 
+  defp constraint_mode(:hidden_canvas), do: "draw blind"
+  defp constraint_mode(:single_stroke), do: "one stroke"
+  defp constraint_mode(:straight_lines), do: "straight lines only"
+  defp constraint_mode(:rotating_canvas), do: "moving target"
+  defp constraint_mode(:mirror), do: "mirror mode"
+  defp constraint_mode(_constraint), do: nil
+
   defp selected_game_mode(:telephone, _variant), do: "telephone"
   defp selected_game_mode(:scribble, :constraint_roulette), do: "constraint_roulette"
   defp selected_game_mode(_mode, _variant), do: "classic"
@@ -646,6 +653,7 @@ defmodule FlamingoWeb.ScribbleLive do
                   <% end %>
                   <%= for drawing <- selected_drawings do %>
                     <% share_url = drawing_share_url(drawing, @final_players) %>
+                    <% drawing_constraint = constraint_mode(Map.get(drawing, :constraint)) %>
                     <div class="border-2 border-border bg-white p-3">
                       <div class="mb-2 flex items-center justify-between gap-3">
                         <span
@@ -679,6 +687,13 @@ defmodule FlamingoWeb.ScribbleLive do
                         <canvas width="700" height="500" class="aspect-[7/5] w-full bg-white">
                         </canvas>
                       </div>
+                      <p
+                        :if={drawing_constraint}
+                        id={"final-drawing-constraint-#{drawing.drawer_id}-round-#{drawing.round_number}"}
+                        class="mt-2 text-center text-sm font-bold text-yellow-600"
+                      >
+                        drawn with {drawing_constraint}
+                      </p>
                     </div>
                   <% end %>
                 </div>

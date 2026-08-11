@@ -585,6 +585,7 @@ defmodule FlamingoWeb.ScribbleLiveTest do
     assert html =~ "data-final-drawing-replay=\"true\""
     assert html =~ "data-drawing-share-url="
     assert html =~ "/drawing#"
+    refute html =~ "final-drawing-constraint-"
 
     [_, share_url] = Regex.run(~r/data-drawing-share-url="([^"]+)"/, html)
     encoded = share_url |> String.split("/drawing#") |> List.last()
@@ -596,6 +597,50 @@ defmodule FlamingoWeb.ScribbleLiveTest do
             }} = DrawingShare.decode(encoded)
 
     assert drawer_name == winner.name
+  end
+
+  test "game end screen identifies constrained drawings", %{conn: conn, room_id: room_id} do
+    {:ok, p1_token, %{viewer_id: p1}} = join_connected(room_id, "Alice")
+    {:ok, p2_token, %{viewer_id: p2}} = join_connected(room_id, "Bob")
+
+    {:ok, view, _html} = live(conn, ~p"/game/#{room_id}?resume_token=#{p1_token}")
+
+    :ok =
+      start_game_as(room_id, p1_token, %{
+        round_count: 1,
+        turn_length: 30,
+        game_variant: :constraint_roulette
+      })
+
+    play_turn(room_id, p1, p1_token, p2, p2_token)
+    play_turn(room_id, p1, p1_token, p2, p2_token)
+
+    {:ok, snapshot} = snapshot_as(room_id, p1_token)
+
+    winner_id =
+      Enum.max_by(snapshot.final_player_order, fn pid ->
+        Map.fetch!(snapshot.final_players, pid).score
+      end)
+
+    drawing = Enum.find(snapshot.final_drawings, &(&1.drawer_id == winner_id))
+
+    mode =
+      Map.fetch!(
+        %{
+          hidden_canvas: "draw blind",
+          single_stroke: "one stroke",
+          straight_lines: "straight lines only",
+          rotating_canvas: "moving target",
+          mirror: "mirror mode"
+        },
+        drawing.constraint
+      )
+
+    assert has_element?(
+             view,
+             "#final-drawing-constraint-#{winner_id}-round-1.text-yellow-600",
+             "drawn with #{mode}"
+           )
   end
 
   test "final score rows select the drawing showcase", %{

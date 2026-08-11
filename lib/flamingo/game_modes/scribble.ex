@@ -369,6 +369,7 @@ defmodule Flamingo.GameModes.Scribble do
       drawer_id: state.drawer_id,
       word: state.word,
       round_number: state.current_round + 1,
+      constraint: state.constraint,
       ops: DrawingShare.compact_ops(state.current_drawing)
     }
 
