@@ -148,7 +148,7 @@ defmodule FlamingoWeb.TelephoneLiveTest do
     assert has_element?(telephone, "#submit-telephone-drawing")
   end
 
-  test "two players receive private chains and progress through draw, guess, and leak-free reveal",
+  test "chains return privately before the host starts the leak-free reveal",
        %{
          conn: conn,
          room_id: room_id
@@ -209,13 +209,34 @@ defmodule FlamingoWeb.TelephoneLiveTest do
     :ok = command_as(room_id, bob_token, {:submit_guess, "a cactus moon"})
     _ = :sys.get_state(room_pid(room_id))
 
-    assert has_element?(host, "#telephone-reveal-phase")
-    assert has_element?(host, "#revealed-entries article")
-    refute has_element?(host, "#revealed-entries article:nth-child(2)")
-    assert has_element?(host, "#advance-telephone-reveal")
+    assert has_element?(host, "#telephone-return-phase")
+    assert has_element?(host, "#telephone-return-original")
+    assert has_element?(host, "#telephone-return-text", "a cactus moon")
+    refute has_element?(host, "#telephone-return-text", "a moon llama")
+    assert has_element?(host, "#start-telephone-reveal")
+    refute has_element?(host, "#telephone-reveal-phase")
 
     {:ok, bob_view, _html} =
       live(build_conn(), ~p"/game/#{room_id}/telephone?resume_token=#{bob_token}")
+
+    assert has_element?(bob_view, "#telephone-return-text", "a moon llama")
+    assert has_element?(bob_view, "#waiting-for-return-host")
+    refute has_element?(bob_view, "#start-telephone-reveal")
+
+    host |> element("#start-telephone-reveal") |> render_click()
+
+    assert has_element?(host, "#telephone-reveal-phase")
+    assert has_element?(host, "#revealed-entries article")
+    refute has_element?(host, "#revealed-entries article:nth-child(2)")
+    assert has_element?(host, "#reveal-chain-progress [data-state='current']")
+    assert has_element?(host, "#reveal-link-progress [data-state='current']")
+
+    assert has_element?(
+             host,
+             "#revealed-entries article[data-current='true'][data-entry-type='prompt']"
+           )
+
+    assert has_element?(host, "#advance-telephone-reveal", "Reveal the first drawing")
 
     assert has_element?(bob_view, "#waiting-for-reveal-host")
     refute has_element?(bob_view, "#advance-telephone-reveal")
@@ -261,7 +282,16 @@ defmodule FlamingoWeb.TelephoneLiveTest do
     :ok = command_as(room_id, bob_token, :submit_drawing)
     host |> form("#telephone-guess-form", %{"guess" => %{"text" => "moon"}}) |> render_submit()
     :ok = command_as(room_id, bob_token, {:submit_guess, "cactus"})
+    assert has_element?(host, "#telephone-return-phase")
+    host |> element("#start-telephone-reveal") |> render_click()
     host |> element("#advance-telephone-reveal") |> render_click()
+
+    assert has_element?(
+             host,
+             "#revealed-entries article[data-current='true'][data-entry-type='drawing']"
+           )
+
+    assert has_element?(host, "#advance-telephone-reveal", "Reveal what they guessed")
 
     {:ok, snapshot} = snapshot_as(room_id, host_token)
     drawing = Enum.find(snapshot.reveal.chain.entries, &(&1.type == :drawing))
@@ -276,6 +306,9 @@ defmodule FlamingoWeb.TelephoneLiveTest do
     end
 
     assert has_element?(host, "#telephone-awards")
+    assert has_element?(host, "#telephone-finale-banner")
+    assert has_element?(host, "#telephone-award-cards > div:nth-child(3)")
+    refute has_element?(host, "#telephone-award-cards > div:nth-child(4)")
     assert has_element?(host, "#telephone-play-again")
     assert has_element?(host, "#telephone-new-room")
   end

@@ -7,19 +7,25 @@ defmodule Flamingo.GameModes.TelephoneTest do
     names = %{"a" => "Alice", "b" => "Bob", "c" => "Cara", "s" => "Sam"}
 
     %{
-      players: Map.new(order, &{&1, %{id: &1, name: names[&1], connected: true}}),
+      players:
+        Map.new(
+          order,
+          &{&1, %{id: &1, name: Map.get(names, &1, String.upcase(&1)), connected: true}}
+        ),
       player_order: order,
       host_id: "a"
     }
   end
 
-  defp context(roster, actor \\ "a") do
+  defp context(roster, actor \\ "a", options \\ []) do
     %{
       roster: roster,
       actor_id: actor,
       now: ~U[2026-01-01 00:00:00Z],
-      word_choices: fn _count, _used, _custom, _defaults -> ["cat", "dog", "bird"] end,
-      select_candidate: &List.first/1
+      word_choices: fn count, _used, _custom, _defaults ->
+        Enum.take(["cat", "dog", "bird", "fish", "horse", "frog"], count)
+      end,
+      select_candidate: Keyword.get(options, :select_candidate, &List.first/1)
     }
   end
 
@@ -35,7 +41,7 @@ defmodule Flamingo.GameModes.TelephoneTest do
       end)
 
     {:ok, %{state: state}} =
-      Telephone.start(state, %{turn_length: 15}, context(game_roster))
+      Telephone.start(state, %{turn_length: 15}, context(game_roster, "a", opts))
 
     state =
       if Keyword.get(opts, :choose_prompts, true) do
@@ -124,6 +130,69 @@ defmodule Flamingo.GameModes.TelephoneTest do
     assert Telephone.view(state, "a", game_roster).assignment.source.value == "guess c"
   end
 
+  test "uses one shuffled circle, returns each chain privately, and waits for the host" do
+    pick_middle = &Enum.at(&1, div(length(&1), 2))
+    order = ["a", "b", "c", "d", "e"]
+    {state, game_roster} = started(order, select_candidate: pick_middle)
+
+    assert state.pass_order == ["c", "d", "b", "e", "a"]
+
+    {assignments, returned} =
+      Enum.map_reduce(1..length(order), state, fn _step, state ->
+        round_assignments =
+          Map.new(order, fn player_id ->
+            assignment = Telephone.view(state, player_id, game_roster).assignment
+            {player_id, assignment.chain_id}
+          end)
+
+        {round_assignments, submit_everyone(state, game_roster)}
+      end)
+
+    chain_ids = MapSet.new(Enum.map(returned.chains, & &1.id))
+
+    assert Enum.all?(assignments, fn round ->
+             round |> Map.values() |> MapSet.new() == chain_ids
+           end)
+
+    assert Enum.all?(order, fn player_id ->
+             assignments
+             |> Enum.map(&Map.fetch!(&1, player_id))
+             |> MapSet.new() == chain_ids
+           end)
+
+    assert Enum.all?(returned.chains, fn chain ->
+             origin_index = Enum.find_index(returned.pass_order, &(&1 == chain.origin_player_id))
+
+             expected_circle =
+               Enum.drop(returned.pass_order, origin_index) ++
+                 Enum.take(returned.pass_order, origin_index)
+
+             Enum.map(tl(chain.entries), & &1.player_id) == expected_circle
+           end)
+
+    assert returned.phase == :telephone_return
+
+    assert Enum.all?(order, fn player_id ->
+             view = Telephone.view(returned, player_id, game_roster)
+             chain = Enum.find(returned.chains, &(&1.origin_player_id == player_id))
+
+             view.reveal == nil and view.assignment.type == :return and
+               view.assignment.chain_id == chain.id and
+               view.assignment.origin == List.first(chain.entries) and
+               view.assignment.source == List.last(chain.entries) and
+               not Map.has_key?(view.assignment, :entries)
+           end)
+
+    assert {:error, :not_host} =
+             Telephone.command(returned, "b", :start_reveal, context(game_roster, "b"))
+
+    {:ok, %{state: reveal}} =
+      Telephone.command(returned, "a", :start_reveal, context(game_roster))
+
+    assert reveal.phase == :telephone_reveal
+    assert length(Telephone.view(reveal, "b", game_roster).reveal.chain.entries) == 1
+  end
+
   test "timeout records placeholders and a disconnect completes the online set" do
     {state, game_roster} = started(["a", "b"])
     {:ok, %{state: state}} = Telephone.command(state, "a", :submit_drawing, context(game_roster))
@@ -136,9 +205,9 @@ defmodule Flamingo.GameModes.TelephoneTest do
     assert state.phase == :telephone_guess
     assert Enum.at(state.chains, 1).entries |> List.last() |> Map.fetch!(:value) == nil
 
-    {:ok, %{state: reveal}} = Telephone.timeout(state, :telephone_step, context(offline_roster))
-    assert reveal.phase == :telephone_reveal
-    assert Enum.all?(reveal.chains, &(length(&1.entries) == 3))
+    {:ok, %{state: returned}} = Telephone.timeout(state, :telephone_step, context(offline_roster))
+    assert returned.phase == :telephone_return
+    assert Enum.all?(returned.chains, &(length(&1.entries) == 3))
   end
 
   test "timeout and disconnect preserve drawings that already reached the server" do
@@ -305,7 +374,7 @@ defmodule Flamingo.GameModes.TelephoneTest do
 
   test "a new host can continue reveal after every original player is removed" do
     {state, game_roster} = started(["a", "b"])
-    reveal = state |> submit_everyone(game_roster) |> submit_everyone(game_roster)
+    returned = state |> submit_everyone(game_roster) |> submit_everyone(game_roster)
 
     bob_roster = %{
       game_roster
@@ -314,22 +383,25 @@ defmodule Flamingo.GameModes.TelephoneTest do
         host_id: "b"
     }
 
-    {:ok, %{state: reveal}} =
-      Telephone.remove_member(reveal, "a", %{name: "Alice"}, context(bob_roster))
+    {:ok, %{state: returned}} =
+      Telephone.remove_member(returned, "a", %{name: "Alice"}, context(bob_roster))
 
     empty_roster = %{players: %{}, player_order: [], host_id: nil}
 
-    {:ok, %{state: reveal}} =
-      Telephone.remove_member(reveal, "b", %{name: "Bob"}, context(empty_roster))
+    {:ok, %{state: returned}} =
+      Telephone.remove_member(returned, "b", %{name: "Bob"}, context(empty_roster))
 
-    assert reveal.host_id == nil
+    assert returned.host_id == nil
 
     sam_roster = %{roster(["s"]) | host_id: "s"}
 
-    {:ok, %{state: reveal}} =
-      Telephone.admit_member(reveal, sam_roster.players["s"], context(sam_roster, "s"))
+    {:ok, %{state: returned}} =
+      Telephone.admit_member(returned, sam_roster.players["s"], context(sam_roster, "s"))
 
-    assert reveal.host_id == "s"
+    assert returned.host_id == "s"
+
+    assert {:ok, %{state: reveal}} =
+             Telephone.command(returned, "s", :start_reveal, context(sam_roster, "s"))
 
     assert {:ok, _result} =
              Telephone.command(reveal, "s", :advance_reveal, context(sam_roster, "s"))
@@ -338,7 +410,14 @@ defmodule Flamingo.GameModes.TelephoneTest do
   test "host paces leak-free reveal, votes can change, and awards finish deterministically" do
     {state, game_roster} = started(["a", "b"])
     state = state |> submit_everyone(game_roster) |> submit_everyone(game_roster)
-    assert state.phase == :telephone_reveal
+    assert state.phase == :telephone_return
+    assert Telephone.view(state, "b", game_roster).reveal == nil
+
+    assert {:error, :not_host} =
+             Telephone.command(state, "b", :start_reveal, context(game_roster, "b"))
+
+    {:ok, %{state: state}} =
+      Telephone.command(state, "a", :start_reveal, context(game_roster))
 
     view = Telephone.view(state, "b", game_roster)
     assert length(view.reveal.chain.entries) == 1
