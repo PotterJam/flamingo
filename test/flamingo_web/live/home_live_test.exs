@@ -6,6 +6,20 @@ defmodule FlamingoWeb.HomeLiveTest do
 
   alias Flamingo.{Rooms, RoomSupervisor}
 
+  test "room invitation path prefills the room code", %{conn: conn} do
+    room_code = "amazing-otter"
+
+    {:ok, view, _html} = live(conn, ~p"/join/#{room_code}")
+
+    assert has_element?(view, "#room-code-input[value='#{room_code}']")
+  end
+
+  test "legacy room query does not prefill the room code", %{conn: conn} do
+    {:ok, view, _html} = live(conn, ~p"/?room=legacy-code")
+
+    assert has_element?(view, "#room-code-input[value='']")
+  end
+
   test "submitting the lobby form joins when a room name is present", %{conn: conn} do
     room_id = "home-#{System.unique_integer([:positive])}"
     {:ok, ^room_id} = RoomSupervisor.start_room(room_id)
