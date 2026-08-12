@@ -72,17 +72,15 @@ defmodule Flamingo.GameModes.Telephone do
          {:ok, custom_words} <- Words.validate_custom_words(custom_words),
          true <- is_boolean(defaults) || {:error, :invalid_include_default_words},
          prompts when is_list(prompts) <-
-           context.word_choices.(max(length(order), 3), MapSet.new(), custom_words, defaults),
+           context.word_choices.(length(order) * 3, MapSet.new(), custom_words, defaults),
+         prompts = Enum.uniq_by(prompts, &prompt_key/1),
          true <- length(prompts) >= length(order) || {:error, :not_enough_prompts} do
       players =
         Map.new(order, fn id ->
           {id, roster.players[id] |> Map.take([:id, :name, :avatar])}
         end)
 
-      prompt_choices =
-        order
-        |> Enum.with_index()
-        |> Map.new(fn {id, index} -> {id, rotated_choices(prompts, index)} end)
+      prompt_choices = distribute_choices(prompts, order)
 
       pass_order = random_order(order, context)
 
@@ -119,6 +117,7 @@ defmodule Flamingo.GameModes.Telephone do
   end
 
   def command(state, actor, {:select_prompt, prompt}, context) when is_binary(prompt) do
+    prompt = String.trim(prompt)
     choices = Map.get(state.prompt_choices, actor, [])
 
     cond do
@@ -131,8 +130,14 @@ defmodule Flamingo.GameModes.Telephone do
       MapSet.member?(state.submitted, actor) ->
         {:error, :already_submitted}
 
-      prompt not in choices ->
+      prompt == "" or String.length(prompt) > 100 ->
         {:error, :invalid_prompt}
+
+      prompt not in choices and offered_to_other_player?(state, actor, prompt) ->
+        {:error, :prompt_taken}
+
+      selected_prompt?(state, prompt) ->
+        {:error, :prompt_taken}
 
       true ->
         state = %{
@@ -473,10 +478,34 @@ defmodule Flamingo.GameModes.Telephone do
       {:schedule_phase_timeout, :telephone_prompt, 15_000}
     ]
 
-  defp rotated_choices(prompts, index) do
-    {before, after_index} = Enum.split(prompts, Integer.mod(index, length(prompts)))
-    Enum.take(after_index ++ before, 3)
+  defp distribute_choices(prompts, order) do
+    choices = Map.new(order, &{&1, []})
+
+    prompts
+    |> Enum.take(length(order) * 3)
+    |> Enum.with_index()
+    |> Enum.reduce(choices, fn {prompt, index}, choices ->
+      player = Enum.at(order, Integer.mod(index, length(order)))
+      Map.update!(choices, player, &(&1 ++ [prompt]))
+    end)
   end
+
+  defp offered_to_other_player?(state, actor, prompt) do
+    key = prompt_key(prompt)
+
+    state.prompt_choices
+    |> Map.delete(actor)
+    |> Map.values()
+    |> List.flatten()
+    |> Enum.any?(&(prompt_key(&1) == key))
+  end
+
+  defp selected_prompt?(state, prompt) do
+    key = prompt_key(prompt)
+    Enum.any?(state.selected_prompts, fn {_player, selected} -> prompt_key(selected) == key end)
+  end
+
+  defp prompt_key(prompt), do: prompt |> String.trim() |> String.downcase()
 
   defp random_order([], _context), do: []
 

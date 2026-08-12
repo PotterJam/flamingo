@@ -10,6 +10,7 @@ defmodule FlamingoWeb.TelephoneComponents do
 
   attr :choices, :list, required: true
   attr :submitted, :boolean, required: true
+  attr :form, :map, required: true
 
   def prompt_phase(assigns) do
     ~H"""
@@ -39,6 +40,35 @@ defmodule FlamingoWeb.TelephoneComponents do
               {prompt}
             </.button>
           </div>
+          <div class="my-6 flex items-center gap-3 text-xs font-bold tracking-widest text-gray-400 uppercase">
+            <span class="h-px flex-1 bg-gray-200"></span>
+            or make it your own <span class="h-px flex-1 bg-gray-200"></span>
+          </div>
+          <.form
+            for={@form}
+            id="telephone-custom-prompt-form"
+            phx-submit="select_prompt"
+            class="mx-auto flex max-w-xl flex-col gap-2 sm:flex-row"
+          >
+            <div class="min-w-0 flex-1">
+              <.input
+                field={@form[:prompt]}
+                id="telephone-custom-prompt-input"
+                type="text"
+                maxlength="100"
+                autocomplete="off"
+                placeholder="Write your own word or phrase…"
+                class="w-full rounded-base border-2 border-border bg-white px-4 py-3 text-base focus:ring-2 focus:ring-ring focus:outline-none"
+              />
+            </div>
+            <.button
+              id="telephone-custom-prompt-submit"
+              type="submit"
+              class="justify-center px-6 py-3 font-black"
+            >
+              Use my prompt
+            </.button>
+          </.form>
         <% end %>
       </.box>
     </section>

@@ -76,8 +76,8 @@ defmodule Flamingo.GameModes.TelephoneTest do
     {state, game_roster} = started(["a", "b"], choose_prompts: false)
 
     assert state.phase == :telephone_prompt
-    assert Telephone.view(state, "a", game_roster).prompt_choices == ["cat", "dog", "bird"]
-    assert Telephone.view(state, "b", game_roster).prompt_choices == ["dog", "bird", "cat"]
+    assert Telephone.view(state, "a", game_roster).prompt_choices == ["cat", "bird", "horse"]
+    assert Telephone.view(state, "b", game_roster).prompt_choices == ["dog", "fish", "frog"]
 
     {:ok, %{state: state}} =
       Telephone.command(state, "a", {:select_prompt, "bird"}, context(game_roster, "a"))
@@ -89,15 +89,43 @@ defmodule Flamingo.GameModes.TelephoneTest do
              Telephone.command(
                state,
                "b",
-               {:select_prompt, "not offered"},
+               {:select_prompt, ""},
                context(game_roster, "b")
              )
 
     {:ok, %{state: state}} =
-      Telephone.command(state, "b", {:select_prompt, "dog"}, context(game_roster, "b"))
+      Telephone.command(state, "b", {:select_prompt, "my own prompt"}, context(game_roster, "b"))
 
     assert state.phase == :telephone_draw
-    assert Enum.map(state.chains, &hd(&1.entries).value) == ["bird", "dog"]
+    assert Enum.map(state.chains, &hd(&1.entries).value) == ["bird", "my own prompt"]
+  end
+
+  test "prompt choices and selected custom prompts are unique across players" do
+    {state, game_roster} = started(["a", "b", "c"], choose_prompts: false)
+
+    choices = state.prompt_choices |> Map.values() |> List.flatten()
+    assert length(choices) == length(Enum.uniq_by(choices, &String.downcase/1))
+
+    {:ok, %{state: state}} =
+      Telephone.command(state, "a", {:select_prompt, "Moon Base"}, context(game_roster, "a"))
+
+    assert {:error, :prompt_taken} =
+             Telephone.command(
+               state,
+               "b",
+               {:select_prompt, " moon base "},
+               context(game_roster, "b")
+             )
+
+    other_player_choice = state.prompt_choices |> Map.fetch!("c") |> List.first()
+
+    assert {:error, :prompt_taken} =
+             Telephone.command(
+               state,
+               "b",
+               {:select_prompt, String.upcase(other_player_choice)},
+               context(game_roster, "b")
+             )
   end
 
   test "rotates chains, alternates phases, and keeps drawings viewer-private" do

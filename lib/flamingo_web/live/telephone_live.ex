@@ -29,6 +29,7 @@ defmodule FlamingoWeb.TelephoneLive do
        include_default_words: false,
        turn_end_time: nil,
        drawing_key: nil,
+       prompt_form: to_form(%{"prompt" => ""}),
        guess_form: to_form(%{"text" => ""}, as: :guess)
      )}
   end
@@ -97,6 +98,7 @@ defmodule FlamingoWeb.TelephoneLive do
               <TelephoneComponents.prompt_phase
                 choices={@prompt_choices}
                 submitted={submitted?(assigns)}
+                form={@prompt_form}
               />
             <% :telephone_draw -> %>
               <TelephoneComponents.draw_phase
@@ -281,7 +283,8 @@ defmodule FlamingoWeb.TelephoneLive do
   defp iso_time(%DateTime{} = value), do: DateTime.to_iso8601(value)
   defp iso_time(value) when is_binary(value), do: value
   defp iso_time(_), do: nil
-  defp command_error(:invalid_prompt), do: "Choose one of the prompts shown."
+  defp command_error(:invalid_prompt), do: "Choose a prompt or write one of your own."
+  defp command_error(:prompt_taken), do: "That prompt is already in this game. Try another one."
   defp command_error(:invalid_guess), do: "Add a guess between 1 and 100 characters."
   defp command_error(:already_submitted), do: "You already sent this link."
   defp command_error(:not_host), do: "Only the host can do that."

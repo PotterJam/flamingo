@@ -124,8 +124,12 @@ defmodule FlamingoWeb.TelephoneLiveTest do
 
     assert has_element?(telephone, "#telephone-prompt-phase")
     assert has_element?(telephone, "#telephone-prompt-choices button")
+    assert has_element?(telephone, "#telephone-custom-prompt-form")
 
-    telephone |> element("#telephone-prompt-choices button", "orbital llama") |> render_click()
+    telephone
+    |> form("#telephone-custom-prompt-form", %{"prompt" => "moon trampoline"})
+    |> render_submit()
+
     assert has_element?(telephone, "#prompt-submitted-waiting")
 
     {:ok, other_snapshot} = snapshot_as(room_id, other_token)
@@ -141,8 +145,7 @@ defmodule FlamingoWeb.TelephoneLiveTest do
 
     assert has_element?(telephone, "#telephone-draw-phase")
 
-    assert has_element?(telephone, "#draw-source-text", "orbital llama") or
-             has_element?(telephone, "#draw-source-text", "velvet cactus")
+    assert has_element?(telephone, "#draw-source-text", "moon trampoline")
 
     assert has_element?(telephone, "#telephone-drawing-canvas canvas")
     assert has_element?(telephone, "#submit-telephone-drawing")
