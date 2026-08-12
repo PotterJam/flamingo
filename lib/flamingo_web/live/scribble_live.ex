@@ -479,7 +479,7 @@ defmodule FlamingoWeb.ScribbleLive do
                       data-constraint={@constraint}
                       class="flex flex-col gap-2"
                     >
-                      <.box class="bg-white p-0">
+                      <.box class="drawing-canvas-frame relative z-0 bg-white p-0">
                         <canvas
                           width="700"
                           height="500"
@@ -495,7 +495,7 @@ defmodule FlamingoWeb.ScribbleLive do
                       </.box>
 
                       <%= if @phase == :playing and @player_id == @drawer_id and @participation == :active do %>
-                        <.box class="bg-white p-0">
+                        <.box class="relative z-10 bg-white p-0">
                           <.drawing_toolbar palette={palette()} />
                         </.box>
                       <% end %>
@@ -503,7 +503,7 @@ defmodule FlamingoWeb.ScribbleLive do
 
                     <%= if @phase == :playing and @player_id != @drawer_id and @participation == :active do %>
                       <%= if MapSet.member?(@correct_guesses, @player_id) do %>
-                        <.box class="bg-green-100 p-3 text-center font-bold text-green-800">
+                        <.box class="relative z-10 bg-green-100 p-3 text-center font-bold text-green-800">
                           You guessed it!
                         </.box>
                       <% else %>
@@ -512,7 +512,7 @@ defmodule FlamingoWeb.ScribbleLive do
                           phx-submit="guess"
                           phx-hook=".GuessForm"
                           id="guess-form"
-                          class="mx-auto flex w-96 items-center gap-2"
+                          class="relative z-10 mx-auto flex w-96 items-center gap-2"
                         >
                           <span
                             id="guess-letter-count"
@@ -539,7 +539,7 @@ defmodule FlamingoWeb.ScribbleLive do
                   </div>
               <% end %>
 
-              <.box class="flex min-h-0 w-full flex-1 flex-col bg-white p-0">
+              <.box class="relative z-10 flex min-h-0 w-full flex-1 flex-col bg-white p-0">
                 <div
                   id="game-feed"
                   phx-hook=".ScrollFeed"

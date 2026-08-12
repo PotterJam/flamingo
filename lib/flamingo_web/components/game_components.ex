@@ -333,7 +333,7 @@ defmodule FlamingoWeb.GameComponents do
       assign(assigns, display: display, hint_chars: hint_chars, letter_count: letter_count)
 
     ~H"""
-    <div class="relative self-center">
+    <div class="relative z-10 self-center">
       <div class={[
         "rounded-full border-2 border-border bg-pink-400 px-10 pt-1 pb-4 shadow-rounded",
         if(!@display, do: "invisible")
@@ -383,7 +383,7 @@ defmodule FlamingoWeb.GameComponents do
 
   def player_list_panel(assigns) do
     ~H"""
-    <div class="relative flex w-full flex-1 flex-col">
+    <div class="relative z-10 flex w-full flex-1 flex-col">
       <p
         id="round-progress"
         class="absolute -top-8 left-1 text-xl leading-none font-black text-black"
