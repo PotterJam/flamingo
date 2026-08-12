@@ -448,6 +448,40 @@ defmodule FlamingoWeb.ScribbleLiveTest do
     refute has_element?(spectator_view, "#guess-form")
   end
 
+  test "hidden canvas is revealed to the drawer during turn reveal", %{
+    conn: conn,
+    room_id: room_id
+  } do
+    {:ok, drawer_token, _drawer_snapshot} = join_connected(room_id, "Alice")
+    {:ok, guesser_token, _guesser_snapshot} = join_connected(room_id, "Bob")
+
+    :ok =
+      start_game_as(room_id, drawer_token, %{
+        game_variant: :constraint_roulette,
+        custom_words: ["secret", "other", "third"]
+      })
+
+    {:ok, state} = room_snapshot(room_id)
+    :sys.replace_state(room_pid(room_id), &put_in(&1.game.constraint, :hidden_canvas))
+
+    {:ok, drawer_view, _html} =
+      live(conn, ~p"/game/#{room_id}?resume_token=#{drawer_token}")
+
+    :ok = select_word_as(room_id, drawer_token, List.first(state.word_choices))
+
+    assert has_element?(
+             drawer_view,
+             "#drawing-canvas[data-is-drawer='true'][data-constraint='hidden_canvas'][data-phase='playing']"
+           )
+
+    assert :correct = guess_as(room_id, guesser_token, List.first(state.word_choices))
+
+    assert has_element?(
+             drawer_view,
+             "#drawing-canvas[data-is-drawer='true'][data-constraint='hidden_canvas'][data-phase='turn_reveal']"
+           )
+  end
+
   test "a late joiner spectates until the next turn", %{conn: conn, room_id: room_id} do
     {:ok, drawer_token, %{viewer_id: drawer}} = join_connected(room_id, "Alice")
     {:ok, guesser_token, %{viewer_id: guesser}} = join_connected(room_id, "Bob")
