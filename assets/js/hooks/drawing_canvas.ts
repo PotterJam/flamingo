@@ -196,7 +196,9 @@ const DrawingCanvas = {
     }
 
     if (this.isDrawer && this.constraint === "rotating_canvas") {
-      this.canvas.classList.add("roulette-rotating-canvas");
+      this.canvas
+        .closest(".drawing-canvas-frame")
+        ?.classList.add("roulette-rotating-canvas-frame");
     }
 
     if (this.el.dataset.finalDrawingEvents) {

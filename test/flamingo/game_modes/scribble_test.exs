@@ -106,6 +106,7 @@ defmodule Flamingo.GameModes.ScribbleTest do
     {%{state: roulette}, _word} = complete_turn(roulette, game_context)
     assert roulette.drawer_id == "b"
     assert roulette.constraint == :mirror
+    assert [%{constraint: :mirror}] = roulette.final_drawings
 
     {%{state: roulette}, _word} = complete_turn(roulette, game_context)
     assert roulette.drawer_id == "a"

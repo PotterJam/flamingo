@@ -105,6 +105,13 @@ defmodule FlamingoWeb.ScribbleLive do
   defp constraint_label(:mirror), do: "Mirror mode — horizontal movement is reversed"
   defp constraint_label(_constraint), do: nil
 
+  defp constraint_mode(:hidden_canvas), do: "draw blind"
+  defp constraint_mode(:single_stroke), do: "one stroke"
+  defp constraint_mode(:straight_lines), do: "straight lines only"
+  defp constraint_mode(:rotating_canvas), do: "moving target"
+  defp constraint_mode(:mirror), do: "mirror mode"
+  defp constraint_mode(_constraint), do: nil
+
   defp selected_game_mode(:telephone, _variant), do: "telephone"
   defp selected_game_mode(:scribble, :constraint_roulette), do: "constraint_roulette"
   defp selected_game_mode(_mode, _variant), do: "classic"
@@ -489,7 +496,7 @@ defmodule FlamingoWeb.ScribbleLive do
                       data-phase={@phase}
                       class="flex flex-col gap-2"
                     >
-                      <.box class="bg-white p-0">
+                      <.box class="drawing-canvas-frame relative z-0 bg-white p-0">
                         <canvas
                           width="700"
                           height="500"
@@ -505,7 +512,7 @@ defmodule FlamingoWeb.ScribbleLive do
                       </.box>
 
                       <%= if @phase == :playing and @player_id == @drawer_id and @participation == :active do %>
-                        <.box class="bg-white p-0">
+                        <.box class="relative z-10 bg-white p-0">
                           <.drawing_toolbar palette={palette()} />
                         </.box>
                       <% end %>
@@ -513,7 +520,7 @@ defmodule FlamingoWeb.ScribbleLive do
 
                     <%= if @phase == :playing and @player_id != @drawer_id and @participation == :active do %>
                       <%= if MapSet.member?(@correct_guesses, @player_id) do %>
-                        <.box class="bg-green-100 p-3 text-center font-bold text-green-800">
+                        <.box class="relative z-10 bg-green-100 p-3 text-center font-bold text-green-800">
                           You guessed it!
                         </.box>
                       <% else %>
@@ -522,7 +529,7 @@ defmodule FlamingoWeb.ScribbleLive do
                           phx-submit="guess"
                           phx-hook=".GuessForm"
                           id="guess-form"
-                          class="mx-auto flex w-96 items-center gap-2"
+                          class="relative z-10 mx-auto flex w-96 items-center gap-2"
                         >
                           <span
                             id="guess-letter-count"
@@ -549,7 +556,7 @@ defmodule FlamingoWeb.ScribbleLive do
                   </div>
               <% end %>
 
-              <.box class="flex min-h-0 w-full flex-1 flex-col bg-white p-0">
+              <.box class="relative z-10 flex min-h-0 w-full flex-1 flex-col bg-white p-0">
                 <div
                   id="game-feed"
                   phx-hook=".ScrollFeed"
@@ -663,6 +670,7 @@ defmodule FlamingoWeb.ScribbleLive do
                   <% end %>
                   <%= for drawing <- selected_drawings do %>
                     <% share_url = drawing_share_url(drawing, @final_players) %>
+                    <% drawing_constraint = constraint_mode(Map.get(drawing, :constraint)) %>
                     <div class="border-2 border-border bg-white p-3">
                       <div class="mb-2 flex items-center justify-between gap-3">
                         <span
@@ -696,6 +704,13 @@ defmodule FlamingoWeb.ScribbleLive do
                         <canvas width="700" height="500" class="aspect-[7/5] w-full bg-white">
                         </canvas>
                       </div>
+                      <p
+                        :if={drawing_constraint}
+                        id={"final-drawing-constraint-#{drawing.drawer_id}-round-#{drawing.round_number}"}
+                        class="mt-2 text-center text-sm font-bold text-yellow-600"
+                      >
+                        drawn with {drawing_constraint}
+                      </p>
                     </div>
                   <% end %>
                 </div>
@@ -799,6 +814,10 @@ defmodule FlamingoWeb.ScribbleLive do
             // bottom; never yank the feed around while they're reading back.
             this.pinned = true
             this.el.addEventListener("scroll", () => {
+              // A stream reset briefly clamps scrollTop to zero. Preserve the
+              // user's pre-patch position until the replacement has settled.
+              if (this.patching) return
+
               const distanceFromBottom =
                 this.el.scrollHeight - this.el.scrollTop - this.el.clientHeight
               this.pinned = distanceFromBottom < 32
@@ -806,14 +825,31 @@ defmodule FlamingoWeb.ScribbleLive do
             this.scrollToBottom()
             this.handleEvent("scroll_feed", () => this.pinned && this.scrollToBottom())
           },
+          beforeUpdate() {
+            this.previousScrollTop = this.el.scrollTop
+            this.patching = true
+          },
           updated() {
             if (this.pinned) this.scrollToBottom()
+            else this.restoreScrollPosition()
           },
           scrollToBottom() {
             // Wait a frame so layout has settled; scrolling while the panel is
             // mid-patch (height not yet computed) silently clamps to the top.
             requestAnimationFrame(() => {
               this.el.scrollTop = this.el.scrollHeight
+              this.finishScroll()
+            })
+          },
+          restoreScrollPosition() {
+            requestAnimationFrame(() => {
+              this.el.scrollTop = this.previousScrollTop
+              this.finishScroll()
+            })
+          },
+          finishScroll() {
+            requestAnimationFrame(() => {
+              this.patching = false
             })
           }
         }
