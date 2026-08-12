@@ -88,19 +88,29 @@ defmodule Flamingo.GameModes.ScribbleTest do
     assert restarted.used_words == MapSet.new()
   end
 
-  test "constraint roulette selects and projects a constraint for each turn" do
+  test "constraint roulette rotates through every constraint for each drawer" do
     pick_last = fn candidates -> List.last(candidates) end
+    game_context = context(select_candidate: pick_last)
 
     {:ok, %{state: roulette}} =
       Scribble.start(
         admitted(),
-        %{round_count: 1, game_variant: :constraint_roulette},
-        context(select_candidate: pick_last)
+        %{round_count: 2, game_variant: :constraint_roulette},
+        game_context
       )
 
     assert roulette.constraint == :mirror
     assert Scribble.view(roulette, "b", roster()).constraint == :mirror
     assert Scribble.view(roulette, "b", roster()).game_variant == :constraint_roulette
+
+    {%{state: roulette}, _word} = complete_turn(roulette, game_context)
+    assert roulette.drawer_id == "b"
+    assert roulette.constraint == :mirror
+    assert [%{constraint: :mirror}] = roulette.final_drawings
+
+    {%{state: roulette}, _word} = complete_turn(roulette, game_context)
+    assert roulette.drawer_id == "a"
+    assert roulette.constraint == :rotating_canvas
 
     {:ok, %{state: classic}} = Scribble.start(admitted(), %{round_count: 1}, context())
     assert classic.constraint == nil

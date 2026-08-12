@@ -359,7 +359,7 @@ defmodule FlamingoWeb.CoreComponents do
     assigns =
       assigns
       |> assign(:value, value)
-      |> assign(:range_progress, range_progress(value, min, max))
+      |> assign(:slider_progress, range_progress(value, min, max))
 
     ~H"""
     <div class="fieldset">
@@ -369,8 +369,8 @@ defmodule FlamingoWeb.CoreComponents do
         name={@name}
         id={@id}
         value={@value}
-        class={["range-input", @class || "w-full"]}
-        style={"--range-progress: #{@range_progress}%"}
+        class={["nb-slider", @class || "w-full"]}
+        style={"--slider-progress: #{@slider_progress}%"}
         phx-hook=".RangeInput"
         {@rest}
       />
@@ -384,7 +384,7 @@ defmodule FlamingoWeb.CoreComponents do
             const max = Number(this.el.max || 100)
             const value = Number(this.el.value)
             const progress = max === min ? 0 : ((value - min) / (max - min)) * 100
-            this.el.style.setProperty("--range-progress", `${Math.min(100, Math.max(0, progress))}%`)
+            this.el.style.setProperty("--slider-progress", `${Math.min(100, Math.max(0, progress))}%`)
           }
 
           this.updateProgress()

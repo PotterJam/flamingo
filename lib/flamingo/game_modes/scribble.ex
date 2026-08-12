@@ -21,6 +21,7 @@ defmodule Flamingo.GameModes.Scribble do
       include_default_words: false,
       game_variant: :classic,
       constraint: nil,
+      remaining_constraints: %{},
       drawer_id: nil,
       current_round: 0,
       drawn_this_round: MapSet.new(),
@@ -64,7 +65,8 @@ defmodule Flamingo.GameModes.Scribble do
       | participants: Map.delete(state.participants, seat_id),
         scores: Map.delete(state.scores, seat_id),
         correct_guesses: Map.delete(state.correct_guesses, seat_id),
-        score_gains: Map.delete(state.score_gains, seat_id)
+        score_gains: Map.delete(state.score_gains, seat_id),
+        remaining_constraints: Map.delete(state.remaining_constraints, seat_id)
     }
 
     {feed, _} = Feed.player_left(state.feed, seat_id, removed.name)
@@ -114,6 +116,7 @@ defmodule Flamingo.GameModes.Scribble do
           include_default_words: defaults,
           game_variant: game_variant,
           constraint: nil,
+          remaining_constraints: %{},
           participants: participants,
           drawer_id: Enum.find(roster.player_order, &active?(participants, &1)),
           current_round: 0,
@@ -284,12 +287,7 @@ defmodule Flamingo.GameModes.Scribble do
     choices =
       context.word_choices.(3, state.used_words, state.custom_words, state.include_default_words)
 
-    constraint =
-      if state.game_variant == :constraint_roulette,
-        do: choose(context, @constraints),
-        else: nil
-
-    state = %{state | constraint: constraint}
+    state = choose_constraint(state, context)
 
     if choices == [],
       do: game_ended(state, context.roster),
@@ -369,6 +367,7 @@ defmodule Flamingo.GameModes.Scribble do
       drawer_id: state.drawer_id,
       word: state.word,
       round_number: state.current_round + 1,
+      constraint: state.constraint,
       ops: DrawingShare.compact_ops(state.current_drawing)
     }
 
@@ -468,6 +467,24 @@ defmodule Flamingo.GameModes.Scribble do
   defp online?(roster, id), do: roster.players[id].connected
   defp online_count(roster), do: Enum.count(roster.players, fn {_, p} -> p.connected end)
   defp choose(context, candidates), do: context.select_candidate.(candidates)
+
+  defp choose_constraint(%{game_variant: :constraint_roulette} = state, context) do
+    remaining = Map.get(state.remaining_constraints, state.drawer_id, @constraints)
+    constraint = choose(context, remaining)
+
+    %{
+      state
+      | constraint: constraint,
+        remaining_constraints:
+          Map.put(
+            state.remaining_constraints,
+            state.drawer_id,
+            List.delete(remaining, constraint)
+          )
+    }
+  end
+
+  defp choose_constraint(state, _context), do: %{state | constraint: nil}
 
   defp constraint_event_allowed?(%{constraint: :single_stroke} = state, event) do
     type = event["event_type"]
