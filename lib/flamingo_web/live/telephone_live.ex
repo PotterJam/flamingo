@@ -109,6 +109,13 @@ defmodule FlamingoWeb.TelephoneLive do
                 submitted={submitted?(assigns)}
                 form={@guess_form}
               />
+            <% :telephone_return -> %>
+              <TelephoneComponents.return_phase
+                assignment={@assignment}
+                players={@players}
+                viewer_id={@viewer_id}
+                host_id={@host_id}
+              />
             <% :telephone_reveal -> %>
               <TelephoneComponents.reveal_phase
                 reveal={@reveal}
@@ -171,6 +178,8 @@ defmodule FlamingoWeb.TelephoneLive do
   def handle_event("submit_guess", %{"guess" => %{"text" => text}}, socket) do
     command(socket, {:submit_guess, text}, reset_form?: true)
   end
+
+  def handle_event("start_reveal", _params, socket), do: command(socket, :start_reveal)
 
   def handle_event("advance_reveal", _params, socket), do: command(socket, :advance_reveal)
 

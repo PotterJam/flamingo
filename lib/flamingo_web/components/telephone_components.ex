@@ -168,6 +168,137 @@ defmodule FlamingoWeb.TelephoneComponents do
     """
   end
 
+  attr :assignment, :map, default: nil
+  attr :players, :map, required: true
+  attr :viewer_id, :any, required: true
+  attr :host_id, :any, required: true
+
+  def return_phase(assigns) do
+    assigns =
+      assign(assigns,
+        original_entry: assigns.assignment && Map.get(assigns.assignment, :origin),
+        final_entry: assigns.assignment && Map.get(assigns.assignment, :source)
+      )
+
+    ~H"""
+    <section id="telephone-return-phase" class="mx-auto w-full max-w-5xl space-y-6 pb-8">
+      <.box class="relative overflow-hidden bg-purple-600 p-6 text-center text-white sm:p-10">
+        <div aria-hidden="true" class="pointer-events-none absolute inset-0 overflow-hidden">
+          <.icon
+            name={:sparkles}
+            class="telephone-float absolute top-3 left-[6%] h-16 w-16 text-yellow-300 opacity-70"
+          />
+          <.icon
+            name={:rotate_cw}
+            class="telephone-float absolute top-4 right-[7%] h-14 w-14 text-pink-200 opacity-60 [animation-delay:400ms]"
+          />
+        </div>
+        <div class="relative">
+          <p class="text-sm font-black tracking-[0.25em] text-yellow-200 uppercase">
+            Full circle
+          </p>
+          <h2 class="mt-2 font-hero text-4xl font-black sm:text-6xl">Your chain made it home</h2>
+          <p class="mx-auto mt-3 max-w-2xl text-lg font-bold text-purple-50">
+            Here’s your private first-and-final look. The twists in the middle stay secret until the
+            host starts the reveal.
+          </p>
+        </div>
+      </.box>
+
+      <div
+        :if={@assignment}
+        id="telephone-return-comparison"
+        class="grid items-stretch gap-5 md:grid-cols-[1fr_auto_1fr]"
+      >
+        <.box class="bg-white p-5 sm:p-7">
+          <p class="text-xs font-black tracking-widest text-purple-700 uppercase">Where it started</p>
+          <p
+            id="telephone-return-original"
+            class="flex min-h-44 items-center justify-center p-4 text-center font-hero text-3xl font-black text-purple-700 sm:text-4xl"
+          >
+            “{present_text(@original_entry && @original_entry.value)}”
+          </p>
+        </.box>
+
+        <div class="flex items-center justify-center" aria-hidden="true">
+          <div class="flex h-14 w-14 rotate-3 items-center justify-center rounded-full border-2 border-border bg-yellow-300 shadow-shadow">
+            <.icon name={:arrow_right} class="hidden h-7 w-7 md:block" />
+            <.icon name={:arrow_down} class="h-7 w-7 md:hidden" />
+          </div>
+        </div>
+
+        <.box class="telephone-reveal-current bg-yellow-50 p-5 sm:p-7">
+          <div class="flex items-center justify-between gap-3">
+            <div>
+              <p class="text-xs font-black tracking-widest text-pink-700 uppercase">
+                Where it landed
+              </p>
+              <p class="mt-1 font-bold">
+                Final link by {player_name(@players, @final_entry && @final_entry.player_id)}
+              </p>
+            </div>
+            <span class="rotate-2 border-2 border-border bg-pink-300 px-3 py-1 text-xs font-black uppercase shadow-shadow">
+              Just for you
+            </span>
+          </div>
+
+          <%= if @final_entry && @final_entry.type == :drawing do %>
+            <div
+              id="telephone-return-drawing"
+              phx-hook="DrawingCanvas"
+              phx-update="ignore"
+              data-is-drawer="false"
+              data-final-drawing-replay="true"
+              data-final-drawing-events={Jason.encode!(@final_entry.value || [])}
+              class="mt-4"
+            >
+              <div class="relative aspect-[7/5] w-full border-2 border-border bg-white">
+                <canvas width="700" height="500" class="absolute inset-0 h-full w-full"></canvas>
+                <.drawing_fallback ops={@final_entry.value || []} />
+              </div>
+            </div>
+          <% else %>
+            <p
+              id="telephone-return-text"
+              class="flex min-h-44 items-center justify-center p-4 text-center font-hero text-3xl font-black text-pink-600 sm:text-4xl"
+            >
+              “{present_text(@final_entry && @final_entry.value)}”
+            </p>
+          <% end %>
+        </.box>
+      </div>
+
+      <.box :if={!@assignment} class="bg-white p-8 text-center">
+        <p id="telephone-return-spectator" class="text-xl font-black">
+          Every chain is back with its owner. The grand reveal is almost here.
+        </p>
+      </.box>
+
+      <div
+        id="telephone-return-controls"
+        class="border-2 border-border bg-white p-5 text-center shadow-shadow"
+      >
+        <p class="mb-3 font-bold text-gray-600">Take it in—there’s no timer on this moment.</p>
+        <.button
+          :if={@viewer_id == @host_id}
+          id="start-telephone-reveal"
+          phx-click="start_reveal"
+          class="min-w-64 justify-center px-8 py-3 text-lg font-black"
+        >
+          Start the grand reveal <.icon name={:sparkles} class="ml-2 h-5 w-5" />
+        </.button>
+        <p
+          :if={@viewer_id != @host_id}
+          id="waiting-for-return-host"
+          class="font-bold text-gray-600"
+        >
+          Waiting for the host to gather everyone for the reveal…
+        </p>
+      </div>
+    </section>
+    """
+  end
+
   attr :reveal, :map, default: nil
   attr :players, :map, required: true
   attr :viewer_id, :any, required: true
