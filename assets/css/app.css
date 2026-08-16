@@ -103,6 +103,18 @@
   background-size: 70px 70px;
 }
 
+.lobby-background-classic {
+  background-color: var(--color-pink-100);
+}
+
+.lobby-background-constraint {
+  background-color: var(--color-purple-100);
+}
+
+.lobby-background-telephone {
+  background-color: var(--color-sky-100);
+}
+
 @keyframes drift-left {
   0% { transform: translateX(-100px); }
   100% { transform: translateX(100px); }

@@ -106,12 +106,13 @@ defmodule FlamingoWeb.TelephoneLiveTest do
     {other_token, _} = join_connected(room_id, "Bob")
     {:ok, lobby, _html} = live(conn, ~p"/game/#{room_id}?resume_token=#{host_token}")
 
+    lobby |> element("#game-mode-telephone") |> render_click()
+
     lobby
     |> form("#settings-form", %{
       "settings" => %{
         "round_count" => "1",
         "turn_length" => "30",
-        "game_mode" => "telephone",
         "custom_words" => "orbital llama\nvelvet cactus",
         "include_default_words" => "false"
       }

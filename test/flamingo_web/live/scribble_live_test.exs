@@ -171,14 +171,14 @@ defmodule FlamingoWeb.ScribbleLiveTest do
 
     {:ok, view, _html} = live(conn, ~p"/game/#{room_id}?resume_token=#{p1_token}")
 
-    assert has_element?(view, "input[name='settings[game_mode]'][value='classic']:checked")
+    assert has_element?(view, "#game-mode-classic[aria-checked='true']")
+    view |> element("#game-mode-constraint_roulette") |> render_click()
 
     view
     |> form("#settings-form", %{
       "settings" => %{
         "round_count" => "1",
-        "turn_length" => "30",
-        "game_mode" => "constraint_roulette"
+        "turn_length" => "30"
       }
     })
     |> render_submit()
