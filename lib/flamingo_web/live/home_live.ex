@@ -11,7 +11,6 @@ defmodule FlamingoWeb.HomeLive do
        name: "",
        room_code: room_code,
        avatar: Avatar.random(),
-       active_part: "head",
        error: nil
      )}
   end
@@ -19,18 +18,17 @@ defmodule FlamingoWeb.HomeLive do
   def render(assigns) do
     ~H"""
     <Layouts.app flash={@flash}>
-      <div class="flex min-h-screen w-full flex-col items-center justify-center gap-4 px-4 py-8">
+      <div class="flex min-h-screen w-full flex-col items-center justify-center gap-4 px-4 py-8 max-[359px]:px-1">
         <.card class="w-full max-w-xs bg-white px-6 py-4">
           <div class="flex justify-center">
             <.logo />
           </div>
         </.card>
 
-        <.card class="w-full max-w-4xl overflow-hidden bg-white p-0">
+        <.card class="w-full max-w-[44rem] overflow-visible bg-white p-0">
           <.form
             for={%{}}
             as={:lobby}
-            phx-change="update_fields"
             phx-submit="submit_lobby"
             id="lobby-form"
           >
@@ -44,156 +42,169 @@ defmodule FlamingoWeb.HomeLive do
             >
               Submit
             </button>
-            <div class="grid lg:grid-cols-[minmax(270px,0.8fr)_minmax(440px,1.2fr)]">
+
+            <div class="grid lg:grid-cols-[minmax(400px,4fr)_minmax(300px,3fr)]">
               <section
                 id="avatar-customizer"
-                class="relative flex flex-col items-center justify-center overflow-hidden border-b-2 border-border bg-pink-100 p-6 lg:border-r-2 lg:border-b-0"
+                phx-hook="AvatarCustomizer"
+                phx-update="ignore"
+                class="relative flex flex-col items-center justify-center bg-white px-3 py-5 max-[359px]:px-1 sm:p-4"
               >
-                <div class="absolute inset-x-0 top-0 flex items-center justify-between p-4">
-                  <span class="rounded-full border-2 border-border bg-white px-3 py-1 text-[11px] font-black uppercase tracking-[0.18em]">
-                    Your creature
-                  </span>
-                  <button
-                    type="button"
-                    phx-click="randomize_avatar"
-                    id="randomize-avatar-button"
-                    class="group flex items-center gap-1.5 rounded-full border-2 border-border bg-yellow-200 px-3 py-1 text-xs font-black shadow-[2px_2px_0_#000] transition-all hover:-translate-y-0.5 hover:shadow-[3px_3px_0_#000] active:translate-x-0.5 active:translate-y-0.5 active:shadow-none"
-                  >
-                    <.icon
-                      name={:sparkles}
-                      class="size-3.5 transition-transform group-hover:rotate-12"
-                    /> Remix
-                  </button>
-                </div>
+                <input
+                  :for={part <- Avatar.parts()}
+                  type="hidden"
+                  id={"avatar-#{part}-input"}
+                  name={"lobby[#{part}]"}
+                  value={@avatar[part]}
+                />
+                <input
+                  :for={part <- Avatar.parts()}
+                  type="hidden"
+                  id={"avatar-#{part}-color-input"}
+                  name={"lobby[#{part}_color]"}
+                  value={@avatar["#{part}_color"]}
+                />
 
-                <div class="mt-9 flex size-56 items-center justify-center rounded-full border-2 border-border bg-white shadow-[6px_6px_0_#000] sm:size-64">
+                <div class="relative h-56 w-full max-w-xl sm:h-64">
                   <.flamingo_avatar
                     avatar={@avatar}
-                    class="h-48 w-48 drop-shadow-sm sm:h-56 sm:w-56"
+                    class="pointer-events-none absolute top-[43%] left-1/2 z-10 h-30 w-24 -translate-x-1/2 -translate-y-1/2 drop-shadow-sm sm:h-40 sm:w-32"
                     label="Your customized creature"
                   />
-                </div>
 
-                <div
-                  class="mt-5 flex flex-wrap justify-center gap-2"
-                  aria-label="Current creature recipe"
-                >
-                  <button
-                    :for={part <- Avatar.parts()}
-                    type="button"
-                    phx-click="select_avatar_part"
-                    phx-value-part={part}
-                    class={[
-                      "rounded-full border-2 border-border px-2.5 py-1 text-xs font-bold capitalize transition-all hover:-translate-y-0.5",
-                      @active_part == part && "bg-pink-300 shadow-[2px_2px_0_#000]",
-                      @active_part != part && "bg-white"
-                    ]}
+                  <template
+                    :for={{animal, index} <- Avatar.animals()}
+                    data-avatar-template={index}
+                    data-avatar-animal-label={animal}
                   >
-                    {part}: {Avatar.animal_label(@avatar[part])}
+                    <.flamingo_avatar avatar={
+                      Map.merge(@avatar, %{
+                        "head" => index,
+                        "body" => index,
+                        "legs" => index,
+                        "feet" => index
+                      })
+                    } />
+                  </template>
+
+                  <div
+                    id="avatar-selector-rows"
+                    class="absolute inset-x-0 top-1/2 z-20 flex -translate-y-1/2 flex-col gap-3"
+                  >
+                    <div
+                      :for={part <- Avatar.parts()}
+                      class="grid grid-cols-[minmax(4rem,1fr)_6rem_minmax(4.5rem,1fr)] items-center min-[360px]:grid-cols-[minmax(4rem,1fr)_8rem_minmax(4.5rem,1fr)] sm:grid-cols-[minmax(6rem,1fr)_10rem_minmax(7rem,1fr)]"
+                    >
+                      <div class="flex items-center justify-end gap-1 sm:gap-2">
+                        <div class="relative flex shrink-0">
+                          <button
+                            type="button"
+                            phx-click={
+                              JS.show(
+                                to: "#avatar-#{part}-color-picker",
+                                display: "grid"
+                              )
+                            }
+                            id={"avatar-#{part}-color-button"}
+                            aria-label={"Choose #{part} colour"}
+                            class="group flex size-8 shrink-0 items-center justify-center transition-transform hover:scale-110 focus-visible:outline-2 focus-visible:outline-offset-2 active:scale-95 sm:size-9"
+                          >
+                            <span
+                              class="size-6 rounded-full border-2 border-border transition-transform group-hover:scale-110 max-[359px]:size-5 sm:size-[1.6rem]"
+                              style={"background-color: #{Avatar.color(@avatar["#{part}_color"])}"}
+                            >
+                            </span>
+                          </button>
+
+                          <div
+                            id={"avatar-#{part}-color-picker"}
+                            role="group"
+                            aria-label={"Choose #{part} colour"}
+                            phx-click-away={JS.hide(to: "#avatar-#{part}-color-picker")}
+                            phx-window-keydown={JS.hide(to: "#avatar-#{part}-color-picker")}
+                            phx-key="escape"
+                            style="display: none"
+                            class="absolute top-1/2 right-[calc(100%-0.25rem)] z-50 grid -translate-y-1/2 grid-cols-[repeat(2,1.25rem)] gap-1 rounded-md border-2 border-border bg-white p-0.5 max-[359px]:right-[calc(100%-0.375rem)]"
+                          >
+                            <button
+                              :for={{color, index} <- Avatar.colors()}
+                              type="button"
+                              phx-click={JS.hide(to: "#avatar-#{part}-color-picker")}
+                              data-avatar-color-option
+                              data-avatar-part={part}
+                              data-avatar-value={index}
+                              data-avatar-color={color}
+                              id={"avatar-#{part}-color-option-#{index}"}
+                              aria-label={"Select colour #{index + 1}"}
+                              aria-pressed={to_string(@avatar["#{part}_color"] == index)}
+                              class={[
+                                "size-5 rounded-full transition-transform hover:scale-110 focus-visible:outline-2 focus-visible:outline-offset-2",
+                                @avatar["#{part}_color"] == index && "scale-110"
+                              ]}
+                              style={"background-color: #{color}"}
+                            >
+                            </button>
+                          </div>
+                        </div>
+                        <button
+                          type="button"
+                          data-avatar-cycle
+                          data-avatar-part={part}
+                          data-avatar-direction="previous"
+                          id={"avatar-#{part}-previous"}
+                          aria-label={"Previous #{part} animal"}
+                          class="flex size-8 shrink-0 items-center justify-center transition-transform hover:-translate-x-0.5 hover:scale-110 focus-visible:outline-2 focus-visible:outline-offset-2 active:scale-95 sm:size-9"
+                        >
+                          <.icon
+                            name={:chevron_left}
+                            class="size-5 stroke-[3] max-[359px]:size-4 sm:size-5"
+                          />
+                        </button>
+                      </div>
+
+                      <span aria-hidden="true"></span>
+
+                      <div class="flex min-w-0 items-center gap-1 sm:gap-2">
+                        <button
+                          type="button"
+                          data-avatar-cycle
+                          data-avatar-part={part}
+                          data-avatar-direction="next"
+                          id={"avatar-#{part}-next"}
+                          aria-label={"Next #{part} animal"}
+                          class="flex size-8 shrink-0 items-center justify-center transition-transform hover:translate-x-0.5 hover:scale-110 focus-visible:outline-2 focus-visible:outline-offset-2 active:scale-95 sm:size-9"
+                        >
+                          <.icon
+                            name={:chevron_right}
+                            class="size-5 stroke-[3] max-[359px]:size-4 sm:size-5"
+                          />
+                        </button>
+                        <span
+                          id={"avatar-#{part}-animal-name"}
+                          class="block text-sm font-medium whitespace-nowrap capitalize"
+                        >
+                          {Avatar.animal_label(@avatar[part])}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+
+                  <button
+                    type="button"
+                    data-avatar-random
+                    id="randomize-avatar-button"
+                    class="group absolute top-[85%] left-1/2 flex -translate-x-1/2 items-center gap-1.5 rounded-full border-2 border-border bg-yellow-200 px-3 py-1 text-xs font-black transition-all hover:-translate-y-0.5 hover:bg-yellow-300 focus-visible:outline-2 focus-visible:outline-offset-2 active:scale-95"
+                  >
+                    <.icon
+                      name={:dice_5}
+                      class="size-3.5 transition-transform group-hover:rotate-12"
+                    /> Random
                   </button>
                 </div>
               </section>
 
-              <div class="flex flex-col">
-                <section class="border-b-2 border-border p-5 sm:p-6">
-                  <div class="mb-5">
-                    <p class="text-xs font-black uppercase tracking-[0.2em] text-pink-500">
-                      Build your own
-                    </p>
-                    <h2 class="font-hero text-3xl leading-tight font-black">
-                      Mix. Match. Make it weird.
-                    </h2>
-                    <p class="mt-1 text-sm text-gray-600">
-                      Choose one part at a time — your creature updates instantly.
-                    </p>
-                  </div>
-
-                  <div
-                    class="grid grid-cols-4 border-2 border-border bg-white"
-                    role="tablist"
-                    aria-label="Creature parts"
-                  >
-                    <button
-                      :for={{part, index} <- Enum.with_index(Avatar.parts())}
-                      type="button"
-                      role="tab"
-                      aria-selected={@active_part == part}
-                      phx-click="select_avatar_part"
-                      phx-value-part={part}
-                      id={"avatar-part-#{part}"}
-                      class={[
-                        "relative px-2 py-3 text-xs font-black uppercase tracking-wide transition-colors sm:text-sm",
-                        index > 0 && "border-l-2 border-border",
-                        @active_part == part && "bg-pink-300",
-                        @active_part != part && "hover:bg-pink-100"
-                      ]}
-                    >
-                      <span class="block capitalize">{part}</span>
-                      <span
-                        :if={@active_part == part}
-                        class="absolute inset-x-3 -bottom-0.5 h-1 bg-black"
-                      >
-                      </span>
-                    </button>
-                  </div>
-
-                  <div
-                    :for={part <- Avatar.parts()}
-                    id={"avatar-#{part}-panel"}
-                    role="tabpanel"
-                    hidden={@active_part != part}
-                    class="pt-5"
-                  >
-                    <fieldset>
-                      <legend class="mb-2 text-xs font-black uppercase tracking-[0.16em] text-gray-500">
-                        Pick an animal
-                      </legend>
-                      <div class="grid grid-cols-5 gap-2">
-                        <label :for={{animal, index} <- Avatar.animals()} class="group cursor-pointer">
-                          <input
-                            type="radio"
-                            name={"lobby[#{part}]"}
-                            value={index}
-                            checked={@avatar[part] == index}
-                            aria-label={"#{part} animal: #{animal}"}
-                            class="peer sr-only"
-                          />
-                          <span class="flex min-h-16 flex-col items-center justify-center gap-1 border-2 border-gray-300 bg-white px-1 py-2 text-center text-[10px] font-black uppercase transition-all group-hover:-translate-y-0.5 group-hover:border-black peer-checked:-translate-y-1 peer-checked:border-black peer-checked:bg-yellow-100 peer-checked:shadow-[3px_3px_0_#000] sm:text-xs">
-                            <span class="text-lg leading-none" aria-hidden="true">
-                              {Enum.at(["🦩", "🐱", "🐸", "🐰", "🦆"], index)}
-                            </span>
-                            {animal}
-                          </span>
-                        </label>
-                      </div>
-                    </fieldset>
-
-                    <fieldset class="mt-5">
-                      <legend class="mb-2 text-xs font-black uppercase tracking-[0.16em] text-gray-500">
-                        Pick a colour
-                      </legend>
-                      <div class="flex flex-wrap gap-2.5">
-                        <label :for={{color, index} <- Avatar.colors()} class="group cursor-pointer">
-                          <input
-                            type="radio"
-                            name={"lobby[#{part}_color]"}
-                            value={index}
-                            checked={@avatar["#{part}_color"] == index}
-                            aria-label={"#{part} colour #{index + 1}"}
-                            class="peer sr-only"
-                          />
-                          <span
-                            class="block size-8 rounded-full border-2 border-border transition-all group-hover:scale-110 peer-checked:-translate-y-1 peer-checked:shadow-[2px_3px_0_#000] peer-focus-visible:outline-2 peer-focus-visible:outline-offset-2"
-                            style={"background-color: #{color}"}
-                          >
-                          </span>
-                        </label>
-                      </div>
-                    </fieldset>
-                  </div>
-                </section>
-
-                <section class="grid gap-4 bg-gray-50 p-5 sm:grid-cols-2 sm:p-6">
+              <div id="lobby-fields-panel" class="flex items-center bg-white">
+                <section class="grid w-full gap-4 p-5 sm:grid-cols-2 sm:p-6 lg:grid-cols-1 lg:p-6">
                   <input
                     type="text"
                     value={@name}
@@ -204,7 +215,7 @@ defmodule FlamingoWeb.HomeLive do
                     id="name-input"
                   />
 
-                  <div class="sm:col-span-2">
+                  <div class="sm:col-span-2 lg:col-span-1">
                     <p :if={@error} class="mb-2 text-sm text-red-400">{@error}</p>
                     <div class="flex flex-row items-start gap-2">
                       <input
@@ -226,7 +237,7 @@ defmodule FlamingoWeb.HomeLive do
                         Join
                       </.button>
                     </div>
-                    <p class="p-2 text-gray-700">or</p>
+                    <p id="lobby-or-divider" class="p-2 text-center text-gray-700">or</p>
                     <.button
                       type="submit"
                       name="lobby[action]"
@@ -247,28 +258,6 @@ defmodule FlamingoWeb.HomeLive do
       </div>
     </Layouts.app>
     """
-  end
-
-  def handle_event("update_fields", %{"lobby" => params}, socket) do
-    {:noreply,
-     assign(socket,
-       name: params["name"] || "",
-       room_code: params["room_code"] || "",
-       avatar: Avatar.normalize(params),
-       error: nil
-     )}
-  end
-
-  def handle_event("randomize_avatar", _params, socket) do
-    {:noreply, assign(socket, avatar: Avatar.random())}
-  end
-
-  def handle_event("select_avatar_part", %{"part" => part}, socket) do
-    if part in Avatar.parts() do
-      {:noreply, assign(socket, active_part: part)}
-    else
-      {:noreply, socket}
-    end
   end
 
   def handle_event("create_room", _params, socket) do
