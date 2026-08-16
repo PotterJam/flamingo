@@ -432,12 +432,7 @@ defmodule FlamingoWeb.ScribbleLive do
                           )
                         ]}
                       >
-                        <div class={[
-                          "flex w-full flex-col items-center gap-4 px-6",
-                          (@constraint == :hidden_canvas and @player_id == @drawer_id and
-                             @participation == :active) &&
-                            "mx-8 w-auto border-2 border-border bg-white/90 py-4 shadow-shadow"
-                        ]}>
+                        <div class="flex w-full flex-col items-center gap-4 px-6">
                           <div>
                             <p class="text-xl font-black">The word was</p>
                             <p class="font-hero text-5xl leading-none font-black text-pink-400">
