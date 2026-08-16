@@ -401,7 +401,7 @@ defmodule FlamingoWeb.ScribbleLive do
         </div>
       <% end %>
       <%= if @phase in [:word_choice, :playing, :turn_reveal] do %>
-        <.flamingo_background />
+        <.flamingo_background game_mode={@game_variant} />
         <div class="flex h-screen w-full items-center justify-center p-6">
           <div class="flex h-[675px] w-full max-w-[1200px] flex-col gap-6">
             <div
@@ -639,7 +639,7 @@ defmodule FlamingoWeb.ScribbleLive do
         </div>
       <% end %>
       <%= if @phase == :game_ended do %>
-        <.flamingo_background />
+        <.flamingo_background game_mode={@game_variant} />
         <% selected_player_id =
           selected_or_winning_player_id(
             @final_players,

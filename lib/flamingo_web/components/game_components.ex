@@ -57,16 +57,32 @@ defmodule FlamingoWeb.GameComponents do
                      }
                    end)
 
+  attr :game_mode, :atom,
+    default: :classic,
+    values: [:classic, :constraint_roulette, :telephone]
+
   def flamingo_background(assigns) do
-    assigns = assign(assigns, :cells, @flamingo_cells)
+    {background_class, word_class} = flamingo_background_classes(assigns.game_mode)
+
+    assigns =
+      assign(assigns,
+        cells: @flamingo_cells,
+        background_class: background_class,
+        word_class: word_class
+      )
 
     ~H"""
-    <div class="fixed inset-0 -z-10 overflow-hidden bg-pink-200">
+    <div
+      id="flamingo-background"
+      data-game-mode={@game_mode}
+      class={["fixed inset-0 -z-10 overflow-hidden", @background_class]}
+    >
       <div class="relative h-full w-full">
         <span
           :for={cell <- @cells}
           class={[
-            "font-retro-display absolute text-lg font-extrabold whitespace-nowrap text-pink-300 opacity-30 select-none",
+            "font-retro-display absolute text-lg font-extrabold whitespace-nowrap opacity-30 select-none",
+            @word_class,
             cell.row_class
           ]}
           style={"top: #{cell.top}rem; left: #{cell.left}rem"}
@@ -78,6 +94,12 @@ defmodule FlamingoWeb.GameComponents do
     </div>
     """
   end
+
+  defp flamingo_background_classes(:constraint_roulette),
+    do: {"bg-purple-100", "text-purple-300"}
+
+  defp flamingo_background_classes(:telephone), do: {"bg-sky-100", "text-sky-300"}
+  defp flamingo_background_classes(_game_mode), do: {"bg-pink-200", "text-pink-300"}
 
   def logo(assigns) do
     ~H"""

@@ -57,7 +57,8 @@ defmodule FlamingoWeb.TelephoneLive do
 
   def render(assigns) do
     ~H"""
-    <Layouts.app flash={@flash} background="grid-background">
+    <Layouts.app flash={@flash} background="">
+      <.flamingo_background game_mode={:telephone} />
       <main id="telephone-game" class="min-h-screen px-3 py-5 sm:px-6 lg:px-8">
         <div class="mx-auto flex w-full max-w-6xl flex-col gap-4">
           <header id="telephone-header" class="flex flex-wrap items-center justify-between gap-3">
