@@ -4,7 +4,7 @@ defmodule FlamingoWeb.HomeLive do
   alias Flamingo.{Avatar, Rooms}
 
   def mount(params, _session, socket) do
-    room_code = params["room"] || ""
+    room_code = Map.get(params, "room_code", "")
 
     {:ok,
      assign(socket,

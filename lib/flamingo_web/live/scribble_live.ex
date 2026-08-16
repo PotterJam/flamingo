@@ -311,7 +311,9 @@ defmodule FlamingoWeb.ScribbleLive do
                           variant="outline"
                           class="text-xs"
                           on_confirm_click={
-                            JS.dispatch("phx:copy", detail: %{text: url(~p"/?room=#{@room_id}")})
+                            JS.dispatch("phx:copy",
+                              detail: %{text: url(~p"/join/#{@room_id}")}
+                            )
                           }
                           id="copy-link-button"
                         >

@@ -98,6 +98,22 @@ defmodule FlamingoWeb.ScribbleLiveTest do
     %{room_id: room_id}
   end
 
+  test "host can copy a path-based room invitation", %{conn: conn, room_id: room_id} do
+    {:ok, host_token, _snapshot} = join_connected(room_id, "Alice")
+    {:ok, view, _html} = live(conn, ~p"/game/#{room_id}?resume_token=#{host_token}")
+
+    copy_command =
+      view
+      |> render()
+      |> LazyHTML.from_fragment()
+      |> LazyHTML.query("#copy-link-button")
+      |> LazyHTML.attribute("phx-click")
+      |> List.first()
+
+    assert copy_command =~ url(~p"/join/#{room_id}")
+    refute copy_command =~ "?room="
+  end
+
   test "host settings clamp round length to supported bounds", %{conn: conn, room_id: room_id} do
     {:ok, p1_token, _p1_snapshot} = join_connected(room_id, "Alice")
     {:ok, _p2_token, _p2_snapshot} = join_connected(room_id, "Bob")
