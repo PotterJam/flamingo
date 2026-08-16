@@ -154,8 +154,7 @@ defmodule Flamingo.GameModes.Telephone do
     do: {:error, :invalid_prompt}
 
   def command(state, actor, {:draw, event}, _context) when is_map(event) do
-    if state.phase == :telephone_draw and eligible?(state, actor) and
-         not MapSet.member?(state.submitted, actor) and valid_draw_event?(event) do
+    if state.phase == :telephone_draw and eligible?(state, actor) and valid_draw_event?(event) do
       old = Map.get(state.current_drawings, actor, [])
       drawing = if event["event_type"] == "undo", do: undo(old), else: old ++ [event]
 
@@ -172,25 +171,33 @@ defmodule Flamingo.GameModes.Telephone do
 
   def command(_state, _actor, {:draw, _event}, _context), do: {:error, :invalid_draw_event}
 
-  def command(state, actor, :submit_drawing, context) do
-    if state.phase == :telephone_draw and eligible?(state, actor) and
-         not MapSet.member?(state.submitted, actor) do
-      submit(state, actor, nil, context)
-    else
-      {:error, :cannot_submit}
-    end
-  end
-
   def command(state, actor, {:submit_guess, text}, context) when is_binary(text) do
     text = String.trim(text)
 
     cond do
-      state.phase != :telephone_guess -> {:error, :not_guess_phase}
-      not eligible?(state, actor) -> {:error, :spectator}
-      MapSet.member?(state.submitted, actor) -> {:error, :already_submitted}
-      text == "" -> {:error, :invalid_guess}
-      String.length(text) > 100 -> {:error, :invalid_guess}
-      true -> submit(state, actor, text, context)
+      state.phase != :telephone_guess ->
+        {:error, :not_guess_phase}
+
+      not eligible?(state, actor) ->
+        {:error, :spectator}
+
+      MapSet.member?(state.submitted, actor) ->
+        {:error, :already_submitted}
+
+      text == "" ->
+        {:error, :invalid_guess}
+
+      String.length(text) > 100 ->
+        {:error, :invalid_guess}
+
+      true ->
+        state = %{
+          state
+          | guesses: Map.put(state.guesses, actor, text),
+            submitted: MapSet.put(state.submitted, actor)
+        }
+
+        reconcile(state, context)
     end
   end
 
@@ -282,20 +289,6 @@ defmodule Flamingo.GameModes.Telephone do
     }
   end
 
-  defp submit(state, actor, guess, context) do
-    state =
-      state
-      |> Map.update!(:submitted, &MapSet.put(&1, actor))
-      |> maybe_store_guess(actor, guess)
-
-    reconcile(state, context)
-  end
-
-  defp maybe_store_guess(state, _actor, nil), do: state
-
-  defp maybe_store_guess(state, actor, guess),
-    do: Map.put(state, :guesses, Map.put(Map.get(state, :guesses, %{}), actor, guess))
-
   defp reconcile(%{phase: :telephone_prompt} = state, context) do
     online = Enum.filter(state.player_order, &online?(context.roster, &1))
 
@@ -304,7 +297,7 @@ defmodule Flamingo.GameModes.Telephone do
       else: ok(state)
   end
 
-  defp reconcile(state, context) when state.phase in [:telephone_draw, :telephone_guess] do
+  defp reconcile(%{phase: :telephone_guess} = state, context) do
     online = Enum.filter(state.player_order, &online?(context.roster, &1))
 
     if online != [] and Enum.all?(online, &MapSet.member?(state.submitted, &1)),
@@ -397,9 +390,7 @@ defmodule Flamingo.GameModes.Telephone do
   defp contribution(%{phase: :telephone_draw} = state, actor) do
     events = Map.get(state.current_drawings, actor, [])
 
-    if MapSet.member?(state.submitted, actor) or events != [],
-      do: DrawingShare.compact_ops(events),
-      else: nil
+    if events == [], do: nil, else: DrawingShare.compact_ops(events)
   end
 
   defp contribution(state, actor),

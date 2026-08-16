@@ -76,7 +76,6 @@ defmodule FlamingoWeb.TelephoneComponents do
   end
 
   attr :assignment, :map, default: nil
-  attr :submitted, :boolean, required: true
 
   def draw_phase(assigns) do
     assigns = assign(assigns, :palette, @palette)
@@ -103,30 +102,13 @@ defmodule FlamingoWeb.TelephoneComponents do
           </.box>
           <.box class="overflow-x-auto bg-white p-0"><.drawing_toolbar palette={@palette} /></.box>
         </div>
-        <div
-          :if={@submitted}
-          id="drawing-submitted-overlay"
-          class="absolute inset-0 z-20 flex items-center justify-center rounded-base bg-white/85 p-6 text-center backdrop-blur-sm"
-        >
-          <div>
-            <.icon name={:check_circle} class="mx-auto h-12 w-12 text-green-600" />
-            <p class="mt-2 text-2xl font-black">Drawing delivered!</p>
-            <p>Waiting for the other artists…</p>
-          </div>
-        </div>
       </div>
       <.box class="bg-pink-100 p-5 text-center lg:sticky lg:top-5">
         <.icon name={:pencil_line} class="mx-auto h-10 w-10" />
         <h2 class="mt-2 text-xl font-black">Pass the picture on</h2>
-        <p class="my-4 text-sm text-gray-700">Make it recognizable—or wonderfully confusing.</p>
-        <.button
-          id="submit-telephone-drawing"
-          phx-click="submit_drawing"
-          disabled={@submitted}
-          class="w-full justify-center px-6 py-3 text-lg font-black"
-        >
-          Done drawing
-        </.button>
+        <p class="my-4 text-sm text-gray-700">
+          Make it recognizable—or wonderfully confusing. Keep drawing until time is up.
+        </p>
       </.box>
     </section>
     """

@@ -430,7 +430,7 @@ defmodule Flamingo.RoomServerTest do
     assert state.current_drawing == [first_event]
   end
 
-  test "telephone dispatches private drawings and advances simultaneous players", %{
+  test "telephone dispatches private drawings and advances when drawing time expires", %{
     room_id: room_id
   } do
     {:ok, alice_token, %{viewer_id: alice}} = join_connected(room_id, "Alice")
@@ -496,8 +496,11 @@ defmodule Flamingo.RoomServerTest do
     assert bob not in alice_snapshot.submitted_ids
     assert alice not in alice_snapshot.submitted_ids
 
-    assert :ok = command_as(room_id, alice_token, :submit_drawing)
-    assert :ok = command_as(room_id, bob_token, :submit_drawing)
+    assert {:error, :invalid_command} = command_as(room_id, alice_token, :submit_drawing)
+
+    timer = runtime_state(room_id).phase_timer
+    send(room_pid(room_id), {:game_timeout, :phase, timer.key, timer.generation})
+    _ = :sys.get_state(room_pid(room_id))
 
     {:ok, next_snapshot} = snapshot_as(room_id, alice_token)
     assert next_snapshot.phase == :telephone_guess

@@ -59,6 +59,13 @@ defmodule FlamingoWeb.TelephoneLiveTest do
 
   defp room_pid(room_id), do: :global.whereis_name({:flamingo_room, room_id})
 
+  defp expire_phase(room_id) do
+    pid = room_pid(room_id)
+    %{phase_timer: timer} = :sys.get_state(pid)
+    send(pid, {:game_timeout, :phase, timer.key, timer.generation})
+    _ = :sys.get_state(pid)
+  end
+
   defp start_telephone(room_id, host_token, other_token) do
     :ok =
       as_player(host_token, fn ->
@@ -149,7 +156,7 @@ defmodule FlamingoWeb.TelephoneLiveTest do
     assert has_element?(telephone, "#draw-source-text", "moon trampoline")
 
     assert has_element?(telephone, "#telephone-drawing-canvas canvas")
-    assert has_element?(telephone, "#submit-telephone-drawing")
+    refute has_element?(telephone, "#submit-telephone-drawing")
   end
 
   test "chains return privately before the host starts the leak-free reveal",
@@ -194,10 +201,7 @@ defmodule FlamingoWeb.TelephoneLiveTest do
     :ok = draw_event_as(room_id, bob_token, end_event)
     _ = :sys.get_state(room_pid(room_id))
 
-    host |> element("#submit-telephone-drawing") |> render_click()
-    assert has_element?(host, "#drawing-submitted-overlay")
-    :ok = command_as(room_id, bob_token, :submit_drawing)
-    _ = :sys.get_state(room_pid(room_id))
+    expire_phase(room_id)
 
     assert has_element?(host, "#telephone-guess-phase")
     assert has_element?(host, "#telephone-guess-drawing")
@@ -282,8 +286,7 @@ defmodule FlamingoWeb.TelephoneLiveTest do
     start_telephone(room_id, host_token, bob_token)
     {:ok, host, _html} = live(conn, ~p"/game/#{room_id}/telephone?resume_token=#{host_token}")
 
-    host |> element("#submit-telephone-drawing") |> render_click()
-    :ok = command_as(room_id, bob_token, :submit_drawing)
+    expire_phase(room_id)
     host |> form("#telephone-guess-form", %{"guess" => %{"text" => "moon"}}) |> render_submit()
     :ok = command_as(room_id, bob_token, {:submit_guess, "cactus"})
     assert has_element?(host, "#telephone-return-phase")

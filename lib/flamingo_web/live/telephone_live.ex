@@ -102,10 +102,7 @@ defmodule FlamingoWeb.TelephoneLive do
                 form={@prompt_form}
               />
             <% :telephone_draw -> %>
-              <TelephoneComponents.draw_phase
-                assignment={@assignment}
-                submitted={submitted?(assigns)}
-              />
+              <TelephoneComponents.draw_phase assignment={@assignment} />
             <% :telephone_guess -> %>
               <TelephoneComponents.guess_phase
                 assignment={@assignment}
@@ -175,8 +172,6 @@ defmodule FlamingoWeb.TelephoneLive do
 
   def handle_event("select_prompt", %{"prompt" => prompt}, socket),
     do: command(socket, {:select_prompt, prompt})
-
-  def handle_event("submit_drawing", _params, socket), do: command(socket, :submit_drawing)
 
   def handle_event("submit_guess", %{"guess" => %{"text" => text}}, socket) do
     command(socket, {:submit_guess, text}, reset_form?: true)
@@ -289,6 +284,5 @@ defmodule FlamingoWeb.TelephoneLive do
   defp command_error(:invalid_guess), do: "Add a guess between 1 and 100 characters."
   defp command_error(:already_submitted), do: "You already sent this link."
   defp command_error(:not_host), do: "Only the host can do that."
-  defp command_error(:cannot_submit), do: "That drawing can no longer be submitted."
   defp command_error(reason), do: "That didn't work (#{reason}). Please try again."
 end

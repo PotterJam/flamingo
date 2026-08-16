@@ -60,14 +60,16 @@ defmodule Flamingo.GameModes.TelephoneTest do
     {state, game_roster}
   end
 
-  defp submit_everyone(state, game_roster) do
-    Enum.reduce(game_roster.player_order, state, fn id, state ->
-      result =
-        if state.phase == :telephone_draw,
-          do: Telephone.command(state, id, :submit_drawing, context(game_roster)),
-          else: Telephone.command(state, id, {:submit_guess, "guess #{id}"}, context(game_roster))
+  defp complete_step(%{phase: :telephone_draw} = state, game_roster) do
+    {:ok, %{state: state}} = Telephone.timeout(state, :telephone_step, context(game_roster))
+    state
+  end
 
-      {:ok, %{state: state}} = result
+  defp complete_step(%{phase: :telephone_guess} = state, game_roster) do
+    Enum.reduce(game_roster.player_order, state, fn id, state ->
+      {:ok, %{state: state}} =
+        Telephone.command(state, id, {:submit_guess, "guess #{id}"}, context(game_roster))
+
       state
     end)
   end
@@ -147,12 +149,12 @@ defmodule Flamingo.GameModes.TelephoneTest do
     assert Telephone.view(state, "a", game_roster).assignment.current_drawing == [event]
     assert Telephone.view(state, "b", game_roster).assignment.current_drawing == []
 
-    state = submit_everyone(state, game_roster)
+    state = complete_step(state, game_roster)
     assert state.phase == :telephone_guess
     assert Telephone.view(state, "a", game_roster).assignment.chain_id == "telephone-chain-2"
     assert Telephone.view(state, "a", game_roster).assignment.source.type == :drawing
 
-    state = submit_everyone(state, game_roster)
+    state = complete_step(state, game_roster)
     assert state.phase == :telephone_draw
     assert Telephone.view(state, "a", game_roster).assignment.chain_id == "telephone-chain-1"
     assert Telephone.view(state, "a", game_roster).assignment.source.value == "guess c"
@@ -173,7 +175,7 @@ defmodule Flamingo.GameModes.TelephoneTest do
             {player_id, assignment.chain_id}
           end)
 
-        {round_assignments, submit_everyone(state, game_roster)}
+        {round_assignments, complete_step(state, game_roster)}
       end)
 
     chain_ids = MapSet.new(Enum.map(returned.chains, & &1.id))
@@ -221,15 +223,16 @@ defmodule Flamingo.GameModes.TelephoneTest do
     assert length(Telephone.view(reveal, "b", game_roster).reveal.chain.entries) == 1
   end
 
-  test "timeout records placeholders and a disconnect completes the online set" do
+  test "drawing waits for its timeout even when a player disconnects" do
     {state, game_roster} = started(["a", "b"])
-    {:ok, %{state: state}} = Telephone.command(state, "a", :submit_drawing, context(game_roster))
-
     offline_roster = put_in(game_roster.players["b"].connected, false)
 
     {:ok, %{state: state}} =
       Telephone.connection_changed(state, "b", :offline, context(offline_roster))
 
+    assert state.phase == :telephone_draw
+
+    {:ok, %{state: state}} = Telephone.timeout(state, :telephone_step, context(offline_roster))
     assert state.phase == :telephone_guess
     assert Enum.at(state.chains, 1).entries |> List.last() |> Map.fetch!(:value) == nil
 
@@ -238,7 +241,7 @@ defmodule Flamingo.GameModes.TelephoneTest do
     assert Enum.all?(returned.chains, &(length(&1.entries) == 3))
   end
 
-  test "timeout and disconnect preserve drawings that already reached the server" do
+  test "timeout preserves drawings that reached the server before a disconnect" do
     {state, game_roster} = started(["a", "b"])
 
     event = %{
@@ -252,15 +255,15 @@ defmodule Flamingo.GameModes.TelephoneTest do
     {:ok, %{state: state}} =
       Telephone.command(state, "b", {:draw, event}, context(game_roster, "b"))
 
-    {:ok, %{state: state}} =
-      Telephone.command(state, "a", :submit_drawing, context(game_roster, "a"))
-
     offline_roster = put_in(game_roster.players["b"].connected, false)
 
     {:ok, %{state: disconnected}} =
       Telephone.connection_changed(state, "b", :offline, context(offline_roster))
 
-    assert disconnected.phase == :telephone_guess
+    assert disconnected.phase == :telephone_draw
+
+    {:ok, %{state: disconnected}} =
+      Telephone.timeout(disconnected, :telephone_step, context(offline_roster))
 
     assert Telephone.view(disconnected, "a", offline_roster).assignment.source.value == [
              ["p", "#000000", 9, [10, 20]]
@@ -307,6 +310,9 @@ defmodule Flamingo.GameModes.TelephoneTest do
 
     assert {:error, :invalid_command} =
              Telephone.command(state, "a", {:guess, "stale"}, context(game_roster))
+
+    assert {:error, :invalid_command} =
+             Telephone.command(state, "a", :submit_drawing, context(game_roster))
 
     assert {:error, :invalid_draw_event} =
              Telephone.command(state, "a", {:draw, "not a map"}, context(game_roster))
@@ -402,7 +408,7 @@ defmodule Flamingo.GameModes.TelephoneTest do
 
   test "a new host can continue reveal after every original player is removed" do
     {state, game_roster} = started(["a", "b"])
-    returned = state |> submit_everyone(game_roster) |> submit_everyone(game_roster)
+    returned = state |> complete_step(game_roster) |> complete_step(game_roster)
 
     bob_roster = %{
       game_roster
@@ -437,7 +443,7 @@ defmodule Flamingo.GameModes.TelephoneTest do
 
   test "host paces leak-free reveal, votes can change, and awards finish deterministically" do
     {state, game_roster} = started(["a", "b"])
-    state = state |> submit_everyone(game_roster) |> submit_everyone(game_roster)
+    state = state |> complete_step(game_roster) |> complete_step(game_roster)
     assert state.phase == :telephone_return
     assert Telephone.view(state, "b", game_roster).reveal == nil
 
