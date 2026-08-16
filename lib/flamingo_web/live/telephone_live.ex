@@ -60,17 +60,14 @@ defmodule FlamingoWeb.TelephoneLive do
     <Layouts.app flash={@flash} background="">
       <.flamingo_background game_mode={:telephone} />
       <main id="telephone-game" class="min-h-screen px-3 py-5 sm:px-6 lg:px-8">
-        <div class="mx-auto flex w-full max-w-6xl flex-col gap-4">
-          <header id="telephone-header" class="flex flex-wrap items-center justify-between gap-3">
-            <div>
-              <p class="font-hero text-sm font-black tracking-widest text-purple-600 uppercase">
-                Telephone
-              </p>
-              <h1 class="text-2xl font-black sm:text-3xl">Draw it. Guess it. Watch it unravel.</h1>
-            </div>
+        <div class={[
+          "mx-auto flex w-full max-w-6xl flex-col",
+          if(@phase == :telephone_prompt, do: "gap-0", else: "gap-4")
+        ]}>
+          <header id="telephone-header" class="relative h-0">
             <div
-              :if={@phase in [:telephone_prompt, :telephone_draw, :telephone_guess]}
-              class="flex items-center gap-3"
+              :if={@phase in [:telephone_draw, :telephone_guess]}
+              class="absolute top-0 right-0 z-10 flex items-center gap-3"
             >
               <span
                 :if={@phase in [:telephone_draw, :telephone_guess]}
@@ -82,15 +79,13 @@ defmodule FlamingoWeb.TelephoneLive do
                   1
                 )}
               </span>
-              <span
-                id="telephone-timer"
-                phx-hook=".TelephoneTimer"
-                phx-update="ignore"
-                data-end-time={iso_time(@turn_end_time)}
-                class="min-w-16 rounded-full border-2 border-border bg-yellow-200 px-4 py-2 text-center font-hero text-xl font-black tabular-nums shadow-shadow"
-              >
-                --
-              </span>
+              <.starburst_timer
+                position_class=""
+                timer_id="telephone-timer"
+                timer_hook="FlamingoWeb.TelephoneLive.TelephoneTimer"
+                end_time={iso_time(@turn_end_time)}
+                fill="#fde047"
+              />
             </div>
           </header>
 
@@ -100,6 +95,7 @@ defmodule FlamingoWeb.TelephoneLive do
                 choices={@prompt_choices}
                 submitted={submitted?(assigns)}
                 form={@prompt_form}
+                end_time={iso_time(@turn_end_time)}
               />
             <% :telephone_draw -> %>
               <TelephoneComponents.draw_phase assignment={@assignment} />
@@ -169,6 +165,9 @@ defmodule FlamingoWeb.TelephoneLive do
     Rooms.draw_event(socket.assigns.room_id, event)
     {:noreply, socket}
   end
+
+  def handle_event("select_prompt", %{"choice" => prompt}, socket),
+    do: command(socket, {:select_prompt, prompt})
 
   def handle_event("select_prompt", %{"prompt" => prompt}, socket),
     do: command(socket, {:select_prompt, prompt})

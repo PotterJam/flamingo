@@ -441,16 +441,12 @@ defmodule FlamingoWeb.ScribbleLive do
                           end_time={@turn_end_time && DateTime.to_iso8601(@turn_end_time)}
                         />
                         <h2 class="text-3xl font-black">Choose a word</h2>
-                        <div class="flex gap-3">
-                          <.button
-                            :for={word <- @word_choices}
-                            phx-click="select_word"
-                            phx-value-word={word}
-                            class="px-6 py-3 text-base font-bold"
-                          >
-                            {word}
-                          </.button>
-                        </div>
+                        <.word_choice_buttons
+                          choices={@word_choices}
+                          id="scribble-word-choices"
+                          id_prefix="scribble-word-choice"
+                          event="select_word"
+                        />
                       </div>
                     <% else %>
                       <div class="relative flex flex-col items-center gap-3">
@@ -579,33 +575,26 @@ defmodule FlamingoWeb.ScribbleLive do
                           You guessed it!
                         </.box>
                       <% else %>
-                        <.form
-                          for={@guess_form}
-                          phx-submit="guess"
-                          phx-hook=".GuessForm"
+                        <.word_submission_form
+                          form={@guess_form}
+                          field={@guess_form[:guess]}
                           id="guess-form"
-                          class="relative z-10 mx-auto flex w-96 items-center gap-2"
+                          input_id="guess-input"
+                          button_id="guess-button"
+                          submit="guess"
+                          placeholder="Type your guess..."
+                          button_label="Guess"
+                          hook="FlamingoWeb.ScribbleLive.GuessForm"
+                          mounted={JS.focus()}
                         >
-                          <span
-                            id="guess-letter-count"
-                            class="mr-2 w-12 shrink-0 text-right font-hero text-lg leading-none font-medium text-black"
-                          >
-                          </span>
-                          <div class="min-w-0 flex-1">
-                            <.input
-                              field={@guess_form[:guess]}
-                              type="text"
-                              placeholder="Type your guess..."
-                              autocomplete="off"
-                              phx-mounted={JS.focus()}
-                              class="w-full rounded-base border-2 border-border bg-white px-3 py-2 text-sm placeholder:text-gray-400 focus:ring-2 focus:ring-ring focus:ring-offset-2 focus:outline-none"
-                              id="guess-input"
-                            />
-                          </div>
-                          <.button type="submit" variant="default" id="guess-button">
-                            Guess
-                          </.button>
-                        </.form>
+                          <:prefix>
+                            <span
+                              id="guess-letter-count"
+                              class="mr-2 w-12 shrink-0 text-right font-hero text-lg leading-none font-medium text-black"
+                            >
+                            </span>
+                          </:prefix>
+                        </.word_submission_form>
                       <% end %>
                     <% end %>
                   </div>
@@ -998,7 +987,7 @@ defmodule FlamingoWeb.ScribbleLive do
     end
   end
 
-  def handle_event("select_word", %{"word" => word}, socket) do
+  def handle_event("select_word", %{"choice" => word}, socket) do
     Rooms.select_word(socket.assigns.room_id, word)
     {:noreply, socket}
   end

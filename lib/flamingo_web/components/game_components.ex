@@ -3,7 +3,7 @@ defmodule FlamingoWeb.GameComponents do
 
   alias Flamingo.Avatar
 
-  import FlamingoWeb.CoreComponents, only: [icon: 1, button_group: 1]
+  import FlamingoWeb.CoreComponents, only: [button: 1, button_group: 1, icon: 1, input: 1]
 
   attr :class, :any, default: nil
   slot :inner_block, required: true
@@ -460,12 +460,79 @@ defmodule FlamingoWeb.GameComponents do
     """
   end
 
+  attr :choices, :list, required: true
+  attr :id, :string, required: true
+  attr :id_prefix, :string, required: true
+  attr :event, :string, required: true
+  attr :class, :any, default: nil
+
+  def word_choice_buttons(assigns) do
+    assigns = assign(assigns, :indexed_choices, Enum.with_index(assigns.choices))
+
+    ~H"""
+    <div id={@id} class={["flex flex-wrap justify-center gap-3", @class]}>
+      <.button
+        :for={{choice, index} <- @indexed_choices}
+        id={"#{@id_prefix}-#{index}"}
+        phx-click={@event}
+        phx-value-choice={choice}
+        class="px-6 py-3 text-base font-bold"
+      >
+        {choice}
+      </.button>
+    </div>
+    """
+  end
+
+  attr :form, :map, required: true
+  attr :field, :any, required: true
+  attr :id, :string, required: true
+  attr :input_id, :string, required: true
+  attr :button_id, :string, required: true
+  attr :submit, :string, required: true
+  attr :placeholder, :string, required: true
+  attr :button_label, :string, required: true
+  attr :hook, :string, default: nil
+  attr :mounted, :any, default: nil
+  attr :maxlength, :integer, default: nil
+  slot :prefix
+
+  def word_submission_form(assigns) do
+    ~H"""
+    <.form
+      for={@form}
+      phx-submit={@submit}
+      phx-hook={@hook}
+      id={@id}
+      class="relative z-10 mx-auto flex w-96 max-w-full items-center gap-2"
+    >
+      {render_slot(@prefix)}
+      <div class="min-w-0 flex-1">
+        <.input
+          field={@field}
+          type="text"
+          placeholder={@placeholder}
+          autocomplete="off"
+          maxlength={@maxlength}
+          phx-mounted={@mounted}
+          class="w-full rounded-base border-2 border-border bg-white px-3 py-2 text-sm placeholder:text-gray-400 focus:ring-2 focus:ring-ring focus:ring-offset-2 focus:outline-none"
+          id={@input_id}
+        />
+      </div>
+      <.button type="submit" variant="default" id={@button_id}>
+        {@button_label}
+      </.button>
+    </.form>
+    """
+  end
+
   attr :position_class, :string, required: true
   attr :size_class, :string, default: "h-32 w-32"
   attr :text_class, :string, default: "text-3xl"
   attr :timer_id, :string, required: true
   attr :timer_hook, :string, required: true
   attr :end_time, :string, default: nil
+  attr :fill, :string, default: "#f9a8d4"
   attr :stroke, :string, default: "none"
   attr :stroke_width, :string, default: "0"
 
@@ -480,7 +547,7 @@ defmodule FlamingoWeb.GameComponents do
         >
           <path
             d="M96.4,8.1 L96.4,8.1 Q100.0,5.0 103.6,8.1 L120.5,22.7 Q124.1,25.8 128.9,25.4 L151.0,23.5 Q155.8,23.1 156.9,27.8 L162.0,49.5 Q163.1,54.2 167.2,56.7 L186.3,68.1 Q190.4,70.6 188.5,75.0 L179.9,95.6 Q178.0,100.0 179.9,104.4 L188.5,125.0 Q190.4,129.4 186.3,131.9 L167.2,143.3 Q163.1,145.8 162.0,150.5 L156.9,172.2 Q155.8,176.9 151.0,176.5 L128.9,174.6 Q124.1,174.2 120.5,177.3 L103.6,191.9 Q100.0,195.0 96.4,191.9 L79.5,177.3 Q75.9,174.2 71.1,174.6 L49.0,176.5 Q44.2,176.9 43.1,172.2 L38.0,150.5 Q36.9,145.8 32.8,143.3 L13.7,131.9 Q9.6,129.4 11.5,125.0 L20.1,104.4 Q22.0,100.0 20.1,95.6 L11.5,75.0 Q9.6,70.6 13.7,68.1 L32.8,56.7 Q36.9,54.2 38.0,49.5 L43.1,27.8 Q44.2,23.1 49.0,23.5 L71.1,25.4 Q75.9,25.8 79.5,22.7 Z"
-            fill="#f9a8d4"
+            fill={@fill}
             stroke={@stroke}
             stroke-width={@stroke_width}
           />

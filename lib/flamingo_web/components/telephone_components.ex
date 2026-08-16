@@ -11,15 +11,29 @@ defmodule FlamingoWeb.TelephoneComponents do
   attr :choices, :list, required: true
   attr :submitted, :boolean, required: true
   attr :form, :map, required: true
+  attr :end_time, :string, default: nil
 
   def prompt_phase(assigns) do
     ~H"""
-    <section id="telephone-prompt-phase" class="mx-auto w-full max-w-4xl py-8 sm:py-16">
-      <.box class="bg-white p-6 text-center sm:p-10">
-        <p class="text-sm font-bold tracking-widest text-purple-600 uppercase">Start your chain</p>
-        <h2 class="mt-2 text-3xl font-black sm:text-5xl">Choose what you’ll draw</h2>
+    <section
+      id="telephone-prompt-phase"
+      class="mx-auto flex min-h-[calc(100vh-2.5rem)] w-full max-w-4xl items-center"
+    >
+      <.box class="relative w-full bg-white p-6 text-center sm:p-10">
+        <.starburst_timer
+          position_class="absolute -top-12 -left-12 z-10"
+          timer_id="telephone-timer"
+          timer_hook="FlamingoWeb.TelephoneLive.TelephoneTimer"
+          end_time={@end_time}
+          fill="#fde047"
+          stroke="#111827"
+          stroke_width="4"
+        />
+        <h2 class="font-hero text-5xl leading-none font-black text-pink-400">
+          Choose what you’ll draw
+        </h2>
         <p class="mx-auto mt-3 max-w-xl text-gray-600">
-          Everyone picks privately. Your prompt starts a chain that will travel around the room.
+          Choose the word you’ll draw first. After this someone will guess the drawing and you’ll guess someone else’s
         </p>
         <%= if @submitted do %>
           <div
@@ -29,46 +43,28 @@ defmodule FlamingoWeb.TelephoneComponents do
             <.icon name={:check_circle} class="mr-2 inline h-6 w-6" />Prompt locked in—waiting for everyone else.
           </div>
         <% else %>
-          <div id="telephone-prompt-choices" class="mt-8 grid gap-3 sm:grid-cols-3">
-            <.button
-              :for={prompt <- @choices}
-              id={"telephone-prompt-#{prompt_id(prompt)}"}
-              phx-click="select_prompt"
-              phx-value-prompt={prompt}
-              class="min-h-20 justify-center px-5 py-4 text-lg font-black"
-            >
-              {prompt}
-            </.button>
-          </div>
-          <div class="my-6 flex items-center gap-3 text-xs font-bold tracking-widest text-gray-400 uppercase">
+          <.word_choice_buttons
+            choices={@choices}
+            id="telephone-prompt-choices"
+            id_prefix="telephone-prompt-choice"
+            event="select_prompt"
+            class="mt-12"
+          />
+          <div class="my-6 flex items-center gap-3 text-sm text-gray-500">
             <span class="h-px flex-1 bg-gray-200"></span>
-            or make it your own <span class="h-px flex-1 bg-gray-200"></span>
+            or enter your own <span class="h-px flex-1 bg-gray-200"></span>
           </div>
-          <.form
-            for={@form}
+          <.word_submission_form
+            form={@form}
+            field={@form[:prompt]}
             id="telephone-custom-prompt-form"
-            phx-submit="select_prompt"
-            class="mx-auto flex max-w-xl flex-col gap-2 sm:flex-row"
-          >
-            <div class="min-w-0 flex-1">
-              <.input
-                field={@form[:prompt]}
-                id="telephone-custom-prompt-input"
-                type="text"
-                maxlength="100"
-                autocomplete="off"
-                placeholder="Write your own word or phrase…"
-                class="w-full rounded-base border-2 border-border bg-white px-4 py-3 text-base focus:ring-2 focus:ring-ring focus:outline-none"
-              />
-            </div>
-            <.button
-              id="telephone-custom-prompt-submit"
-              type="submit"
-              class="justify-center px-6 py-3 font-black"
-            >
-              Use my prompt
-            </.button>
-          </.form>
+            input_id="telephone-custom-prompt-input"
+            button_id="telephone-custom-prompt-submit"
+            submit="select_prompt"
+            placeholder="Enter your own…"
+            button_label="Submit"
+            maxlength={100}
+          />
         <% end %>
       </.box>
     </section>
@@ -772,5 +768,4 @@ defmodule FlamingoWeb.TelephoneComponents do
   defp player_name(_players, nil), do: "an unknown player"
   defp player_name(players, id), do: Map.get(player(players, id), :name, "Unknown player")
   defp player_avatar(players, id), do: Map.get(player(players, id), :avatar, %{})
-  defp prompt_id(prompt), do: Base.url_encode64(prompt, padding: false)
 end
