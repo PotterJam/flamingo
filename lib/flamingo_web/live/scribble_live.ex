@@ -116,6 +116,36 @@ defmodule FlamingoWeb.ScribbleLive do
   defp selected_game_mode(:scribble, :constraint_roulette), do: "constraint_roulette"
   defp selected_game_mode(_mode, _variant), do: "classic"
 
+  defp lobby_background(:telephone, _variant),
+    do: "grid-background lobby-background-telephone transition-colors duration-300"
+
+  defp lobby_background(:scribble, :constraint_roulette),
+    do: "grid-background lobby-background-constraint transition-colors duration-300"
+
+  defp lobby_background(_mode, _variant),
+    do: "grid-background lobby-background-classic transition-colors duration-300"
+
+  defp game_mode_description("constraint_roulette"),
+    do: "Like classic but with a little bit of spice"
+
+  defp game_mode_description("telephone"),
+    do: "Cycle through guessing and drawing before revealing the chaos"
+
+  defp game_mode_description(_mode),
+    do: "Take turns drawing a word while everyone guesses"
+
+  defp game_mode_option_class("constraint_roulette", selected?) do
+    if selected?, do: "bg-purple-400", else: "bg-gray-200 hover:bg-purple-400"
+  end
+
+  defp game_mode_option_class("telephone", selected?) do
+    if selected?, do: "bg-sky-400", else: "bg-gray-200 hover:bg-sky-400"
+  end
+
+  defp game_mode_option_class(_mode, selected?) do
+    if selected?, do: "bg-pink-300", else: "bg-gray-200 hover:bg-pink-300"
+  end
+
   defp winning_player_id(players, player_order) do
     Enum.max_by(player_order, fn pid -> Map.get(players, pid).score end, fn -> nil end)
   end
@@ -164,182 +194,210 @@ defmodule FlamingoWeb.ScribbleLive do
       )
 
     ~H"""
-    <Layouts.app flash={@flash} background={if(@phase == :lobby, do: "grid-background", else: "")}>
+    <Layouts.app
+      flash={@flash}
+      background={if(@phase == :lobby, do: lobby_background(@game_mode, @game_variant), else: "")}
+    >
       <%= if @phase == :lobby do %>
-        <div class="flex h-screen w-full items-center justify-center">
-          <.card class="flex h-3/5 w-full max-w-2xl flex-row gap-0 bg-white p-0">
-            <div class="flex flex-1 flex-col gap-4 border-r-2 border-border p-4">
-              <h2 class="text-xl font-bold">Players</h2>
-              <ul class="space-y-2">
-                <%= for pid <- @player_order do %>
-                  <li id={"lobby-player-row-#{pid}"} class="flex min-w-0 items-center gap-2">
-                    <.flamingo_avatar
-                      avatar={Map.get(Map.get(@players, pid), :avatar, %{})}
-                      class="h-12 w-12 shrink-0"
-                      label={"#{Map.get(@players, pid).name}'s avatar"}
-                    />
-                    <span class="min-w-0 flex-1 truncate">{Map.get(@players, pid).name}</span>
-                  </li>
-                <% end %>
-              </ul>
-            </div>
-
+        <div class="flex h-screen w-full items-center justify-center px-4 py-8">
+          <div class="flex h-full w-full max-w-3xl flex-col items-center justify-center gap-4">
             <%= if @player_id == @host_id do %>
-              <div class="flex h-full min-h-0 w-full flex-[3] flex-col overflow-hidden">
-                <.form
-                  for={@settings_form}
-                  phx-change="update_settings"
-                  phx-submit="start_game"
-                  class="min-h-0 flex-1 overflow-y-auto p-4"
-                  id="settings-form"
+              <fieldset class="w-full max-w-sm">
+                <legend class="sr-only">Game mode</legend>
+                <div
+                  id="game-mode-selector"
+                  class="grid grid-cols-3 gap-2"
+                  role="radiogroup"
                 >
-                  <fieldset class="mb-4">
-                    <legend class="text-sm">Game mode</legend>
-                    <div class="mt-1 grid grid-cols-1 gap-2 sm:grid-cols-3">
-                      <label
-                        :for={
-                          {value, title, description} <- [
-                            {"classic", "Classic", "The original draw-and-guess game"},
-                            {"constraint_roulette", "Constraint roulette",
-                             "A surprise drawing rule every turn"},
-                            {"telephone", "Telephone",
-                             "Everyone draws, guesses, then reveals the chaos"}
-                          ]
-                        }
-                        class={[
-                          "cursor-pointer border-2 border-border p-3 transition-all hover:-translate-y-0.5 hover:shadow-shadow",
-                          selected_game_mode(@game_mode, @game_variant) == value &&
-                            "bg-pink-100 shadow-shadow"
-                        ]}
-                      >
-                        <input
-                          type="radio"
-                          name={@settings_form[:game_mode].name}
-                          value={value}
-                          checked={selected_game_mode(@game_mode, @game_variant) == value}
-                          class="sr-only"
+                  <button
+                    :for={
+                      {value, title} <- [
+                        {"classic", "Classic"},
+                        {"constraint_roulette", "Roulette"},
+                        {"telephone", "Telephone"}
+                      ]
+                    }
+                    type="button"
+                    id={"game-mode-#{value}"}
+                    phx-click="select_game_mode"
+                    phx-value-mode={value}
+                    role="radio"
+                    aria-checked={
+                      if(selected_game_mode(@game_mode, @game_variant) == value,
+                        do: "true",
+                        else: "false"
+                      )
+                    }
+                    class={[
+                      "flex h-8 cursor-pointer items-center justify-center rounded-full border-2 border-border px-3 py-1 text-center text-sm font-bold shadow-rounded transition-all duration-200 hover:-translate-y-0.5 focus-visible:-translate-y-0.5 focus-visible:outline-2 focus-visible:outline-offset-2 active:translate-y-0 active:shadow-none",
+                      game_mode_option_class(
+                        value,
+                        selected_game_mode(@game_mode, @game_variant) == value
+                      )
+                    ]}
+                  >
+                    {title}
+                  </button>
+                </div>
+              </fieldset>
+
+              <p
+                id="game-mode-description"
+                class="min-h-6 max-w-lg px-3 text-center text-xs text-gray-700"
+                aria-live="polite"
+              >
+                {game_mode_description(selected_game_mode(@game_mode, @game_variant))}
+              </p>
+            <% end %>
+
+            <.card class="flex h-[65%] w-full flex-row gap-0 bg-white p-0">
+              <div class="flex flex-1 flex-col gap-4 border-r-2 border-border p-4">
+                <h2 class="text-xl font-bold">Players</h2>
+                <ul class="space-y-2">
+                  <%= for pid <- @player_order do %>
+                    <li id={"lobby-player-row-#{pid}"} class="flex min-w-0 items-center gap-2">
+                      <.flamingo_avatar
+                        avatar={Map.get(Map.get(@players, pid), :avatar, %{})}
+                        class="h-12 w-12 shrink-0"
+                        label={"#{Map.get(@players, pid).name}'s avatar"}
+                      />
+                      <span class="min-w-0 flex-1 truncate">{Map.get(@players, pid).name}</span>
+                    </li>
+                  <% end %>
+                </ul>
+              </div>
+
+              <%= if @player_id == @host_id do %>
+                <div class="flex h-full min-h-0 w-full flex-[3] flex-col overflow-hidden">
+                  <.form
+                    for={@settings_form}
+                    phx-change="update_settings"
+                    phx-submit="start_game"
+                    class="min-h-0 flex-1 overflow-y-auto p-4"
+                    id="settings-form"
+                  >
+                    <input
+                      type="hidden"
+                      name={@settings_form[:game_mode].name}
+                      value={selected_game_mode(@game_mode, @game_variant)}
+                    />
+
+                    <div class="space-y-1">
+                      <div class="flex w-full justify-between">
+                        <label for="round-count-slider" class="text-sm">Rounds</label>
+                        <span class="text-sm">{@round_count}</span>
+                      </div>
+                      <.input
+                        field={@settings_form[:round_count]}
+                        type="range"
+                        min="1"
+                        max="5"
+                        value={@round_count}
+                        class="w-full"
+                        id="round-count-slider"
+                      />
+                    </div>
+
+                    <div class="mt-4">
+                      <label class="text-sm">Round length(s)</label>
+                      <div class="mt-1 flex w-48 items-center">
+                        <.input
+                          type="number"
+                          min={@min_turn_length}
+                          max={@max_turn_length}
+                          value={@turn_length}
+                          name={@settings_form[:turn_length].name}
+                          class="w-full rounded-base border-2 border-border bg-white px-3 py-2 text-sm focus:ring-2 focus:ring-ring focus:ring-offset-2 focus:outline-none"
+                          id="round-length-input"
                         />
-                        <span class="block font-bold">{title}</span>
-                        <span class="block text-xs text-gray-600">{description}</span>
-                      </label>
-                    </div>
-                  </fieldset>
-
-                  <div class="space-y-1">
-                    <div class="flex w-full justify-between">
-                      <label for="round-count-slider" class="text-sm">Rounds</label>
-                      <span class="text-sm">{@round_count}</span>
-                    </div>
-                    <.input
-                      field={@settings_form[:round_count]}
-                      type="range"
-                      min="1"
-                      max="5"
-                      value={@round_count}
-                      class="w-full"
-                      id="round-count-slider"
-                    />
-                  </div>
-
-                  <div class="mt-4">
-                    <label class="text-sm">Round length(s)</label>
-                    <div class="mt-1 flex w-48 items-center">
-                      <.input
-                        type="number"
-                        min={@min_turn_length}
-                        max={@max_turn_length}
-                        value={@turn_length}
-                        name={@settings_form[:turn_length].name}
-                        class="w-full rounded-base border-2 border-border bg-white px-3 py-2 text-sm focus:ring-2 focus:ring-ring focus:ring-offset-2 focus:outline-none"
-                        id="round-length-input"
-                      />
-                    </div>
-                  </div>
-
-                  <div class="mt-4">
-                    <div class="flex items-end justify-between gap-3">
-                      <label for="custom-words-input" class="text-sm">Custom words</label>
-                      <span id="custom-word-count" class="text-xs text-gray-500">
-                        {@custom_word_count} / 3000
-                      </span>
-                    </div>
-                    <.input
-                      field={@settings_form[:custom_words]}
-                      type="textarea"
-                      rows="4"
-                      placeholder={"Add your own words, one per line" <> "\nflamingo\nsandcastle"}
-                      class="mt-1 min-h-24 w-full resize-y rounded-base border-2 border-border bg-white px-3 py-2 text-sm leading-5 focus:ring-2 focus:ring-ring focus:ring-offset-2 focus:outline-none"
-                      phx-hook=".CustomWords"
-                      id="custom-words-input"
-                    />
-                    <p
-                      :if={@custom_words_error}
-                      id="custom-words-error"
-                      class="mt-1 text-xs text-red-600"
-                    >
-                      {@custom_words_error}
-                    </p>
-                    <p :if={!@custom_words_error} class="mt-1 text-xs text-gray-500">
-                      Leave empty to use the standard word list. Commas are not supported.
-                    </p>
-                    <div class="mt-3">
-                      <.input
-                        field={@settings_form[:include_default_words]}
-                        type="checkbox"
-                        label="Include standard words"
-                        id="include-default-words-input"
-                      />
-                    </div>
-                  </div>
-                </.form>
-
-                <div class="flex w-full shrink-0 flex-col gap-4 border-t-2 border-border p-4">
-                  <div>
-                    <label class="text-sm">Room name</label>
-                    <div class="flex flex-row items-center justify-between">
-                      <p class="font-bold">{@room_id}</p>
-                      <div class="flex gap-1">
-                        <.button
-                          variant="ghost"
-                          class="text-xs"
-                          on_confirm_click={JS.dispatch("phx:copy", detail: %{text: @room_id})}
-                          id="copy-name-button"
-                        >
-                          Copy name
-                        </.button>
-                        <.button
-                          variant="outline"
-                          class="text-xs"
-                          on_confirm_click={
-                            JS.dispatch("phx:copy",
-                              detail: %{text: url(~p"/join/#{@room_id}")}
-                            )
-                          }
-                          id="copy-link-button"
-                        >
-                          Copy link
-                        </.button>
                       </div>
                     </div>
-                  </div>
 
-                  <.button
-                    variant="default"
-                    type="submit"
-                    form="settings-form"
-                    disabled={map_size(@players) < 2}
-                    id="start-game-button"
-                  >
-                    Start Game
-                  </.button>
+                    <div class="mt-4">
+                      <div class="flex items-end justify-between gap-3">
+                        <label for="custom-words-input" class="text-sm">Custom words</label>
+                        <span id="custom-word-count" class="text-xs text-gray-500">
+                          {@custom_word_count} / 3000
+                        </span>
+                      </div>
+                      <.input
+                        field={@settings_form[:custom_words]}
+                        type="textarea"
+                        rows="4"
+                        placeholder={"Add your own words, one per line" <> "\nflamingo\nsandcastle"}
+                        class="mt-1 min-h-24 w-full resize-y rounded-base border-2 border-border bg-white px-3 py-2 text-sm leading-5 focus:ring-2 focus:ring-ring focus:ring-offset-2 focus:outline-none"
+                        phx-hook=".CustomWords"
+                        id="custom-words-input"
+                      />
+                      <p
+                        :if={@custom_words_error}
+                        id="custom-words-error"
+                        class="mt-1 text-xs text-red-600"
+                      >
+                        {@custom_words_error}
+                      </p>
+                      <p :if={!@custom_words_error} class="mt-1 text-xs text-gray-500">
+                        Leave empty to use the standard word list. Commas are not supported.
+                      </p>
+                      <div class="mt-3">
+                        <.input
+                          field={@settings_form[:include_default_words]}
+                          type="checkbox"
+                          label="Include standard words"
+                          id="include-default-words-input"
+                        />
+                      </div>
+                    </div>
+                  </.form>
+
+                  <div class="flex w-full shrink-0 flex-col gap-4 border-t-2 border-border p-4">
+                    <div>
+                      <label class="text-sm">Room name</label>
+                      <div class="flex flex-row items-center justify-between">
+                        <p class="font-bold">{@room_id}</p>
+                        <div class="flex gap-1">
+                          <.button
+                            variant="ghost"
+                            class="text-xs"
+                            on_confirm_click={JS.dispatch("phx:copy", detail: %{text: @room_id})}
+                            id="copy-name-button"
+                          >
+                            Copy name
+                          </.button>
+                          <.button
+                            variant="outline"
+                            class="text-xs"
+                            on_confirm_click={
+                              JS.dispatch("phx:copy",
+                                detail: %{text: url(~p"/join/#{@room_id}")}
+                              )
+                            }
+                            id="copy-link-button"
+                          >
+                            Copy link
+                          </.button>
+                        </div>
+                      </div>
+                    </div>
+
+                    <.button
+                      variant="default"
+                      type="submit"
+                      form="settings-form"
+                      disabled={map_size(@players) < 2}
+                      id="start-game-button"
+                    >
+                      Start Game
+                    </.button>
+                  </div>
                 </div>
-              </div>
-            <% else %>
-              <div class="my-auto flex-[3] text-center">
-                The host is configuring the game
-              </div>
-            <% end %>
-          </.card>
+              <% else %>
+                <div class="my-auto flex-[3] text-center">
+                  The host is configuring the game
+                </div>
+              <% end %>
+            </.card>
+          </div>
         </div>
       <% end %>
       <%= if @phase in [:word_choice, :playing, :turn_reveal] do %>
@@ -853,6 +911,20 @@ defmodule FlamingoWeb.ScribbleLive do
       </script>
     </Layouts.app>
     """
+  end
+
+  def handle_event("select_game_mode", %{"mode" => mode}, socket) do
+    {game_mode, game_variant} =
+      parse_game_mode(mode, socket.assigns.game_mode, socket.assigns.game_variant)
+
+    params = Map.put(socket.assigns.settings_form.params, "game_mode", mode)
+
+    {:noreply,
+     assign(socket,
+       game_mode: game_mode,
+       game_variant: game_variant,
+       settings_form: to_form(params, as: :settings)
+     )}
   end
 
   def handle_event("update_settings", %{"settings" => params}, socket) do
