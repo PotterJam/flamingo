@@ -62,29 +62,28 @@ defmodule FlamingoWeb.TelephoneLive do
       <main id="telephone-game" class="min-h-screen px-3 py-5 sm:px-6 lg:px-8">
         <div class={[
           "mx-auto flex w-full max-w-6xl flex-col",
-          if(@phase == :telephone_prompt, do: "gap-0", else: "gap-4")
+          if(@phase in [:telephone_prompt, :telephone_draw], do: "gap-0", else: "gap-4")
         ]}>
           <header id="telephone-header" class="relative h-0">
             <div
-              :if={@phase in [:telephone_draw, :telephone_guess]}
+              :if={@phase == :telephone_guess}
               class="absolute top-0 right-0 z-10 flex items-center gap-3"
             >
-              <span
-                :if={@phase in [:telephone_draw, :telephone_guess]}
+              <.game_progress
                 id="telephone-step-progress"
-                class="rounded-full border-2 border-border bg-white px-4 py-2 font-bold shadow-shadow"
-              >
-                Step {if(is_integer(@current_step), do: @current_step + 1, else: "–")} of {max(
-                  @step_count,
-                  1
-                )}
-              </span>
+                label="Step"
+                current={if(is_integer(@current_step), do: @current_step + 1, else: 1)}
+                total={max(@step_count, 1)}
+                position_class=""
+              />
               <.starburst_timer
                 position_class=""
                 timer_id="telephone-timer"
                 timer_hook="FlamingoWeb.TelephoneLive.TelephoneTimer"
                 end_time={iso_time(@turn_end_time)}
                 fill="#fde047"
+                stroke="#111827"
+                stroke_width="4"
               />
             </div>
           </header>
@@ -98,7 +97,12 @@ defmodule FlamingoWeb.TelephoneLive do
                 end_time={iso_time(@turn_end_time)}
               />
             <% :telephone_draw -> %>
-              <TelephoneComponents.draw_phase assignment={@assignment} />
+              <TelephoneComponents.draw_phase
+                assignment={@assignment}
+                current_step={if(is_integer(@current_step), do: @current_step + 1, else: 1)}
+                step_count={max(@step_count, 1)}
+                end_time={iso_time(@turn_end_time)}
+              />
             <% :telephone_guess -> %>
               <TelephoneComponents.guess_phase
                 assignment={@assignment}

@@ -413,12 +413,12 @@ defmodule FlamingoWeb.GameComponents do
   def player_list_panel(assigns) do
     ~H"""
     <div class="relative z-10 flex w-full flex-1 flex-col">
-      <p
+      <.game_progress
         id="round-progress"
-        class="absolute -top-8 left-1 text-xl leading-none font-black text-black"
-      >
-        Round {@current_round} of {@round_count}
-      </p>
+        label="Round"
+        current={@current_round}
+        total={@round_count}
+      />
       <.box class="flex min-h-0 flex-1 flex-col bg-white p-0">
         <div id="player-list-scroll" class="min-h-0 flex-grow overflow-y-auto overflow-x-hidden">
           <ul>
@@ -457,6 +457,23 @@ defmodule FlamingoWeb.GameComponents do
         </div>
       </.box>
     </div>
+    """
+  end
+
+  attr :id, :string, required: true
+  attr :label, :string, required: true
+  attr :current, :integer, required: true
+  attr :total, :integer, required: true
+  attr :position_class, :string, default: "absolute -top-8 left-1"
+
+  def game_progress(assigns) do
+    ~H"""
+    <p
+      id={@id}
+      class={[@position_class, "text-xl leading-none font-black text-black"]}
+    >
+      {@label} {@current} of {@total}
+    </p>
     """
   end
 
@@ -562,6 +579,46 @@ defmodule FlamingoWeb.GameComponents do
         >
         </span>
       </div>
+    </div>
+    """
+  end
+
+  attr :id, :string, required: true
+  attr :is_drawer, :boolean, required: true
+  attr :show_toolbar, :boolean, default: false
+  attr :palette, :list, default: []
+  attr :constraint, :any, default: nil
+  attr :phase, :any, default: nil
+  attr :class, :any, default: nil
+
+  def drawing_canvas(assigns) do
+    ~H"""
+    <div
+      id={@id}
+      phx-hook="DrawingCanvas"
+      phx-update="ignore"
+      data-is-drawer={to_string(@is_drawer)}
+      data-constraint={@constraint}
+      data-phase={@phase}
+      class={["flex w-[704px] max-w-full flex-col gap-2", @class]}
+    >
+      <.box class="drawing-canvas-frame relative z-0 bg-white p-0">
+        <canvas
+          width="700"
+          height="500"
+          class={[
+            "block aspect-[7/5] w-full bg-white",
+            if(@is_drawer, do: "cursor-crosshair", else: "cursor-default")
+          ]}
+        >
+        </canvas>
+      </.box>
+
+      <%= if @show_toolbar do %>
+        <.box class="relative z-10 bg-white p-0">
+          <.drawing_toolbar palette={@palette} />
+        </.box>
+      <% end %>
     </div>
     """
   end

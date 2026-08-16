@@ -536,38 +536,17 @@ defmodule FlamingoWeb.ScribbleLive do
                       </div>
                     <% end %>
 
-                    <div
+                    <.drawing_canvas
                       id="drawing-canvas"
-                      phx-hook="DrawingCanvas"
-                      phx-update="ignore"
-                      data-is-drawer={
-                        to_string(@player_id == @drawer_id and @participation == :active)
+                      is_drawer={@player_id == @drawer_id and @participation == :active}
+                      constraint={@constraint}
+                      phase={@phase}
+                      show_toolbar={
+                        @phase == :playing and @player_id == @drawer_id and
+                          @participation == :active
                       }
-                      data-constraint={@constraint}
-                      data-phase={@phase}
-                      class="flex flex-col gap-2"
-                    >
-                      <.box class="drawing-canvas-frame relative z-0 bg-white p-0">
-                        <canvas
-                          width="700"
-                          height="500"
-                          class={[
-                            "bg-white",
-                            if(@player_id == @drawer_id and @participation == :active,
-                              do: "cursor-crosshair",
-                              else: "cursor-default"
-                            )
-                          ]}
-                        >
-                        </canvas>
-                      </.box>
-
-                      <%= if @phase == :playing and @player_id == @drawer_id and @participation == :active do %>
-                        <.box class="relative z-10 bg-white p-0">
-                          <.drawing_toolbar palette={palette()} />
-                        </.box>
-                      <% end %>
-                    </div>
+                      palette={palette()}
+                    />
 
                     <%= if @phase == :playing and @player_id != @drawer_id and @participation == :active do %>
                       <%= if MapSet.member?(@correct_guesses, @player_id) do %>

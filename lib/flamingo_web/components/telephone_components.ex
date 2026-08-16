@@ -72,40 +72,49 @@ defmodule FlamingoWeb.TelephoneComponents do
   end
 
   attr :assignment, :map, default: nil
+  attr :current_step, :integer, required: true
+  attr :step_count, :integer, required: true
+  attr :end_time, :string, default: nil
 
   def draw_phase(assigns) do
     assigns = assign(assigns, :palette, @palette)
 
     ~H"""
-    <section id="telephone-draw-phase" class="grid items-start gap-4 lg:grid-cols-[1fr_18rem]">
-      <div class="relative min-w-0">
-        <.box class="mb-3 bg-white p-3 text-center">
-          <p class="text-xs font-bold tracking-wider text-gray-500 uppercase">Your link says</p>
+    <section
+      id="telephone-draw-phase"
+      class="mx-auto flex min-h-[calc(100vh-2.5rem)] w-full max-w-[704px] items-center"
+    >
+      <div class="w-full min-w-0">
+        <.box class="relative mb-3 bg-white p-3 text-center">
+          <.game_progress
+            id="telephone-step-progress"
+            label="Step"
+            current={@current_step}
+            total={@step_count}
+            position_class="absolute -top-7 right-1 whitespace-nowrap"
+          />
+          <.starburst_timer
+            position_class="absolute -top-10 -left-14 z-10"
+            size_class="h-20 w-20"
+            text_class="text-xl"
+            timer_id="telephone-timer"
+            timer_hook="FlamingoWeb.TelephoneLive.TelephoneTimer"
+            end_time={@end_time}
+            fill="#fde047"
+            stroke="#111827"
+            stroke_width="4"
+          />
           <p id="draw-source-text" class="text-xl font-black sm:text-2xl">
             {source_text(@assignment)}
           </p>
         </.box>
-        <div
+        <.drawing_canvas
           id="telephone-drawing-canvas"
-          phx-hook="DrawingCanvas"
-          phx-update="ignore"
-          data-is-drawer="true"
-          class="flex flex-col gap-3"
-        >
-          <.box class="overflow-hidden bg-white p-0">
-            <canvas width="700" height="500" class="aspect-[7/5] w-full cursor-crosshair bg-white">
-            </canvas>
-          </.box>
-          <.box class="overflow-x-auto bg-white p-0"><.drawing_toolbar palette={@palette} /></.box>
-        </div>
+          is_drawer={true}
+          show_toolbar={true}
+          palette={@palette}
+        />
       </div>
-      <.box class="bg-pink-100 p-5 text-center lg:sticky lg:top-5">
-        <.icon name={:pencil_line} class="mx-auto h-10 w-10" />
-        <h2 class="mt-2 text-xl font-black">Pass the picture on</h2>
-        <p class="my-4 text-sm text-gray-700">
-          Make it recognizable—or wonderfully confusing. Keep drawing until time is up.
-        </p>
-      </.box>
     </section>
     """
   end
