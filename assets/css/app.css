@@ -277,6 +277,10 @@
   transform-origin: center;
 }
 
+#drawing-canvas[data-phase="turn_reveal"] .roulette-rotating-canvas-frame {
+  animation-play-state: paused;
+}
+
 .nb-slider {
   -webkit-appearance: none;
   appearance: none;
