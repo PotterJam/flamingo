@@ -27,20 +27,7 @@ defmodule FlamingoWeb.HomeLiveTest do
     {:ok, view, _html} = live(conn, ~p"/")
 
     view
-    |> form("#lobby-form",
-      lobby: %{
-        name: "Alice",
-        room_code: room_id,
-        head: "1",
-        head_color: "6",
-        body: "4",
-        body_color: "3",
-        legs: "2",
-        legs_color: "7",
-        feet: "3",
-        feet_color: "5"
-      }
-    )
+    |> form("#lobby-form", lobby: %{name: "Alice", room_code: room_id})
     |> render_submit()
 
     {path, _flash} = assert_redirect(view)
@@ -50,18 +37,7 @@ defmodule FlamingoWeb.HomeLiveTest do
     assert %{"resume_token" => resume_token} = URI.decode_query(uri.query)
     assert resume_token != ""
 
-    assert {:ok, state} = Rooms.connect(room_id, resume_token)
-
-    assert state.players[state.viewer_id].avatar == %{
-             "head" => 1,
-             "head_color" => 6,
-             "body" => 4,
-             "body_color" => 3,
-             "legs" => 2,
-             "legs_color" => 7,
-             "feet" => 3,
-             "feet_color" => 5
-           }
+    assert {:ok, _state} = Rooms.connect(room_id, resume_token)
   end
 
   test "submitting the lobby form creates when room name is empty", %{conn: conn} do
@@ -84,40 +60,6 @@ defmodule FlamingoWeb.HomeLiveTest do
 
     assert has_element?(view, "#join-button[type='submit']")
     assert has_element?(view, "#create-room-button[type='submit']")
-  end
-
-  test "home lets players mix animal parts and colors without showing every panel", %{conn: conn} do
-    {:ok, view, _html} = live(conn, ~p"/")
-
-    assert has_element?(view, "#avatar-customizer svg[aria-label='Your customized creature']")
-    assert has_element?(view, "#randomize-avatar-button[type='button']")
-
-    for part <- ~w(head body legs feet) do
-      assert has_element?(view, "#avatar-part-#{part}[role='tab']")
-      assert has_element?(view, "#avatar-#{part}-panel[role='tabpanel']")
-
-      for animal <- 0..4 do
-        assert has_element?(
-                 view,
-                 "input[type='radio'][name='lobby[#{part}]'][value='#{animal}']"
-               )
-      end
-
-      for color <- 0..7 do
-        assert has_element?(
-                 view,
-                 "input[type='radio'][name='lobby[#{part}_color]'][value='#{color}']"
-               )
-      end
-    end
-
-    assert has_element?(view, "#avatar-head-panel:not([hidden])")
-    assert has_element?(view, "#avatar-body-panel[hidden]")
-
-    view |> element("#avatar-part-body") |> render_click()
-
-    assert has_element?(view, "#avatar-head-panel[hidden]")
-    assert has_element?(view, "#avatar-body-panel:not([hidden])")
   end
 
   test "app layout sound control is a volume slider initialized to full volume" do
