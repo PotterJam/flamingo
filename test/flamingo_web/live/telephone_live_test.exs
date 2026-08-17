@@ -236,15 +236,15 @@ defmodule FlamingoWeb.TelephoneLiveTest do
     assert has_element?(host, "#telephone-reveal-phase")
     assert has_element?(host, "#revealed-entries article")
     refute has_element?(host, "#revealed-entries article:nth-child(2)")
-    assert has_element?(host, "#reveal-chain-progress [data-state='current']")
-    assert has_element?(host, "#reveal-link-progress [data-state='current']")
+    assert has_element?(host, "#reveal-journey-progress [data-state='current']")
 
     assert has_element?(
              host,
              "#revealed-entries article[data-current='true'][data-entry-type='prompt']"
            )
 
-    assert has_element?(host, "#advance-telephone-reveal", "Reveal the first drawing")
+    assert has_element?(host, "#advance-telephone-reveal", "Next")
+    assert has_element?(host, "#advance-telephone-reveal svg")
 
     assert has_element?(bob_view, "#waiting-for-reveal-host")
     refute has_element?(bob_view, "#advance-telephone-reveal")
@@ -298,7 +298,8 @@ defmodule FlamingoWeb.TelephoneLiveTest do
              "#revealed-entries article[data-current='true'][data-entry-type='drawing']"
            )
 
-    assert has_element?(host, "#advance-telephone-reveal", "Reveal what they guessed")
+    assert has_element?(host, "#advance-telephone-reveal", "Next")
+    assert has_element?(host, "#advance-telephone-reveal svg")
 
     {:ok, snapshot} = snapshot_as(room_id, host_token)
     drawing = Enum.find(snapshot.reveal.chain.entries, &(&1.type == :drawing))

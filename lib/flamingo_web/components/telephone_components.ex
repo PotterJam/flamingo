@@ -333,18 +333,17 @@ defmodule FlamingoWeb.TelephoneComponents do
         chain: chain,
         entries: entries,
         current_entry: List.last(entries),
-        chain_count: Map.get(assigns.reveal || %{}, :chain_count, 0),
         entry_count: Map.get(assigns.reveal || %{}, :entry_count, 0),
         categories: @categories
       )
 
     ~H"""
     <section id="telephone-reveal-phase" class="space-y-6 pb-6">
-      <.box class="relative overflow-hidden bg-purple-100 p-5 text-center sm:p-8">
+      <.box class="relative mx-auto max-w-4xl overflow-hidden bg-sky-100 p-5 text-center sm:p-8">
         <div aria-hidden="true" class="pointer-events-none absolute inset-0 overflow-hidden">
           <.icon
             name={:sparkles}
-            class="telephone-float absolute -top-3 left-[7%] h-16 w-16 rotate-[-12deg] text-yellow-500 opacity-60"
+            class="telephone-float absolute top-6 left-[7%] h-16 w-16 rotate-[-12deg] text-yellow-500 opacity-60"
           />
           <.icon
             name={:shuffle}
@@ -352,69 +351,34 @@ defmodule FlamingoWeb.TelephoneComponents do
           />
         </div>
         <div class="relative">
-          <p id="reveal-progress" class="text-sm font-black tracking-wider uppercase">
-            Chain {number(@reveal, :chain_index)} of {@chain_count} · Link {number(
-              @reveal,
-              :entry_index
-            )} of {@entry_count}
-          </p>
-          <h2 class="mt-1 font-hero text-4xl font-black text-purple-700 sm:text-6xl">
+          <h2 class="font-hero text-4xl leading-none font-black text-black sm:text-5xl">
             Watch the story unravel
           </h2>
-          <p class="mx-auto mt-2 max-w-xl text-base sm:text-lg">
-            It started with <strong>{player_name(@players, @chain && @chain.origin_player_id)}</strong>.
-            Now every link gets its moment.
-          </p>
 
-          <div class="mx-auto mt-6 grid max-w-3xl gap-4 sm:grid-cols-2">
-            <div>
-              <p class="mb-2 text-xs font-black tracking-widest text-purple-700 uppercase">
-                Stories
+          <div
+            id="reveal-journey-progress"
+            class="mx-auto mt-5 flex max-w-xl items-end gap-1"
+            aria-label="Chain journey progress"
+          >
+            <div :for={index <- progress_indices(@entry_count)} class="min-w-0 flex-1">
+              <p class="mb-1 truncate text-xs font-bold text-gray-700">
+                {journey_label(index)}
               </p>
-              <div
-                id="reveal-chain-progress"
-                class="flex items-center justify-center gap-1.5"
-                aria-label="Chain reveal progress"
+              <span
+                data-state={progress_state(index, Map.get(@reveal || %{}, :entry_index))}
+                class={[
+                  "block h-2 w-full rounded-full border-2 border-border transition-all duration-300",
+                  progress_class(index, Map.get(@reveal || %{}, :entry_index))
+                ]}
               >
-                <span
-                  :for={index <- progress_indices(@chain_count)}
-                  data-state={progress_state(index, Map.get(@reveal || %{}, :chain_index))}
-                  class={[
-                    "h-3 flex-1 border-2 border-border transition-all duration-300",
-                    progress_class(index, Map.get(@reveal || %{}, :chain_index))
-                  ]}
-                >
-                </span>
-              </div>
-            </div>
-            <div>
-              <p class="mb-2 text-xs font-black tracking-widest text-pink-700 uppercase">Links</p>
-              <div
-                id="reveal-link-progress"
-                class="flex items-center justify-center gap-1.5"
-                aria-label="Current chain progress"
-              >
-                <span
-                  :for={index <- progress_indices(@entry_count)}
-                  data-state={progress_state(index, Map.get(@reveal || %{}, :entry_index))}
-                  class={[
-                    "h-3 flex-1 border-2 border-border transition-all duration-300",
-                    progress_class(index, Map.get(@reveal || %{}, :entry_index))
-                  ]}
-                >
-                </span>
-              </div>
+              </span>
             </div>
           </div>
         </div>
       </.box>
       <div
         id="revealed-entries"
-        class={[
-          "grid gap-5",
-          length(@entries) == 1 && "mx-auto w-full max-w-2xl",
-          length(@entries) > 1 && "md:grid-cols-2"
-        ]}
+        class="flex flex-col gap-5"
       >
         <article
           :for={entry <- @entries}
@@ -422,43 +386,27 @@ defmodule FlamingoWeb.TelephoneComponents do
           data-current={to_string(current_entry?(entry, @current_entry))}
           data-entry-type={entry.type}
           class={[
-            "rounded-base border-2 border-border p-4 shadow-shadow transition-all duration-300",
-            current_entry?(entry, @current_entry) &&
-              "telephone-reveal-current bg-yellow-50 p-5 md:col-span-2 sm:p-7",
-            not current_entry?(entry, @current_entry) &&
-              "bg-white opacity-75 hover:-translate-y-1 hover:opacity-100"
+            "mx-auto flex w-full max-w-3xl flex-col rounded-base border-2 border-border p-3 shadow-shadow",
+            current_entry?(entry, @current_entry) && "telephone-reveal-current",
+            entry.type == :drawing && "bg-white",
+            entry.type != :drawing && "bg-yellow-50"
           ]}
         >
-          <div class="mb-3 flex items-center justify-between gap-3">
-            <div class="flex items-center gap-2">
+          <%= if entry.type == :drawing do %>
+            <div class="mb-1 flex items-center gap-2">
               <.flamingo_avatar
                 avatar={player_avatar(@players, entry.player_id || @chain.origin_player_id)}
-                class={[
-                  "h-10 w-10",
-                  current_entry?(entry, @current_entry) && "sm:h-14 sm:w-14"
-                ]}
+                class="h-8 w-8"
                 label={
                   "#{player_name(@players, entry.player_id || @chain.origin_player_id)}'s avatar"
                 }
               />
               <div>
-                <p class={[
-                  "font-bold",
-                  current_entry?(entry, @current_entry) && "text-lg sm:text-xl"
-                ]}>
+                <p class="font-bold">
                   {player_name(@players, entry.player_id || @chain.origin_player_id)}
                 </p>
-                <p class="text-xs font-bold text-gray-500 uppercase">{entry_label(entry)}</p>
               </div>
             </div>
-            <span
-              :if={current_entry?(entry, @current_entry)}
-              class="rotate-2 border-2 border-border bg-pink-300 px-3 py-1 font-hero text-sm font-black tracking-wider uppercase shadow-shadow"
-            >
-              Latest twist
-            </span>
-          </div>
-          <%= if entry.type == :drawing do %>
             <div
               id={"reveal-drawing-#{entry.id}"}
               phx-hook="DrawingCanvas"
@@ -466,25 +414,36 @@ defmodule FlamingoWeb.TelephoneComponents do
               data-is-drawer="false"
               data-final-drawing-replay="true"
               data-final-drawing-events={Jason.encode!(entry.value || [])}
-              class={current_entry?(entry, @current_entry) && "mx-auto max-w-4xl"}
             >
-              <div class="relative aspect-[7/5] w-full border-2 border-border bg-white">
+              <div class="relative aspect-[7/5] w-full bg-white">
                 <canvas width="700" height="500" class="absolute inset-0 h-full w-full"></canvas>
                 <.drawing_fallback ops={entry.value || []} />
               </div>
             </div>
           <% else %>
-            <p
-              id={"reveal-text-#{entry.id}"}
-              class={[
-                "flex min-h-36 items-center justify-center p-5 text-center font-hero text-3xl font-black text-pink-500",
-                current_entry?(entry, @current_entry) && "sm:min-h-48 sm:text-5xl"
-              ]}
-            >
-              “{present_text(entry.value)}”
-            </p>
+            <div class="grid grid-cols-[1fr_auto_1fr] items-center gap-2">
+              <div class="flex min-w-0 items-center gap-2 justify-self-start">
+                <.flamingo_avatar
+                  avatar={player_avatar(@players, entry.player_id || @chain.origin_player_id)}
+                  class="h-8 w-8 shrink-0"
+                  label={
+                    "#{player_name(@players, entry.player_id || @chain.origin_player_id)}'s avatar"
+                  }
+                />
+                <span class="truncate font-bold">
+                  {player_name(@players, entry.player_id || @chain.origin_player_id)}
+                </span>
+              </div>
+              <p
+                id={"reveal-text-#{entry.id}"}
+                class="text-center font-hero text-2xl leading-tight font-black text-black"
+              >
+                {present_text(entry.value)}
+              </p>
+              <span aria-hidden="true"></span>
+            </div>
           <% end %>
-          <div :if={@participation == :active} class="mt-4 flex flex-wrap gap-2">
+          <div :if={@participation == :active} class="mt-2 flex flex-wrap justify-center gap-2">
             <button
               :for={{category, label, icon} <- applicable_categories(@categories, entry)}
               id={"vote-#{category}-#{entry.id}"}
@@ -501,23 +460,18 @@ defmodule FlamingoWeb.TelephoneComponents do
           </div>
         </article>
       </div>
-      <div
-        id="reveal-controls"
-        class="sticky bottom-3 z-30 mx-auto max-w-3xl border-2 border-border bg-white/95 p-4 text-center shadow-shadow backdrop-blur-sm sm:p-5"
-      >
-        <p id="reveal-next-hint" class="mb-3 text-sm font-bold text-gray-600">
-          {reveal_hint(@reveal, @current_entry)}
-        </p>
+      <div id="reveal-controls" class="flex justify-center">
         <.button
           :if={@viewer_id == @host_id}
           id="advance-telephone-reveal"
           phx-click="advance_reveal"
-          class="min-w-64 justify-center px-8 py-3 text-lg font-black"
+          class="inline-flex items-center gap-1"
         >
-          {reveal_button_label(@reveal, @current_entry)}<.icon
-            name={:arrow_right}
-            class="ml-2 h-5 w-5"
-          />
+          <%= if final_reveal?(@reveal) do %>
+            Finish
+          <% else %>
+            Next <.icon name={:arrow_down} class="h-4 w-4" />
+          <% end %>
         </.button>
         <p :if={@viewer_id != @host_id} id="waiting-for-reveal-host" class="font-bold text-gray-600">
           The host is choosing the dramatic moment… hold your breath.
@@ -704,11 +658,6 @@ defmodule FlamingoWeb.TelephoneComponents do
     do: if(String.trim(value) == "", do: "A mysterious blank link", else: value)
 
   defp present_text(_), do: "A mysterious blank link"
-  defp number(nil, _key), do: "–"
-
-  defp number(map, key),
-    do: if(is_integer(Map.get(map, key)), do: Map.get(map, key) + 1, else: "–")
-
   defp progress_indices(count) when count > 0, do: 0..(count - 1)
   defp progress_indices(_count), do: []
 
@@ -716,41 +665,21 @@ defmodule FlamingoWeb.TelephoneComponents do
   defp progress_state(index, index), do: "current"
   defp progress_state(_index, _current), do: "upcoming"
 
-  defp progress_class(index, current) when index < current, do: "bg-purple-500"
-  defp progress_class(index, index), do: "scale-y-150 bg-yellow-300"
-  defp progress_class(_index, _current), do: "bg-white"
+  defp journey_label(0), do: "Prompt"
+  defp journey_label(index) when rem(index, 2) == 1, do: "Drawing"
+  defp journey_label(_index), do: "Guess"
+
+  defp progress_class(index, current) when index < current, do: "border-solid bg-white"
+  defp progress_class(index, index), do: "border-solid bg-pink-400"
+  defp progress_class(_index, _current), do: "border-dotted bg-transparent"
 
   defp current_entry?(%{id: id}, %{id: id}), do: true
   defp current_entry?(_entry, _current), do: false
 
-  defp reveal_button_label(reveal, entry) do
-    cond do
-      reveal.entry_index + 1 < reveal.entry_count -> next_link_label(entry)
-      reveal.chain_index + 1 < reveal.chain_count -> "Unwrap the next chain"
-      true -> "Crown the legends"
-    end
+  defp final_reveal?(reveal) do
+    reveal.entry_index + 1 == reveal.entry_count and
+      reveal.chain_index + 1 == reveal.chain_count
   end
-
-  defp next_link_label(%{type: :prompt}), do: "Reveal the first drawing"
-  defp next_link_label(%{type: :drawing}), do: "Reveal what they guessed"
-  defp next_link_label(_entry), do: "Reveal the next drawing"
-
-  defp reveal_hint(reveal, _entry)
-       when reveal.entry_index + 1 == reveal.entry_count and
-              reveal.chain_index + 1 == reveal.chain_count,
-       do: "That’s every last twist. Make sure your votes are in."
-
-  defp reveal_hint(reveal, _entry) when reveal.entry_index + 1 == reveal.entry_count,
-    do: "This story is complete. Another chain is waiting backstage."
-
-  defp reveal_hint(_reveal, %{type: :prompt}),
-    do: "The innocent beginning—before the first artist got involved."
-
-  defp reveal_hint(_reveal, %{type: :drawing}),
-    do: "A picture is worth a thousand words. The next player only got one guess."
-
-  defp reveal_hint(_reveal, _entry),
-    do: "That guess became somebody else’s drawing prompt. What could go wrong?"
 
   defp award_card_class(:derailment), do: "bg-purple-100"
   defp award_card_class(:best_save), do: "bg-green-100"
@@ -760,10 +689,6 @@ defmodule FlamingoWeb.TelephoneComponents do
   defp award_summary(%{entry: %{type: :drawing}}), do: "A masterpiece beyond words"
   defp award_summary(_award), do: "An unforgettable link"
 
-  defp entry_label(%{type: :prompt}), do: "Original prompt"
-  defp entry_label(%{type: :drawing}), do: "Drawing"
-  defp entry_label(%{type: :guess}), do: "Guess"
-  defp entry_label(_), do: "Missing link"
   defp applicable_categories(categories, %{type: :drawing}), do: categories
   defp applicable_categories(_categories, %{type: :prompt}), do: []
 
