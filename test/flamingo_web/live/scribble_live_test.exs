@@ -122,6 +122,22 @@ defmodule FlamingoWeb.ScribbleLiveTest do
     assert player_ids == ["player-row-bob", "player-row-charlie", "player-row-alice"]
   end
 
+  test "playing timer has no border" do
+    timer_path =
+      render_component(&GameComponents.game_header/1, %{
+        word: "flamingo",
+        show_word: true,
+        revealed_indices: [],
+        turn_end_time: nil,
+        show_timer: true
+      })
+      |> LazyHTML.from_fragment()
+      |> LazyHTML.query(".starburst path")
+
+    assert LazyHTML.attribute(timer_path, "stroke") == ["none"]
+    assert LazyHTML.attribute(timer_path, "stroke-width") == ["0"]
+  end
+
   test "host can copy a path-based room invitation", %{conn: conn, room_id: room_id} do
     {:ok, host_token, _snapshot} = join_connected(room_id, "Alice")
     {:ok, view, _html} = live(conn, ~p"/game/#{room_id}?resume_token=#{host_token}")

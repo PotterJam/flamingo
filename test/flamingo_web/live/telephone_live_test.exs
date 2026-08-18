@@ -134,6 +134,11 @@ defmodule FlamingoWeb.TelephoneLiveTest do
     assert has_element?(telephone, "#telephone-prompt-choices button")
     assert has_element?(telephone, "#telephone-custom-prompt-form")
 
+    assert has_element?(
+             telephone,
+             "#telephone-prompt-phase .starburst path[stroke='#111827'][stroke-width='4']"
+           )
+
     telephone
     |> form("#telephone-custom-prompt-form", %{"prompt" => "moon trampoline"})
     |> render_submit()

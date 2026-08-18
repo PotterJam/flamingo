@@ -437,8 +437,6 @@ defmodule FlamingoWeb.GameComponents do
           text_class="text-2xl"
           timer_id="turn-timer"
           end_time={@turn_end_time && DateTime.to_iso8601(@turn_end_time)}
-          stroke="black"
-          stroke_width="6"
         />
       <% end %>
     </div>
