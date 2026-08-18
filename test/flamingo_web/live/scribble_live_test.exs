@@ -5,6 +5,7 @@ defmodule FlamingoWeb.ScribbleLiveTest do
 
   alias Flamingo.DrawingShare
   alias Flamingo.Rooms
+  alias FlamingoWeb.GameComponents
 
   defp join_connected(room_id, player_name) do
     parent = self()
@@ -96,6 +97,29 @@ defmodule FlamingoWeb.ScribbleLiveTest do
     room_id = "live-#{System.unique_integer([:positive])}"
     {:ok, ^room_id} = RoomSupervisor.start_room(room_id)
     %{room_id: room_id}
+  end
+
+  test "player sidebar orders players by score" do
+    players = %{
+      "alice" => %{name: "Alice", avatar: %{}, score: 20},
+      "bob" => %{name: "Bob", avatar: %{}, score: 80},
+      "charlie" => %{name: "Charlie", avatar: %{}, score: 50}
+    }
+
+    player_ids =
+      render_component(&GameComponents.player_list_panel/1, %{
+        players: players,
+        player_order: ["alice", "bob", "charlie"],
+        drawer_id: "alice",
+        correct_guesses: MapSet.new(),
+        current_round: 1,
+        round_count: 3
+      })
+      |> LazyHTML.from_fragment()
+      |> LazyHTML.query("#player-list-scroll li")
+      |> LazyHTML.attribute("id")
+
+    assert player_ids == ["player-row-bob", "player-row-charlie", "player-row-alice"]
   end
 
   test "host can copy a path-based room invitation", %{conn: conn, room_id: room_id} do

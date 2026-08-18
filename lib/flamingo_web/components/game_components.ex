@@ -453,6 +453,13 @@ defmodule FlamingoWeb.GameComponents do
   attr :round_count, :integer, required: true
 
   def player_list_panel(assigns) do
+    assigns =
+      assign(
+        assigns,
+        :player_order,
+        Enum.sort_by(assigns.player_order, fn pid -> -Map.fetch!(assigns.players, pid).score end)
+      )
+
     ~H"""
     <div class="relative z-10 flex w-full flex-1 flex-col">
       <.game_progress
