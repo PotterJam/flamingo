@@ -134,6 +134,13 @@ defmodule FlamingoWeb.TelephoneLiveTest do
     assert has_element?(telephone, "#telephone-prompt-choices button")
     assert has_element?(telephone, "#telephone-custom-prompt-form")
 
+    assert_push_event(telephone, "sync_round_audio", %{
+      phase: "telephone_prompt",
+      end_time: prompt_end_time
+    })
+
+    assert is_binary(prompt_end_time)
+
     assert has_element?(
              telephone,
              "#telephone-prompt-phase .starburst path[stroke='#111827'][stroke-width='4']"
@@ -157,6 +164,13 @@ defmodule FlamingoWeb.TelephoneLiveTest do
     _ = :sys.get_state(room_pid(room_id))
 
     assert has_element?(telephone, "#telephone-draw-phase")
+
+    assert_push_event(telephone, "sync_round_audio", %{
+      phase: "telephone_draw",
+      end_time: draw_end_time
+    })
+
+    assert is_binary(draw_end_time)
 
     assert has_element?(telephone, "#draw-source-text", "moon trampoline")
 

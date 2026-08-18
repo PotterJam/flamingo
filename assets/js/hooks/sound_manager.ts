@@ -138,13 +138,17 @@ const SoundManager = {
     };
 
     const applyRoundAudio = ({ phase, end_time }: RoundAudioPayload) => {
-      if (phase === "playing" && end_time) {
+      if ((phase === "playing" && end_time) || phase === "telephone_draw" || phase === "telephone_guess") {
         fadeInMusic();
+      } else {
+        fadeOutMusic();
+      }
+
+      if (phase === "playing" && end_time) {
         scheduleCountdown(end_time);
         return;
       }
 
-      fadeOutMusic();
       stopCountdown();
     };
 

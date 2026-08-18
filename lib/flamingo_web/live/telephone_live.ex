@@ -216,6 +216,7 @@ defmodule FlamingoWeb.TelephoneLive do
   defp result(socket, _), do: {:noreply, socket}
 
   defp apply_snapshot(socket, snapshot) do
+    initial? = is_nil(socket.assigns.viewer_id)
     old_phase = socket.assigns.phase
     old_reveal_position = reveal_position(socket.assigns.reveal)
     assignment = Map.get(snapshot, :assignment)
@@ -257,13 +258,24 @@ defmodule FlamingoWeb.TelephoneLive do
         end_time: iso_time(Map.get(snapshot, :turn_end_time))
       })
 
+    socket =
+      if initial? or old_phase != snapshot.phase, do: sync_round_audio(socket), else: socket
+
     if old_phase == :telephone_reveal and snapshot.phase == :telephone_reveal and
          old_reveal_position != reveal_position(snapshot.reveal),
-      do: push_event(socket, "scroll_telephone_reveal", %{}),
-      else: socket
+       do: push_event(socket, "scroll_telephone_reveal", %{}),
+       else: socket
   end
 
   defp submitted?(assigns), do: MapSet.member?(assigns.submitted_ids, assigns.viewer_id)
+
+  defp sync_round_audio(socket) do
+    push_event(socket, "sync_round_audio", %{
+      phase: Atom.to_string(socket.assigns.phase),
+      end_time: iso_time(socket.assigns.turn_end_time)
+    })
+  end
+
   defp reveal_position(%{chain_index: chain_index, entry_index: entry_index}),
     do: {chain_index, entry_index}
 
