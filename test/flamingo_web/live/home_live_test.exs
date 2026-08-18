@@ -62,6 +62,19 @@ defmodule FlamingoWeb.HomeLiveTest do
     assert has_element?(view, "#create-room-button[type='submit']")
   end
 
+  test "each avatar part offers the inline drawing editor", %{conn: conn} do
+    {:ok, view, _html} = live(conn, ~p"/")
+
+    for part <- ~w(head body legs feet) do
+      assert has_element?(view, "#avatar-#{part}-draw[data-avatar-draw]")
+      assert has_element?(view, "#avatar-#{part}-drawing-input[name='lobby[#{part}_drawing]']")
+    end
+
+    assert has_element?(view, "[data-avatar-drawing-editor][hidden]")
+    assert has_element?(view, "[data-avatar-drawing-surface]")
+    assert has_element?(view, "[data-avatar-drawing-save]")
+  end
+
   test "app layout sound control is a volume slider initialized to full volume" do
     assigns = %{}
 

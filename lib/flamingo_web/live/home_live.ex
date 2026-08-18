@@ -64,6 +64,13 @@ defmodule FlamingoWeb.HomeLive do
                   name={"lobby[#{part}_color]"}
                   value={@avatar["#{part}_color"]}
                 />
+                <input
+                  :for={part <- Avatar.parts()}
+                  type="hidden"
+                  id={"avatar-#{part}-drawing-input"}
+                  name={"lobby[#{part}_drawing]"}
+                  value={@avatar["#{part}_drawing"]}
+                />
 
                 <div class="relative h-56 w-full max-w-xl sm:h-64">
                   <.flamingo_avatar
@@ -73,9 +80,8 @@ defmodule FlamingoWeb.HomeLive do
                   />
 
                   <template
-                    :for={{animal, index} <- Avatar.animals()}
+                    :for={{_animal, index} <- Avatar.animals()}
                     data-avatar-template={index}
-                    data-avatar-animal-label={animal}
                   >
                     <.flamingo_avatar avatar={
                       Map.merge(@avatar, %{
@@ -179,12 +185,110 @@ defmodule FlamingoWeb.HomeLive do
                             class="size-5 stroke-[3] max-[359px]:size-4 sm:size-5"
                           />
                         </button>
-                        <span
-                          id={"avatar-#{part}-animal-name"}
-                          class="block text-sm font-medium whitespace-nowrap capitalize"
+                        <button
+                          type="button"
+                          data-avatar-draw
+                          data-avatar-part={part}
+                          id={"avatar-#{part}-draw"}
+                          aria-label={"Draw your own #{part}"}
+                          title={"Draw your own #{part}"}
+                          class="group flex size-7 shrink-0 items-center justify-center text-gray-500 transition-all hover:-translate-y-0.5 hover:text-pink-500 focus-visible:outline-2 focus-visible:outline-offset-2 active:translate-y-0 sm:size-8"
                         >
-                          {Avatar.animal_label(@avatar[part])}
-                        </span>
+                          <.icon
+                            name={:pencil}
+                            class="size-4 transition-transform group-hover:-rotate-6"
+                          />
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div
+                    data-avatar-drawing-editor
+                    hidden
+                    class="absolute inset-x-0 top-1/2 z-40 mx-auto w-[min(100%,22rem)] -translate-y-1/2 rounded-base border-2 border-border bg-pink-50 p-3 shadow-shadow"
+                  >
+                    <div class="mb-2 flex items-center justify-between gap-2">
+                      <div>
+                        <p class="text-[0.65rem] font-black tracking-[0.16em] text-pink-500 uppercase">
+                          Make it yours
+                        </p>
+                        <h2 class="text-sm font-black capitalize">
+                          Draw your own <span data-avatar-drawing-title>part</span>
+                        </h2>
+                      </div>
+                      <span class="rounded-full border-2 border-border bg-yellow-200 px-2 py-0.5 text-[0.65rem] font-bold">
+                        Draw in the glow
+                      </span>
+                    </div>
+
+                    <svg
+                      data-avatar-drawing-surface
+                      viewBox="0 0 130 145"
+                      class="h-36 w-full touch-none cursor-crosshair rounded-lg border-2 border-dashed border-pink-300 bg-white"
+                      aria-label="Drawing surface"
+                    >
+                      <rect
+                        data-avatar-drawing-guide
+                        x="12"
+                        y="2"
+                        width="106"
+                        height="66"
+                        rx="10"
+                        fill="#fce7f3"
+                      />
+                      <path
+                        data-avatar-drawing-shadow
+                        fill="none"
+                        stroke="#111827"
+                        stroke-width="10"
+                        stroke-linecap="round"
+                        stroke-linejoin="round"
+                      />
+                      <path
+                        data-avatar-drawing-path
+                        fill="none"
+                        stroke="#f472b6"
+                        stroke-width="6"
+                        stroke-linecap="round"
+                        stroke-linejoin="round"
+                      />
+                    </svg>
+
+                    <div class="mt-2 flex items-center justify-between gap-2">
+                      <div class="flex gap-1">
+                        <button
+                          type="button"
+                          data-avatar-drawing-undo
+                          class="flex size-8 items-center justify-center rounded-full transition-colors hover:bg-white"
+                          aria-label="Undo last stroke"
+                        >
+                          <.icon name={:undo_2} class="size-4" />
+                        </button>
+                        <button
+                          type="button"
+                          data-avatar-drawing-clear
+                          class="flex size-8 items-center justify-center rounded-full transition-colors hover:bg-white"
+                          aria-label="Clear drawing"
+                        >
+                          <.icon name={:trash_2} class="size-4" />
+                        </button>
+                      </div>
+                      <div class="flex gap-2">
+                        <button
+                          type="button"
+                          data-avatar-drawing-cancel
+                          class="rounded-full px-3 py-1.5 text-xs font-bold transition-colors hover:bg-white"
+                        >
+                          Cancel
+                        </button>
+                        <button
+                          type="button"
+                          data-avatar-drawing-save
+                          class="rounded-full border-2 border-border bg-pink-400 px-4 py-1 text-xs font-black text-white transition-all hover:-translate-y-0.5 hover:bg-pink-500 active:translate-y-0"
+                        >
+                          Use drawing
+                        </button>
                       </div>
                     </div>
                   </div>

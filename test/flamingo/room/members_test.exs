@@ -16,8 +16,10 @@ defmodule Flamingo.Room.MembersTest do
     avatar = %{
       "head" => "1",
       "head_color" => "6",
+      "head_drawing" => "M 30 20 L 45 35",
       "body" => "4",
       "body_color" => "3",
+      "body_drawing" => "<script>",
       "legs" => "99",
       "legs_color" => "7",
       "feet" => "3",
@@ -29,12 +31,16 @@ defmodule Flamingo.Room.MembersTest do
     assert Members.fetch!(members, "alice").avatar == %{
              "head" => 1,
              "head_color" => 6,
+             "head_drawing" => "M 30 20 L 45 35",
              "body" => 4,
              "body_color" => 3,
+             "body_drawing" => "",
              "legs" => 0,
              "legs_color" => 7,
+             "legs_drawing" => "",
              "feet" => 3,
-             "feet_color" => 5
+             "feet_color" => 5,
+             "feet_drawing" => ""
            }
   end
 
