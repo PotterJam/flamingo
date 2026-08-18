@@ -216,6 +216,8 @@ defmodule FlamingoWeb.TelephoneLive do
   defp result(socket, _), do: {:noreply, socket}
 
   defp apply_snapshot(socket, snapshot) do
+    old_phase = socket.assigns.phase
+    old_reveal_position = reveal_position(socket.assigns.reveal)
     assignment = Map.get(snapshot, :assignment)
     key = assignment && {Map.get(snapshot, :current_step), assignment.chain_id}
     baseline? = key != socket.assigns.drawing_key and Map.get(snapshot, :phase) == :telephone_draw
@@ -250,12 +252,22 @@ defmodule FlamingoWeb.TelephoneLive do
           push_event(socket, "drawing_state", %{events: Map.get(assignment, :current_drawing, [])}),
         else: socket
 
-    push_event(socket, "set_timer", %{
-      end_time: iso_time(Map.get(snapshot, :turn_end_time))
-    })
+    socket =
+      push_event(socket, "set_timer", %{
+        end_time: iso_time(Map.get(snapshot, :turn_end_time))
+      })
+
+    if old_phase == :telephone_reveal and snapshot.phase == :telephone_reveal and
+         old_reveal_position != reveal_position(snapshot.reveal),
+      do: push_event(socket, "scroll_telephone_reveal", %{}),
+      else: socket
   end
 
   defp submitted?(assigns), do: MapSet.member?(assigns.submitted_ids, assigns.viewer_id)
+  defp reveal_position(%{chain_index: chain_index, entry_index: entry_index}),
+    do: {chain_index, entry_index}
+
+  defp reveal_position(_reveal), do: nil
   defp iso_time(%DateTime{} = value), do: DateTime.to_iso8601(value)
   defp iso_time(value) when is_binary(value), do: value
   defp iso_time(_), do: nil

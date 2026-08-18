@@ -336,7 +336,7 @@ defmodule FlamingoWeb.TelephoneComponents do
       )
 
     ~H"""
-    <section id="telephone-reveal-phase" class="space-y-6 pb-6">
+    <section id="telephone-reveal-phase" phx-hook=".ScrollReveal" class="space-y-6 pb-6">
       <.box class="relative mx-auto max-w-4xl overflow-hidden bg-sky-100 p-5 text-center sm:p-8">
         <div aria-hidden="true" class="pointer-events-none absolute inset-0 overflow-hidden">
           <.icon
@@ -483,6 +483,17 @@ defmodule FlamingoWeb.TelephoneComponents do
         </p>
       </div>
     </section>
+    <script :type={Phoenix.LiveView.ColocatedHook} name=".ScrollReveal">
+      export default {
+        mounted() {
+          this.handleEvent("scroll_telephone_reveal", () => {
+            window.requestAnimationFrame(() => {
+              window.scrollTo({top: document.documentElement.scrollHeight, behavior: "smooth"})
+            })
+          })
+        }
+      }
+    </script>
     """
   end
 

@@ -256,6 +256,13 @@ defmodule FlamingoWeb.TelephoneLiveTest do
 
     assert has_element?(bob_view, "#waiting-for-reveal-host")
     refute has_element?(bob_view, "#advance-telephone-reveal")
+
+    host |> element("#advance-telephone-reveal") |> render_click()
+
+    assert_push_event(host, "scroll_telephone_reveal", %{})
+    assert_push_event(bob_view, "scroll_telephone_reveal", %{})
+    assert has_element?(host, "#revealed-entries article:nth-child(2)")
+    assert has_element?(bob_view, "#revealed-entries article:nth-child(2)")
   end
 
   test "drawing deltas stay private and reconnect receives the current baseline", %{
