@@ -242,6 +242,9 @@ defmodule FlamingoWeb.TelephoneLiveTest do
     assert has_element?(host, "#revealed-entries article")
     refute has_element?(host, "#revealed-entries article:nth-child(2)")
     assert has_element?(host, "#reveal-journey-progress [data-state='current']")
+    assert has_element?(host, "#reveal-journey-progress p[aria-label='Prompt']", "Prompt")
+    assert has_element?(host, "#reveal-journey-progress p[aria-label='Drawing'] svg")
+    assert has_element?(host, "#reveal-journey-progress p[aria-label='Guess'] svg")
 
     assert has_element?(
              host,

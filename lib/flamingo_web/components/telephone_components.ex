@@ -359,8 +359,15 @@ defmodule FlamingoWeb.TelephoneComponents do
             aria-label="Chain journey progress"
           >
             <div :for={index <- progress_indices(@entry_count)} class="min-w-0 flex-1">
-              <p class="mb-1 truncate text-xs font-bold text-gray-700">
-                {journey_label(index)}
+              <p
+                class="mb-1 flex h-4 items-center justify-center truncate text-xs font-bold text-gray-700"
+                aria-label={journey_label(index)}
+              >
+                <%= if icon = journey_icon(index) do %>
+                  <.icon name={icon} class="h-4 w-4" />
+                <% else %>
+                  {journey_label(index)}
+                <% end %>
               </p>
               <span
                 data-state={progress_state(index, Map.get(@reveal || %{}, :entry_index))}
@@ -666,6 +673,10 @@ defmodule FlamingoWeb.TelephoneComponents do
   defp journey_label(0), do: "Prompt"
   defp journey_label(index) when rem(index, 2) == 1, do: "Drawing"
   defp journey_label(_index), do: "Guess"
+
+  defp journey_icon(0), do: nil
+  defp journey_icon(index) when rem(index, 2) == 1, do: :paintbrush
+  defp journey_icon(_index), do: :message_circle
 
   defp progress_class(index, current) when index < current, do: "border-solid bg-white"
   defp progress_class(index, index), do: "border-solid bg-pink-400"
