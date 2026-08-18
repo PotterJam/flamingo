@@ -180,29 +180,133 @@ defmodule FlamingoWeb.ScribbleLiveTest do
     assert has_element?(view, "#round-length-input[value='120']")
   end
 
-  test "host can configure custom words one per line", %{conn: conn, room_id: room_id} do
+  test "host can select custom words and keeps the draft when changing themes", %{
+    conn: conn,
+    room_id: room_id
+  } do
     {:ok, p1_token, _p1_snapshot} = join_connected(room_id, "Alice")
     {:ok, _p2_token, _p2_snapshot} = join_connected(room_id, "Bob")
 
     {:ok, view, _html} = live(conn, ~p"/game/#{room_id}?resume_token=#{p1_token}")
 
-    assert has_element?(view, "#custom-words-input[placeholder*='one per line']")
-    assert has_element?(view, "#include-default-words-input:not(:checked)")
+    assert has_element?(view, "#word-list-select.nb-select option[value='default'][selected]")
+
+    assert has_element?(
+             view,
+             "label[for='word-list-select'] > span.mb-2.block.text-sm",
+             "Word theme"
+           )
+
+    assert has_element?(view, "#word-list-select option[value='default']", "Default")
+    assert has_element?(view, "#word-list-select option[value='films']")
+    assert has_element?(view, "#word-list-select option[value='custom']")
+    refute has_element?(view, "#word-list-description")
+    refute has_element?(view, "#custom-words-settings")
+
+    view
+    |> element("#settings-form")
+    |> render_change(%{
+      "settings" => %{
+        "round_count" => "3",
+        "turn_length" => "45",
+        "word_list" => "custom",
+        "custom_words" => "orbital llama\nvelvet cactus\ndisco teapot"
+      }
+    })
+
+    assert has_element?(view, "#custom-words-settings")
+    assert has_element?(view, "#custom-words-input[required][placeholder*='one per line']")
+    assert has_element?(view, "#custom-word-count", "3 / 3000")
+
+    view
+    |> element("#settings-form")
+    |> render_change(%{
+      "settings" => %{
+        "round_count" => "3",
+        "turn_length" => "45",
+        "word_list" => "films"
+      }
+    })
+
+    refute has_element?(view, "#custom-words-settings")
+
+    view
+    |> element("#settings-form")
+    |> render_change(%{
+      "settings" => %{
+        "round_count" => "3",
+        "turn_length" => "45",
+        "word_list" => "custom"
+      }
+    })
+
+    custom_words_input =
+      view
+      |> render()
+      |> LazyHTML.from_fragment()
+      |> LazyHTML.query("#custom-words-input")
+
+    assert LazyHTML.text(custom_words_input) =~ "orbital llama"
+    assert LazyHTML.text(custom_words_input) =~ "velvet cactus"
+    assert LazyHTML.text(custom_words_input) =~ "disco teapot"
 
     view
     |> form("#settings-form", %{
       "settings" => %{
         "round_count" => "3",
         "turn_length" => "45",
-        "custom_words" => "orbital llama\nvelvet cactus\ndisco teapot",
-        "include_default_words" => "true"
+        "word_list" => "custom",
+        "custom_words" => "orbital llama\nvelvet cactus\ndisco teapot"
       }
     })
     |> render_submit()
 
     {:ok, state} = room_snapshot(room_id)
+    assert state.word_list == :custom
     assert state.custom_words == ["orbital llama", "velvet cactus", "disco teapot"]
-    assert state.include_default_words
+
+    assert Enum.sort(state.word_choices) ==
+             Enum.sort(["orbital llama", "velvet cactus", "disco teapot"])
+
+    refute state.include_default_words
+  end
+
+  test "host can start with the films word theme", %{conn: conn, room_id: room_id} do
+    {:ok, p1_token, _p1_snapshot} = join_connected(room_id, "Alice")
+    {:ok, _p2_token, _p2_snapshot} = join_connected(room_id, "Bob")
+
+    {:ok, view, _html} = live(conn, ~p"/game/#{room_id}?resume_token=#{p1_token}")
+
+    view
+    |> element("#settings-form")
+    |> render_change(%{
+      "settings" => %{
+        "round_count" => "3",
+        "turn_length" => "45",
+        "word_list" => "films"
+      }
+    })
+
+    assert has_element?(view, "#word-list-select option[value='films'][selected]")
+    refute has_element?(view, "#word-list-description")
+    refute has_element?(view, "#custom-words-settings")
+
+    view
+    |> form("#settings-form", %{
+      "settings" => %{
+        "round_count" => "3",
+        "turn_length" => "45",
+        "word_list" => "films"
+      }
+    })
+    |> render_submit()
+
+    {:ok, state} = room_snapshot(room_id)
+    film_words = File.read!("priv/words/films.txt") |> String.split("\n", trim: true)
+
+    assert state.word_list == :films
+    assert state.custom_words == []
+    assert Enum.all?(state.word_choices, &(&1 in film_words))
   end
 
   test "host can start constraint roulette", %{conn: conn, room_id: room_id} do
@@ -254,11 +358,25 @@ defmodule FlamingoWeb.ScribbleLiveTest do
       "settings" => %{
         "round_count" => "3",
         "turn_length" => "45",
+        "word_list" => "custom",
         "custom_words" => "cat, dog"
       }
     })
 
     assert has_element?(view, "#custom-words-error")
+
+    view
+    |> form("#settings-form", %{
+      "settings" => %{
+        "round_count" => "3",
+        "turn_length" => "45",
+        "word_list" => "custom",
+        "custom_words" => ""
+      }
+    })
+    |> render_submit()
+
+    assert has_element?(view, "#custom-words-error", "Add at least one custom word.")
   end
 
   test "player rows constrain long names without displacing status and scores", %{
@@ -351,6 +469,7 @@ defmodule FlamingoWeb.ScribbleLiveTest do
       "settings" => %{
         "round_count" => "5",
         "turn_length" => "90",
+        "word_list" => "custom",
         "custom_words" => "saved locally"
       }
     })
@@ -359,6 +478,7 @@ defmodule FlamingoWeb.ScribbleLiveTest do
 
     assert has_element?(view, "#round-count-slider[value='5']")
     assert has_element?(view, "#round-length-input[value='90']")
+    assert has_element?(view, "#word-list-select option[value='custom'][selected]")
     assert has_element?(view, "#custom-words-input", "saved locally")
   end
 

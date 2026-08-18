@@ -116,12 +116,23 @@ defmodule FlamingoWeb.TelephoneLiveTest do
     lobby |> element("#game-mode-telephone") |> render_click()
 
     lobby
+    |> element("#settings-form")
+    |> render_change(%{
+      "settings" => %{
+        "round_count" => "1",
+        "turn_length" => "30",
+        "word_list" => "custom",
+        "custom_words" => "orbital llama\nvelvet cactus"
+      }
+    })
+
+    lobby
     |> form("#settings-form", %{
       "settings" => %{
         "round_count" => "1",
         "turn_length" => "30",
-        "custom_words" => "orbital llama\nvelvet cactus",
-        "include_default_words" => "false"
+        "word_list" => "custom",
+        "custom_words" => "orbital llama\nvelvet cactus"
       }
     })
     |> render_submit()

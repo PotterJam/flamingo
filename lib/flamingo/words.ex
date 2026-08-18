@@ -18,13 +18,18 @@ defmodule Flamingo.Words do
     |> Enum.take_random(n)
   end
 
-  def validate_word_list(word_list) when word_list in [:default, :films], do: {:ok, word_list}
+  def validate_word_list(word_list) when word_list in [:default, :films, :custom],
+    do: {:ok, word_list}
+
   def validate_word_list(_word_list), do: {:error, :invalid_word_list}
+
+  defp available_words([], _include_default_words, :custom), do: []
 
   defp available_words([], _include_default_words, word_list),
     do: Map.fetch!(@word_lists, word_list)
 
   defp available_words(custom_words, false, _word_list), do: custom_words
+  defp available_words(custom_words, true, :custom), do: custom_words
 
   defp available_words(custom_words, true, word_list) do
     Enum.uniq_by(custom_words ++ Map.fetch!(@word_lists, word_list), &String.downcase/1)

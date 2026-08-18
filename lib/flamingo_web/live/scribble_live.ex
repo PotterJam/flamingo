@@ -36,6 +36,7 @@ defmodule FlamingoWeb.ScribbleLive do
        turn_length: 45,
        game_mode: :scribble,
        game_variant: :classic,
+       word_list: :default,
        custom_words: "",
        custom_word_count: 0,
        custom_words_error: nil,
@@ -45,8 +46,8 @@ defmodule FlamingoWeb.ScribbleLive do
              "round_count" => "3",
              "turn_length" => "45",
              "game_mode" => "classic",
-             "custom_words" => "",
-             "include_default_words" => false
+             "word_list" => "default",
+             "custom_words" => ""
            },
            as: :settings
          ),
@@ -299,7 +300,7 @@ defmodule FlamingoWeb.ScribbleLive do
                     </div>
 
                     <div class="mt-4">
-                      <label class="text-sm">Round length(s)</label>
+                      <label class="block text-sm">Round length(s)</label>
                       <div class="mt-1 flex w-48 items-center">
                         <.input
                           type="number"
@@ -313,7 +314,21 @@ defmodule FlamingoWeb.ScribbleLive do
                       </div>
                     </div>
 
-                    <div class="mt-4">
+                    <div class="mt-4 space-y-1">
+                      <.input
+                        field={@settings_form[:word_list]}
+                        type="select"
+                        label="Word theme"
+                        options={[
+                          {"Default", "default"},
+                          {"Films", "films"},
+                          {"Custom", "custom"}
+                        ]}
+                        id="word-list-select"
+                      />
+                    </div>
+
+                    <div :if={@word_list == :custom} id="custom-words-settings" class="mt-4">
                       <div class="flex items-end justify-between gap-3">
                         <label for="custom-words-input" class="text-sm">Custom words</label>
                         <span id="custom-word-count" class="text-xs text-gray-500">
@@ -324,6 +339,7 @@ defmodule FlamingoWeb.ScribbleLive do
                         field={@settings_form[:custom_words]}
                         type="textarea"
                         rows="4"
+                        required
                         placeholder={"Add your own words, one per line" <> "\nflamingo\nsandcastle"}
                         class="mt-1 min-h-24 w-full resize-y rounded-base border-2 border-border bg-white px-3 py-2 text-sm leading-5 focus:ring-2 focus:ring-ring focus:ring-offset-2 focus:outline-none"
                         phx-hook=".CustomWords"
@@ -337,16 +353,8 @@ defmodule FlamingoWeb.ScribbleLive do
                         {@custom_words_error}
                       </p>
                       <p :if={!@custom_words_error} class="mt-1 text-xs text-gray-500">
-                        Leave empty to use the standard word list. Commas are not supported.
+                        Add at least one word or phrase per line. Commas are not supported.
                       </p>
-                      <div class="mt-3">
-                        <.input
-                          field={@settings_form[:include_default_words]}
-                          type="checkbox"
-                          label="Include standard words"
-                          id="include-default-words-input"
-                        />
-                      </div>
                     </div>
                   </.form>
 
@@ -883,7 +891,13 @@ defmodule FlamingoWeb.ScribbleLive do
         :error -> socket.assigns.turn_length
       end
 
-    custom_words = Map.get(params, "custom_words", "")
+    word_list = parse_word_list(params["word_list"], socket.assigns.word_list)
+    custom_words = Map.get(params, "custom_words", socket.assigns.custom_words)
+
+    params =
+      params
+      |> Map.put("word_list", Atom.to_string(word_list))
+      |> Map.put("custom_words", custom_words)
 
     {game_mode, game_variant} =
       parse_game_mode(params["game_mode"], socket.assigns.game_mode, socket.assigns.game_variant)
@@ -896,6 +910,7 @@ defmodule FlamingoWeb.ScribbleLive do
        turn_length: turn_length,
        game_mode: game_mode,
        game_variant: game_variant,
+       word_list: word_list,
        custom_words: custom_words,
        custom_word_count: custom_word_count,
        custom_words_error: custom_words_error,
@@ -904,43 +919,56 @@ defmodule FlamingoWeb.ScribbleLive do
   end
 
   def handle_event("start_game", %{"settings" => params}, socket) do
-    custom_words = Map.get(params, "custom_words", "")
+    word_list = parse_word_list(params["word_list"], socket.assigns.word_list)
+    custom_words = Map.get(params, "custom_words", socket.assigns.custom_words)
 
-    case Words.parse_custom_words(custom_words) do
-      {:ok, words} ->
-        {game_mode, game_variant} =
-          parse_game_mode(
-            params["game_mode"],
-            socket.assigns.game_mode,
-            socket.assigns.game_variant
-          )
+    with {:ok, words} <- words_for_start(word_list, custom_words),
+         :ok <- validate_custom_selection(word_list, words) do
+      {game_mode, game_variant} =
+        parse_game_mode(
+          params["game_mode"],
+          socket.assigns.game_mode,
+          socket.assigns.game_variant
+        )
 
-        settings = %{
-          round_count: socket.assigns.round_count,
-          turn_length: socket.assigns.turn_length,
-          custom_words: words,
-          include_default_words: params["include_default_words"] == "true",
-          game_mode: game_mode,
-          game_variant: game_variant
-        }
+      settings = %{
+        round_count: socket.assigns.round_count,
+        turn_length: socket.assigns.turn_length,
+        custom_words: words,
+        include_default_words: false,
+        word_list: word_list,
+        game_mode: game_mode,
+        game_variant: game_variant
+      }
 
-        case Rooms.start_game(socket.assigns.room_id, settings) do
-          :ok ->
-            {:noreply, socket}
+      case Rooms.start_game(socket.assigns.room_id, settings) do
+        :ok ->
+          {:noreply, socket}
 
-          {:error, reason} ->
-            {:noreply, put_flash(socket, :error, "Cannot start game: #{reason}")}
-        end
-
-      {:error, _reason} ->
-        {custom_word_count, custom_words_error} = custom_words_summary(custom_words)
+        {:error, reason} ->
+          {:noreply, put_flash(socket, :error, "Cannot start game: #{reason}")}
+      end
+    else
+      {:error, reason} ->
+        {custom_word_count, custom_words_error} =
+          case reason do
+            :empty_custom_words -> {0, "Add at least one custom word."}
+            _reason -> custom_words_summary(custom_words)
+          end
 
         {:noreply,
          assign(socket,
+           word_list: word_list,
            custom_words: custom_words,
            custom_word_count: custom_word_count,
            custom_words_error: custom_words_error,
-           settings_form: to_form(params, as: :settings)
+           settings_form:
+             to_form(
+               params
+               |> Map.put("word_list", Atom.to_string(word_list))
+               |> Map.put("custom_words", custom_words),
+               as: :settings
+             )
          )}
     end
   end
@@ -983,6 +1011,17 @@ defmodule FlamingoWeb.ScribbleLive do
 
   defp parse_game_mode("classic", _mode, _variant), do: {:scribble, :classic}
   defp parse_game_mode(_value, mode, variant), do: {mode, variant}
+
+  defp parse_word_list("default", _fallback), do: :default
+  defp parse_word_list("films", _fallback), do: :films
+  defp parse_word_list("custom", _fallback), do: :custom
+  defp parse_word_list(_value, fallback), do: fallback
+
+  defp words_for_start(:custom, custom_words), do: Words.parse_custom_words(custom_words)
+  defp words_for_start(_word_list, _custom_words), do: {:ok, []}
+
+  defp validate_custom_selection(:custom, []), do: {:error, :empty_custom_words}
+  defp validate_custom_selection(_word_list, _words), do: :ok
 
   defp custom_words_summary(custom_words) do
     case Words.parse_custom_words(custom_words) do
@@ -1036,6 +1075,7 @@ defmodule FlamingoWeb.ScribbleLive do
     turn_length = if sync_settings?, do: snapshot.turn_length, else: socket.assigns.turn_length
     game_mode = if sync_settings?, do: :scribble, else: socket.assigns.game_mode
     game_variant = if sync_settings?, do: snapshot.game_variant, else: socket.assigns.game_variant
+    word_list = if sync_settings?, do: snapshot.word_list, else: socket.assigns.word_list
     custom_words = if sync_settings?, do: custom_words, else: socket.assigns.custom_words
 
     custom_word_count =
@@ -1051,8 +1091,8 @@ defmodule FlamingoWeb.ScribbleLive do
             "round_count" => Integer.to_string(snapshot.round_count),
             "turn_length" => Integer.to_string(snapshot.turn_length),
             "game_mode" => selected_game_mode(:scribble, snapshot.game_variant),
-            "custom_words" => custom_words,
-            "include_default_words" => snapshot.include_default_words
+            "word_list" => Atom.to_string(snapshot.word_list),
+            "custom_words" => custom_words
           },
           as: :settings
         )
@@ -1091,6 +1131,7 @@ defmodule FlamingoWeb.ScribbleLive do
         turn_length: turn_length,
         game_mode: game_mode,
         game_variant: game_variant,
+        word_list: word_list,
         constraint: snapshot.constraint,
         custom_words: custom_words,
         custom_word_count: custom_word_count,

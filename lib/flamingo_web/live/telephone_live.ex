@@ -25,6 +25,7 @@ defmodule FlamingoWeb.TelephoneLive do
        votes: %{},
        vote_counts: %{},
        awards: %{},
+       word_list: :default,
        custom_words: [],
        include_default_words: false,
        turn_end_time: nil,
@@ -172,6 +173,7 @@ defmodule FlamingoWeb.TelephoneLive do
     settings = %{
       game_mode: :telephone,
       turn_length: socket.assigns.turn_length,
+      word_list: socket.assigns.word_list,
       custom_words: socket.assigns.custom_words,
       include_default_words: socket.assigns.include_default_words
     }
@@ -241,6 +243,7 @@ defmodule FlamingoWeb.TelephoneLive do
         votes: snapshot.votes,
         vote_counts: snapshot.vote_counts,
         awards: snapshot.awards,
+        word_list: snapshot.word_list,
         custom_words: snapshot.custom_words,
         include_default_words: snapshot.include_default_words,
         turn_end_time: Map.get(snapshot, :turn_end_time),

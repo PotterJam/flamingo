@@ -314,17 +314,24 @@ defmodule FlamingoWeb.CoreComponents do
     ~H"""
     <div class="fieldset">
       <label for={@id}>
-        <span :if={@label} class="label mb-1">{@label}</span>
-        <select
-          id={@id}
-          name={@name}
-          class={[@class || "w-full select", @errors != [] && (@error_class || "select-error")]}
-          multiple={@multiple}
-          {@rest}
-        >
-          <option :if={@prompt} value="">{@prompt}</option>
-          {Phoenix.HTML.Form.options_for_select(@options, @value)}
-        </select>
+        <span :if={@label} class="mb-2 block text-sm">{@label}</span>
+        <span class="relative block">
+          <select
+            id={@id}
+            name={@name}
+            class={[@class || "nb-select", @errors != [] && (@error_class || "nb-select-error")]}
+            multiple={@multiple}
+            {@rest}
+          >
+            <option :if={@prompt} value="">{@prompt}</option>
+            {Phoenix.HTML.Form.options_for_select(@options, @value)}
+          </select>
+          <.icon
+            :if={!@multiple}
+            name={:chevron_down}
+            class="pointer-events-none absolute top-1/2 right-3 size-4 -translate-y-1/2"
+          />
+        </span>
       </label>
       <.error :for={msg <- @errors}>{msg}</.error>
     </div>

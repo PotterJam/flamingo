@@ -53,9 +53,10 @@ defmodule Flamingo.WordsTest do
     assert Enum.sort(choices) == Enum.sort([String.downcase(first), second, "orbital llama"])
   end
 
-  test "validate_word_list accepts built-in lists and rejects unknown lists" do
+  test "validate_word_list accepts known lists and rejects unknown lists" do
     assert {:ok, :default} = Words.validate_word_list(:default)
     assert {:ok, :films} = Words.validate_word_list(:films)
+    assert {:ok, :custom} = Words.validate_word_list(:custom)
     assert {:error, :invalid_word_list} = Words.validate_word_list(:unknown)
   end
 
