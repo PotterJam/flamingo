@@ -22,7 +22,7 @@ defmodule Flamingo.GameModes.TelephoneTest do
       roster: roster,
       actor_id: actor,
       now: ~U[2026-01-01 00:00:00Z],
-      word_choices: fn count, _used, _custom, _defaults ->
+      word_choices: fn count, _used, _options ->
         Enum.take(["cat", "dog", "bird", "fish", "horse", "frog"], count)
       end,
       select_candidate: Keyword.get(options, :select_candidate, &List.first/1)

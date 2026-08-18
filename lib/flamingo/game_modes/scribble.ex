@@ -19,6 +19,7 @@ defmodule Flamingo.GameModes.Scribble do
       turn_length: 30,
       custom_words: [],
       include_default_words: false,
+      word_list: :default,
       game_variant: :classic,
       constraint: nil,
       remaining_constraints: %{},
@@ -94,6 +95,7 @@ defmodule Flamingo.GameModes.Scribble do
     turn_length = Map.get(settings, :turn_length, state.turn_length)
     custom_words = Map.get(settings, :custom_words, state.custom_words)
     defaults = Map.get(settings, :include_default_words, state.include_default_words)
+    word_list = Map.get(settings, :word_list, state.word_list)
     game_variant = Map.get(settings, :game_variant, state.game_variant)
     roster = context.roster
 
@@ -104,6 +106,7 @@ defmodule Flamingo.GameModes.Scribble do
            turn_length in @min_turn_length..@max_turn_length || {:error, :invalid_turn_length},
          {:ok, custom_words} <- Words.validate_custom_words(custom_words),
          true <- is_boolean(defaults) || {:error, :invalid_include_default_words},
+         {:ok, word_list} <- Words.validate_word_list(word_list),
          true <-
            game_variant in [:classic, :constraint_roulette] || {:error, :invalid_game_variant} do
       participants = Map.new(state.participants, fn {id, _} -> {id, :active} end)
@@ -114,6 +117,7 @@ defmodule Flamingo.GameModes.Scribble do
           turn_length: turn_length,
           custom_words: custom_words,
           include_default_words: defaults,
+          word_list: word_list,
           game_variant: game_variant,
           constraint: nil,
           remaining_constraints: %{},
@@ -258,6 +262,7 @@ defmodule Flamingo.GameModes.Scribble do
       custom_words: if(viewer == roster.host_id, do: state.custom_words, else: []),
       include_default_words:
         if(viewer == roster.host_id, do: state.include_default_words, else: false),
+      word_list: state.word_list,
       game_variant: state.game_variant,
       constraint: state.constraint,
       word_choices:
@@ -285,7 +290,11 @@ defmodule Flamingo.GameModes.Scribble do
 
   defp enter_word_choice(state, context) do
     choices =
-      context.word_choices.(3, state.used_words, state.custom_words, state.include_default_words)
+      context.word_choices.(3, state.used_words,
+        custom_words: state.custom_words,
+        include_default_words: state.include_default_words,
+        word_list: state.word_list
+      )
 
     state = choose_constraint(state, context)
 

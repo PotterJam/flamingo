@@ -686,6 +686,40 @@ defmodule Flamingo.RoomServerTest do
     assert length(state.word_choices) == 3
   end
 
+  test "start_game uses the selected built-in word list", %{room_id: room_id} do
+    {:ok, p1_token, %{viewer_id: p1}} = join_connected(room_id, "Alice")
+    {:ok, _p2_token, _p2_snapshot} = join_connected(room_id, "Bob")
+
+    assert :ok = start_game_as(room_id, p1_token, %{word_list: :films})
+
+    {:ok, state} = room_snapshot(room_id)
+    film_words = File.read!("priv/words/films.txt") |> String.split("\n", trim: true)
+
+    assert state.word_list == :films
+    assert Enum.all?(state.word_choices, &(&1 in film_words))
+
+    {:ok, host_snapshot} = snapshot_as(room_id, p1_token)
+    assert host_snapshot.viewer_id == p1
+    assert host_snapshot.word_list == :films
+  end
+
+  test "telephone uses the selected built-in word list", %{room_id: room_id} do
+    {:ok, host_token, _host_snapshot} = join_connected(room_id, "Alice")
+    {:ok, player_token, _player_snapshot} = join_connected(room_id, "Bob")
+
+    assert :ok =
+             start_game_as(room_id, host_token, %{game_mode: :telephone, word_list: :films})
+
+    {:ok, host_snapshot} = snapshot_as(room_id, host_token)
+    {:ok, player_snapshot} = snapshot_as(room_id, player_token)
+    film_words = File.read!("priv/words/films.txt") |> String.split("\n", trim: true)
+
+    assert host_snapshot.word_list == :films
+    assert player_snapshot.word_list == :films
+    assert Enum.all?(host_snapshot.prompt_choices, &(&1 in film_words))
+    assert Enum.all?(player_snapshot.prompt_choices, &(&1 in film_words))
+  end
+
   test "start_game rejects invalid custom words", %{room_id: room_id} do
     {:ok, p1_token, %{viewer_id: p1}} = join_connected(room_id, "Alice")
     {:ok, p2_token, %{viewer_id: p2}} = join_connected(room_id, "Bob")
@@ -701,6 +735,9 @@ defmodule Flamingo.RoomServerTest do
              start_game_as(room_id, Map.fetch!(resume_tokens, p1), %{
                custom_words: Enum.map(1..3001, &"word #{&1}")
              })
+
+    assert {:error, :invalid_word_list} =
+             start_game_as(room_id, Map.fetch!(resume_tokens, p1), %{word_list: :unknown})
   end
 
   test "join returns not_found for nonexistent room" do

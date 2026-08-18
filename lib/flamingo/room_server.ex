@@ -224,12 +224,7 @@ defmodule Flamingo.RoomServer do
       roster: Members.snapshot(members || state.members),
       actor_id: actor,
       now: DateTime.utc_now(),
-      word_choices: fn n, used, custom, defaults ->
-        Flamingo.Words.random_choices(n, used,
-          custom_words: custom,
-          include_default_words: defaults
-        )
-      end,
+      word_choices: &Flamingo.Words.random_choices/3,
       select_candidate: fn candidates -> Enum.random(candidates) end
     }
   end

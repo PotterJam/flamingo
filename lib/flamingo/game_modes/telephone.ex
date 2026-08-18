@@ -12,6 +12,7 @@ defmodule Flamingo.GameModes.Telephone do
       turn_length: 30,
       custom_words: [],
       include_default_words: false,
+      word_list: :default,
       players: %{},
       player_order: [],
       host_id: nil,
@@ -63,6 +64,7 @@ defmodule Flamingo.GameModes.Telephone do
     turn_length = Map.get(settings, :turn_length, state.turn_length)
     custom_words = Map.get(settings, :custom_words, state.custom_words)
     defaults = Map.get(settings, :include_default_words, state.include_default_words)
+    word_list = Map.get(settings, :word_list, state.word_list)
 
     order = Enum.filter(roster.player_order, &online?(roster, &1))
 
@@ -71,8 +73,13 @@ defmodule Flamingo.GameModes.Telephone do
          true <- turn_length in 15..120 || {:error, :invalid_turn_length},
          {:ok, custom_words} <- Words.validate_custom_words(custom_words),
          true <- is_boolean(defaults) || {:error, :invalid_include_default_words},
+         {:ok, word_list} <- Words.validate_word_list(word_list),
          prompts when is_list(prompts) <-
-           context.word_choices.(length(order) * 3, MapSet.new(), custom_words, defaults),
+           context.word_choices.(length(order) * 3, MapSet.new(),
+             custom_words: custom_words,
+             include_default_words: defaults,
+             word_list: word_list
+           ),
          prompts = Enum.uniq_by(prompts, &prompt_key/1),
          true <- length(prompts) >= length(order) || {:error, :not_enough_prompts} do
       players =
@@ -91,6 +98,7 @@ defmodule Flamingo.GameModes.Telephone do
           turn_length: turn_length,
           custom_words: custom_words,
           include_default_words: defaults,
+          word_list: word_list,
           players: players,
           player_order: order,
           host_id: roster.host_id,
@@ -285,7 +293,8 @@ defmodule Flamingo.GameModes.Telephone do
         if(viewer == (state.host_id || roster.host_id),
           do: state.include_default_words,
           else: false
-        )
+        ),
+      word_list: state.word_list
     }
   end
 

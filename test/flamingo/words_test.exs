@@ -18,6 +18,15 @@ defmodule Flamingo.WordsTest do
     assert Words.random_choices(3, excluded_words) == []
   end
 
+  test "random_choices uses the selected built-in word list" do
+    film_words = all_words(:films)
+    excluded_words = film_words |> Enum.drop(3) |> MapSet.new()
+
+    choices = Words.random_choices(3, excluded_words, word_list: :films)
+
+    assert Enum.sort(choices) == film_words |> Enum.take(3) |> Enum.sort()
+  end
+
   test "random_choices merges defaults and deduplicates case-insensitively" do
     excluded_words = all_words() |> Enum.reject(&(&1 in ["Apple", "bow"])) |> MapSet.new()
 
@@ -28,6 +37,26 @@ defmodule Flamingo.WordsTest do
       )
 
     assert Enum.sort(choices) == Enum.sort(["Apple", "Bow", "orbital llama"])
+  end
+
+  test "random_choices merges custom words with the selected built-in word list" do
+    film_words = all_words(:films)
+    [first, second | excluded] = film_words
+
+    choices =
+      Words.random_choices(3, MapSet.new(excluded),
+        custom_words: [String.downcase(first), "orbital llama"],
+        include_default_words: true,
+        word_list: :films
+      )
+
+    assert Enum.sort(choices) == Enum.sort([String.downcase(first), second, "orbital llama"])
+  end
+
+  test "validate_word_list accepts built-in lists and rejects unknown lists" do
+    assert {:ok, :default} = Words.validate_word_list(:default)
+    assert {:ok, :films} = Words.validate_word_list(:films)
+    assert {:error, :invalid_word_list} = Words.validate_word_list(:unknown)
   end
 
   test "parse_custom_words trims blank lines and removes duplicates" do
@@ -42,8 +71,8 @@ defmodule Flamingo.WordsTest do
     assert {:error, :too_many_custom_words} = Words.parse_custom_words(too_many_words)
   end
 
-  defp all_words do
-    "priv/words/default.txt"
+  defp all_words(word_list \\ :default) do
+    "priv/words/#{word_list}.txt"
     |> File.read!()
     |> String.split("\n", trim: true)
   end

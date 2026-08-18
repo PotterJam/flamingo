@@ -21,7 +21,7 @@ defmodule Flamingo.GameModes.ScribbleTest do
       roster: Keyword.get(options, :roster, roster()),
       actor_id: Keyword.get(options, :actor_id, "a"),
       now: @now,
-      word_choices: fn _count, used, _custom, _defaults ->
+      word_choices: fn _count, used, _options ->
         Enum.reject(["cat", "dog", "bird"], &MapSet.member?(used, &1))
       end,
       select_candidate: Keyword.get(options, :select_candidate, &List.first/1)
@@ -527,7 +527,7 @@ defmodule Flamingo.GameModes.ScribbleTest do
 
     game_context = %{
       context()
-      | word_choices: fn _count, used, _custom, _defaults ->
+      | word_choices: fn _count, used, _options ->
           Enum.reject(words, &MapSet.member?(used, &1))
         end
     }
@@ -585,7 +585,7 @@ defmodule Flamingo.GameModes.ScribbleTest do
   test "word exhaustion finishes without scheduling another phase" do
     exhausted_context = %{
       context()
-      | word_choices: fn _count, _used, _custom, _defaults -> [] end
+      | word_choices: fn _count, _used, _options -> [] end
     }
 
     assert {:ok,
