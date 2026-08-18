@@ -144,7 +144,7 @@ const SoundManager = {
         fadeOutMusic();
       }
 
-      if (phase === "playing" && end_time) {
+      if ((phase === "playing" || phase === "telephone_draw") && end_time) {
         scheduleCountdown(end_time);
         return;
       }
