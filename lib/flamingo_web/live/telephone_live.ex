@@ -79,7 +79,6 @@ defmodule FlamingoWeb.TelephoneLive do
               <.starburst_timer
                 position_class=""
                 timer_id="telephone-timer"
-                timer_hook="FlamingoWeb.TelephoneLive.TelephoneTimer"
                 end_time={iso_time(@turn_end_time)}
                 fill="#fde047"
                 stroke="#111827"
@@ -139,28 +138,6 @@ defmodule FlamingoWeb.TelephoneLive do
           <% end %>
         </div>
       </main>
-
-      <script :type={Phoenix.LiveView.ColocatedHook} name=".TelephoneTimer">
-        export default {
-          mounted() {
-            this.run = (endTime) => {
-              this.token = (this.token || 0) + 1
-              const token = this.token
-              const end = endTime ? new Date(endTime).getTime() : NaN
-              const tick = () => {
-                if (token !== this.token) return
-                const seconds = Number.isFinite(end) ? Math.max(0, Math.ceil((end - Date.now()) / 1000)) : 0
-                this.el.textContent = Number.isFinite(end) ? String(seconds).padStart(2, "0") : "--"
-                if (seconds > 0) requestAnimationFrame(tick)
-              }
-              tick()
-            }
-            this.run(this.el.dataset.endTime)
-            this.handleEvent("set_telephone_timer", ({end_time}) => this.run(end_time))
-          },
-          destroyed() { this.token = (this.token || 0) + 1 }
-        }
-      </script>
     </Layouts.app>
     """
   end
@@ -273,7 +250,7 @@ defmodule FlamingoWeb.TelephoneLive do
           push_event(socket, "drawing_state", %{events: Map.get(assignment, :current_drawing, [])}),
         else: socket
 
-    push_event(socket, "set_telephone_timer", %{
+    push_event(socket, "set_timer", %{
       end_time: iso_time(Map.get(snapshot, :turn_end_time))
     })
   end

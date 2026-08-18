@@ -23,7 +23,6 @@ defmodule FlamingoWeb.TelephoneComponents do
         <.starburst_timer
           position_class="absolute -top-12 -left-12 z-10"
           timer_id="telephone-timer"
-          timer_hook="FlamingoWeb.TelephoneLive.TelephoneTimer"
           end_time={@end_time}
           fill="#fde047"
           stroke="#111827"
@@ -98,7 +97,6 @@ defmodule FlamingoWeb.TelephoneComponents do
             size_class="h-20 w-20"
             text_class="text-xl"
             timer_id="telephone-timer"
-            timer_hook="FlamingoWeb.TelephoneLive.TelephoneTimer"
             end_time={@end_time}
             fill="#fde047"
             stroke="#111827"

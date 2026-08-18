@@ -25,6 +25,7 @@ import {LiveSocket} from "phoenix_live_view"
 import {hooks as colocatedHooks} from "phoenix-colocated/flamingo"
 import topbar from "../vendor/topbar"
 import AvatarCustomizer from "./hooks/avatar_customizer"
+import CountdownTimer from "./hooks/countdown_timer"
 import DrawingCanvas from "./hooks/drawing_canvas"
 import FinalDrawingShowcase from "./hooks/final_drawing_showcase"
 import SharedDrawing from "./hooks/shared_drawing"
@@ -46,7 +47,7 @@ const csrfToken = document.querySelector("meta[name='csrf-token']").getAttribute
 const liveSocket = new LiveSocket("/live", Socket, {
   longPollFallbackMs: 2500,
   params: {_csrf_token: csrfToken},
-  hooks: {AvatarCustomizer, ...colocatedHooks, DrawingCanvas, FinalDrawingShowcase, SharedDrawing, SoundManager},
+  hooks: {AvatarCustomizer, ...colocatedHooks, CountdownTimer, DrawingCanvas, FinalDrawingShowcase, SharedDrawing, SoundManager},
 })
 
 // Show progress bar on live navigation and form submits

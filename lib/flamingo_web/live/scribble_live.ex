@@ -437,7 +437,6 @@ defmodule FlamingoWeb.ScribbleLive do
                         <.starburst_timer
                           position_class="absolute -top-36 -right-16"
                           timer_id="word-choice-timer"
-                          timer_hook="FlamingoWeb.ScribbleLive.Timer"
                           end_time={@turn_end_time && DateTime.to_iso8601(@turn_end_time)}
                         />
                         <h2 class="text-3xl font-black">Choose a word</h2>
@@ -455,7 +454,6 @@ defmodule FlamingoWeb.ScribbleLive do
                           size_class="h-28 w-28"
                           text_class="text-2xl"
                           timer_id="word-choice-timer"
-                          timer_hook="FlamingoWeb.ScribbleLive.Timer"
                           end_time={@turn_end_time && DateTime.to_iso8601(@turn_end_time)}
                         />
                         <p class="text-3xl font-black">
@@ -529,7 +527,6 @@ defmodule FlamingoWeb.ScribbleLive do
                             size_class="h-20 w-20"
                             text_class="text-xl"
                             timer_id="turn-reveal-timer"
-                            timer_hook="FlamingoWeb.ScribbleLive.Timer"
                             end_time={@turn_end_time && DateTime.to_iso8601(@turn_end_time)}
                           />
                         </div>
@@ -752,24 +749,6 @@ defmodule FlamingoWeb.ScribbleLive do
                 navigator.clipboard.writeText(event.detail.text)
               }
             })
-          }
-        }
-      </script>
-      <script :type={Phoenix.LiveView.ColocatedHook} name=".Timer">
-        export default {
-          mounted() {
-            const startTimer = (endTime) => {
-              const endMs = new Date(endTime).getTime()
-              const update = () => {
-                const remaining = Math.max(0, Math.ceil((endMs - Date.now()) / 1000))
-                this.el.innerText = String(remaining).padStart(2, '0')
-                if (remaining > 0) requestAnimationFrame(update)
-              }
-              update()
-            }
-            const initial = this.el.dataset.endTime
-            if (initial) startTimer(initial)
-            this.handleEvent("set_timer", ({end_time}) => startTimer(end_time))
           }
         }
       </script>

@@ -393,7 +393,6 @@ defmodule FlamingoWeb.GameComponents do
           size_class="h-24 w-24"
           text_class="text-2xl"
           timer_id="turn-timer"
-          timer_hook="FlamingoWeb.ScribbleLive.Timer"
           end_time={@turn_end_time && DateTime.to_iso8601(@turn_end_time)}
           stroke="black"
           stroke_width="6"
@@ -547,7 +546,6 @@ defmodule FlamingoWeb.GameComponents do
   attr :size_class, :string, default: "h-32 w-32"
   attr :text_class, :string, default: "text-3xl"
   attr :timer_id, :string, required: true
-  attr :timer_hook, :string, required: true
   attr :end_time, :string, default: nil
   attr :fill, :string, default: "#f9a8d4"
   attr :stroke, :string, default: "none"
@@ -571,7 +569,7 @@ defmodule FlamingoWeb.GameComponents do
         </svg>
         <span
           id={@timer_id}
-          phx-hook={@timer_hook}
+          phx-hook="CountdownTimer"
           phx-update="ignore"
           data-end-time={@end_time}
           class={["absolute font-hero font-black", @text_class]}
