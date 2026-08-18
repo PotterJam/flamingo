@@ -660,6 +660,7 @@ defmodule FlamingoWeb.ScribbleLiveTest do
     assert html =~ "data-drawing-share-url="
     assert html =~ "/drawing#"
     refute html =~ "final-drawing-constraint-"
+    assert has_element?(view, "[id^='copy-final-drawing-'].bg-transparent.shadow-none")
 
     [_, share_url] = Regex.run(~r/data-drawing-share-url="([^"]+)"/, html)
     encoded = share_url |> String.split("/drawing#") |> List.last()

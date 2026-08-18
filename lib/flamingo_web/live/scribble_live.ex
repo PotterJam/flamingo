@@ -701,7 +701,7 @@ defmodule FlamingoWeb.ScribbleLive do
                         </span>
                         <p class="truncate text-right font-bold">{drawing.word}</p>
                         <.button
-                          variant="neutral"
+                          variant="outline"
                           size="sm"
                           class="shrink-0 px-2"
                           on_confirm_click={JS.dispatch("phx:copy", detail: %{text: share_url})}
