@@ -1,7 +1,9 @@
 const PARTS = ["head", "body", "legs", "feet"] as const;
 const ANIMAL_COUNT = 5;
+const STORAGE_KEY = "flamingo_avatar";
 
 type AvatarPart = (typeof PARTS)[number];
+type StoredAvatar = Record<string, string>;
 
 const DRAWING_BOUNDS: Record<AvatarPart, { x: number; y: number; width: number; height: number }> = {
   head: { x: 12, y: 2, width: 106, height: 66 },
@@ -118,6 +120,33 @@ const selectColor = (root: HTMLElement, part: AvatarPart, value: number) => {
   }
 };
 
+const restoreAvatar = (root: HTMLElement) => {
+  const avatar = JSON.parse(localStorage.getItem(STORAGE_KEY) ?? "{}") as StoredAvatar;
+
+  const inputs = root.querySelectorAll<HTMLInputElement>('input[type="hidden"][id^="avatar-"]');
+  for (const input of inputs) {
+    input.value = avatar[input.id] ?? avatar[input.name] ?? input.value;
+  }
+
+  const drawings = PARTS.map((part) => drawingValue(root, part));
+  for (const [index, part] of PARTS.entries()) {
+    selectPart(root, part, inputValue(root, `avatar-${part}-input`));
+    selectColor(root, part, inputValue(root, `avatar-${part}-color-input`));
+    showCustomDrawing(root, part, drawings[index]);
+  }
+};
+
+const persistAvatar = (root: HTMLElement) => {
+  const avatar = Object.fromEntries(
+    Array.from(
+      root.querySelectorAll<HTMLInputElement>('input[type="hidden"][id^="avatar-"]'),
+      (input) => [input.id, input.value],
+    ),
+  );
+
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(avatar));
+};
+
 const updateLobbyActions = (form: HTMLFormElement) => {
   const name = form.elements.namedItem("lobby[name]") as HTMLInputElement | null;
   const room = form.elements.namedItem("lobby[room_code]") as HTMLInputElement | null;
@@ -139,6 +168,9 @@ const AvatarCustomizer = {
     const surface = editor.querySelector<SVGSVGElement>("[data-avatar-drawing-surface]")!;
     const guide = editor.querySelector<SVGRectElement>("[data-avatar-drawing-guide]")!;
     const title = editor.querySelector<HTMLElement>("[data-avatar-drawing-title]")!;
+
+    restoreAvatar(this.el);
+    persistAvatar(this.el);
 
     const closeEditor = () => {
       editor.hidden = true;
@@ -196,6 +228,7 @@ const AvatarCustomizer = {
 
       if (event.target.closest("[data-avatar-drawing-save]") && this.drawingPart) {
         showCustomDrawing(this.el, this.drawingPart, this.drawingStrokes.join(" "));
+        persistAvatar(this.el);
         closeEditor();
         return;
       }
@@ -205,6 +238,7 @@ const AvatarCustomizer = {
         const part = cycle.dataset.avatarPart as AvatarPart;
         const direction = cycle.dataset.avatarDirection === "previous" ? -1 : 1;
         selectPart(this.el, part, inputValue(this.el, `avatar-${part}-input`) + direction);
+        persistAvatar(this.el);
         return;
       }
 
@@ -215,6 +249,7 @@ const AvatarCustomizer = {
           color.dataset.avatarPart as AvatarPart,
           Number.parseInt(color.dataset.avatarValue ?? "0", 10),
         );
+        persistAvatar(this.el);
         return;
       }
 
@@ -227,6 +262,7 @@ const AvatarCustomizer = {
           );
           selectColor(this.el, part, Math.floor(Math.random() * colors.length));
         }
+        persistAvatar(this.el);
       }
     };
 
@@ -268,6 +304,7 @@ const AvatarCustomizer = {
   },
 
   updated(this: AvatarCustomizerHook) {
+    restoreAvatar(this.el);
     updateLobbyActions(this.form);
   },
 
