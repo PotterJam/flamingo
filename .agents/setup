@@ -5,6 +5,7 @@ readonly OTP_VERSION="28.1.1"
 readonly ELIXIR_VERSION="1.20.0"
 readonly OTP_DIR="$HOME/.elixir-install/installs/otp/$OTP_VERSION"
 readonly ELIXIR_DIR="$HOME/.elixir-install/installs/elixir/$ELIXIR_VERSION-otp-28"
+readonly FLY_DIR="$HOME/.fly"
 
 echo "==> Installing system prerequisites"
 packages=(build-essential ca-certificates curl git libncurses6 libssl3 libstdc++6 unzip)
@@ -29,6 +30,12 @@ fi
 tmp_dir="$(mktemp -d)"
 trap 'rm -rf "$tmp_dir"' EXIT
 
+if [[ ! -x "$FLY_DIR/bin/flyctl" ]]; then
+  echo "==> Installing Fly.io CLI"
+  curl -fsSL https://fly.io/install.sh -o "$tmp_dir/install-flyctl.sh"
+  sh "$tmp_dir/install-flyctl.sh"
+fi
+
 if [[ ! -x "$OTP_DIR/bin/erl" ]]; then
   echo "==> Installing Erlang/OTP $OTP_VERSION"
   mkdir -p "$OTP_DIR"
@@ -48,7 +55,16 @@ if [[ ! -x "$ELIXIR_DIR/bin/elixir" ]]; then
   unzip -q "$tmp_dir/elixir.zip" -d "$ELIXIR_DIR"
 fi
 
-export PATH="$ELIXIR_DIR/bin:$OTP_DIR/bin:$PATH"
+export PATH="$FLY_DIR/bin:$ELIXIR_DIR/bin:$OTP_DIR/bin:$PATH"
+
+fly_profile_marker="# Flamingo Fly.io CLI"
+if ! grep -Fqx "$fly_profile_marker" "$HOME/.bash_profile" 2>/dev/null; then
+  cat >> "$HOME/.bash_profile" <<'EOF'
+
+# Flamingo Fly.io CLI
+export PATH="$HOME/.fly/bin:$PATH"
+EOF
+fi
 
 profile_marker="# Flamingo Elixir toolchain"
 if ! grep -Fqx "$profile_marker" "$HOME/.bash_profile" 2>/dev/null; then
@@ -77,3 +93,4 @@ mix setup
 
 echo "==> Orb setup complete"
 elixir --version
+flyctl version
