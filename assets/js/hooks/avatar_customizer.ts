@@ -1,6 +1,7 @@
 const PARTS = ["head", "body", "legs", "feet"] as const;
 const ANIMAL_COUNT = 5;
 const STORAGE_KEY = "flamingo_avatar";
+const NAME_STORAGE_KEY = "flamingo_player_name";
 
 type AvatarPart = (typeof PARTS)[number];
 type StoredAvatar = Record<string, string>;
@@ -22,6 +23,7 @@ interface AvatarCustomizerHook {
   handlePointerDown: (event: PointerEvent) => void;
   handlePointerMove: (event: PointerEvent) => void;
   handlePointerUp: (event: PointerEvent) => void;
+  handleSubmit: () => void;
 }
 
 const inputValue = (root: HTMLElement, id: string) => {
@@ -147,8 +149,24 @@ const persistAvatar = (root: HTMLElement) => {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(avatar));
 };
 
+const nameInput = (form: HTMLFormElement) =>
+  form.elements.namedItem("lobby[name]") as HTMLInputElement | null;
+
+const restoreName = (form: HTMLFormElement) => {
+  const name = nameInput(form);
+  const storedName = sessionStorage.getItem(NAME_STORAGE_KEY);
+
+  if (name && storedName !== null) name.value = storedName;
+};
+
+const persistName = (form: HTMLFormElement) => {
+  const name = nameInput(form)?.value.trim();
+
+  if (name) sessionStorage.setItem(NAME_STORAGE_KEY, name);
+};
+
 const updateLobbyActions = (form: HTMLFormElement) => {
-  const name = form.elements.namedItem("lobby[name]") as HTMLInputElement | null;
+  const name = nameInput(form);
   const room = form.elements.namedItem("lobby[room_code]") as HTMLInputElement | null;
   const join = form.querySelector<HTMLButtonElement>("#join-button");
   const create = form.querySelector<HTMLButtonElement>("#create-room-button");
@@ -171,6 +189,7 @@ const AvatarCustomizer = {
 
     restoreAvatar(this.el);
     persistAvatar(this.el);
+    restoreName(this.form);
 
     const closeEditor = () => {
       editor.hidden = true;
@@ -293,6 +312,7 @@ const AvatarCustomizer = {
       if (surface.hasPointerCapture(event.pointerId)) surface.releasePointerCapture(event.pointerId);
     };
     this.handleInput = () => updateLobbyActions(this.form);
+    this.handleSubmit = () => persistName(this.form);
 
     this.el.addEventListener("click", this.handleClick);
     surface.addEventListener("pointerdown", this.handlePointerDown);
@@ -300,6 +320,7 @@ const AvatarCustomizer = {
     surface.addEventListener("pointerup", this.handlePointerUp);
     surface.addEventListener("pointercancel", this.handlePointerUp);
     this.form.addEventListener("input", this.handleInput);
+    this.form.addEventListener("submit", this.handleSubmit);
     updateLobbyActions(this.form);
   },
 
@@ -316,6 +337,7 @@ const AvatarCustomizer = {
     surface?.removeEventListener("pointerup", this.handlePointerUp);
     surface?.removeEventListener("pointercancel", this.handlePointerUp);
     this.form.removeEventListener("input", this.handleInput);
+    this.form.removeEventListener("submit", this.handleSubmit);
   },
 };
 
