@@ -7,10 +7,9 @@ primary_region = 'lhr'
   PHX_HOST = 'flamingo.fly.dev'
   PHX_SERVER = 'true'
   # Rooms live in a single machine's memory, so this app must run exactly ONE
-  # machine (`fly scale count 1`) - a player routed to a second machine can't
-  # see rooms hosted on the first. Clustering (this query + rel/env.sh.eex +
-  # :global room registration) is kept as a safety net so things still work
-  # if a second machine ever appears.
+  # machine. The deploy workflow enforces this with `--ha=false` and
+  # `fly scale count 1`. Clustering (this query + rel/env.sh.eex + :global room
+  # registration) is kept as a safety net if a second machine briefly appears.
   DNS_CLUSTER_QUERY = 'flamingo.internal'
 
 [http_service]
