@@ -322,6 +322,7 @@ defmodule FlamingoWeb.ScribbleLive do
                         options={[
                           {"Default", "default"},
                           {"Films", "films"},
+                          {"Landmarks & places", "landmarks"},
                           {"Custom", "custom"}
                         ]}
                         id="word-list-select"
@@ -1014,6 +1015,7 @@ defmodule FlamingoWeb.ScribbleLive do
 
   defp parse_word_list("default", _fallback), do: :default
   defp parse_word_list("films", _fallback), do: :films
+  defp parse_word_list("landmarks", _fallback), do: :landmarks
   defp parse_word_list("custom", _fallback), do: :custom
   defp parse_word_list(_value, fallback), do: fallback
 

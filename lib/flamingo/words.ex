@@ -1,9 +1,18 @@
 defmodule Flamingo.Words do
   @max_custom_words 3_000
 
+  @default_words_path Path.expand("../../priv/words/default.txt", __DIR__)
+  @films_words_path Path.expand("../../priv/words/films.txt", __DIR__)
+  @landmarks_words_path Path.expand("../../priv/words/landmarks.txt", __DIR__)
+
+  @external_resource @default_words_path
+  @external_resource @films_words_path
+  @external_resource @landmarks_words_path
+
   @word_lists %{
-    default: File.read!("priv/words/default.txt") |> String.split("\n", trim: true),
-    films: File.read!("priv/words/films.txt") |> String.split("\n", trim: true)
+    default: File.read!(@default_words_path) |> String.split("\n", trim: true),
+    films: File.read!(@films_words_path) |> String.split("\n", trim: true),
+    landmarks: File.read!(@landmarks_words_path) |> String.split("\n", trim: true)
   }
 
   def random_choices(n \\ 3, excluded_words \\ MapSet.new(), options \\ []) do
@@ -18,7 +27,7 @@ defmodule Flamingo.Words do
     |> Enum.take_random(n)
   end
 
-  def validate_word_list(word_list) when word_list in [:default, :films, :custom],
+  def validate_word_list(word_list) when word_list in [:default, :films, :landmarks, :custom],
     do: {:ok, word_list}
 
   def validate_word_list(_word_list), do: {:error, :invalid_word_list}
