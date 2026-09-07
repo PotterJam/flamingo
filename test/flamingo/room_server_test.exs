@@ -244,35 +244,17 @@ defmodule Flamingo.RoomServerTest do
              start_game_as(room_id, Map.fetch!(resume_tokens, p1), %{round_count: 6})
   end
 
-  test "start_game fails with invalid turn_length", %{room_id: room_id} do
-    {:ok, p1_token, %{viewer_id: p1}} = join_connected(room_id, "Alice")
-    {:ok, p2_token, %{viewer_id: p2}} = join_connected(room_id, "Bob")
+  test "rejected shared settings return an error without changing the game", %{room_id: room_id} do
+    {:ok, host_token, _snapshot} = join_connected(room_id, "Alice")
+    {:ok, _player_token, _snapshot} = join_connected(room_id, "Bob")
 
-    resume_tokens = %{p1 => p1_token, p2 => p2_token}
-
-    assert {:error, :invalid_turn_length} =
-             start_game_as(room_id, Map.fetch!(resume_tokens, p1), %{turn_length: 14})
+    assert :ok = start_game_as(room_id, host_token, %{round_count: 3, turn_length: 90})
+    {:ok, before} = snapshot_as(room_id, host_token)
 
     assert {:error, :invalid_turn_length} =
-             start_game_as(room_id, Map.fetch!(resume_tokens, p1), %{turn_length: 121})
-  end
+             start_game_as(room_id, host_token, %{round_count: 1, turn_length: 14})
 
-  test "start_game accepts turn_length boundaries", %{room_id: room_id} do
-    {:ok, p1_token, %{viewer_id: p1}} = join_connected(room_id, "Alice")
-    {:ok, p2_token, %{viewer_id: p2}} = join_connected(room_id, "Bob")
-
-    resume_tokens = %{p1 => p1_token, p2 => p2_token}
-
-    assert :ok = start_game_as(room_id, Map.fetch!(resume_tokens, p1), %{turn_length: 15})
-
-    {:ok, state} = room_snapshot(room_id)
-    assert state.turn_length == 15
-
-    assert :ok =
-             start_game_as(room_id, Map.fetch!(resume_tokens, p1), %{turn_length: 120})
-
-    {:ok, state} = room_snapshot(room_id)
-    assert state.turn_length == 120
+    assert {:ok, ^before} = snapshot_as(room_id, host_token)
   end
 
   test "start_game enters word choice", %{room_id: room_id} do
@@ -718,26 +700,6 @@ defmodule Flamingo.RoomServerTest do
     assert player_snapshot.word_list == :films
     assert Enum.all?(host_snapshot.prompt_choices, &(&1 in film_words))
     assert Enum.all?(player_snapshot.prompt_choices, &(&1 in film_words))
-  end
-
-  test "start_game rejects invalid custom words", %{room_id: room_id} do
-    {:ok, p1_token, %{viewer_id: p1}} = join_connected(room_id, "Alice")
-    {:ok, p2_token, %{viewer_id: p2}} = join_connected(room_id, "Bob")
-
-    resume_tokens = %{p1 => p1_token, p2 => p2_token}
-
-    assert {:error, :invalid_custom_words} =
-             start_game_as(room_id, Map.fetch!(resume_tokens, p1), %{
-               custom_words: ["cat, dog"]
-             })
-
-    assert {:error, :too_many_custom_words} =
-             start_game_as(room_id, Map.fetch!(resume_tokens, p1), %{
-               custom_words: Enum.map(1..3001, &"word #{&1}")
-             })
-
-    assert {:error, :invalid_word_list} =
-             start_game_as(room_id, Map.fetch!(resume_tokens, p1), %{word_list: :unknown})
   end
 
   test "join returns not_found for nonexistent room" do

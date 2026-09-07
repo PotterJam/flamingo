@@ -60,6 +60,27 @@ defmodule Flamingo.WordsTest do
     assert {:error, :invalid_word_list} = Words.validate_word_list(:unknown)
   end
 
+  test "the word theme catalogue drives parsing, validation and built-in word selection" do
+    assert Words.word_list_options() == [
+             {"Default", :default},
+             {"Films", :films},
+             {"Landmarks & places", :landmarks},
+             {"Custom", :custom}
+           ]
+
+    for {_label, id} <- Words.word_list_options() do
+      assert Words.parse_word_list(Atom.to_string(id), :default) == id
+      assert {:ok, ^id} = Words.validate_word_list(id)
+
+      if id != :custom,
+        do: assert(length(Words.random_choices(1, MapSet.new(), word_list: id)) == 1)
+    end
+
+    for invalid <- ["unknown", nil, "", "FILMS"] do
+      assert Words.parse_word_list(invalid, :landmarks) == :landmarks
+    end
+  end
+
   test "parse_custom_words trims blank lines and removes duplicates" do
     assert {:ok, ["red panda", "flamingo"]} =
              Words.parse_custom_words(" red panda \n\nflamingo\nred panda\n")

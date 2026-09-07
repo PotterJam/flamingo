@@ -1,10 +1,9 @@
 defmodule FlamingoWeb.ScribbleLive do
   use FlamingoWeb, :live_view
 
-  alias Flamingo.{DrawingShare, Rooms, Words}
+  alias Flamingo.{DrawingShare, GameSettings, Rooms, Words}
 
-  @min_turn_length 15
-  @max_turn_length 120
+  @turn_length_range GameSettings.turn_length_range()
 
   @palette ~w(
     #000000 #FFFFFF #C1C1C1 #505050 #EF120B #740A08
@@ -15,6 +14,8 @@ defmodule FlamingoWeb.ScribbleLive do
   )
 
   def mount(%{"room_id" => room_id} = _params, _session, socket) do
+    defaults = GameSettings.defaults()
+
     {:ok,
      socket
      |> assign(
@@ -33,10 +34,10 @@ defmodule FlamingoWeb.ScribbleLive do
        drawer_id: nil,
        constraint: nil,
        round_count: 3,
-       turn_length: 45,
+       turn_length: defaults.turn_length,
        game_mode: :scribble,
        game_variant: :classic,
-       word_list: :default,
+       word_list: defaults.word_list,
        custom_words: "",
        custom_word_count: 0,
        custom_words_error: nil,
@@ -44,9 +45,9 @@ defmodule FlamingoWeb.ScribbleLive do
          to_form(
            %{
              "round_count" => "3",
-             "turn_length" => "45",
+             "turn_length" => Integer.to_string(defaults.turn_length),
              "game_mode" => "classic",
-             "word_list" => "default",
+             "word_list" => Atom.to_string(defaults.word_list),
              "custom_words" => ""
            },
            as: :settings
@@ -190,8 +191,8 @@ defmodule FlamingoWeb.ScribbleLive do
   def render(assigns) do
     assigns =
       assign(assigns,
-        min_turn_length: @min_turn_length,
-        max_turn_length: @max_turn_length
+        min_turn_length: @turn_length_range.first,
+        max_turn_length: @turn_length_range.last
       )
 
     ~H"""
@@ -319,12 +320,7 @@ defmodule FlamingoWeb.ScribbleLive do
                         field={@settings_form[:word_list]}
                         type="select"
                         label="Word theme"
-                        options={[
-                          {"Default", "default"},
-                          {"Films", "films"},
-                          {"Landmarks & places", "landmarks"},
-                          {"Custom", "custom"}
-                        ]}
+                        options={Words.word_list_options()}
                         id="word-list-select"
                       />
                     </div>
@@ -888,11 +884,11 @@ defmodule FlamingoWeb.ScribbleLive do
 
     turn_length =
       case Integer.parse(params["turn_length"]) do
-        {val, _} -> val |> max(@min_turn_length) |> min(@max_turn_length)
+        {val, _} -> val |> max(@turn_length_range.first) |> min(@turn_length_range.last)
         :error -> socket.assigns.turn_length
       end
 
-    word_list = parse_word_list(params["word_list"], socket.assigns.word_list)
+    word_list = Words.parse_word_list(params["word_list"], socket.assigns.word_list)
     custom_words = Map.get(params, "custom_words", socket.assigns.custom_words)
 
     params =
@@ -920,7 +916,7 @@ defmodule FlamingoWeb.ScribbleLive do
   end
 
   def handle_event("start_game", %{"settings" => params}, socket) do
-    word_list = parse_word_list(params["word_list"], socket.assigns.word_list)
+    word_list = Words.parse_word_list(params["word_list"], socket.assigns.word_list)
     custom_words = Map.get(params, "custom_words", socket.assigns.custom_words)
 
     with {:ok, words} <- words_for_start(word_list, custom_words),
@@ -1012,12 +1008,6 @@ defmodule FlamingoWeb.ScribbleLive do
 
   defp parse_game_mode("classic", _mode, _variant), do: {:scribble, :classic}
   defp parse_game_mode(_value, mode, variant), do: {mode, variant}
-
-  defp parse_word_list("default", _fallback), do: :default
-  defp parse_word_list("films", _fallback), do: :films
-  defp parse_word_list("landmarks", _fallback), do: :landmarks
-  defp parse_word_list("custom", _fallback), do: :custom
-  defp parse_word_list(_value, fallback), do: fallback
 
   defp words_for_start(:custom, custom_words), do: Words.parse_custom_words(custom_words)
   defp words_for_start(_word_list, _custom_words), do: {:ok, []}

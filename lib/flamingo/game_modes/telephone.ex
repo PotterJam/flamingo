@@ -1,18 +1,14 @@
 defmodule Flamingo.GameModes.Telephone do
   @moduledoc "Pure transitions for the Telephone drawing game."
 
-  alias Flamingo.{DrawingShare, Words}
+  alias Flamingo.{DrawingShare, GameSettings}
 
   @categories [:derailment, :best_save, :worst_drawing]
 
   def new do
-    %{
+    Map.merge(GameSettings.defaults(), %{
       phase: :lobby,
       participants: %{},
-      turn_length: 30,
-      custom_words: [],
-      include_default_words: false,
-      word_list: :default,
       players: %{},
       player_order: [],
       host_id: nil,
@@ -29,7 +25,7 @@ defmodule Flamingo.GameModes.Telephone do
       votes: %{},
       awards: %{},
       final_result: nil
-    }
+    })
   end
 
   def admit_member(state, %{id: id}, context) do
@@ -61,24 +57,17 @@ defmodule Flamingo.GameModes.Telephone do
 
   def start(state, settings, context) do
     roster = context.roster
-    turn_length = Map.get(settings, :turn_length, state.turn_length)
-    custom_words = Map.get(settings, :custom_words, state.custom_words)
-    defaults = Map.get(settings, :include_default_words, state.include_default_words)
-    word_list = Map.get(settings, :word_list, state.word_list)
 
     order = Enum.filter(roster.player_order, &online?(roster, &1))
 
     with true <- context.actor_id == roster.host_id || {:error, :not_host},
          true <- length(order) >= 2 || {:error, :not_enough_players},
-         true <- turn_length in 15..120 || {:error, :invalid_turn_length},
-         {:ok, custom_words} <- Words.validate_custom_words(custom_words),
-         true <- is_boolean(defaults) || {:error, :invalid_include_default_words},
-         {:ok, word_list} <- Words.validate_word_list(word_list),
+         {:ok, shared_settings} <- GameSettings.validate(settings, state),
          prompts when is_list(prompts) <-
            context.word_choices.(length(order) * 3, MapSet.new(),
-             custom_words: custom_words,
-             include_default_words: defaults,
-             word_list: word_list
+             custom_words: shared_settings.custom_words,
+             include_default_words: shared_settings.include_default_words,
+             word_list: shared_settings.word_list
            ),
          prompts = Enum.uniq_by(prompts, &prompt_key/1),
          true <- length(prompts) >= length(order) || {:error, :not_enough_prompts} do
@@ -90,15 +79,12 @@ defmodule Flamingo.GameModes.Telephone do
       prompt_choices = distribute_choices(prompts, order)
 
       pass_order = random_order(order, context)
+      state = Map.merge(state, shared_settings)
 
       state = %{
         state
         | phase: :telephone_prompt,
           participants: Map.new(roster.player_order, &{&1, participation(&1, order)}),
-          turn_length: turn_length,
-          custom_words: custom_words,
-          include_default_words: defaults,
-          word_list: word_list,
           players: players,
           player_order: order,
           host_id: roster.host_id,

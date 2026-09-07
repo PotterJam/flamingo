@@ -1,10 +1,12 @@
 defmodule FlamingoWeb.TelephoneLive do
   use FlamingoWeb, :live_view
 
-  alias Flamingo.Rooms
+  alias Flamingo.{GameSettings, Rooms}
   alias FlamingoWeb.TelephoneComponents
 
   def mount(%{"room_id" => room_id}, _session, socket) do
+    defaults = GameSettings.defaults()
+
     {:ok,
      assign(socket,
        room_id: room_id,
@@ -15,7 +17,7 @@ defmodule FlamingoWeb.TelephoneLive do
        players: %{},
        player_order: [],
        host_id: nil,
-       turn_length: 30,
+       turn_length: defaults.turn_length,
        current_step: nil,
        step_count: 0,
        submitted_ids: MapSet.new(),
@@ -25,9 +27,9 @@ defmodule FlamingoWeb.TelephoneLive do
        votes: %{},
        vote_counts: %{},
        awards: %{},
-       word_list: :default,
-       custom_words: [],
-       include_default_words: false,
+       word_list: defaults.word_list,
+       custom_words: defaults.custom_words,
+       include_default_words: defaults.include_default_words,
        turn_end_time: nil,
        drawing_key: nil,
        prompt_form: to_form(%{"prompt" => ""}),

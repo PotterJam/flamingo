@@ -4,22 +4,16 @@ defmodule Flamingo.GameModes.Scribble do
   mode should `:continue` or has `{:finished, result}`.
   """
 
-  alias Flamingo.{DrawingShare, Feed, Scoring, Words}
+  alias Flamingo.{DrawingShare, Feed, GameSettings, Scoring}
 
-  @min_turn_length 15
-  @max_turn_length 120
   @constraints [:hidden_canvas, :single_stroke, :straight_lines, :rotating_canvas, :mirror]
 
   def new do
-    %{
+    Map.merge(GameSettings.defaults(), %{
       phase: :lobby,
       participants: %{},
       scores: %{},
       round_count: 3,
-      turn_length: 30,
-      custom_words: [],
-      include_default_words: false,
-      word_list: :default,
       game_variant: :classic,
       constraint: nil,
       remaining_constraints: %{},
@@ -37,7 +31,7 @@ defmodule Flamingo.GameModes.Scribble do
       final_drawings: [],
       final_result: nil,
       feed: Feed.new()
-    }
+    })
   end
 
   def admit_member(state, %{id: id} = candidate, _context) do
@@ -92,32 +86,21 @@ defmodule Flamingo.GameModes.Scribble do
 
   def start(state, settings, context) do
     round_count = Map.get(settings, :round_count, state.round_count)
-    turn_length = Map.get(settings, :turn_length, state.turn_length)
-    custom_words = Map.get(settings, :custom_words, state.custom_words)
-    defaults = Map.get(settings, :include_default_words, state.include_default_words)
-    word_list = Map.get(settings, :word_list, state.word_list)
     game_variant = Map.get(settings, :game_variant, state.game_variant)
     roster = context.roster
 
     with true <- context.actor_id == roster.host_id || {:error, :not_host},
          true <- online_count(roster) >= 2 || {:error, :not_enough_players},
          true <- round_count in 1..5 || {:error, :invalid_round_count},
-         true <-
-           turn_length in @min_turn_length..@max_turn_length || {:error, :invalid_turn_length},
-         {:ok, custom_words} <- Words.validate_custom_words(custom_words),
-         true <- is_boolean(defaults) || {:error, :invalid_include_default_words},
-         {:ok, word_list} <- Words.validate_word_list(word_list),
+         {:ok, shared_settings} <- GameSettings.validate(settings, state),
          true <-
            game_variant in [:classic, :constraint_roulette] || {:error, :invalid_game_variant} do
       participants = Map.new(state.participants, fn {id, _} -> {id, :active} end)
+      state = Map.merge(state, shared_settings)
 
       state = %{
         state
         | round_count: round_count,
-          turn_length: turn_length,
-          custom_words: custom_words,
-          include_default_words: defaults,
-          word_list: word_list,
           game_variant: game_variant,
           constraint: nil,
           remaining_constraints: %{},

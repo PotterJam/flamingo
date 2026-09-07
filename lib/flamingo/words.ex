@@ -1,5 +1,12 @@
 defmodule Flamingo.Words do
   @max_custom_words 3_000
+  @word_list_options [
+    {"Default", :default},
+    {"Films", :films},
+    {"Landmarks & places", :landmarks},
+    {"Custom", :custom}
+  ]
+  @word_list_ids Enum.map(@word_list_options, &elem(&1, 1))
 
   @default_words_path Path.expand("../../priv/words/default.txt", __DIR__)
   @films_words_path Path.expand("../../priv/words/films.txt", __DIR__)
@@ -27,7 +34,12 @@ defmodule Flamingo.Words do
     |> Enum.take_random(n)
   end
 
-  def validate_word_list(word_list) when word_list in [:default, :films, :landmarks, :custom],
+  def word_list_options, do: @word_list_options
+
+  def parse_word_list(value, fallback),
+    do: Enum.find(@word_list_ids, fallback, &(Atom.to_string(&1) == value))
+
+  def validate_word_list(word_list) when word_list in @word_list_ids,
     do: {:ok, word_list}
 
   def validate_word_list(_word_list), do: {:error, :invalid_word_list}
