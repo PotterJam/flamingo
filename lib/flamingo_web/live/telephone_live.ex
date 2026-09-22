@@ -2,6 +2,7 @@ defmodule FlamingoWeb.TelephoneLive do
   use FlamingoWeb, :live_view
 
   alias Flamingo.{GameSettings, Rooms}
+  alias FlamingoWeb.RoomRoute
   alias FlamingoWeb.TelephoneComponents
 
   def mount(%{"room_id" => room_id}, _session, socket) do
@@ -40,12 +41,8 @@ defmodule FlamingoWeb.TelephoneLive do
   def handle_params(%{"resume_token" => token}, _uri, socket) do
     if connected?(socket) do
       case Rooms.connect(socket.assigns.room_id, token) do
-        {:ok, %{mode: :telephone} = snapshot} ->
-          {:noreply, socket |> assign(:resume_token, token) |> apply_snapshot(snapshot)}
-
-        {:ok, _snapshot} ->
-          {:noreply,
-           push_navigate(socket, to: "/game/#{socket.assigns.room_id}?resume_token=#{token}")}
+        {:ok, snapshot} ->
+          {:noreply, socket |> assign(:resume_token, token) |> route_snapshot(snapshot)}
 
         {:error, _reason} ->
           {:noreply, push_navigate(socket, to: ~p"/")}
@@ -183,8 +180,8 @@ defmodule FlamingoWeb.TelephoneLive do
     result(socket, Rooms.start_game(socket.assigns.room_id, settings))
   end
 
-  def handle_info({:room_snapshot, %{mode: :telephone} = snapshot}, socket),
-    do: {:noreply, apply_snapshot(socket, snapshot)}
+  def handle_info({:room_snapshot, snapshot}, socket),
+    do: {:noreply, route_snapshot(socket, snapshot)}
 
   def handle_info({:draw_event, %{actor_id: actor_id, event: event}}, socket) do
     if actor_id == socket.assigns.viewer_id,
@@ -218,6 +215,19 @@ defmodule FlamingoWeb.TelephoneLive do
     do: {:noreply, put_flash(socket, :error, command_error(reason))}
 
   defp result(socket, _), do: {:noreply, socket}
+
+  defp route_snapshot(socket, snapshot) do
+    if RoomRoute.screen(snapshot) == :telephone do
+      apply_snapshot(socket, snapshot)
+    else
+      Rooms.prepare_handoff(socket.assigns.room_id)
+
+      push_navigate(socket,
+        to: RoomRoute.path(snapshot, socket.assigns.room_id, socket.assigns.resume_token),
+        replace: true
+      )
+    end
+  end
 
   defp apply_snapshot(socket, snapshot) do
     initial? = is_nil(socket.assigns.viewer_id)

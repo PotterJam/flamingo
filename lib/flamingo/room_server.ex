@@ -22,6 +22,7 @@ defmodule Flamingo.RoomServer do
   def start_link(id), do: GenServer.start_link(__MODULE__, id, name: via(id))
   def join(id, name, avatar), do: call(id, {:join, name, avatar}, {:error, :not_found})
   def connect(id, token), do: call(id, {:connect, token}, {:error, :not_found})
+  def prepare_handoff(id), do: call(id, :prepare_handoff, {:error, :not_found})
   def leave(id), do: call(id, {:leave, self()}, :ok)
   def start_game(id, settings), do: GenServer.call(via(id), {:start_game, self(), settings})
   def select_word(id, word), do: GenServer.call(via(id), {:select_word, self(), word})
@@ -70,6 +71,23 @@ defmodule Flamingo.RoomServer do
       {:reply, {:ok, snapshot_for(state, id)}, state}
     else
       _ -> {:reply, {:error, :not_found}, state}
+    end
+  end
+
+  def handle_call(:prepare_handoff, {pid, _}, state) do
+    case Map.fetch(state.connections, pid) do
+      {:ok, connection} ->
+        Process.send_after(
+          self(),
+          {:handoff_timeout, pid, connection.monitor_ref},
+          @disconnect_grace_ms
+        )
+
+        connections = Map.put(state.connections, pid, Map.put(connection, :handoff, true))
+        {:reply, :ok, %{state | connections: connections}}
+
+      :error ->
+        {:reply, {:error, :not_found}, state}
     end
   end
 
@@ -145,8 +163,25 @@ defmodule Flamingo.RoomServer do
        else: {:noreply, state}
   end
 
+  def handle_info({:handoff_timeout, pid, ref}, state) do
+    case state.connections do
+      %{^pid => %{monitor_ref: ^ref, handoff: true} = connection} ->
+        Process.demonitor(ref, [:flush])
+        connections = Map.put(state.connections, pid, Map.delete(connection, :handoff))
+        handle_info({:DOWN, ref, :process, pid, :normal}, %{state | connections: connections})
+
+      _ ->
+        {:noreply, state}
+    end
+  end
+
   def handle_info({:DOWN, ref, :process, pid, _}, state) do
     case state.connections do
+      %{^pid => %{monitor_ref: ^ref, handoff: true}} ->
+        # Live navigation stops the old view before the replacement connects.
+        # Retain this connection's presence until it is claimed or expires.
+        {:noreply, state}
+
       %{^pid => %{player_id: id, monitor_ref: ^ref}} ->
         {:ok, members, transition} = Members.connection_removed(state.members, id)
         state = %{state | connections: Map.delete(state.connections, pid), members: members}
@@ -268,14 +303,27 @@ defmodule Flamingo.RoomServer do
         {:error, :already_connected}
 
       :error ->
-        ref = Process.monitor(pid)
-        {:ok, members, transition} = Members.connection_added(state.members, id)
+        handoff =
+          Enum.find(state.connections, fn {_, connection} ->
+            connection.player_id == id and Map.get(connection, :handoff, false)
+          end)
+
+        {state, transition} =
+          case handoff do
+            {previous_pid, connection} ->
+              Process.demonitor(connection.monitor_ref, [:flush])
+              {%{state | connections: Map.delete(state.connections, previous_pid)}, :unchanged}
+
+            nil ->
+              {:ok, members, transition} = Members.connection_added(state.members, id)
+              {%{state | members: members}, transition}
+          end
 
         {:ok,
          %{
            state
-           | members: members,
-             connections: Map.put(state.connections, pid, %{player_id: id, monitor_ref: ref}),
+           | connections:
+               Map.put(state.connections, pid, %{player_id: id, monitor_ref: Process.monitor(pid)}),
              disconnect_timers:
                if(transition == :became_online,
                  do: Map.delete(state.disconnect_timers, id),

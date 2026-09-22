@@ -767,6 +767,30 @@ defmodule Flamingo.RoomServerTest do
     refute Map.has_key?(state.disconnect_timers, seat_id)
   end
 
+  test "navigation handoffs expire only when not claimed by a replacement", %{room_id: room_id} do
+    {:ok, observer_token, _} = join_connected(room_id, "Observer")
+
+    for {name, reconnect?} <- [{"Alice", true}, {"Charlie", false}] do
+      {:ok, token, %{viewer_id: seat_id}} = join_connected(room_id, name)
+      pid = Process.get({:player, token})
+      ref = runtime_state(room_id).connections[pid].monitor_ref
+      :ok = as_player(token, fn -> Rooms.prepare_handoff(room_id) end)
+      stop_supervised!(Process.get({:player_child, token}))
+      _ = :sys.get_state(room_pid(room_id))
+
+      {:ok, snapshot} = snapshot_as(room_id, observer_token)
+      assert snapshot.players[seat_id].connected
+
+      if reconnect?, do: start_connection(room_id, token)
+      send(room_pid(room_id), {:handoff_timeout, pid, ref})
+      _ = :sys.get_state(room_pid(room_id))
+
+      {:ok, snapshot} = snapshot_as(room_id, observer_token)
+      assert snapshot.players[seat_id].connected == reconnect?
+      assert connection_count(runtime_state(room_id), seat_id) == if(reconnect?, do: 1, else: 0)
+    end
+  end
+
   test "stale DOWN does not remove a current connection", %{room_id: room_id} do
     {:ok, resume_token, %{viewer_id: seat_id}} = Rooms.join(room_id, "Alice")
     {_connection_id, connection_pid, _snapshot} = start_connection(room_id, resume_token)

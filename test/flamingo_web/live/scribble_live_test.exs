@@ -83,6 +83,13 @@ defmodule FlamingoWeb.ScribbleLiveTest do
 
   defp room_pid(room_id), do: :global.whereis_name({:flamingo_room, room_id})
 
+  defp enter_scribble(conn, lobby, room_id, token) do
+    path = ~p"/game/#{room_id}/scribble?resume_token=#{token}"
+    assert_redirect(lobby, path)
+    {:ok, view, _html} = live(conn, path)
+    view
+  end
+
   defp finish_reveal(room_id) do
     pid = room_pid(room_id)
     state = :sys.get_state(pid)
@@ -262,6 +269,8 @@ defmodule FlamingoWeb.ScribbleLiveTest do
              :mirror
            ]
 
+    view = enter_scribble(conn, view, room_id, p1_token)
+
     view
     |> element("button[phx-click='select_word']", List.first(state.word_choices))
     |> render_click()
@@ -351,6 +360,9 @@ defmodule FlamingoWeb.ScribbleLiveTest do
         turn_length: 30
       })
 
+    drawer_view = enter_scribble(conn, drawer_view, room_id, drawer_id_token)
+    guesser_view = enter_scribble(conn, guesser_view, room_id, guesser_id_token)
+
     {:ok, state} = room_snapshot(room_id)
     word = List.first(state.word_choices)
     :ok = select_word_as(room_id, Map.fetch!(resume_tokens, drawer_id), word)
@@ -381,6 +393,10 @@ defmodule FlamingoWeb.ScribbleLiveTest do
       start_game_as(room_id, drawer_token, %{
         custom_words: ["secret", "other", "third"]
       })
+
+    drawer_view = enter_scribble(conn, drawer_view, room_id, drawer_token)
+    duplicate_view = enter_scribble(conn, duplicate_view, room_id, drawer_token)
+    guesser_view = enter_scribble(conn, guesser_view, room_id, guesser_token)
 
     {:ok, state} = room_snapshot(room_id)
     word = List.first(state.word_choices)
@@ -434,7 +450,8 @@ defmodule FlamingoWeb.ScribbleLiveTest do
     draw_event_as(room_id, drawer_token, second_event)
     _ = :sys.get_state(room_pid(room_id))
 
-    {:ok, guesser_view, _html} = live(conn, ~p"/game/#{room_id}?resume_token=#{guesser_token}")
+    {:ok, guesser_view, _html} =
+      live(conn, ~p"/game/#{room_id}/scribble?resume_token=#{guesser_token}")
 
     assert_push_event(guesser_view, "drawing_state", %{events: [^first_event, ^second_event]})
   end
@@ -464,7 +481,7 @@ defmodule FlamingoWeb.ScribbleLiveTest do
       Rooms.join(room_id, "Charlie")
 
     {:ok, spectator_view, _html} =
-      live(conn, ~p"/game/#{room_id}?resume_token=#{spectator_token}")
+      live(conn, ~p"/game/#{room_id}/scribble?resume_token=#{spectator_token}")
 
     assert_push_event(spectator_view, "drawing_state", %{events: [^event]})
     assert has_element?(spectator_view, "#spectator-notice")
@@ -488,7 +505,7 @@ defmodule FlamingoWeb.ScribbleLiveTest do
     :sys.replace_state(room_pid(room_id), &put_in(&1.game.constraint, :hidden_canvas))
 
     {:ok, drawer_view, _html} =
-      live(conn, ~p"/game/#{room_id}?resume_token=#{drawer_token}")
+      live(conn, ~p"/game/#{room_id}/scribble?resume_token=#{drawer_token}")
 
     :ok = select_word_as(room_id, drawer_token, List.first(state.word_choices))
 
@@ -528,7 +545,7 @@ defmodule FlamingoWeb.ScribbleLiveTest do
       Rooms.join(room_id, "Charlie")
 
     {:ok, spectator_view, _html} =
-      live(conn, ~p"/game/#{room_id}?resume_token=#{spectator_token}")
+      live(conn, ~p"/game/#{room_id}/scribble?resume_token=#{spectator_token}")
 
     assert_push_event(spectator_view, "drawing_state", %{events: [^event]})
     assert has_element?(spectator_view, "#spectator-notice")
@@ -567,6 +584,8 @@ defmodule FlamingoWeb.ScribbleLiveTest do
         turn_length: 30
       })
 
+    view = enter_scribble(conn, view, room_id, p1_token)
+
     play_turn(room_id, p1, p1_token, p2, p2_token)
     play_turn(room_id, p1, p1_token, p2, p2_token)
 
@@ -589,7 +608,7 @@ defmodule FlamingoWeb.ScribbleLiveTest do
     assert Map.fetch!(snapshot.final_players, p2).score > 0
 
     {:ok, reconnected_view, _html} =
-      live(conn, ~p"/game/#{room_id}?resume_token=#{p1_token}")
+      live(conn, ~p"/game/#{room_id}/scribble?resume_token=#{p1_token}")
 
     assert has_element?(reconnected_view, "#final-score-rows [data-player-id='#{p1}']")
     assert has_element?(reconnected_view, "#final-score-rows [data-player-id='#{p2}']")
@@ -608,6 +627,8 @@ defmodule FlamingoWeb.ScribbleLiveTest do
         round_count: 1,
         turn_length: 30
       })
+
+    view = enter_scribble(conn, view, room_id, p1_token)
 
     words_by_player =
       play_turn(room_id, p1, p1_token, p2, p2_token, [
@@ -673,6 +694,8 @@ defmodule FlamingoWeb.ScribbleLiveTest do
         turn_length: 30
       })
 
+    view = enter_scribble(conn, view, room_id, p1_token)
+
     play_turn(room_id, p1, p1_token, p2, p2_token, [
       %{
         "event_type" => "start",
@@ -716,6 +739,8 @@ defmodule FlamingoWeb.ScribbleLiveTest do
         round_count: 1,
         turn_length: 30
       })
+
+    view = enter_scribble(conn, view, room_id, p1_token)
 
     assert_push_event(view, "sync_round_audio", %{
       phase: "word_choice",

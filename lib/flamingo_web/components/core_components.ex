@@ -31,6 +31,27 @@ defmodule FlamingoWeb.CoreComponents do
 
   alias Phoenix.LiveView.JS
 
+  def clipboard_handler(assigns) do
+    ~H"""
+    <div id="clipboard-handler" phx-hook=".Clipboard" phx-update="ignore"></div>
+    <script :type={Phoenix.LiveView.ColocatedHook} name=".Clipboard">
+      export default {
+        mounted() {
+          this.copy = (event) => {
+            if (event.detail && event.detail.text) {
+              navigator.clipboard.writeText(event.detail.text)
+            }
+          }
+          window.addEventListener("phx:copy", this.copy)
+        },
+        destroyed() {
+          window.removeEventListener("phx:copy", this.copy)
+        }
+      }
+    </script>
+    """
+  end
+
   @doc """
   Renders flash notices.
 
