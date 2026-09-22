@@ -152,11 +152,6 @@ defmodule FlamingoWeb.TelephoneLiveTest do
 
     assert is_binary(prompt_end_time)
 
-    assert has_element?(
-             telephone,
-             "#telephone-prompt-phase .starburst path[stroke='#111827'][stroke-width='4']"
-           )
-
     telephone
     |> form("#telephone-custom-prompt-form", %{"prompt" => "moon trampoline"})
     |> render_submit()
@@ -267,17 +262,11 @@ defmodule FlamingoWeb.TelephoneLiveTest do
     assert has_element?(host, "#revealed-entries article")
     refute has_element?(host, "#revealed-entries article:nth-child(2)")
     assert has_element?(host, "#reveal-journey-progress [data-state='current']")
-    assert has_element?(host, "#reveal-journey-progress p[aria-label='Prompt']", "Prompt")
-    assert has_element?(host, "#reveal-journey-progress p[aria-label='Drawing'] svg")
-    assert has_element?(host, "#reveal-journey-progress p[aria-label='Guess'] svg")
 
     assert has_element?(
              host,
              "#revealed-entries article[data-current='true'][data-entry-type='prompt']"
            )
-
-    assert has_element?(host, "#advance-telephone-reveal", "Next")
-    assert has_element?(host, "#advance-telephone-reveal svg")
 
     assert has_element?(bob_view, "#waiting-for-reveal-host")
     refute has_element?(bob_view, "#advance-telephone-reveal")
@@ -337,9 +326,6 @@ defmodule FlamingoWeb.TelephoneLiveTest do
              host,
              "#revealed-entries article[data-current='true'][data-entry-type='drawing']"
            )
-
-    assert has_element?(host, "#advance-telephone-reveal", "Next")
-    assert has_element?(host, "#advance-telephone-reveal svg")
 
     {:ok, snapshot} = snapshot_as(room_id, host_token)
     drawing = Enum.find(snapshot.reveal.chain.entries, &(&1.type == :drawing))

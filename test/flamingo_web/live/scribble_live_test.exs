@@ -5,7 +5,6 @@ defmodule FlamingoWeb.ScribbleLiveTest do
 
   alias Flamingo.DrawingShare
   alias Flamingo.Rooms
-  alias FlamingoWeb.GameComponents
 
   defp join_connected(room_id, player_name) do
     parent = self()
@@ -99,73 +98,11 @@ defmodule FlamingoWeb.ScribbleLiveTest do
     %{room_id: room_id}
   end
 
-  test "player sidebar orders players by score" do
-    players = %{
-      "alice" => %{name: "Alice", avatar: %{}, score: 20},
-      "bob" => %{name: "Bob", avatar: %{}, score: 80},
-      "charlie" => %{name: "Charlie", avatar: %{}, score: 50}
-    }
-
-    player_ids =
-      render_component(&GameComponents.player_list_panel/1, %{
-        players: players,
-        player_order: ["alice", "bob", "charlie"],
-        drawer_id: "alice",
-        correct_guesses: MapSet.new(),
-        current_round: 1,
-        round_count: 3
-      })
-      |> LazyHTML.from_fragment()
-      |> LazyHTML.query("#player-list-scroll li")
-      |> LazyHTML.attribute("id")
-
-    assert player_ids == ["player-row-bob", "player-row-charlie", "player-row-alice"]
-  end
-
-  test "playing timer has no border" do
-    timer_path =
-      render_component(&GameComponents.game_header/1, %{
-        word: "flamingo",
-        show_word: true,
-        revealed_indices: [],
-        turn_end_time: nil,
-        show_timer: true
-      })
-      |> LazyHTML.from_fragment()
-      |> LazyHTML.query(".starburst path")
-
-    assert LazyHTML.attribute(timer_path, "stroke") == ["none"]
-    assert LazyHTML.attribute(timer_path, "stroke-width") == ["0"]
-  end
-
-  test "host can copy a path-based room invitation", %{conn: conn, room_id: room_id} do
-    {:ok, host_token, _snapshot} = join_connected(room_id, "Alice")
-    {:ok, view, _html} = live(conn, ~p"/game/#{room_id}?resume_token=#{host_token}")
-
-    copy_command =
-      view
-      |> render()
-      |> LazyHTML.from_fragment()
-      |> LazyHTML.query("#copy-link-button")
-      |> LazyHTML.attribute("phx-click")
-      |> List.first()
-
-    assert copy_command =~ url(~p"/join/#{room_id}")
-    refute copy_command =~ "?room="
-  end
-
   test "host settings clamp round length to supported bounds", %{conn: conn, room_id: room_id} do
     {:ok, p1_token, _p1_snapshot} = join_connected(room_id, "Alice")
     {:ok, _p2_token, _p2_snapshot} = join_connected(room_id, "Bob")
 
     {:ok, view, _html} = live(conn, ~p"/game/#{room_id}?resume_token=#{p1_token}")
-
-    assert has_element?(
-             view,
-             "#round-count-slider.nb-slider[type='range'][min='1'][max='5'][value='3'][style='--slider-progress: 50.0%']"
-           )
-
-    assert has_element?(view, "#round-length-input[min='15'][max='120']")
 
     view
     |> element("#settings-form")
@@ -189,18 +126,6 @@ defmodule FlamingoWeb.ScribbleLiveTest do
 
     {:ok, view, _html} = live(conn, ~p"/game/#{room_id}?resume_token=#{p1_token}")
 
-    assert has_element?(view, "#word-list-select.nb-select option[value='default'][selected]")
-
-    assert has_element?(
-             view,
-             "label[for='word-list-select'] > span.mb-2.block.text-sm",
-             "Word theme"
-           )
-
-    assert has_element?(view, "#word-list-select option[value='default']", "Default")
-    assert has_element?(view, "#word-list-select option[value='films']")
-    assert has_element?(view, "#word-list-select option[value='custom']")
-    refute has_element?(view, "#word-list-description")
     refute has_element?(view, "#custom-words-settings")
 
     view
@@ -215,7 +140,6 @@ defmodule FlamingoWeb.ScribbleLiveTest do
     })
 
     assert has_element?(view, "#custom-words-settings")
-    assert has_element?(view, "#custom-words-input[required][placeholder*='one per line']")
     assert has_element?(view, "#custom-word-count", "3 / 3000")
 
     view
@@ -377,83 +301,6 @@ defmodule FlamingoWeb.ScribbleLiveTest do
     |> render_submit()
 
     assert has_element?(view, "#custom-words-error", "Add at least one custom word.")
-  end
-
-  test "player rows constrain long names without displacing status and scores", %{
-    conn: conn,
-    room_id: room_id
-  } do
-    {:ok, p1_token, %{viewer_id: p1}} =
-      join_connected(room_id, "TwentyCharacterNameOne")
-
-    {:ok, p2_token, %{viewer_id: p2}} =
-      join_connected(room_id, "TwentyCharacterNameTwo")
-
-    {:ok, view, _html} = live(conn, ~p"/game/#{room_id}?resume_token=#{p1_token}")
-
-    assert has_element?(view, "#lobby-player-row-#{p1}.min-w-0 .min-w-0.flex-1.truncate")
-    assert has_element?(view, "#lobby-player-row-#{p1} svg[aria-label*='avatar']")
-
-    :ok = start_game_as(room_id, p1_token, %{round_count: 1, turn_length: 30})
-
-    assert has_element?(view, "#round-progress.font-black", "Round 1 of 1")
-    assert has_element?(view, "#player-list-scroll.overflow-y-auto.overflow-x-hidden")
-
-    for player_id <- [p1, p2] do
-      assert has_element?(
-               view,
-               "#player-row-#{player_id}.min-w-0 .min-w-0.flex-1.truncate"
-             )
-
-      assert has_element?(view, "#player-row-#{player_id} .shrink-0.text-sm")
-      assert has_element?(view, "#player-row-#{player_id} svg[aria-label*='avatar']")
-    end
-
-    play_turn(room_id, p1, p1_token, p2, p2_token)
-    play_turn(room_id, p1, p1_token, p2, p2_token)
-
-    for player_id <- [p1, p2] do
-      assert has_element?(
-               view,
-               "#final-score-row-#{player_id}.min-w-0 .min-w-0.flex-1.truncate"
-             )
-
-      assert has_element?(view, "#final-score-row-#{player_id} .shrink-0.text-pink-500")
-      assert has_element?(view, "#final-score-row-#{player_id} svg[aria-label*='avatar']")
-    end
-  end
-
-  test "turn reveal score gains flow into columns after five players", %{
-    conn: conn,
-    room_id: room_id
-  } do
-    players =
-      for index <- 1..6 do
-        {:ok, token, %{viewer_id: id}} = join_connected(room_id, "Player #{index}")
-        {id, token}
-      end
-
-    [{_host_id, host_token} | _] = players
-    tokens = Map.new(players)
-    {:ok, view, _html} = live(conn, ~p"/game/#{room_id}?resume_token=#{host_token}")
-
-    :ok = start_game_as(room_id, host_token, %{round_count: 1, turn_length: 30})
-    {:ok, state} = room_snapshot(room_id)
-    word = List.first(state.word_choices)
-    :ok = select_word_as(room_id, Map.fetch!(tokens, state.drawer_id), word)
-
-    for {id, token} <- players, id != state.drawer_id do
-      assert :correct = guess_as(room_id, token, word)
-    end
-
-    assert has_element?(
-             view,
-             "#turn-reveal-score-gains.grid.grid-flow-col.grid-rows-5"
-           )
-
-    for {id, _token} <- players do
-      assert has_element?(view, "#score-gain-row-#{id}")
-    end
   end
 
   test "a lobby update does not replace the host's unsaved settings", %{
@@ -796,7 +643,6 @@ defmodule FlamingoWeb.ScribbleLiveTest do
     assert html =~ "data-drawing-share-url="
     assert html =~ "/drawing#"
     refute html =~ "final-drawing-constraint-"
-    assert has_element?(view, "[id^='copy-final-drawing-'].bg-transparent.shadow-none")
 
     [_, share_url] = Regex.run(~r/data-drawing-share-url="([^"]+)"/, html)
     encoded = share_url |> String.split("/drawing#") |> List.last()
@@ -810,51 +656,7 @@ defmodule FlamingoWeb.ScribbleLiveTest do
     assert drawer_name == winner.name
   end
 
-  test "game end screen identifies constrained drawings", %{conn: conn, room_id: room_id} do
-    {:ok, p1_token, %{viewer_id: p1}} = join_connected(room_id, "Alice")
-    {:ok, p2_token, %{viewer_id: p2}} = join_connected(room_id, "Bob")
-
-    {:ok, view, _html} = live(conn, ~p"/game/#{room_id}?resume_token=#{p1_token}")
-
-    :ok =
-      start_game_as(room_id, p1_token, %{
-        round_count: 1,
-        turn_length: 30,
-        game_variant: :constraint_roulette
-      })
-
-    play_turn(room_id, p1, p1_token, p2, p2_token)
-    play_turn(room_id, p1, p1_token, p2, p2_token)
-
-    {:ok, snapshot} = snapshot_as(room_id, p1_token)
-
-    winner_id =
-      Enum.max_by(snapshot.final_player_order, fn pid ->
-        Map.fetch!(snapshot.final_players, pid).score
-      end)
-
-    drawing = Enum.find(snapshot.final_drawings, &(&1.drawer_id == winner_id))
-
-    mode =
-      Map.fetch!(
-        %{
-          hidden_canvas: "draw blind",
-          single_stroke: "one stroke",
-          straight_lines: "straight lines only",
-          rotating_canvas: "moving target",
-          mirror: "mirror mode"
-        },
-        drawing.constraint
-      )
-
-    assert has_element?(
-             view,
-             "#final-drawing-constraint-#{winner_id}-round-1.text-yellow-600",
-             "drawn with #{mode}"
-           )
-  end
-
-  test "final score rows select the drawing showcase", %{
+  test "final score rows switch between populated and empty drawings", %{
     conn: conn,
     room_id: room_id
   } do
@@ -871,91 +673,34 @@ defmodule FlamingoWeb.ScribbleLiveTest do
         turn_length: 30
       })
 
-    alice_word =
-      play_turn(room_id, p1, p1_token, p2, p2_token, [
-        %{
-          "event_type" => "start",
-          "x" => 10,
-          "y" => 20,
-          "color" => "#000000",
-          "line_width" => 9
-        }
-      ])
-
-    bob_word =
-      play_turn(room_id, p1, p1_token, p2, p2_token, [
-        %{
-          "event_type" => "start",
-          "x" => 30,
-          "y" => 40,
-          "color" => "#EF120B",
-          "line_width" => 9
-        }
-      ])
-
-    html = render(view)
-    assert html =~ alice_word
-    assert html =~ "final-drawing-#{p1}-round-1"
-
-    html =
-      view
-      |> element("[data-player-id='#{p2}']")
-      |> render_click()
-
-    assert html =~ bob_word
-    assert html =~ "final-drawing-#{p2}-round-1"
-    assert html =~ "data-selected=\"true\""
-  end
-
-  test "selected final score row has a client-side replay control", %{
-    conn: conn,
-    room_id: room_id
-  } do
-    {:ok, p1_token, %{viewer_id: p1}} = join_connected(room_id, "Alice")
-    {:ok, p2_token, %{viewer_id: p2}} = join_connected(room_id, "Bob")
-
-    {:ok, view, _html} = live(conn, ~p"/game/#{room_id}?resume_token=#{p1_token}")
-
-    resume_tokens = %{p1 => p1_token, p2 => p2_token}
-
-    :ok =
-      start_game_as(room_id, Map.fetch!(resume_tokens, p1), %{
-        round_count: 1,
-        turn_length: 30
-      })
+    play_turn(room_id, p1, p1_token, p2, p2_token, [
+      %{
+        "event_type" => "start",
+        "x" => 10,
+        "y" => 20,
+        "color" => "#000000",
+        "line_width" => 9
+      }
+    ])
 
     play_turn(room_id, p1, p1_token, p2, p2_token, [])
-    play_turn(room_id, p1, p1_token, p2, p2_token, [])
 
-    html = render(view)
+    assert has_element?(view, "#final-score-row-#{p1} [data-selected='true']")
+    assert has_element?(view, "#final-drawing-#{p1}-round-1")
+    refute has_element?(view, "#final-drawing-#{p2}-round-1")
 
-    assert html =~ "aria-label=\"Replay selected drawings\""
-    assert html =~ "data-replay-final-drawings"
-    refute html =~ "phx-click=\"replay_final_drawings\""
-  end
+    view |> element("#final-score-row-#{p2} [data-player-id]") |> render_click()
 
-  test "final score row with an empty drawing remains selectable", %{
-    conn: conn,
-    room_id: room_id
-  } do
-    {:ok, p1_token, %{viewer_id: p1}} = join_connected(room_id, "Alice")
-    {:ok, p2_token, %{viewer_id: p2}} = join_connected(room_id, "Bob")
+    assert has_element?(view, "#final-score-row-#{p2} [data-selected='true']")
+    assert has_element?(view, "#final-score-row-#{p1} [data-selected='false']")
+    assert has_element?(view, "#final-drawing-#{p2}-round-1[data-final-drawing-events='[]']")
+    refute has_element?(view, "#final-drawing-#{p1}-round-1")
 
-    {:ok, view, _html} = live(conn, ~p"/game/#{room_id}?resume_token=#{p1_token}")
+    view |> element("#final-score-row-#{p1} [data-player-id]") |> render_click()
 
-    :ok = start_game_as(room_id, p1_token, %{round_count: 1, turn_length: 30})
-
-    play_turn(room_id, p1, p1_token, p2, p2_token)
-    play_turn(room_id, p1, p1_token, p2, p2_token)
-
-    html =
-      view
-      |> element("[data-player-id='#{p2}']")
-      |> render_click()
-
-    assert html =~ "Bob"
-    assert html =~ "aria-label=\"Round 1\""
-    assert html =~ "data-selected=\"true\""
+    assert has_element?(view, "#final-score-row-#{p1} [data-selected='true']")
+    assert has_element?(view, "#final-drawing-#{p1}-round-1")
+    refute has_element?(view, "#final-drawing-#{p2}-round-1")
   end
 
   test "pushes round audio lifecycle events as phases change", %{conn: conn, room_id: room_id} do

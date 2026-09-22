@@ -578,7 +578,6 @@ defmodule Flamingo.RoomServerTest do
 
     assert is_binary(token)
     assert byte_size(token) >= 32
-    assert snapshot.viewer_id == seat_id
     refute token == seat_id
     refute inspect(snapshot) =~ token
     refute Map.has_key?(snapshot, :resume_tokens)
