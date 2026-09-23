@@ -498,11 +498,6 @@ defmodule FlamingoWeb.LobbyLive do
   end
 
   defp apply_snapshot(socket, snapshot) do
-    Rooms.prepare_handoff(socket.assigns.room_id)
-
-    push_navigate(socket,
-      to: RoomRoute.path(snapshot, socket.assigns.room_id, socket.assigns.resume_token),
-      replace: true
-    )
+    RoomRoute.navigate(socket, snapshot)
   end
 end
