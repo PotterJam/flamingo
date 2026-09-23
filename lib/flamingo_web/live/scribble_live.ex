@@ -388,8 +388,6 @@ defmodule FlamingoWeb.ScribbleLive do
                 <ul
                   id="final-score-rows"
                   class="w-full"
-                  phx-hook="FinalDrawingShowcase"
-                  data-selected-player-id={selected_player_id}
                 >
                   <%= for {pid, idx} <- @final_player_order |> Enum.sort_by(fn pid -> -(Map.get(@final_players, pid).score) end) |> Enum.with_index() do %>
                     <li
@@ -458,16 +456,6 @@ defmodule FlamingoWeb.ScribbleLive do
                           {Map.get(@final_players, pid).score}
                         </span>
                       </button>
-                      <button
-                        :if={pid == selected_player_id}
-                        type="button"
-                        class="mr-2 flex h-8 w-8 shrink-0 items-center justify-center text-pink-600 transition-colors hover:bg-pink-200"
-                        data-replay-final-drawings
-                        aria-label="Replay selected drawings"
-                      >
-                        <.icon name={:refresh_cw} class="h-4 w-4" />
-                      </button>
-                      <span :if={pid != selected_player_id} class="mr-2 h-8 w-8 shrink-0"></span>
                     </li>
                   <% end %>
                 </ul>
@@ -492,6 +480,8 @@ defmodule FlamingoWeb.ScribbleLive do
               id="final-drawings"
               aria-label="Selected player's drawings"
               class="flex min-w-0 flex-col justify-center p-4 sm:p-6"
+              phx-hook="FinalDrawingShowcase"
+              data-selected-player-id={selected_player_id}
             >
               <%= if is_nil(drawing) do %>
                 <div class="bg-white p-6 text-center font-bold">
@@ -501,9 +491,22 @@ defmodule FlamingoWeb.ScribbleLive do
                 <% share_url = drawing_share_url(drawing, @final_players) %>
                 <% drawing_constraint = constraint_mode(Map.get(drawing, :constraint)) %>
                 <div class="w-full">
-                  <h3 id="final-drawing-word" class="mb-4 text-center text-2xl font-bold">
-                    {drawing.word}
-                  </h3>
+                  <div class="mb-4 grid grid-cols-[3rem_minmax(0,1fr)_3rem] items-center">
+                    <h3 id="final-drawing-word" class="col-start-2 text-center text-2xl font-bold">
+                      {drawing.word}
+                    </h3>
+                    <.button
+                      id="replay-final-drawing"
+                      type="button"
+                      variant="ghost"
+                      size="icon"
+                      class="text-black"
+                      data-replay-final-drawings
+                      aria-label="Replay drawing"
+                    >
+                      <.icon name={:refresh_cw} class="h-5 w-5" />
+                    </.button>
+                  </div>
                   <div
                     id={"final-drawing-#{drawing.drawer_id}-round-#{drawing.round_number}"}
                     phx-hook="DrawingCanvas"
