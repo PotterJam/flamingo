@@ -345,81 +345,84 @@ defmodule FlamingoWeb.ScribbleLive do
         <% selected_drawings = drawings_for_player(@final_drawings, selected_player_id) %>
         <div class="flex h-screen w-full items-center justify-center">
           <div class="grid h-full w-fit grid-cols-[500px_320px] items-center justify-center gap-28">
-            <.card class="flex h-fit w-full flex-col items-center gap-6 bg-white p-8">
-              <h2 class="text-3xl font-bold">Game finished</h2>
-              <ul
-                id="final-score-rows"
-                class="w-full space-y-1"
-                phx-hook="FinalDrawingShowcase"
-                data-selected-player-id={selected_player_id}
-              >
-                <%= for {pid, idx} <- @final_player_order |> Enum.sort_by(fn pid -> -(Map.get(@final_players, pid).score) end) |> Enum.with_index() do %>
-                  <li
-                    id={"final-score-row-#{pid}"}
-                    class={[
-                      "flex min-w-0 items-center transition-colors",
-                      pid == selected_player_id && "bg-pink-100",
-                      pid != selected_player_id && "hover:bg-pink-50"
-                    ]}
-                  >
-                    <button
-                      type="button"
-                      class={[
-                        "flex min-w-0 flex-1 items-center gap-2 px-3 py-2 text-left"
-                      ]}
-                      phx-click="select_player"
-                      phx-value-player-id={pid}
-                      data-player-id={pid}
-                      data-selected={if(pid == selected_player_id, do: "true", else: "false")}
-                    >
-                      <span class="text-lg">
-                        <%= case idx do %>
-                          <% 0 -> %>
-                            🥇
-                          <% 1 -> %>
-                            🥈
-                          <% 2 -> %>
-                            🥉
-                          <% _ -> %>
-                            {idx + 1}
-                        <% end %>
-                      </span>
-                      <.flamingo_avatar
-                        avatar={Map.get(Map.get(@final_players, pid), :avatar, %{})}
-                        class="h-10 w-10 shrink-0"
-                        label={"#{Map.get(@final_players, pid).name}'s avatar"}
-                      />
-                      <span class="min-w-0 flex-1 truncate font-bold">
-                        {Map.get(@final_players, pid).name}
-                      </span>
-                      <span class="shrink-0 text-pink-500 font-semibold">
-                        {Map.get(@final_players, pid).score}
-                      </span>
-                    </button>
-                    <button
-                      :if={pid == selected_player_id}
-                      type="button"
-                      class="mr-2 flex h-8 w-8 shrink-0 items-center justify-center text-pink-600 transition-colors hover:bg-pink-200"
-                      data-replay-final-drawings
-                      aria-label="Replay selected drawings"
-                    >
-                      <.icon name={:refresh_cw} class="h-4 w-4" />
-                    </button>
-                    <span :if={pid != selected_player_id} class="mr-2 h-8 w-8 shrink-0"></span>
-                  </li>
-                <% end %>
-              </ul>
+            <div class="relative">
               <.button
                 :if={@player_id == @host_id}
                 id="return-to-lobby"
                 phx-click="return_to_lobby"
+                class="absolute bottom-full left-0 mb-6"
               >
                 Return to lobby
               </.button>
-              <p :if={@player_id != @host_id} class="text-sm text-gray-600">
-                Waiting for the host to return to the lobby.
-              </p>
-            </.card>
+              <.card class="flex h-fit w-full flex-col items-center gap-6 bg-white p-8">
+                <h2 class="text-3xl font-bold">Game finished</h2>
+                <ul
+                  id="final-score-rows"
+                  class="w-full space-y-1"
+                  phx-hook="FinalDrawingShowcase"
+                  data-selected-player-id={selected_player_id}
+                >
+                  <%= for {pid, idx} <- @final_player_order |> Enum.sort_by(fn pid -> -(Map.get(@final_players, pid).score) end) |> Enum.with_index() do %>
+                    <li
+                      id={"final-score-row-#{pid}"}
+                      class={[
+                        "flex min-w-0 items-center transition-colors",
+                        pid == selected_player_id && "bg-pink-100",
+                        pid != selected_player_id && "hover:bg-pink-50"
+                      ]}
+                    >
+                      <button
+                        type="button"
+                        class={[
+                          "flex min-w-0 flex-1 items-center gap-2 px-3 py-2 text-left"
+                        ]}
+                        phx-click="select_player"
+                        phx-value-player-id={pid}
+                        data-player-id={pid}
+                        data-selected={if(pid == selected_player_id, do: "true", else: "false")}
+                      >
+                        <span class="text-lg">
+                          <%= case idx do %>
+                            <% 0 -> %>
+                              🥇
+                            <% 1 -> %>
+                              🥈
+                            <% 2 -> %>
+                              🥉
+                            <% _ -> %>
+                              {idx + 1}
+                          <% end %>
+                        </span>
+                        <.flamingo_avatar
+                          avatar={Map.get(Map.get(@final_players, pid), :avatar, %{})}
+                          class="h-10 w-10 shrink-0"
+                          label={"#{Map.get(@final_players, pid).name}'s avatar"}
+                        />
+                        <span class="min-w-0 flex-1 truncate font-bold">
+                          {Map.get(@final_players, pid).name}
+                        </span>
+                        <span class="shrink-0 text-pink-500 font-semibold">
+                          {Map.get(@final_players, pid).score}
+                        </span>
+                      </button>
+                      <button
+                        :if={pid == selected_player_id}
+                        type="button"
+                        class="mr-2 flex h-8 w-8 shrink-0 items-center justify-center text-pink-600 transition-colors hover:bg-pink-200"
+                        data-replay-final-drawings
+                        aria-label="Replay selected drawings"
+                      >
+                        <.icon name={:refresh_cw} class="h-4 w-4" />
+                      </button>
+                      <span :if={pid != selected_player_id} class="mr-2 h-8 w-8 shrink-0"></span>
+                    </li>
+                  <% end %>
+                </ul>
+                <p :if={@player_id != @host_id} class="text-sm text-gray-600">
+                  Waiting for the host to return to the lobby.
+                </p>
+              </.card>
+            </div>
 
             <div class="flex h-full min-h-0 flex-col">
               <div class="no-scrollbar flex min-h-0 flex-1 flex-col overflow-y-auto pr-2 [justify-content:safe_center]">

@@ -563,7 +563,7 @@ defmodule FlamingoWeb.TelephoneComponents do
           <% end %>
         </.box>
       </div>
-      <div class="relative flex flex-wrap justify-center gap-3 border-2 border-border bg-white p-5 shadow-shadow">
+      <div class="relative flex justify-center">
         <.button
           :if={@host?}
           id="return-to-lobby"
@@ -575,14 +575,6 @@ defmodule FlamingoWeb.TelephoneComponents do
         <p :if={!@host?} class="self-center text-sm text-gray-600">
           Waiting for the host to return to the lobby.
         </p>
-        <.button
-          id="telephone-new-room"
-          navigate={~p"/"}
-          variant="neutral"
-          class="px-7 py-3 font-black"
-        >
-          New room
-        </.button>
       </div>
     </section>
     """
