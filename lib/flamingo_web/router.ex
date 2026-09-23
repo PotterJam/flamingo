@@ -25,6 +25,14 @@ defmodule FlamingoWeb.Router do
     live "/drawing", DrawingLive
   end
 
+  # Local review fixture; remove before shipping.
+  if Application.compile_env(:flamingo, :dev_routes) do
+    scope "/preview", FlamingoWeb do
+      pipe_through :browser
+      live "/voting", VotingPreviewLive
+    end
+  end
+
   # Other scopes may use custom stacks.
   # scope "/api", FlamingoWeb do
   #   pipe_through :api
