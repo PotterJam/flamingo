@@ -27,6 +27,7 @@ defmodule FlamingoWeb.ScribbleLive do
        final_player_order: [],
        final_drawings: [],
        selected_player_id: nil,
+       selected_drawing_index: 0,
        host_id: nil,
        drawer_id: nil,
        constraint: nil,
@@ -375,22 +376,18 @@ defmodule FlamingoWeb.ScribbleLive do
             @selected_player_id
           ) %>
         <% selected_drawings = drawings_for_player(@final_drawings, selected_player_id) %>
-        <div class="flex h-screen w-full items-center justify-center">
-          <div class="grid h-full w-fit grid-cols-[500px_320px] items-center justify-center gap-28">
-            <div class="relative">
-              <.button
-                :if={@player_id == @host_id}
-                id="return-to-lobby"
-                phx-click="return_to_lobby"
-                class="absolute bottom-full left-0 mb-6"
-              >
-                Return to lobby
-              </.button>
-              <.card class="flex h-fit w-full flex-col items-center gap-6 bg-white p-8">
-                <h2 class="text-3xl font-bold">Game finished</h2>
+        <% drawing = Enum.at(selected_drawings, @selected_drawing_index) %>
+        <div class="flex min-h-dvh w-full items-center justify-center p-4 sm:p-8">
+          <.card class="grid w-full max-w-5xl overflow-hidden bg-white p-0 md:grid-cols-[minmax(0,340px)_minmax(0,1fr)]">
+            <div
+              id="final-leaderboard"
+              class="flex min-h-0 flex-col border-b-2 border-border md:border-r-2 md:border-b-0"
+            >
+              <div class="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto pb-4">
+                <h2 class="px-4 pt-4 text-3xl font-bold">Results</h2>
                 <ul
                   id="final-score-rows"
-                  class="w-full space-y-1"
+                  class="w-full"
                   phx-hook="FinalDrawingShowcase"
                   data-selected-player-id={selected_player_id}
                 >
@@ -474,69 +471,95 @@ defmodule FlamingoWeb.ScribbleLive do
                     </li>
                   <% end %>
                 </ul>
-                <p :if={@player_id != @host_id} class="text-sm text-gray-600">
+              </div>
+              <div class="mt-auto border-t-2 border-border">
+                <.button
+                  :if={@player_id == @host_id}
+                  id="return-to-lobby"
+                  phx-click="return_to_lobby"
+                  variant="ghost"
+                  class="flex w-full items-center justify-start gap-2 rounded-none border-0! px-3! py-2!"
+                >
+                  <.icon name={:arrow_left} class="h-5 w-5" /> Back to lobby
+                </.button>
+                <p :if={@player_id != @host_id} class="px-3 py-2 text-sm text-gray-600">
                   Waiting for the host to return to the lobby.
                 </p>
-              </.card>
-            </div>
-
-            <div class="flex h-full min-h-0 flex-col">
-              <div class="no-scrollbar flex min-h-0 flex-1 flex-col overflow-y-auto pr-2 [justify-content:safe_center]">
-                <div class="flex w-full flex-col gap-4 py-4">
-                  <%= if selected_drawings == [] do %>
-                    <div class="border-2 border-border bg-white p-6 text-center font-bold">
-                      No drawings to show
-                    </div>
-                  <% end %>
-                  <%= for drawing <- selected_drawings do %>
-                    <% share_url = drawing_share_url(drawing, @final_players) %>
-                    <% drawing_constraint = constraint_mode(Map.get(drawing, :constraint)) %>
-                    <div class="border-2 border-border bg-white p-3">
-                      <div class="mb-2 flex items-center justify-between gap-3">
-                        <span
-                          class="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-pink-400 text-xs font-black text-white"
-                          aria-label={"Round #{drawing.round_number}"}
-                        >
-                          {drawing.round_number}
-                        </span>
-                        <p class="truncate text-right font-bold">{drawing.word}</p>
-                        <.button
-                          variant="outline"
-                          size="sm"
-                          class="shrink-0 px-2"
-                          on_confirm_click={JS.dispatch("phx:copy", detail: %{text: share_url})}
-                          id={"copy-final-drawing-#{drawing.drawer_id}-round-#{drawing.round_number}"}
-                          data-drawing-share-url={share_url}
-                        >
-                          <span class="flex items-center gap-1">
-                            <.icon name={:copy} class="h-4 w-4" /> Copy link
-                          </span>
-                        </.button>
-                      </div>
-                      <div
-                        id={"final-drawing-#{drawing.drawer_id}-round-#{drawing.round_number}"}
-                        phx-hook="DrawingCanvas"
-                        phx-update="ignore"
-                        data-is-drawer="false"
-                        data-final-drawing-replay="true"
-                        data-final-drawing-events={Jason.encode!(drawing.ops)}
-                      >
-                        <canvas width="700" height="500" class="aspect-[7/5] w-full bg-white">
-                        </canvas>
-                      </div>
-                      <p
-                        :if={drawing_constraint}
-                        id={"final-drawing-constraint-#{drawing.drawer_id}-round-#{drawing.round_number}"}
-                        class="mt-2 text-center text-sm font-bold text-yellow-600"
-                      >
-                        drawn with {drawing_constraint}
-                      </p>
-                    </div>
-                  <% end %>
-                </div>
               </div>
             </div>
-          </div>
+
+            <div
+              id="final-drawings"
+              aria-label="Selected player's drawings"
+              class="flex min-w-0 flex-col justify-center p-4 sm:p-6"
+            >
+              <%= if is_nil(drawing) do %>
+                <div class="bg-white p-6 text-center font-bold">
+                  No drawings to show
+                </div>
+              <% else %>
+                <% share_url = drawing_share_url(drawing, @final_players) %>
+                <% drawing_constraint = constraint_mode(Map.get(drawing, :constraint)) %>
+                <div class="w-full">
+                  <h3 id="final-drawing-word" class="mb-4 text-center text-2xl font-bold">
+                    {drawing.word}
+                  </h3>
+                  <div
+                    id={"final-drawing-#{drawing.drawer_id}-round-#{drawing.round_number}"}
+                    phx-hook="DrawingCanvas"
+                    phx-update="ignore"
+                    data-is-drawer="false"
+                    data-final-drawing-replay="true"
+                    data-final-drawing-events={Jason.encode!(drawing.ops)}
+                  >
+                    <canvas width="700" height="500" class="aspect-[7/5] w-full bg-white"></canvas>
+                  </div>
+                  <p
+                    :if={drawing_constraint}
+                    id={"final-drawing-constraint-#{drawing.drawer_id}-round-#{drawing.round_number}"}
+                    class="mt-2 text-center text-sm font-bold text-yellow-600"
+                  >
+                    drawn with {drawing_constraint}
+                  </p>
+                  <nav
+                    aria-label="Drawing navigation"
+                    class="mt-4 flex items-center justify-center gap-2"
+                  >
+                    <.button
+                      id="previous-final-drawing"
+                      variant="ghost"
+                      phx-click="previous_drawing"
+                      disabled={@selected_drawing_index == 0}
+                      class="flex items-center gap-1"
+                      aria-label="Previous drawing"
+                    >
+                      <.icon name={:arrow_left} class="h-4 w-4" /> Prev
+                    </.button>
+                    <.button
+                      variant="ghost"
+                      on_confirm_click={JS.dispatch("phx:copy", detail: %{text: share_url})}
+                      id={"copy-final-drawing-#{drawing.drawer_id}-round-#{drawing.round_number}"}
+                      data-drawing-share-url={share_url}
+                    >
+                      <span class="flex items-center gap-1">
+                        <.icon name={:copy} class="h-4 w-4" /> Copy
+                      </span>
+                    </.button>
+                    <.button
+                      id="next-final-drawing"
+                      variant="ghost"
+                      phx-click="next_drawing"
+                      disabled={@selected_drawing_index >= length(selected_drawings) - 1}
+                      class="flex items-center gap-1"
+                      aria-label="Next drawing"
+                    >
+                      Next <.icon name={:arrow_right} class="h-4 w-4" />
+                    </.button>
+                  </nav>
+                </div>
+              <% end %>
+            </div>
+          </.card>
         </div>
       <% end %>
 
@@ -660,7 +683,25 @@ defmodule FlamingoWeb.ScribbleLive do
   end
 
   def handle_event("select_player", %{"player-id" => player_id}, socket) do
-    {:noreply, assign(socket, selected_player_id: player_id)}
+    {:noreply, assign(socket, selected_player_id: player_id, selected_drawing_index: 0)}
+  end
+
+  def handle_event("previous_drawing", _params, socket) do
+    {:noreply, update(socket, :selected_drawing_index, &max(&1 - 1, 0))}
+  end
+
+  def handle_event("next_drawing", _params, socket) do
+    assigns = socket.assigns
+
+    player_id =
+      selected_or_winning_player_id(
+        assigns.final_players,
+        assigns.final_player_order,
+        assigns.selected_player_id
+      )
+
+    last_index = max(length(drawings_for_player(assigns.final_drawings, player_id)) - 1, 0)
+    {:noreply, update(socket, :selected_drawing_index, &min(&1 + 1, last_index))}
   end
 
   def handle_info({:room_snapshot, snapshot}, socket) do

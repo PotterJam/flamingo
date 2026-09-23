@@ -590,14 +590,14 @@ defmodule FlamingoWeb.ScribbleLiveTest do
     play_turn(room_id, p1, p1_token, p2, p2_token)
 
     html = render(view)
-    assert html =~ "Game finished"
+    assert has_element?(view, "#final-leaderboard h2", "Results")
     assert html =~ "Alice"
     assert html =~ "Bob"
 
     :ok = leave_as(room_id, Map.fetch!(resume_tokens, p2))
 
     html = render(view)
-    assert html =~ "Game finished"
+    assert has_element?(view, "#final-leaderboard h2", "Results")
     assert html =~ "Alice"
     assert html =~ "Bob"
 
@@ -655,9 +655,10 @@ defmodule FlamingoWeb.ScribbleLiveTest do
 
     html = render(view)
 
-    assert html =~ "Game finished"
+    assert has_element?(view, "#final-leaderboard h2", "Results")
     assert html =~ winner.name
-    assert html =~ "aria-label=\"Round 1\""
+    assert has_element?(view, "#previous-final-drawing[disabled]")
+    assert has_element?(view, "#next-final-drawing[disabled]")
     assert html =~ winner_word
     assert html =~ "data-final-drawing-events="
     assert html =~ "data-final-drawing-replay=\"true\""
@@ -712,6 +713,10 @@ defmodule FlamingoWeb.ScribbleLiveTest do
     assert has_element?(view, "#final-drawing-#{p1}-round-1")
     refute has_element?(view, "#final-drawing-#{p2}-round-1")
 
+    assert has_element?(view, "#final-leaderboard #final-score-rows")
+    assert has_element?(view, "#final-leaderboard #return-to-lobby")
+    assert has_element?(view, "#final-drawings #final-drawing-#{p1}-round-1")
+
     view |> element("#final-score-row-#{p2} [data-player-id]") |> render_click()
 
     assert has_element?(view, "#final-score-row-#{p2} [data-selected='true']")
@@ -724,6 +729,14 @@ defmodule FlamingoWeb.ScribbleLiveTest do
     assert has_element?(view, "#final-score-row-#{p1} [data-selected='true']")
     assert has_element?(view, "#final-drawing-#{p1}-round-1")
     refute has_element?(view, "#final-drawing-#{p2}-round-1")
+
+    {:ok, guest_view, _html} =
+      live(conn, ~p"/game/#{room_id}/scribble?resume_token=#{p2_token}")
+
+    refute has_element?(guest_view, "#return-to-lobby")
+
+    view |> element("#return-to-lobby") |> render_click()
+    assert_redirect(view, ~p"/game/#{room_id}?resume_token=#{p1_token}")
   end
 
   test "pushes round audio lifecycle events as phases change", %{conn: conn, room_id: room_id} do
