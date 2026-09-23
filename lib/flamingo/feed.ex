@@ -15,6 +15,9 @@ defmodule Flamingo.Feed do
 
   def correct_guess(feed, player_id, name), do: add(feed, {:correct_guess, player_id, name})
 
+  def drawing_vote(feed, player_id, name, vote),
+    do: add(feed, {:drawing_vote, player_id, name, vote})
+
   def word_revealed(feed, word), do: add(feed, {:word_revealed, word})
 
   defp add(feed, event) do
@@ -47,6 +50,12 @@ defmodule Flamingo.Feed do
 
   defp format_event({:correct_guess, _player_id, name}, _viewer),
     do: {:correct, "#{name} guessed the word"}
+
+  defp format_event({:drawing_vote, _player_id, name, :up}, _viewer),
+    do: {:like, "#{name} liked the drawing"}
+
+  defp format_event({:drawing_vote, _player_id, name, :down}, _viewer),
+    do: {:dislike, "#{name} disliked the drawing"}
 
   defp format_event({:word_revealed, word}, _viewer), do: {:system, "The word was #{word}"}
 end

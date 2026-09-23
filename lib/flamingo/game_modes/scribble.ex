@@ -24,6 +24,7 @@ defmodule Flamingo.GameModes.Scribble do
       word_choices: [],
       used_words: MapSet.new(),
       current_drawing: [],
+      drawing_votes: %{},
       correct_guesses: %{},
       revealed_indices: [],
       pending_hint_delays: [],
@@ -146,6 +147,26 @@ defmodule Flamingo.GameModes.Scribble do
 
   def command(_state, _actor, {:draw, _event}, _context), do: :ignored
 
+  def command(state, actor, {:vote_drawing, vote}, context) when vote in [:up, :down] do
+    cond do
+      state.phase != :playing ->
+        {:error, :not_playing}
+
+      not active?(state, actor) ->
+        {:error, :not_guesser}
+
+      actor == state.drawer_id ->
+        {:error, :drawer_cannot_vote}
+
+      Map.get(state.drawing_votes, actor) == vote ->
+        ok(state)
+
+      true ->
+        {feed, _} = Feed.drawing_vote(state.feed, actor, context.roster.players[actor].name, vote)
+        ok(%{state | drawing_votes: Map.put(state.drawing_votes, actor, vote), feed: feed})
+    end
+  end
+
   def command(state, actor, {:guess, text}, context) when is_binary(text) do
     cond do
       state.phase != :playing ->
@@ -259,6 +280,7 @@ defmodule Flamingo.GameModes.Scribble do
       revealed_indices: state.revealed_indices,
       score_gains: if(state.phase == :turn_reveal, do: state.score_gains, else: %{}),
       current_drawing: state.current_drawing,
+      drawing_vote: Map.get(state.drawing_votes, viewer),
       final_players: if(result, do: result.players, else: %{}),
       final_player_order: if(result, do: result.player_order, else: []),
       final_drawings: if(result, do: result.drawings, else: []),
@@ -292,6 +314,7 @@ defmodule Flamingo.GameModes.Scribble do
       | phase: :word_choice,
         word_choices: choices,
         word: nil,
+        drawing_votes: %{},
         correct_guesses: %{},
         revealed_indices: [],
         pending_hint_delays: []
@@ -360,6 +383,8 @@ defmodule Flamingo.GameModes.Scribble do
       word: state.word,
       round_number: state.current_round + 1,
       constraint: state.constraint,
+      thumbs_up: Enum.count(state.drawing_votes, fn {_, vote} -> vote == :up end),
+      thumbs_down: Enum.count(state.drawing_votes, fn {_, vote} -> vote == :down end),
       ops: DrawingShare.compact_ops(state.current_drawing)
     }
 
@@ -418,8 +443,14 @@ defmodule Flamingo.GameModes.Scribble do
   defp game_ended(state, roster) do
     players =
       Map.new(roster.players, fn {id, p} ->
+        drawings = Enum.filter(state.final_drawings, &(&1.drawer_id == id))
+
         {id,
-         p |> Map.take([:id, :name, :avatar]) |> Map.put(:score, Map.fetch!(state.scores, id))}
+         p
+         |> Map.take([:id, :name, :avatar])
+         |> Map.put(:score, Map.fetch!(state.scores, id))
+         |> Map.put(:thumbs_up, Enum.sum(Enum.map(drawings, & &1.thumbs_up)))
+         |> Map.put(:thumbs_down, Enum.sum(Enum.map(drawings, & &1.thumbs_down)))}
       end)
 
     {%{

@@ -1,6 +1,8 @@
 defmodule Flamingo.GameModes.ScribbleTest do
   use ExUnit.Case, async: true
 
+  import Flamingo.TestAssertions, only: [assert_fields: 2]
+
   alias Flamingo.GameModes.Scribble
 
   @now ~U[2026-01-01 00:00:00Z]
@@ -73,6 +75,96 @@ defmodule Flamingo.GameModes.ScribbleTest do
     assert state.phase == :turn_reveal
     assert Scribble.view(state, "b", roster()).word == "cat"
     assert state.scores["b"] > 0
+  end
+
+  test "only active guessers can vote" do
+    state = %{admitted() | phase: :playing, drawer_id: "a", word: "cat"}
+    {:ok, %{state: state}} = Scribble.admit_member(state, %{id: "c", name: "Cara"}, context())
+
+    for actor <- ["a", "c", "unknown"] do
+      assert {:error, _} = Scribble.command(state, actor, {:vote_drawing, :up}, context())
+    end
+  end
+
+  test "invalid drawing votes are rejected" do
+    state = %{admitted() | phase: :playing, drawer_id: "a", word: "cat"}
+
+    assert {:error, :invalid_command} =
+             Scribble.command(state, "b", {:vote_drawing, :invalid}, context())
+  end
+
+  test "voting is only available during drawing" do
+    state = %{admitted() | drawer_id: "a", word: "cat"}
+
+    for phase <- [:lobby, :word_choice, :turn_reveal, :game_ended] do
+      assert {:error, :not_playing} =
+               Scribble.command(%{state | phase: phase}, "b", {:vote_drawing, :up}, context())
+    end
+  end
+
+  test "a correct guesser can still vote" do
+    state = %{
+      admitted()
+      | phase: :playing,
+        drawer_id: "a",
+        word: "cat",
+        correct_guesses: %{"b" => @now}
+    }
+
+    {:ok, %{state: state}} = Scribble.command(state, "b", {:vote_drawing, :up}, context())
+    assert state.drawing_votes == %{"b" => :up}
+  end
+
+  test "repeated votes count once and switching replaces the vote" do
+    state = %{admitted() | phase: :playing, drawer_id: "a", word: "cat"}
+    {:ok, %{state: state}} = Scribble.command(state, "b", {:vote_drawing, :up}, context())
+    {:ok, %{state: state}} = Scribble.command(state, "b", {:vote_drawing, :up}, context())
+    assert state.drawing_votes == %{"b" => :up}
+    {:ok, %{state: state}} = Scribble.command(state, "b", {:vote_drawing, :down}, context())
+    assert state.drawing_votes == %{"b" => :down}
+  end
+
+  test "votes accumulate for the artist across rounds" do
+    game_context = %{context() | word_choices: fn _, _, _ -> ["cat"] end}
+    {:ok, %{state: state}} = Scribble.start(admitted(), %{round_count: 2}, game_context)
+
+    finished =
+      Enum.reduce([:up, :down, :up, nil], state, fn vote, state ->
+        drawer = state.drawer_id
+        guesser = if drawer == "a", do: "b", else: "a"
+
+        {:ok, %{state: state}} =
+          Scribble.command(state, drawer, {:select_word, "cat"}, game_context)
+
+        state =
+          if vote do
+            {:ok, %{state: voted}} =
+              Scribble.command(state, guesser, {:vote_drawing, vote}, game_context)
+
+            voted
+          else
+            state
+          end
+
+        {:ok, %{state: state}} = Scribble.timeout(state, :playing, game_context)
+        {:ok, %{state: state}} = Scribble.timeout(state, :turn_reveal, game_context)
+        state
+      end)
+
+    assert %{thumbs_up: 2, thumbs_down: 0} = finished.final_result.players["a"]
+    assert %{thumbs_up: 0, thumbs_down: 1} = finished.final_result.players["b"]
+  end
+
+  test "starting a new game clears previous voting results" do
+    state = %{
+      admitted()
+      | drawing_votes: %{"b" => :up},
+        final_drawings: [%{thumbs_up: 1}],
+        final_result: %{}
+    }
+
+    {:ok, %{state: restarted}} = Scribble.start(state, %{round_count: 1}, context())
+    assert_fields(restarted, %{drawing_votes: %{}, final_drawings: [], final_result: nil})
   end
 
   test "partial restart keeps scores and feed while resetting match fields" do
