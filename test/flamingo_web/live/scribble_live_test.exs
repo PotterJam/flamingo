@@ -772,7 +772,7 @@ defmodule FlamingoWeb.ScribbleLiveTest do
         {artist, votes}
       end
 
-    assert has_element?(view, "#final-podium [id^='final-votes-']")
+    assert has_element?(view, "#final-podium .podium-player-details [id^='final-votes-']")
     assert has_element?(view, "#final-remaining-players [data-player-id]")
 
     for {artist, votes} <- expected do

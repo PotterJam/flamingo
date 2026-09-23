@@ -78,14 +78,13 @@ defmodule FlamingoWeb.ScribbleLive do
 
   attr :player, :map, required: true
   attr :id, :string, required: true
-  attr :class, :any, default: nil
 
   defp final_votes(assigns) do
     ~H"""
     <span
       :if={@player.thumbs_up > 0 or @player.thumbs_down > 0}
       id={"final-votes-#{@id}"}
-      class={["flex shrink-0 items-center gap-2 text-xs font-semibold sm:text-sm", @class]}
+      class="flex shrink-0 items-center gap-2 text-xs font-semibold sm:text-sm"
     >
       <span
         :if={@player.thumbs_up > 0}
@@ -412,91 +411,88 @@ defmodule FlamingoWeb.ScribbleLive do
           <.card class="grid w-full max-w-6xl overflow-hidden bg-white p-0 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.1fr)]">
             <div
               id="final-leaderboard"
-              class="flex min-h-0 flex-col border-b-2 border-border lg:border-r-2 lg:border-b-0"
+              class="flex min-h-0 min-w-0 flex-col border-b-2 border-border lg:border-r-2 lg:border-b-0"
             >
               <div class="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto pb-4">
                 <h2 class="px-4 pt-4 text-3xl font-bold">Results</h2>
                 <div id="final-score-rows" class="w-full">
-                  <ol
-                    id="final-podium"
-                    aria-label="Podium"
-                    class="mx-auto grid w-fit grid-cols-[repeat(3,2.5rem)] items-end pt-16 pb-6 sm:grid-cols-[repeat(3,3rem)]"
-                  >
-                    <%= for {pid, idx} <- ranked_players |> Enum.take(3) |> Enum.with_index() do %>
-                      <% player = Map.fetch!(@final_players, pid) %>
-                      <li
-                        id={"final-score-row-#{pid}"}
-                        value={idx + 1}
-                        class={[
-                          "relative row-start-1",
-                          idx == 0 && "col-start-2 h-26",
-                          idx == 1 && "col-start-1 h-16",
-                          idx == 2 && "col-start-3 h-6"
-                        ]}
+                  <div class="overflow-x-auto">
+                    <div class="min-w-[29rem] sm:min-w-[33rem]">
+                      <ol
+                        id="final-podium"
+                        aria-label="Podium"
+                        class="mx-auto grid w-fit grid-cols-[repeat(3,2.5rem)] items-end pt-16 pb-6 sm:grid-cols-[repeat(3,3rem)]"
                       >
-                        <button
-                          type="button"
-                          class="podium-player relative flex h-full w-full cursor-pointer items-center justify-center focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-pink-500"
-                          phx-click="select_player"
-                          phx-value-player-id={pid}
-                          data-player-id={pid}
-                          data-selected={if(pid == selected_player_id, do: "true", else: "false")}
-                          aria-pressed={if(pid == selected_player_id, do: "true", else: "false")}
-                          aria-label={"Rank #{idx + 1}: #{player.name}, #{player.score} points"}
-                        >
-                          <span class={[
-                            "absolute bottom-full -mb-2 flex items-center gap-2 px-3 py-2",
-                            idx == 1 && "right-1/2 -mr-8 flex-row-reverse",
-                            idx != 1 && "left-1/2 -ml-8"
-                          ]}>
-                            <.flamingo_avatar
-                              avatar={Map.get(player, :avatar, %{})}
-                              class="h-10 w-10 shrink-0"
-                              label={"#{player.name}'s avatar"}
-                            />
-                            <span class={[
-                              "relative flex w-15 min-w-0 items-center text-sm min-[375px]:w-24 sm:w-32 sm:text-base",
-                              idx == 1 && "justify-end text-right"
-                            ]}>
-                              <span class="podium-player-details relative flex min-w-0 items-center gap-1 sm:gap-2">
-                                <span class="min-w-0 truncate font-bold" title={player.name}>
-                                  {player.name}
-                                </span>
-                                <span class="shrink-0 font-semibold text-pink-500">
-                                  {player.score}
-                                </span>
-                              </span>
-                              <.final_votes
-                                player={player}
-                                id={pid}
-                                class={[
-                                  "absolute top-full mt-1",
-                                  if(idx == 1, do: "right-0", else: "left-0")
-                                ]}
-                              />
-                            </span>
-                          </span>
-                          <span
-                            aria-hidden="true"
+                        <%= for {pid, idx} <- ranked_players |> Enum.take(3) |> Enum.with_index() do %>
+                          <% player = Map.fetch!(@final_players, pid) %>
+                          <li
+                            id={"final-score-row-#{pid}"}
+                            value={idx + 1}
                             class={[
-                              "relative z-10 flex h-full w-full items-center justify-center overflow-hidden border-2 border-border text-xl font-black",
-                              idx == 0 && "bg-yellow-300 text-yellow-400",
-                              idx == 1 && "border-r-0 bg-slate-200 text-slate-300",
-                              idx == 2 && "border-l-0 bg-orange-300 text-[#d9a36b]"
+                              "relative row-start-1",
+                              idx == 0 && "col-start-2 h-26",
+                              idx == 1 && "col-start-1 h-16",
+                              idx == 2 && "col-start-3 h-6"
                             ]}
                           >
-                            <span
-                              :for={stripe <- 0..11}
-                              class="podium-stripe pointer-events-none"
-                              style={"--stripe-index: #{stripe}; --stripe-delay: #{rem(stripe, 3) * 60}ms"}
+                            <button
+                              type="button"
+                              class="podium-player relative flex h-full w-full cursor-pointer items-center justify-center focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-pink-500"
+                              phx-click="select_player"
+                              phx-value-player-id={pid}
+                              data-player-id={pid}
+                              data-selected={if(pid == selected_player_id, do: "true", else: "false")}
+                              aria-pressed={if(pid == selected_player_id, do: "true", else: "false")}
+                              aria-label={"Rank #{idx + 1}: #{player.name}, #{player.score} points"}
                             >
-                            </span>
-                            <span class="relative text-black">{idx + 1}</span>
-                          </span>
-                        </button>
-                      </li>
-                    <% end %>
-                  </ol>
+                              <span class={[
+                                "absolute bottom-full -mb-2 flex items-center gap-2 px-3 py-2",
+                                idx == 1 && "right-1/2 -mr-8 flex-row-reverse",
+                                idx != 1 && "left-1/2 -ml-8"
+                              ]}>
+                                <.flamingo_avatar
+                                  avatar={Map.get(player, :avatar, %{})}
+                                  class="h-10 w-10 shrink-0"
+                                  label={"#{player.name}'s avatar"}
+                                />
+                                <span class={[
+                                  "flex w-40 min-w-0 items-center text-sm sm:w-46 sm:text-base",
+                                  idx == 1 && "justify-end text-right"
+                                ]}>
+                                  <span class="podium-player-details relative flex min-w-0 items-center gap-1 sm:gap-2">
+                                    <span class="min-w-0 truncate font-bold" title={player.name}>
+                                      {player.name}
+                                    </span>
+                                    <.final_votes player={player} id={pid} />
+                                    <span class="shrink-0 font-semibold text-pink-500">
+                                      {player.score}
+                                    </span>
+                                  </span>
+                                </span>
+                              </span>
+                              <span
+                                aria-hidden="true"
+                                class={[
+                                  "relative z-10 flex h-full w-full items-center justify-center overflow-hidden border-2 border-border text-xl font-black",
+                                  idx == 0 && "bg-yellow-300 text-yellow-400",
+                                  idx == 1 && "border-r-0 bg-slate-200 text-slate-300",
+                                  idx == 2 && "border-l-0 bg-orange-300 text-[#d9a36b]"
+                                ]}
+                              >
+                                <span
+                                  :for={stripe <- 0..11}
+                                  class="podium-stripe pointer-events-none"
+                                  style={"--stripe-index: #{stripe}; --stripe-delay: #{rem(stripe, 3) * 60}ms"}
+                                >
+                                </span>
+                                <span class="relative text-black">{idx + 1}</span>
+                              </span>
+                            </button>
+                          </li>
+                        <% end %>
+                      </ol>
+                    </div>
+                  </div>
                   <ol id="final-remaining-players" start="4">
                     <%= for {pid, idx} <- ranked_players |> Enum.drop(3) |> Enum.with_index(3) do %>
                       <li
