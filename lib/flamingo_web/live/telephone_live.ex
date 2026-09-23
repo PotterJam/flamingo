@@ -168,16 +168,8 @@ defmodule FlamingoWeb.TelephoneLive do
     if category, do: command(socket, {:vote, category, entry_id}), else: {:noreply, socket}
   end
 
-  def handle_event("play_again", _params, socket) do
-    settings = %{
-      game_mode: :telephone,
-      turn_length: socket.assigns.turn_length,
-      word_list: socket.assigns.word_list,
-      custom_words: socket.assigns.custom_words,
-      include_default_words: socket.assigns.include_default_words
-    }
-
-    result(socket, Rooms.start_game(socket.assigns.room_id, settings))
+  def handle_event("return_to_lobby", _params, socket) do
+    result(socket, Rooms.return_to_lobby(socket.assigns.room_id))
   end
 
   def handle_info({:room_snapshot, snapshot}, socket),

@@ -111,6 +111,94 @@ defmodule FlamingoWeb.LobbyLiveTest do
     assert MapSet.equal?(snapshot.correct_guesses, MapSet.new([guest_id, slow_id]))
   end
 
+  test "finished games return every viewer and stale game URLs to the same lobby", context do
+    %{
+      conn: conn,
+      room_id: room_id,
+      token: token,
+      server: server,
+      host: initial_host,
+      host_id: host_id
+    } = context
+
+    {:ok, guest_token, %{viewer_id: guest_id}} = Rooms.join(room_id, "Bob")
+    lobby_path = ~p"/game/#{room_id}?resume_token=#{token}"
+    guest_lobby_path = ~p"/game/#{room_id}?resume_token=#{guest_token}"
+    {:ok, _guest_lobby, _} = live(conn, guest_lobby_path)
+
+    Enum.reduce([:scribble, :telephone], initial_host, fn mode, host_lobby ->
+      host_path = "/game/#{room_id}/#{mode}?resume_token=#{token}"
+      guest_path = "/game/#{room_id}/#{mode}?resume_token=#{guest_token}"
+      mode_id = if mode == :scribble, do: "classic", else: "telephone"
+      host_lobby |> element("#game-mode-#{mode_id}") |> render_click()
+      host_lobby |> form("#settings-form", settings: %{round_count: "1"}) |> render_change()
+      host_lobby |> form("#settings-form") |> render_submit()
+      assert_redirect(host_lobby, host_path)
+      {:ok, host, _} = live(conn, host_path)
+
+      # The guest has not followed the return-to-lobby redirect before the next
+      # match starts. Its one handoff must keep it eligible, without test tabs.
+      assert {:error, {:live_redirect, %{to: ^guest_path, kind: :replace}}} =
+               live(conn, guest_lobby_path)
+
+      {:ok, guest, _} = live(conn, guest_path)
+      state = :sys.get_state(server)
+      assert state.members.seats[host_id].connection_count == 1
+      assert state.members.seats[guest_id].connection_count == 1
+      assert state.game.participants[guest_id] == :active
+      if mode == :telephone, do: assert(guest_id in state.game.player_order)
+
+      for _ <- 1..if(mode == :scribble, do: 6, else: 3) do
+        timer = :sys.get_state(server).phase_timer
+        send(server, {:game_timeout, :phase, timer.key, timer.generation})
+        _ = :sys.get_state(server)
+      end
+
+      if mode == :telephone do
+        host |> element("#start-telephone-reveal") |> render_click()
+        for _ <- 1..6, do: host |> element("#advance-telephone-reveal") |> render_click()
+      end
+
+      finished = :sys.get_state(server).game
+      assert finished.phase == :game_ended
+      render_hook(guest, "return_to_lobby", %{})
+      assert :sys.get_state(server).game == finished
+
+      # Reconnect the guest's only connection while results are still held.
+      ref = Process.monitor(guest.pid)
+      GenServer.stop(guest.pid, :normal)
+      assert_receive {:DOWN, ^ref, :process, _, :normal}
+      assert :sys.get_state(server).members.seats[guest_id].connection_count == 0
+
+      assert {:error, {:live_redirect, %{to: ^guest_path, kind: :replace}}} =
+               live(conn, guest_lobby_path)
+
+      {:ok, guest, _} = live(conn, guest_path)
+      assert :sys.get_state(server).game == finished
+
+      ref = Process.monitor(guest.pid)
+      host |> element("#return-to-lobby") |> render_click()
+      assert_redirect(host, lobby_path)
+      assert_redirect(guest, guest_lobby_path)
+
+      # The old view stops, but deliberately delay its replacement until after
+      # the next start. This is the vulnerable return -> lobby -> game interval.
+      assert_receive {:DOWN, ^ref, :process, _, _reason}
+      state = :sys.get_state(server)
+      assert state.lifecycle == :lobby
+      assert state.members.order == [host_id, guest_id]
+      assert state.members.host_id == host_id
+
+      for suffix <- ["scribble", "telephone"], mode == :telephone do
+        assert {:error, {:live_redirect, %{to: ^guest_lobby_path, kind: :replace}}} =
+                 live(conn, "/game/#{room_id}/#{suffix}?resume_token=#{guest_token}")
+      end
+
+      {:ok, returned_host, _} = live(conn, lobby_path)
+      returned_host
+    end)
+  end
+
   test "game URLs send an unstarted room to its lobby", context do
     %{conn: conn, room_id: room_id, token: token} = context
     lobby_path = ~p"/game/#{room_id}?resume_token=#{token}"

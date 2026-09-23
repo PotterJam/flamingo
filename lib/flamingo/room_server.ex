@@ -11,10 +11,10 @@ defmodule Flamingo.RoomServer do
     :phase_timer,
     :hint_timer,
     :turn_end_time,
-    game_module: Scribble,
+    game_module: nil,
     lifecycle: :lobby,
     members: Members.new(),
-    game: Scribble.new(),
+    game: nil,
     disconnect_timers: %{},
     connections: %{}
   ]
@@ -25,6 +25,7 @@ defmodule Flamingo.RoomServer do
   def prepare_handoff(id), do: call(id, :prepare_handoff, {:error, :not_found})
   def leave(id), do: call(id, {:leave, self()}, :ok)
   def start_game(id, settings), do: GenServer.call(via(id), {:start_game, self(), settings})
+  def return_to_lobby(id), do: call(id, {:return_to_lobby, self()}, {:error, :not_found})
   def select_word(id, word), do: GenServer.call(via(id), {:select_word, self(), word})
   def draw_event(id, event), do: GenServer.cast(via(id), {:draw_event, self(), event})
   def guess(id, text), do: GenServer.call(via(id), {:guess, self(), text})
@@ -47,11 +48,8 @@ defmodule Flamingo.RoomServer do
     token = random(32)
 
     with {:ok, members} <- Members.add(state.members, id, token, name, avatar),
-         context = context(state, members),
-         {:ok, result} <-
-           state.game_module.admit_member(state.game, %{id: id, name: name}, context) do
-      state =
-        %{state | members: members} |> accept(result, context.now) |> commit()
+         {:ok, state} <- admit_member(%{state | members: members}, %{id: id, name: name}) do
+      state = commit(state)
 
       {:reply, {:ok, token, snapshot_for(state, id)}, state}
     else
@@ -101,6 +99,26 @@ defmodule Flamingo.RoomServer do
   def handle_call({:start_game, pid, settings}, _, state),
     do: start_game_call(state, player_id(state, pid), settings)
 
+  def handle_call({:return_to_lobby, pid}, _, state) do
+    actor = player_id(state, pid)
+
+    cond do
+      is_nil(actor) ->
+        {:reply, {:error, :not_found}, state}
+
+      actor != state.members.host_id ->
+        {:reply, {:error, :not_host}, state}
+
+      not match?({:finished, _}, state.lifecycle) ->
+        {:reply, {:error, :game_not_finished}, state}
+
+      true ->
+        state = state |> cancel_slot(:phase_timer) |> cancel_slot(:hint_timer)
+        state = %{state | game: nil, game_module: nil, lifecycle: :lobby} |> commit()
+        {:reply, :ok, state}
+    end
+  end
+
   def handle_call({:select_word, pid, word}, _, state),
     do: command_call(state, player_id(state, pid), {:select_word, word})
 
@@ -118,6 +136,9 @@ defmodule Flamingo.RoomServer do
   end
 
   @impl true
+  def handle_cast({:draw_event, _, _}, %{lifecycle: :lobby} = state),
+    do: {:noreply, state}
+
   def handle_cast({:draw_event, pid, event}, state) do
     context = context(state)
 
@@ -199,6 +220,9 @@ defmodule Flamingo.RoomServer do
 
   defp command_call(state, nil, _), do: {:reply, {:error, :not_found}, state}
 
+  defp command_call(%{lifecycle: :lobby} = state, _, _),
+    do: {:reply, {:error, :not_playing}, state}
+
   defp command_call(state, id, command) do
     context = context(state)
     run_call(state, state.game_module.command(state.game, id, command, context), context.now)
@@ -210,8 +234,9 @@ defmodule Flamingo.RoomServer do
     context = context(state, state.members, actor)
 
     with {:ok, module} <- mode_module(Map.get(settings, :game_mode, :scribble)),
-         :ok <- allow_mode_switch(state, module),
-         {:ok, game} <- game_for_start(state, module, context),
+         true <- actor == state.members.host_id || {:error, :not_host},
+         true <- state.lifecycle == :lobby || {:error, :game_in_progress},
+         {:ok, game} <- game_for_start(module, context),
          {:ok, result} <- module.start(game, settings, context) do
       state = %{state | game_module: module}
       run_call(state, {:ok, result}, context.now)
@@ -245,7 +270,7 @@ defmodule Flamingo.RoomServer do
     lifecycle =
       case result.status do
         :continue ->
-          if(result.state.phase == :lobby, do: :lobby, else: :playing)
+          :playing
 
         {:finished, final_result} ->
           {:finished, final_result}
@@ -263,6 +288,18 @@ defmodule Flamingo.RoomServer do
       select_candidate: fn candidates -> Enum.random(candidates) end
     }
   end
+
+  defp admit_member(%{lifecycle: :lobby} = state, _candidate), do: {:ok, state}
+
+  defp admit_member(state, candidate) do
+    context = context(state)
+
+    with {:ok, result} <- state.game_module.admit_member(state.game, candidate, context) do
+      {:ok, accept(state, result, context.now)}
+    end
+  end
+
+  defp connection_transition(%{lifecycle: :lobby} = state, _id, _status), do: state
 
   defp connection_transition(state, id, status) do
     context = context(state)
@@ -286,12 +323,16 @@ defmodule Flamingo.RoomServer do
         disconnect_timers: Map.delete(state.disconnect_timers, id)
     }
 
-    context = context(state)
+    if state.lifecycle == :lobby do
+      state
+    else
+      context = context(state)
 
-    {:ok, result} =
-      state.game_module.remove_member(state.game, id, %{id: id, name: seat.name}, context)
+      {:ok, result} =
+        state.game_module.remove_member(state.game, id, %{id: id, name: seat.name}, context)
 
-    accept(state, result, context.now)
+      accept(state, result, context.now)
+    end
   end
 
   defp connect_pid(state, id, pid) do
@@ -375,6 +416,19 @@ defmodule Flamingo.RoomServer do
     end
   end
 
+  defp snapshot_for(%{lifecycle: :lobby} = state, id) do
+    Flamingo.GameSettings.defaults()
+    |> Map.merge(Members.snapshot(state.members))
+    |> Map.merge(%{
+      phase: :lobby,
+      mode: :scribble,
+      viewer_id: id,
+      round_count: 3,
+      game_variant: :classic,
+      turn_end_time: nil
+    })
+  end
+
   defp snapshot_for(state, id),
     do:
       state.game_module.view(state.game, id, Members.snapshot(state.members))
@@ -384,15 +438,7 @@ defmodule Flamingo.RoomServer do
   defp mode_module(:scribble), do: {:ok, Scribble}
   defp mode_module(_mode), do: {:error, :invalid_game_mode}
 
-  defp allow_mode_switch(%{lifecycle: :playing, game_module: current}, requested)
-       when current != requested,
-       do: {:error, :game_in_progress}
-
-  defp allow_mode_switch(_state, _requested), do: :ok
-
-  defp game_for_start(%{game_module: module, game: game}, module, _context), do: {:ok, game}
-
-  defp game_for_start(_state, module, context) do
+  defp game_for_start(module, context) do
     context.roster.player_order
     |> Enum.reduce_while({:ok, module.new()}, fn id, {:ok, game} ->
       player = context.roster.players[id]

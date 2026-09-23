@@ -343,7 +343,6 @@ defmodule FlamingoWeb.TelephoneLiveTest do
     assert has_element?(host, "#telephone-finale-banner")
     assert has_element?(host, "#telephone-award-cards > div:nth-child(3)")
     refute has_element?(host, "#telephone-award-cards > div:nth-child(4)")
-    assert has_element?(host, "#telephone-play-again")
     assert has_element?(host, "#telephone-new-room")
   end
 

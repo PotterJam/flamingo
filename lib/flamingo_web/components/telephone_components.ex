@@ -566,12 +566,15 @@ defmodule FlamingoWeb.TelephoneComponents do
       <div class="relative flex flex-wrap justify-center gap-3 border-2 border-border bg-white p-5 shadow-shadow">
         <.button
           :if={@host?}
-          id="telephone-play-again"
-          phx-click="play_again"
+          id="return-to-lobby"
+          phx-click="return_to_lobby"
           class="px-7 py-3 font-black"
         >
-          <.icon name={:rotate_cw} class="mr-2 h-5 w-5" />Play again
+          Return to lobby
         </.button>
+        <p :if={!@host?} class="self-center text-sm text-gray-600">
+          Waiting for the host to return to the lobby.
+        </p>
         <.button
           id="telephone-new-room"
           navigate={~p"/"}

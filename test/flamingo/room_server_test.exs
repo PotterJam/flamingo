@@ -1,6 +1,8 @@
 defmodule Flamingo.RoomServerTest do
   use ExUnit.Case, async: true
 
+  import Flamingo.TestAssertions
+
   alias Flamingo.Rooms
   alias Flamingo.Room.Members
   alias Flamingo.RoomSupervisor
@@ -20,7 +22,7 @@ defmodule Flamingo.RoomServerTest do
         snapshot
       end
 
-    {:ok, Enum.find(snapshots, List.first(snapshots), &(&1.word_choices != []))}
+    {:ok, Enum.find(snapshots, List.first(snapshots), &(Map.get(&1, :word_choices, []) != []))}
   end
 
   defp room_pid(room_id), do: :global.whereis_name({:flamingo_room, room_id})
@@ -174,6 +176,104 @@ defmodule Flamingo.RoomServerTest do
     {p1, p2, word, state}
   end
 
+  test "Scribble replay clears scores and drawings", %{room_id: room_id} do
+    {alice, bob, word, state} = start_playing(room_id)
+    host = resume_token_for(state, alice)
+    guest = resume_token_for(state, bob)
+    :correct = guess_as(room_id, guest, word)
+    expire_phase(room_id)
+    expire_phase(room_id)
+    :ok = draw_event_as(room_id, guest, %{"event_type" => "clear"})
+    for _ <- 1..2, do: expire_phase(room_id)
+
+    :ok = as_player(host, fn -> Rooms.return_to_lobby(room_id) end)
+    :ok = start_game_as(room_id, host, %{})
+
+    assert_fields(runtime_state(room_id).game, %{
+      scores: %{alice => 0, bob => 0},
+      current_drawing: [],
+      final_drawings: []
+    })
+  end
+
+  test "Telephone replay clears chains and votes", %{room_id: room_id} do
+    {:ok, host, _} = join_connected(room_id, "Alice")
+    {:ok, _guest, _} = join_connected(room_id, "Bob")
+    :ok = start_game_as(room_id, host, %{game_mode: :telephone})
+    for _ <- 1..3, do: expire_phase(room_id)
+    :ok = command_as(room_id, host, :start_reveal)
+    :ok = command_as(room_id, host, :advance_reveal)
+    {:ok, revealed} = snapshot_as(room_id, host)
+    drawing = List.last(revealed.reveal.chain.entries)
+    :ok = command_as(room_id, host, {:vote, :worst_drawing, drawing.id})
+    for _ <- 1..5, do: command_as(room_id, host, :advance_reveal)
+
+    :ok = as_player(host, fn -> Rooms.return_to_lobby(room_id) end)
+    :ok = start_game_as(room_id, host, %{game_mode: :telephone})
+
+    assert_fields(runtime_state(room_id).game, %{chains: [], votes: %{}, awards: %{}})
+  end
+
+  test "a previous game's timer cannot advance a replay", %{room_id: room_id} do
+    {:ok, host, _} = join_connected(room_id, "Alice")
+    {:ok, _guest, _} = join_connected(room_id, "Bob")
+    :ok = start_game_as(room_id, host, %{round_count: 1})
+    old_timer = runtime_state(room_id).phase_timer
+    for _ <- 1..6, do: expire_phase(room_id)
+    :ok = as_player(host, fn -> Rooms.return_to_lobby(room_id) end)
+    :ok = start_game_as(room_id, host, %{})
+    {:ok, before} = snapshot_as(room_id, host)
+
+    send(room_pid(room_id), {:game_timeout, :phase, old_timer.key, old_timer.generation})
+    _ = :sys.get_state(room_pid(room_id))
+
+    assert {:ok, ^before} = snapshot_as(room_id, host)
+  end
+
+  test "return to lobby cannot cancel a running game", %{room_id: room_id} do
+    {alice, _bob, _word, state} = start_playing(room_id)
+    host = resume_token_for(state, alice)
+    {:ok, before} = snapshot_as(room_id, host)
+
+    assert {:error, :game_not_finished} =
+             as_player(host, fn -> Rooms.return_to_lobby(room_id) end)
+
+    assert {:ok, ^before} = snapshot_as(room_id, host)
+  end
+
+  defp expire_phase(room_id) do
+    timer = runtime_state(room_id).phase_timer
+    send(room_pid(room_id), {:game_timeout, :phase, timer.key, timer.generation})
+    _ = :sys.get_state(room_pid(room_id))
+  end
+
+  test "the current host returns results and a late spectator joins the next match", %{
+    room_id: room_id
+  } do
+    {:ok, host, _} = join_connected(room_id, "Alice")
+    {:ok, successor, %{viewer_id: bob}} = join_connected(room_id, "Bob")
+    :ok = start_game_as(room_id, host, %{game_mode: :telephone})
+
+    {:ok, late, %{viewer_id: charlie, participation: :spectator}} =
+      join_connected(room_id, "Charlie")
+
+    for _ <- 1..3, do: expire_phase(room_id)
+    :ok = command_as(room_id, host, :start_reveal)
+    for _ <- 1..6, do: command_as(room_id, host, :advance_reveal)
+    :ok = leave_as(room_id, host)
+
+    :ok = as_player(successor, fn -> Rooms.return_to_lobby(room_id) end)
+    :ok = start_game_as(room_id, successor, %{game_mode: :telephone})
+    {:ok, playing} = snapshot_as(room_id, late)
+
+    assert_fields(playing, %{
+      phase: :telephone_prompt,
+      host_id: bob,
+      player_order: [bob, charlie],
+      participation: :active
+    })
+  end
+
   test "first player becomes host", %{room_id: room_id} do
     {:ok, _resume_token, %{viewer_id: player_id} = state} = join_connected(room_id, "Alice")
     assert state.mode == :scribble
@@ -244,17 +344,18 @@ defmodule Flamingo.RoomServerTest do
              start_game_as(room_id, Map.fetch!(resume_tokens, p1), %{round_count: 6})
   end
 
-  test "rejected shared settings return an error without changing the game", %{room_id: room_id} do
+  test "rejected shared settings leave the lobby ready for a valid start", %{room_id: room_id} do
     {:ok, host_token, _snapshot} = join_connected(room_id, "Alice")
     {:ok, _player_token, _snapshot} = join_connected(room_id, "Bob")
 
-    assert :ok = start_game_as(room_id, host_token, %{round_count: 3, turn_length: 90})
     {:ok, before} = snapshot_as(room_id, host_token)
 
     assert {:error, :invalid_turn_length} =
              start_game_as(room_id, host_token, %{round_count: 1, turn_length: 14})
 
     assert {:ok, ^before} = snapshot_as(room_id, host_token)
+    assert :ok = start_game_as(room_id, host_token, %{round_count: 3, turn_length: 90})
+    assert {:ok, %{phase: :word_choice, turn_length: 90}} = snapshot_as(room_id, host_token)
   end
 
   test "start_game enters word choice", %{room_id: room_id} do
@@ -529,20 +630,20 @@ defmodule Flamingo.RoomServerTest do
     refute_receive {:room_snapshot, _snapshot}
   end
 
-  test "restarting a phase rejects the replaced timer generation", %{room_id: room_id} do
+  test "an active game cannot be restarted even in the same mode", %{room_id: room_id} do
     {:ok, alice_token, _snapshot} = join_connected(room_id, "Alice")
     {:ok, _bob_token, _snapshot} = join_connected(room_id, "Bob")
 
     :ok = start_game_as(room_id, alice_token, %{})
     first_generation = runtime_state(room_id).phase_timer.generation
 
-    :ok = start_game_as(room_id, alice_token, %{})
+    assert {:error, :game_in_progress} = start_game_as(room_id, alice_token, %{})
     current_generation = runtime_state(room_id).phase_timer.generation
-    refute current_generation == first_generation
+    assert current_generation == first_generation
     {:ok, _snapshot} = room_snapshot(room_id)
     flush_room_snapshots()
 
-    send(room_pid(room_id), {:game_timeout, :phase, :word_choice, first_generation})
+    send(room_pid(room_id), {:game_timeout, :phase, :word_choice, make_ref()})
     _ = :sys.get_state(room_pid(room_id))
 
     assert runtime_state(room_id).phase_timer.generation == current_generation

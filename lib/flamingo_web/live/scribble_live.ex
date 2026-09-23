@@ -409,6 +409,16 @@ defmodule FlamingoWeb.ScribbleLive do
                   </li>
                 <% end %>
               </ul>
+              <.button
+                :if={@player_id == @host_id}
+                id="return-to-lobby"
+                phx-click="return_to_lobby"
+              >
+                Return to lobby
+              </.button>
+              <p :if={@player_id != @host_id} class="text-sm text-gray-600">
+                Waiting for the host to return to the lobby.
+              </p>
             </.card>
 
             <div class="flex h-full min-h-0 flex-col">
@@ -553,6 +563,16 @@ defmodule FlamingoWeb.ScribbleLive do
       </script>
     </Layouts.app>
     """
+  end
+
+  def handle_event("return_to_lobby", _params, socket) do
+    case Rooms.return_to_lobby(socket.assigns.room_id) do
+      :ok ->
+        {:noreply, socket}
+
+      {:error, reason} ->
+        {:noreply, put_flash(socket, :error, "Cannot return to lobby: #{reason}")}
+    end
   end
 
   def handle_event("select_word", %{"choice" => word}, socket) do

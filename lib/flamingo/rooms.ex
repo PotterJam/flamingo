@@ -11,6 +11,7 @@ defmodule Flamingo.Rooms do
 
   def connect(room_id, resume_token), do: RoomServer.connect(room_id, resume_token)
   def prepare_handoff(room_id), do: RoomServer.prepare_handoff(room_id)
+  def return_to_lobby(room_id), do: RoomServer.return_to_lobby(room_id)
 
   def leave(room_id) do
     RoomServer.leave(room_id)
