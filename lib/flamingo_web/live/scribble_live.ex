@@ -38,6 +38,7 @@ defmodule FlamingoWeb.ScribbleLive do
        show_word: false,
        current_round: 0,
        correct_guesses: MapSet.new(),
+       drawing_vote: nil,
        revealed_indices: [],
        feed_ids: MapSet.new(),
        guess_form: to_form(%{"guess" => ""}, as: :guess_form),
@@ -277,32 +278,61 @@ defmodule FlamingoWeb.ScribbleLive do
                     />
 
                     <%= if @phase == :playing and @player_id != @drawer_id and @participation == :active do %>
-                      <%= if MapSet.member?(@correct_guesses, @player_id) do %>
-                        <.box class="relative z-10 bg-green-100 p-3 text-center font-bold text-green-800">
-                          You guessed it!
-                        </.box>
-                      <% else %>
-                        <.word_submission_form
-                          form={@guess_form}
-                          field={@guess_form[:guess]}
-                          id="guess-form"
-                          input_id="guess-input"
-                          button_id="guess-button"
-                          submit="guess"
-                          placeholder="Type your guess..."
-                          button_label="Guess"
-                          hook="FlamingoWeb.ScribbleLive.GuessForm"
-                          mounted={JS.focus()}
-                        >
-                          <:prefix>
-                            <span
-                              id="guess-letter-count"
-                              class="mr-2 w-12 shrink-0 text-right font-hero text-lg leading-none font-medium text-black"
-                            >
-                            </span>
-                          </:prefix>
-                        </.word_submission_form>
-                      <% end %>
+                      <div id="guess-row" class="relative z-10 flex w-full items-center gap-2">
+                        <div id="drawing-votes" class="flex shrink-0">
+                          <.button
+                            :for={{vote, icon} <- [{:down, :thumbs_down}, {:up, :thumbs_up}]}
+                            id={"vote-drawing-#{vote}"}
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            class="drawing-vote flex h-10 w-10 items-center justify-center"
+                            data-vote={vote}
+                            phx-click={
+                              JS.set_attribute({"aria-pressed", "false"}, to: "#drawing-votes button")
+                              |> JS.set_attribute({"aria-pressed", "true"})
+                              |> JS.push("vote_drawing")
+                              |> JS.transition("drawing-vote-pop",
+                                to: "#vote-drawing-#{vote} svg",
+                                time: 280,
+                                blocking: false
+                              )
+                            }
+                            phx-value-vote={vote}
+                            aria-label={"Thumbs #{vote}"}
+                            aria-pressed={to_string(@drawing_vote == vote)}
+                          >
+                            <.icon name={icon} class="h-5 w-5" />
+                          </.button>
+                        </div>
+                        <%= if MapSet.member?(@correct_guesses, @player_id) do %>
+                          <.box class="min-w-0 flex-1 bg-green-100 p-3 text-center font-bold text-green-800">
+                            You guessed it!
+                          </.box>
+                        <% else %>
+                          <.word_submission_form
+                            form={@guess_form}
+                            field={@guess_form[:guess]}
+                            id="guess-form"
+                            input_id="guess-input"
+                            button_id="guess-button"
+                            submit="guess"
+                            placeholder="Type your guess..."
+                            button_label="Guess"
+                            class="min-w-0 flex-1"
+                            hook="FlamingoWeb.ScribbleLive.GuessForm"
+                            mounted={JS.focus()}
+                          >
+                            <:prefix>
+                              <span
+                                id="guess-letter-count"
+                                class="absolute left-0 top-full mt-1 font-hero text-sm leading-none font-medium text-black"
+                              >
+                              </span>
+                            </:prefix>
+                          </.word_submission_form>
+                        <% end %>
+                      </div>
                     <% end %>
                   </div>
               <% end %>
@@ -321,6 +351,8 @@ defmodule FlamingoWeb.ScribbleLive do
                       "p-1 text-xs",
                       entry.kind == :system && "font-semibold text-pink-600",
                       entry.kind == :correct && "font-semibold text-green-600",
+                      entry.kind == :like && "font-semibold text-emerald-600",
+                      entry.kind == :dislike && "font-semibold text-red-600",
                       entry.kind == :close && "font-semibold text-amber-600",
                       entry.kind == :guess && "text-foreground",
                       entry.kind == :info && "text-gray-500"
@@ -400,6 +432,30 @@ defmodule FlamingoWeb.ScribbleLive do
                         />
                         <span class="min-w-0 flex-1 truncate font-bold">
                           {Map.get(@final_players, pid).name}
+                        </span>
+                        <span
+                          :if={
+                            @final_players[pid].thumbs_up > 0 or @final_players[pid].thumbs_down > 0
+                          }
+                          id={"final-votes-#{pid}"}
+                          class="mr-4 flex shrink-0 items-center gap-2 text-sm font-semibold"
+                        >
+                          <span
+                            :if={@final_players[pid].thumbs_up > 0}
+                            class="flex items-center gap-1 text-green-700"
+                            aria-label={"#{@final_players[pid].thumbs_up} thumbs up"}
+                          >
+                            <.icon name={:thumbs_up} class="h-4 w-4" />
+                            {@final_players[pid].thumbs_up}
+                          </span>
+                          <span
+                            :if={@final_players[pid].thumbs_down > 0}
+                            class="flex items-center gap-1 text-red-600"
+                            aria-label={"#{@final_players[pid].thumbs_down} thumbs down"}
+                          >
+                            <.icon name={:thumbs_down} class="h-4 w-4" />
+                            {@final_players[pid].thumbs_down}
+                          </span>
                         </span>
                         <span class="shrink-0 text-pink-500 font-semibold">
                           {Map.get(@final_players, pid).score}
@@ -588,6 +644,11 @@ defmodule FlamingoWeb.ScribbleLive do
     {:noreply, socket}
   end
 
+  def handle_event("vote_drawing", %{"vote" => vote}, socket) when vote in ["up", "down"] do
+    Rooms.command(socket.assigns.room_id, {:vote_drawing, if(vote == "up", do: :up, else: :down)})
+    {:noreply, socket}
+  end
+
   def handle_event("guess", %{"guess_form" => %{"guess" => text}}, socket) do
     socket =
       case Rooms.guess(socket.assigns.room_id, text) do
@@ -665,6 +726,7 @@ defmodule FlamingoWeb.ScribbleLive do
         word: snapshot.word,
         show_word: snapshot.word_visible?,
         correct_guesses: snapshot.correct_guesses,
+        drawing_vote: snapshot.drawing_vote,
         revealed_indices: snapshot.revealed_indices,
         feed_ids: feed_ids,
         score_gains: snapshot.score_gains

@@ -359,3 +359,50 @@
   background: var(--color-pink-300);
   height: 100%;
 }
+
+.drawing-vote[data-vote="up"] {
+  --vote-hover: var(--color-emerald-200);
+  --vote-selected: var(--color-emerald-400);
+  --vote-rotation: -14deg;
+}
+
+.drawing-vote[data-vote="down"] {
+  --vote-hover: var(--color-red-200);
+  --vote-selected: var(--color-red-400);
+  --vote-rotation: -14deg;
+}
+
+.drawing-vote,
+.drawing-vote:hover {
+  background-color: transparent;
+  color: black;
+}
+
+.drawing-vote svg {
+  fill: transparent;
+}
+
+@media (hover: hover) {
+  .drawing-vote:hover svg {
+    fill: var(--vote-hover);
+  }
+}
+
+.drawing-vote[aria-pressed="true"] svg {
+  fill: var(--vote-selected);
+}
+
+.drawing-vote-pop {
+  animation: drawing-vote-pop 280ms ease-in-out;
+}
+
+@keyframes drawing-vote-pop {
+  0%, 100% { transform: rotate(0deg); }
+  50% { transform: rotate(var(--vote-rotation)); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .drawing-vote-pop {
+    animation: none;
+  }
+}

@@ -559,6 +559,7 @@ defmodule FlamingoWeb.GameComponents do
   attr :hook, :string, default: nil
   attr :mounted, :any, default: nil
   attr :maxlength, :integer, default: nil
+  attr :class, :any, default: "w-96"
   slot :prefix
 
   def word_submission_form(assigns) do
@@ -568,7 +569,7 @@ defmodule FlamingoWeb.GameComponents do
       phx-submit={@submit}
       phx-hook={@hook}
       id={@id}
-      class="relative z-10 mx-auto flex w-96 max-w-full items-center gap-2"
+      class={["relative z-10 mx-auto flex max-w-full items-center gap-2", @class]}
     >
       {render_slot(@prefix)}
       <div class="min-w-0 flex-1">
