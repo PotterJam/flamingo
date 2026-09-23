@@ -406,3 +406,51 @@
     animation: none;
   }
 }
+
+.podium-player {
+  --selection-easing: cubic-bezier(0.65, 0, 0.35, 1);
+}
+
+.podium-player-details::after {
+  content: "";
+  position: absolute;
+  inset-inline: 0;
+  bottom: 0;
+  height: 2px;
+  background: var(--color-pink-500);
+  transform: scaleX(0);
+  transform-origin: right;
+  transition: transform 900ms var(--selection-easing);
+}
+
+.podium-player[aria-pressed="true"] .podium-player-details::after {
+  transform: scaleX(1);
+  transform-origin: left;
+}
+
+.podium-stripe {
+  position: absolute;
+  left: calc(50% - 120px);
+  /* At 45 degrees, 16px between bands needs 16 × √2 of vertical offset. */
+  top: calc(var(--stripe-index) * 22.627417px - 48px);
+  width: 240px;
+  height: 8px;
+  background: currentColor;
+  transform: rotate(45deg) translateX(-240px);
+  transition: transform 900ms var(--selection-easing) var(--stripe-delay);
+}
+
+.podium-stripe:nth-child(even) {
+  transform: rotate(45deg) translateX(240px);
+}
+
+.podium-player[aria-pressed="true"] .podium-stripe {
+  transform: rotate(45deg) translateX(0);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .podium-stripe,
+  .podium-player-details::after {
+    transition: none;
+  }
+}

@@ -739,6 +739,61 @@ defmodule FlamingoWeb.ScribbleLiveTest do
     assert_redirect(view, ~p"/game/#{room_id}?resume_token=#{p1_token}")
   end
 
+  test "final results preserve each artist's votes in podium and remaining rows", %{
+    conn: conn,
+    room_id: room_id
+  } do
+    players =
+      for name <- ["Alice", "Bob", "Charlie", "Dana"] do
+        {:ok, token, %{viewer_id: id}} = join_connected(room_id, name)
+        {id, token}
+      end
+
+    [{_, host_token} | _] = players
+    tokens = Map.new(players)
+    {:ok, lobby, _} = live(conn, ~p"/game/#{room_id}?resume_token=#{host_token}")
+    :ok = start_game_as(room_id, host_token, %{round_count: 1, turn_length: 30})
+    view = enter_scribble(conn, lobby, room_id, host_token)
+
+    expected =
+      for votes <- [[:up, :down, :up], [:down, :down, :down], [], [:up, :up, :up]] do
+        {:ok, snapshot} = room_snapshot(room_id)
+        artist = snapshot.drawer_id
+        word = hd(snapshot.word_choices)
+        :ok = select_word_as(room_id, Map.fetch!(tokens, artist), word)
+        guessers = Enum.reject(players, fn {id, _} -> id == artist end)
+
+        for {{_, token}, vote} <- Enum.zip(guessers, votes) do
+          :ok = as_player(token, fn -> Rooms.command(room_id, {:vote_drawing, vote}) end)
+        end
+
+        for {_, token} <- guessers, do: assert(:correct == guess_as(room_id, token, word))
+        finish_reveal(room_id)
+        {artist, votes}
+      end
+
+    assert has_element?(view, "#final-podium [id^='final-votes-']")
+    assert has_element?(view, "#final-remaining-players [data-player-id]")
+
+    for {artist, votes} <- expected do
+      selector = "#final-score-row-#{artist} #final-votes-#{artist}"
+
+      if votes == [] do
+        refute has_element?(view, selector)
+      else
+        for vote <- [:up, :down] do
+          count = Enum.count(votes, &(&1 == vote))
+
+          if count > 0 do
+            assert has_element?(view, "#{selector} [aria-label='#{count} thumbs #{vote}']")
+          else
+            refute has_element?(view, "#{selector} [aria-label$='thumbs #{vote}']")
+          end
+        end
+      end
+    end
+  end
+
   test "pushes round audio lifecycle events as phases change", %{conn: conn, room_id: room_id} do
     {:ok, p1_token, %{viewer_id: p1}} = join_connected(room_id, "Alice")
     {:ok, p2_token, %{viewer_id: p2}} = join_connected(room_id, "Bob")
