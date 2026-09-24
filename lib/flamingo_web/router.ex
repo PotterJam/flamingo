@@ -30,6 +30,7 @@ defmodule FlamingoWeb.Router do
     scope "/preview", FlamingoWeb do
       pipe_through :browser
       live "/voting", VotingPreviewLive
+      live "/telephone", TelephonePreviewLive
     end
   end
 

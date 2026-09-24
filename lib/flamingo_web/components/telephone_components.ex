@@ -505,77 +505,93 @@ defmodule FlamingoWeb.TelephoneComponents do
     assigns = assign(assigns, categories: @categories)
 
     ~H"""
-    <section id="telephone-awards" class="relative space-y-7 overflow-hidden pb-8 text-center">
-      <div aria-hidden="true" class="pointer-events-none absolute inset-0">
-        <.icon
-          name={:sparkles}
-          class="telephone-float absolute top-6 left-[4%] h-16 w-16 -rotate-12 text-yellow-500"
-        />
-        <.icon
-          name={:sparkles}
-          class="telephone-float absolute top-24 right-[3%] h-20 w-20 rotate-12 text-pink-500 [animation-delay:500ms]"
-        />
-      </div>
-      <div id="telephone-finale-banner" class="relative">
-        <.box class="bg-purple-600 p-7 text-white sm:p-10">
-          <div class="relative">
-            <p class="font-hero text-sm font-black tracking-[0.35em] text-yellow-200 uppercase">
-              Every chain survived
-            </p>
-            <h2 class="mt-2 font-hero text-5xl font-black sm:text-7xl">Telephone legends!</h2>
-            <p class="mx-auto mt-3 max-w-2xl text-lg font-bold text-purple-50 sm:text-xl">
-              {@players |> map_size()} players turned simple prompts into absolute nonsense. Time to
-              celebrate the links nobody saw coming.
-            </p>
-          </div>
-        </.box>
-      </div>
-      <div id="telephone-award-cards" class="relative grid gap-5 md:grid-cols-3">
-        <.box
-          :for={{category, label, icon} <- @categories}
-          class={[
-            "telephone-award-card p-6 transition hover:-translate-y-2",
-            award_card_class(category)
-          ]}
+    <section id="telephone-awards" class="text-center">
+      <.card class="overflow-hidden bg-white p-0">
+        <div
+          id="telephone-finale-banner"
+          class="flex items-center justify-center gap-3 border-b-2 border-border px-4 py-4 sm:gap-5"
         >
-          <div class="mx-auto flex h-16 w-16 rotate-3 items-center justify-center rounded-full border-2 border-border bg-white shadow-shadow">
-            <.icon name={icon} class="h-9 w-9 text-purple-700" />
+          <.icon name={:laurel_branch} class="h-12 w-6 shrink-0 text-pink-500" />
+          <h2 class="text-2xl font-bold sm:text-3xl">Award ceremony</h2>
+          <.icon name={:laurel_branch} class="h-12 w-6 shrink-0 -scale-x-100 text-pink-500" />
+        </div>
+        <div id="telephone-award-cards" class="grid md:grid-cols-3">
+          <div
+            :for={{category, label, _icon} <- @categories}
+            class={[
+              "flex min-w-0 flex-col border-border p-6 not-last:border-b-2 md:not-last:border-r-2 md:not-last:border-b-0",
+              award_card_class(category)
+            ]}
+          >
+            <div class="-mx-2 -mt-2 text-left">
+              <p class="font-serif text-sm leading-tight italic text-[var(--award-accent)]">
+                The award for
+              </p>
+              <h3 class="text-xl leading-tight font-bold">{label}</h3>
+            </div>
+            <%= if award = Map.get(@awards, category) do %>
+              <figure class="mx-auto mt-7 w-full max-w-80">
+                <p
+                  :if={award.text != nil}
+                  id={"telephone-award-text-#{category}"}
+                  class="mb-2 text-left text-base text-[var(--award-accent)]"
+                >
+                  “{present_text(award.text)}”
+                </p>
+                <div
+                  id={"telephone-award-drawing-#{category}"}
+                  phx-hook="DrawingCanvas"
+                  phx-update="ignore"
+                  data-is-drawer="false"
+                  data-final-drawing-events={Jason.encode!(award.drawing.value || [])}
+                  role="img"
+                  aria-label={"Drawing by #{player_name(@players, award.drawing.player_id)}"}
+                  class="relative aspect-[7/5] overflow-hidden rounded-base border-2 border-[var(--award-accent)] bg-white"
+                >
+                  <canvas width="700" height="500" class="absolute inset-0 h-full w-full"></canvas>
+                </div>
+                <figcaption class="mt-1 text-right text-[10px] italic text-black">
+                  Drawn by {player_name(@players, award.drawing.player_id)}
+                </figcaption>
+              </figure>
+              <div
+                id={"telephone-award-winner-#{category}"}
+                class="mt-auto flex items-center gap-3 pt-8 text-left"
+              >
+                <.flamingo_avatar
+                  avatar={player_avatar(@players, award.player_id)}
+                  class="h-16 w-16 shrink-0"
+                  label={"#{player_name(@players, award.player_id)}'s avatar"}
+                />
+                <div class="min-w-0">
+                  <p class="text-lg leading-tight font-bold break-words">
+                    {player_name(@players, award.player_id)}
+                  </p>
+                  <p class="text-sm leading-tight font-normal text-black">
+                    {award.votes} {if(award.votes == 1, do: "vote", else: "votes")}
+                  </p>
+                </div>
+              </div>
+            <% else %>
+              <p class="mt-8 text-gray-600">No votes this time—chaos made winners of everyone.</p>
+            <% end %>
           </div>
-          <p class="mt-5 text-xs font-black tracking-[0.2em] text-purple-700 uppercase">
-            The award for
+        </div>
+        <div id="telephone-awards-footer" class="border-t-2 border-border text-left">
+          <.button
+            :if={@host?}
+            id="return-to-lobby"
+            phx-click="return_to_lobby"
+            variant="ghost"
+            class="flex w-full items-center justify-start gap-2 rounded-none border-0! px-3! py-2!"
+          >
+            <.icon name={:arrow_left} class="h-5 w-5" /> Back to lobby
+          </.button>
+          <p :if={!@host?} class="px-3 py-2 text-sm text-gray-600">
+            Waiting for the host to return to the lobby.
           </p>
-          <h3 class="mt-1 font-hero text-2xl font-black">{label}</h3>
-          <%= if award = Map.get(@awards, category) do %>
-            <.flamingo_avatar
-              avatar={player_avatar(@players, award.player_id)}
-              class="mx-auto mt-5 h-24 w-24"
-              label={"#{player_name(@players, award.player_id)}'s avatar"}
-            />
-            <p class="mt-2 text-2xl font-black">{player_name(@players, award.player_id)}</p>
-            <p class="mt-2 border-y-2 border-border/20 py-3 font-hero text-lg font-black text-pink-700">
-              {award_summary(award)}
-            </p>
-            <p class="mt-3 text-sm font-bold text-gray-600">
-              {award.votes} {if(award.votes == 1, do: "vote", else: "votes")}
-            </p>
-          <% else %>
-            <p class="mt-8 text-gray-600">No votes this time—chaos made winners of everyone.</p>
-          <% end %>
-        </.box>
-      </div>
-      <div class="relative flex justify-center">
-        <.button
-          :if={@host?}
-          id="return-to-lobby"
-          phx-click="return_to_lobby"
-          class="px-7 py-3 font-black"
-        >
-          Return to lobby
-        </.button>
-        <p :if={!@host?} class="self-center text-sm text-gray-600">
-          Waiting for the host to return to the lobby.
-        </p>
-      </div>
+        </div>
+      </.card>
     </section>
     """
   end
@@ -696,13 +712,14 @@ defmodule FlamingoWeb.TelephoneComponents do
       reveal.chain_index + 1 == reveal.chain_count
   end
 
-  defp award_card_class(:derailment), do: "bg-purple-100"
-  defp award_card_class(:best_save), do: "bg-green-100"
-  defp award_card_class(:worst_drawing), do: "bg-yellow-100"
+  defp award_card_class(:derailment),
+    do: "bg-purple-100 [--award-accent:var(--color-purple-700)]"
 
-  defp award_summary(%{entry: %{type: :guess, value: value}}), do: "“#{present_text(value)}”"
-  defp award_summary(%{entry: %{type: :drawing}}), do: "A masterpiece beyond words"
-  defp award_summary(_award), do: "An unforgettable link"
+  defp award_card_class(:best_save),
+    do: "bg-green-100 [--award-accent:var(--color-green-800)]"
+
+  defp award_card_class(:worst_drawing),
+    do: "bg-yellow-100 [--award-accent:var(--color-yellow-800)]"
 
   defp applicable_categories(categories, %{type: :drawing}), do: categories
   defp applicable_categories(_categories, %{type: :prompt}), do: []

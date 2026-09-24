@@ -1,6 +1,8 @@
 defmodule Flamingo.GameModes.TelephoneTest do
   use ExUnit.Case, async: true
 
+  import Flamingo.TestAssertions, only: [assert_fields: 2]
+
   alias Flamingo.GameModes.Telephone
 
   defp roster(order) do
@@ -509,11 +511,37 @@ defmodule Flamingo.GameModes.TelephoneTest do
     {:ok, %{state: state}} = Telephone.command(state, "a", :advance_reveal, context(game_roster))
     {:ok, %{state: state}} = Telephone.command(state, "a", :advance_reveal, context(game_roster))
     {:ok, %{state: state}} = Telephone.command(state, "a", :advance_reveal, context(game_roster))
+    [_, source_drawing, winning_guess] = Enum.at(state.chains, 1).entries
+
+    {:ok, %{state: state}} =
+      Telephone.command(
+        state,
+        "a",
+        {:vote, :derailment, winning_guess.id},
+        context(game_roster)
+      )
+
     {:ok, result} = Telephone.command(state, "a", :advance_reveal, context(game_roster))
 
     assert result.state.phase == :game_ended
     assert {:finished, result.state.final_result} == result.status
-    assert result.state.awards.worst_drawing.player_id == "a"
-    assert result.state.awards.best_save.entry.id == future_drawing.id
+
+    assert_fields(result.state.awards.worst_drawing, %{
+      player_id: "a",
+      drawing: future_drawing,
+      text: prompt.value
+    })
+
+    assert_fields(result.state.awards.best_save, %{
+      entry: future_drawing,
+      drawing: future_drawing,
+      text: "guess b"
+    })
+
+    assert_fields(result.state.awards.derailment, %{
+      entry: winning_guess,
+      text: winning_guess.value,
+      drawing: source_drawing
+    })
   end
 end

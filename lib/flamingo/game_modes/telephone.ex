@@ -593,14 +593,43 @@ defmodule Flamingo.GameModes.Telephone do
     counts = Map.get(vote_counts(state), category, %{})
     ordered = Enum.flat_map(state.chains, & &1.entries)
 
-    case Enum.max_by(ordered, &Map.get(counts, &1.id, 0), fn -> nil end) do
+    case Enum.max_by(
+           Enum.with_index(ordered),
+           fn {entry, _} -> Map.get(counts, entry.id, 0) end,
+           fn -> nil end
+         ) do
       nil ->
         nil
 
-      entry ->
+      {entry, index} ->
+        # Drawings follow their prompt (or a later guess); guesses follow their drawing.
+        previous = Enum.at(ordered, index - 1)
+        drawing = if entry.type == :drawing, do: entry, else: previous
+
+        text =
+          cond do
+            category == :worst_drawing ->
+              previous.value
+
+            entry.type == :guess ->
+              entry.value
+
+            true ->
+              case Enum.at(ordered, index + 1) do
+                %{type: :guess, value: value} -> value
+                _ -> nil
+              end
+          end
+
         if Map.get(counts, entry.id, 0) == 0,
           do: nil,
-          else: %{entry: entry, player_id: entry.player_id, votes: counts[entry.id]}
+          else: %{
+            entry: entry,
+            drawing: drawing,
+            text: text,
+            player_id: entry.player_id,
+            votes: counts[entry.id]
+          }
     end
   end
 

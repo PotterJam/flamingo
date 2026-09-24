@@ -59,12 +59,18 @@ defmodule FlamingoWeb.TelephoneLive do
     ~H"""
     <Layouts.app flash={@flash} background="">
       <.flamingo_background game_mode={:telephone} label="TELEPHONE" />
-      <main id="telephone-game" class="min-h-screen px-3 py-5 sm:px-6 lg:px-8">
+      <main
+        id="telephone-game"
+        class={[
+          "min-h-dvh px-3 py-5 sm:px-6 lg:px-8",
+          @phase == :game_ended && "flex items-center justify-center"
+        ]}
+      >
         <div class={[
           "mx-auto flex w-full max-w-6xl flex-col",
           if(@phase in [:telephone_prompt, :telephone_draw], do: "gap-0", else: "gap-4")
         ]}>
-          <header id="telephone-header" class="relative h-0">
+          <header :if={@phase != :game_ended} id="telephone-header" class="relative h-0">
             <div
               :if={@phase == :telephone_guess}
               class="absolute top-0 right-0 z-10 flex items-center gap-3"
