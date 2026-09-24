@@ -40,33 +40,33 @@ defmodule FlamingoWeb.GameComponents do
 
   # Rows must cover the tallest realistic viewport (portrait QHD ~2560 CSS px)
   # and columns the widest (4K ~3840 CSS px plus drift animation overshoot),
-  # since the cells are a fixed-size tessellation behind a fixed full-screen
-  # layer.
+  # including the off-screen start of each animated row.
   @num_rows 66
   @num_cols 27
   @row_height_rem 2.5
-  @col_width_rem 10
 
-  @flamingo_cells (for row <- 0..(@num_rows - 1), col <- 0..(@num_cols - 1) do
-                     offset = if rem(row, 2) != 0, do: @col_width_rem / 2, else: 0
-
-                     %{
-                       top: row * @row_height_rem,
-                       left: col * @col_width_rem - offset - @col_width_rem,
-                       row_class: if(rem(row, 2) == 0, do: "bg-row-even", else: "bg-row-odd")
-                     }
-                   end)
+  @flamingo_rows (for row <- 0..(@num_rows - 1) do
+                    %{
+                      top: row * @row_height_rem,
+                      left: if(rem(row, 2) == 0, do: -10, else: -15),
+                      mode_row?: rem(row, 2) != 0,
+                      row_class: if(rem(row, 2) == 0, do: "bg-row-even", else: "bg-row-odd")
+                    }
+                  end)
 
   attr :game_mode, :atom,
     default: :classic,
     values: [:classic, :constraint_roulette, :telephone]
+
+  attr :label, :string, default: "SCRIBBLE"
 
   def flamingo_background(assigns) do
     {background_class, word_class} = flamingo_background_classes(assigns.game_mode)
 
     assigns =
       assign(assigns,
-        cells: @flamingo_cells,
+        rows: @flamingo_rows,
+        repetitions: @num_cols,
         background_class: background_class,
         word_class: word_class
       )
@@ -78,18 +78,20 @@ defmodule FlamingoWeb.GameComponents do
       class={["fixed inset-0 -z-10 overflow-hidden", @background_class]}
     >
       <div class="relative h-full w-full">
-        <span
-          :for={cell <- @cells}
+        <div
+          :for={row <- @rows}
           class={[
-            "font-retro-display absolute text-lg font-extrabold whitespace-nowrap opacity-30 select-none",
+            "font-retro-display absolute flex w-max gap-4 text-lg font-extrabold whitespace-nowrap opacity-30 select-none",
             @word_class,
-            cell.row_class
+            row.row_class
           ]}
-          style={"top: #{cell.top}rem; left: #{cell.left}rem"}
+          style={"top: #{row.top}rem; left: #{row.left}rem"}
           aria-hidden="true"
         >
-          flamingo
-        </span>
+          <span :for={_ <- 1..@repetitions}>
+            {if row.mode_row?, do: @label, else: "FLAMINGO"}
+          </span>
+        </div>
       </div>
     </div>
     """
