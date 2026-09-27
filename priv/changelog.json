@@ -1,5 +1,38 @@
 [
   {
+    "date": "2026-09-27",
+    "entries": [
+      {"type": "feature", "text": "See recent features and fixes from the new What's new menu on home and lobby screens."}
+    ]
+  },
+  {
+    "date": "2026-09-25",
+    "entries": [
+      {"type": "feature", "text": "Telephone chain reveals now animate each drawing and guess as the story unfolds."}
+    ]
+  },
+  {
+    "date": "2026-09-24",
+    "entries": [
+      {"type": "feature", "text": "Telephone awards now show the winning drawing and its place in the story."}
+    ]
+  },
+  {
+    "date": "2026-09-23",
+    "entries": [
+      {"type": "feature", "text": "Hosts can return everyone to the lobby after results and start another game in the same room."},
+      {"type": "feature", "text": "Scribble players can vote thumbs up or down on drawings and see each artist's totals in the results."},
+      {"type": "feature", "text": "Scribble results now show a podium and let you browse every player's drawings one at a time."}
+    ]
+  },
+  {
+    "date": "2026-09-22",
+    "entries": [
+      {"type": "fix", "text": "Slow-loading players no longer make the first Scribble turn end early."},
+      {"type": "fix", "text": "Using the browser Back button from a game now returns you home instead of reopening the game."}
+    ]
+  },
+  {
     "date": "2026-09-07",
     "entries": [
       {"type": "fix", "text": "Lobbies now consistently start with 30-second turns."}
