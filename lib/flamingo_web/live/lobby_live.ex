@@ -87,7 +87,7 @@ defmodule FlamingoWeb.LobbyLive do
       )
 
     ~H"""
-    <Layouts.app flash={@flash} background={lobby_background(@game_mode, @game_variant)}>
+    <Layouts.app flash={@flash} background={lobby_background(@game_mode, @game_variant)} changelog>
       <div class="flex h-screen w-full items-center justify-center px-4 py-8">
         <div class="flex h-full w-full max-w-3xl flex-col items-center justify-center gap-4">
           <%= if @player_id == @host_id do %>
