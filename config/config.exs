@@ -8,7 +8,12 @@
 import Config
 
 config :flamingo,
-  generators: [timestamp_type: :utc_datetime]
+  ecto_repos: [Flamingo.Repo],
+  generators: [timestamp_type: :utc_datetime, binary_id: true]
+
+config :flamingo, Flamingo.Mailer, adapter: Swoosh.Adapters.Local
+config :flamingo, :mail_from, "hello@example.com"
+config :swoosh, :api_client, Swoosh.ApiClient.Req
 
 # Configure the endpoint
 config :flamingo, FlamingoWeb.Endpoint,

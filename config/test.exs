@@ -1,5 +1,16 @@
 import Config
 
+config :flamingo, Flamingo.Repo,
+  username: "postgres",
+  password: "postgres",
+  hostname: "localhost",
+  database: "flamingo_test#{System.get_env("MIX_TEST_PARTITION")}",
+  pool: Ecto.Adapters.SQL.Sandbox,
+  pool_size: System.schedulers_online() * 2
+
+config :flamingo, Flamingo.Mailer, adapter: Swoosh.Adapters.Test
+config :swoosh, :api_client, false
+
 # We don't run a server during test. If one is required,
 # you can enable the server option below.
 config :flamingo, FlamingoWeb.Endpoint,
