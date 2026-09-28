@@ -3,9 +3,71 @@ defmodule FlamingoWeb.Layouts do
 
   embed_templates "layouts/*"
 
+  attr :current_scope, :map, default: nil
+
+  def account_nav(assigns) do
+    ~H"""
+    <nav
+      id="account-nav"
+      aria-label="Account"
+      class="flex flex-wrap items-center justify-center gap-3 text-sm"
+    >
+      <%= if @current_scope do %>
+        <span class="max-w-64 truncate">{@current_scope.user.email}</span>
+        <.button id="account-settings" href={~p"/users/settings"} variant="neutral" size="sm">
+          Settings
+        </.button>
+        <.button
+          id="account-log-out"
+          href={~p"/users/log-out"}
+          method="delete"
+          variant="neutral"
+          size="sm"
+        >
+          Log out
+        </.button>
+      <% else %>
+        <span class="text-muted-foreground">No account needed to play.</span>
+        <.link
+          id="account-log-in"
+          navigate={~p"/users/log-in"}
+          class="font-semibold underline underline-offset-4"
+        >
+          Log in
+        </.link>
+        <.link
+          id="account-register"
+          navigate={~p"/users/register"}
+          class="font-semibold underline underline-offset-4"
+        >
+          Register
+        </.link>
+      <% end %>
+    </nav>
+    """
+  end
+
+  attr :current_scope, :map, default: nil
+  slot :inner_block, required: true
+
+  def account_panel(assigns) do
+    ~H"""
+    <div class="mx-auto flex min-h-screen max-w-lg flex-col justify-center gap-6 px-4 pt-28 pb-12">
+      <.link navigate={~p"/"} class="self-center font-semibold underline underline-offset-4">
+        Back to Flamingo
+      </.link>
+      <.card class="space-y-6 bg-white p-6 sm:p-8">
+        {render_slot(@inner_block)}
+      </.card>
+      <.account_nav current_scope={@current_scope} />
+    </div>
+    """
+  end
+
   attr :flash, :map, required: true
   attr :current_scope, :map, default: nil
   attr :background, :string, default: "grid-background"
+  attr :show_sound_controls, :boolean, default: true
   slot :inner_block, required: true
 
   def app(assigns) do
@@ -16,6 +78,7 @@ defmodule FlamingoWeb.Layouts do
     <.flash_group flash={@flash} />
     <div id="sound-manager" phx-hook="SoundManager" phx-update="ignore"></div>
     <div
+      :if={@show_sound_controls}
       id="sound-volume-control"
       phx-hook=".SoundVolume"
       phx-update="ignore"

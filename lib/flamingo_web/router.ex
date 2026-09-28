@@ -1,6 +1,8 @@
 defmodule FlamingoWeb.Router do
   use FlamingoWeb, :router
 
+  import FlamingoWeb.UserAuth
+
   pipeline :browser do
     plug :accepts, ["html"]
     plug :fetch_session
@@ -8,25 +10,20 @@ defmodule FlamingoWeb.Router do
     plug :put_root_layout, html: {FlamingoWeb.Layouts, :root}
     plug :protect_from_forgery
     plug :put_secure_browser_headers
+    plug :fetch_current_scope_for_user
   end
 
   pipeline :api do
     plug :accepts, ["json"]
   end
 
-  scope "/", FlamingoWeb do
-    pipe_through :browser
-
-    live "/", HomeLive
-    live "/join/:room_code", HomeLive
-    live "/game/:room_id", LobbyLive
-    live "/game/:room_id/scribble", ScribbleLive
-    live "/game/:room_id/telephone", TelephoneLive
-    live "/drawing", DrawingLive
-  end
-
   # Local review fixture; remove before shipping.
   if Application.compile_env(:flamingo, :dev_routes) do
+    scope "/dev" do
+      pipe_through :browser
+      forward "/mailbox", Plug.Swoosh.MailboxPreview
+    end
+
     scope "/preview", FlamingoWeb do
       pipe_through :browser
       live "/voting", VotingPreviewLive
@@ -38,4 +35,36 @@ defmodule FlamingoWeb.Router do
   # scope "/api", FlamingoWeb do
   #   pipe_through :api
   # end
+
+  ## Authentication routes
+
+  scope "/", FlamingoWeb do
+    pipe_through [:browser, :require_authenticated_user]
+
+    live_session :require_authenticated_user,
+      on_mount: [{FlamingoWeb.UserAuth, :require_authenticated}] do
+      live "/users/settings", UserLive.Settings, :edit
+      live "/users/settings/confirm-email/:token", UserLive.Settings, :confirm_email
+    end
+  end
+
+  scope "/", FlamingoWeb do
+    pipe_through [:browser]
+
+    live_session :current_user,
+      on_mount: [{FlamingoWeb.UserAuth, :mount_current_scope}] do
+      live "/", HomeLive
+      live "/join/:room_code", HomeLive
+      live "/game/:room_id", LobbyLive
+      live "/game/:room_id/scribble", ScribbleLive
+      live "/game/:room_id/telephone", TelephoneLive
+      live "/drawing", DrawingLive
+      live "/users/register", UserLive.Registration, :new
+      live "/users/log-in", UserLive.Login, :new
+      live "/users/log-in/:token", UserLive.Confirmation, :new
+    end
+
+    post "/users/log-in", UserSessionController, :create
+    delete "/users/log-out", UserSessionController, :delete
+  end
 end

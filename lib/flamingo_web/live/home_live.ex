@@ -17,8 +17,9 @@ defmodule FlamingoWeb.HomeLive do
 
   def render(assigns) do
     ~H"""
-    <Layouts.app flash={@flash}>
+    <Layouts.app flash={@flash} current_scope={@current_scope}>
       <div class="flex min-h-screen w-full flex-col items-center justify-center gap-4 px-4 py-8 max-[359px]:px-1">
+        <Layouts.account_nav current_scope={@current_scope} />
         <.card class="w-full max-w-xs bg-white px-6 py-4">
           <div class="flex justify-center">
             <.logo />
