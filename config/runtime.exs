@@ -23,7 +23,28 @@ end
 config :flamingo, FlamingoWeb.Endpoint,
   http: [port: String.to_integer(System.get_env("PORT", "4000"))]
 
+if config_env() == :dev && System.get_env("PUBLIC_URL") do
+  public_url = URI.parse(System.fetch_env!("PUBLIC_URL"))
+
+  config :flamingo, FlamingoWeb.Endpoint,
+    url: [host: public_url.host, scheme: public_url.scheme, port: public_url.port]
+end
+
 if config_env() == :prod do
+  database_url = System.fetch_env!("DATABASE_URL")
+
+  config :flamingo, Flamingo.Repo,
+    url: database_url,
+    pool_size: String.to_integer(System.get_env("POOL_SIZE", "10")),
+    socket_options: if(System.get_env("ECTO_IPV6") in ["true", "1"], do: [:inet6], else: []),
+    ssl: System.get_env("DATABASE_SSL", "true") == "true"
+
+  config :flamingo, Flamingo.Mailer,
+    adapter: Swoosh.Adapters.Resend,
+    api_key: System.fetch_env!("RESEND_API_KEY")
+
+  config :flamingo, :mail_from, System.fetch_env!("MAIL_FROM")
+
   # The secret key base is used to sign/encrypt cookies and other secrets.
   # A default value is used in config/dev.exs and config/test.exs but you
   # want to use a different value for prod and you most likely don't want
