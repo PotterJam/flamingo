@@ -391,12 +391,12 @@ defmodule FlamingoWeb.GameComponents do
             |> String.graphemes()
             |> Enum.with_index()
             |> Enum.map(fn {ch, idx} ->
-              if ch == " " or MapSet.member?(revealed, idx), do: ch, else: "_"
+              if ch in [" ", "-"] or MapSet.member?(revealed, idx), do: ch, else: "_"
             end)
 
           count =
             word
-            |> String.split(" ")
+            |> String.split([" ", "-"], trim: true)
             |> Enum.map(&String.length/1)
             |> Enum.join("-")
 

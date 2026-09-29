@@ -571,10 +571,17 @@ defmodule Flamingo.GameModes.Scribble do
       word
       |> String.graphemes()
       |> Enum.with_index()
-      |> Enum.map_join(fn {c, i} -> if c == " " or i in indices, do: c, else: "_" end)
+      |> Enum.map_join(fn {c, i} -> if c in [" ", "-"] or i in indices, do: c, else: "_" end)
 
-  defp correct?(guess, word),
-    do: String.downcase(String.trim(guess)) == String.downcase(word)
+  defp correct?(guess, word) do
+    pattern =
+      word
+      |> String.downcase()
+      |> String.split("-")
+      |> Enum.map_join(" *-? *", &Regex.escape/1)
+
+    Regex.match?(Regex.compile!("\\A#{pattern}\\z"), String.downcase(String.trim(guess)))
+  end
 
   defp normalize(t), do: t |> String.downcase() |> String.replace(~r/[^\p{L}\p{N}]/u, "")
 

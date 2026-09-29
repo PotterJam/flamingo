@@ -570,7 +570,26 @@ defmodule Flamingo.GameModes.ScribbleTest do
     assert drawer.word_visible?
   end
 
-  test "correct guesses preserve exact punctuation and spacing behavior" do
+  test "hyphens are visible and optional with or without spaces in guesses" do
+    state = %{admitted() | phase: :playing, drawer_id: "a", word: "Jack-in-the-box"}
+
+    assert Scribble.view(state, "b", roster()).word == "____-__-___-___"
+
+    hinted = %{state | revealed_indices: [5]}
+    assert Scribble.view(hinted, "b", roster()).word == "____-i_-___-___"
+
+    for guess <- ["Jack-in-the-box", "jackinthebox", "jack in the box", " JACK - in-the box "] do
+      assert {:ok, %{reply: :correct}} =
+               Scribble.command(state, "b", {:guess, guess}, context())
+    end
+
+    for guess <- ["j ackinthebox", "jackinthebox!", "jack--in-the-box"] do
+      assert {:ok, %{reply: :incorrect}} =
+               Scribble.command(state, "b", {:guess, guess}, context())
+    end
+  end
+
+  test "correct guesses preserve other punctuation and spacing behavior" do
     state = %{admitted() | phase: :playing, drawer_id: "a", word: "cat"}
 
     for correct_guess <- ["CAT", " cat "] do
