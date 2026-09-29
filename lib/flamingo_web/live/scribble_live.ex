@@ -309,8 +309,17 @@ defmodule FlamingoWeb.ScribbleLive do
                       palette={palette()}
                     />
 
-                    <%= if @phase == :playing and @player_id != @drawer_id and @participation == :active do %>
-                      <div id="guess-row" class="relative z-10 flex w-full items-center gap-2">
+                    <%= if @phase in [:playing, :turn_reveal] and @player_id != @drawer_id and @participation == :active do %>
+                      <div
+                        id="guess-row"
+                        class={[
+                          "relative z-10 flex w-full items-center gap-2",
+                          @phase == :turn_reveal && "justify-center"
+                        ]}
+                      >
+                        <span :if={@phase == :turn_reveal} class="font-hero text-xl font-bold">
+                          Cast your vote
+                        </span>
                         <div id="drawing-votes" class="flex shrink-0">
                           <.button
                             :for={{vote, icon} <- [{:down, :thumbs_down}, {:up, :thumbs_up}]}
@@ -337,32 +346,34 @@ defmodule FlamingoWeb.ScribbleLive do
                             <.icon name={icon} class="h-5 w-5" />
                           </.button>
                         </div>
-                        <%= if MapSet.member?(@correct_guesses, @player_id) do %>
-                          <.box class="min-w-0 flex-1 bg-green-100 p-3 text-center font-bold text-green-800">
-                            You guessed it!
-                          </.box>
-                        <% else %>
-                          <.word_submission_form
-                            form={@guess_form}
-                            field={@guess_form[:guess]}
-                            id="guess-form"
-                            input_id="guess-input"
-                            button_id="guess-button"
-                            submit="guess"
-                            placeholder="Type your guess..."
-                            button_label="Guess"
-                            class="min-w-0 flex-1"
-                            hook="FlamingoWeb.ScribbleLive.GuessForm"
-                            mounted={JS.focus()}
-                          >
-                            <:prefix>
-                              <span
-                                id="guess-letter-count"
-                                class="absolute left-0 top-full mt-1 font-hero text-sm leading-none font-medium text-black"
-                              >
-                              </span>
-                            </:prefix>
-                          </.word_submission_form>
+                        <%= if @phase == :playing do %>
+                          <%= if MapSet.member?(@correct_guesses, @player_id) do %>
+                            <.box class="min-w-0 flex-1 bg-green-100 p-3 text-center font-bold text-green-800">
+                              You guessed it!
+                            </.box>
+                          <% else %>
+                            <.word_submission_form
+                              form={@guess_form}
+                              field={@guess_form[:guess]}
+                              id="guess-form"
+                              input_id="guess-input"
+                              button_id="guess-button"
+                              submit="guess"
+                              placeholder="Type your guess..."
+                              button_label="Guess"
+                              class="min-w-0 flex-1"
+                              hook="FlamingoWeb.ScribbleLive.GuessForm"
+                              mounted={JS.focus()}
+                            >
+                              <:prefix>
+                                <span
+                                  id="guess-letter-count"
+                                  class="absolute left-0 top-full mt-1 font-hero text-sm leading-none font-medium text-black"
+                                >
+                                </span>
+                              </:prefix>
+                            </.word_submission_form>
+                          <% end %>
                         <% end %>
                       </div>
                     <% end %>

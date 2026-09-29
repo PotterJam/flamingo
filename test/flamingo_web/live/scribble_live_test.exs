@@ -456,6 +456,39 @@ defmodule FlamingoWeb.ScribbleLiveTest do
     assert_push_event(guesser_view, "drawing_state", %{events: [^first_event, ^second_event]})
   end
 
+  test "guessers can change their drawing vote while turn scores are shown", %{
+    conn: conn,
+    room_id: room_id
+  } do
+    {:ok, drawer_token, _} = join_connected(room_id, "Alice")
+    {:ok, guesser_token, _} = join_connected(room_id, "Bob")
+    :ok = start_game_as(room_id, drawer_token, %{custom_words: ["secret"]})
+
+    {:ok, view, _} = live(conn, ~p"/game/#{room_id}/scribble?resume_token=#{guesser_token}")
+    {:ok, state} = room_snapshot(room_id)
+    word = List.first(state.word_choices)
+    :ok = select_word_as(room_id, drawer_token, word)
+
+    view |> element("#vote-drawing-up") |> render_click()
+    view |> form("#guess-form", guess_form: %{guess: word}) |> render_submit()
+
+    assert has_element?(view, "#turn-reveal-score-gains")
+    refute has_element?(view, "#guess-form")
+    assert has_element?(view, "#vote-drawing-up[aria-pressed=true]")
+
+    view |> element("#vote-drawing-down") |> render_click()
+    assert has_element?(view, "#vote-drawing-down[aria-pressed=true]")
+    assert has_element?(view, "#vote-drawing-up[aria-pressed=false]")
+
+    assert %{thumbs_up: 0, thumbs_down: 1} =
+             room_id
+             |> room_pid()
+             |> :sys.get_state()
+             |> Map.fetch!(:game)
+             |> Map.fetch!(:final_drawings)
+             |> List.last()
+  end
+
   test "a spectator joining during turn reveal receives the drawing baseline", %{
     conn: conn,
     room_id: room_id

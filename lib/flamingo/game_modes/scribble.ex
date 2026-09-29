@@ -149,7 +149,7 @@ defmodule Flamingo.GameModes.Scribble do
 
   def command(state, actor, {:vote_drawing, vote}, context) when vote in [:up, :down] do
     cond do
-      state.phase != :playing ->
+      state.phase not in [:playing, :turn_reveal] ->
         {:error, :not_playing}
 
       not active?(state, actor) ->
@@ -163,7 +163,22 @@ defmodule Flamingo.GameModes.Scribble do
 
       true ->
         {feed, _} = Feed.drawing_vote(state.feed, actor, context.roster.players[actor].name, vote)
-        ok(%{state | drawing_votes: Map.put(state.drawing_votes, actor, vote), feed: feed})
+        votes = Map.put(state.drawing_votes, actor, vote)
+
+        drawings =
+          if state.phase == :turn_reveal do
+            List.update_at(state.final_drawings, -1, fn drawing ->
+              %{
+                drawing
+                | thumbs_up: Enum.count(votes, fn {_, vote} -> vote == :up end),
+                  thumbs_down: Enum.count(votes, fn {_, vote} -> vote == :down end)
+              }
+            end)
+          else
+            state.final_drawings
+          end
+
+        ok(%{state | drawing_votes: votes, final_drawings: drawings, feed: feed})
     end
   end
 

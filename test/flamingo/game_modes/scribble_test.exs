@@ -81,8 +81,9 @@ defmodule Flamingo.GameModes.ScribbleTest do
     state = %{admitted() | phase: :playing, drawer_id: "a", word: "cat"}
     {:ok, %{state: state}} = Scribble.admit_member(state, %{id: "c", name: "Cara"}, context())
 
-    for actor <- ["a", "c", "unknown"] do
-      assert {:error, _} = Scribble.command(state, actor, {:vote_drawing, :up}, context())
+    for phase <- [:playing, :turn_reveal], actor <- ["a", "c", "unknown"] do
+      assert {:error, _} =
+               Scribble.command(%{state | phase: phase}, actor, {:vote_drawing, :up}, context())
     end
   end
 
@@ -93,10 +94,10 @@ defmodule Flamingo.GameModes.ScribbleTest do
              Scribble.command(state, "b", {:vote_drawing, :invalid}, context())
   end
 
-  test "voting is only available during drawing" do
+  test "voting is only available during drawing and turn reveal" do
     state = %{admitted() | drawer_id: "a", word: "cat"}
 
-    for phase <- [:lobby, :word_choice, :turn_reveal, :game_ended] do
+    for phase <- [:lobby, :word_choice, :game_ended] do
       assert {:error, :not_playing} =
                Scribble.command(%{state | phase: phase}, "b", {:vote_drawing, :up}, context())
     end
@@ -147,12 +148,20 @@ defmodule Flamingo.GameModes.ScribbleTest do
           end
 
         {:ok, %{state: state}} = Scribble.timeout(state, :playing, game_context)
+        reveal_vote = if drawer == "a", do: :down, else: vote || :up
+
+        {:ok, %{state: state}} =
+          Scribble.command(state, guesser, {:vote_drawing, reveal_vote}, game_context)
+
+        {:ok, %{state: state}} =
+          Scribble.command(state, guesser, {:vote_drawing, reveal_vote}, game_context)
+
         {:ok, %{state: state}} = Scribble.timeout(state, :turn_reveal, game_context)
         state
       end)
 
-    assert %{thumbs_up: 2, thumbs_down: 0} = finished.final_result.players["a"]
-    assert %{thumbs_up: 0, thumbs_down: 1} = finished.final_result.players["b"]
+    assert %{thumbs_up: 0, thumbs_down: 2} = finished.final_result.players["a"]
+    assert %{thumbs_up: 1, thumbs_down: 1} = finished.final_result.players["b"]
   end
 
   test "starting a new game clears previous voting results" do
