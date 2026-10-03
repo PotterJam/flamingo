@@ -70,6 +70,7 @@ defmodule Flamingo.MixProject do
   # See the documentation for `Mix` for more info on aliases.
   defp aliases do
     [
+      dev: [&ensure_dev_env/1, "cmd docker compose up --wait db", "setup", "phx.server"],
       setup: ["deps.get", "ecto.setup", "assets.setup", "assets.build"],
       "ecto.setup": ["ecto.create", "ecto.migrate"],
       "ecto.reset": ["ecto.drop", "ecto.setup"],
@@ -83,5 +84,11 @@ defmodule Flamingo.MixProject do
       ],
       precommit: ["compile --warnings-as-errors", "deps.unlock --unused", "format", "test"]
     ]
+  end
+
+  defp ensure_dev_env(_args) do
+    if Mix.env() != :dev do
+      Mix.raise("mix dev must run in the dev environment. Unset MIX_ENV or use MIX_ENV=dev.")
+    end
   end
 end
