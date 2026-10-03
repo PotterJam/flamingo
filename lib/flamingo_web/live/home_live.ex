@@ -1,16 +1,17 @@
 defmodule FlamingoWeb.HomeLive do
   use FlamingoWeb, :live_view
 
-  alias Flamingo.{Avatar, Rooms}
+  alias Flamingo.{Accounts, Avatar, Rooms}
 
   def mount(params, _session, socket) do
     room_code = Map.get(params, "room_code", "")
+    saved_avatar = socket.assigns.current_scope && socket.assigns.current_scope.user.avatar
 
     {:ok,
      assign(socket,
        name: "",
        room_code: room_code,
-       avatar: Avatar.random(),
+       avatar: saved_avatar || Avatar.random(),
        error: nil
      )}
   end
@@ -18,8 +19,8 @@ defmodule FlamingoWeb.HomeLive do
   def render(assigns) do
     ~H"""
     <Layouts.app flash={@flash} current_scope={@current_scope}>
-      <div class="flex min-h-screen w-full flex-col items-center justify-center gap-4 px-4 py-8 max-[359px]:px-1">
-        <Layouts.account_nav current_scope={@current_scope} />
+      <Layouts.account_menu current_scope={@current_scope} avatar={@avatar} />
+      <div class="flex min-h-screen w-full flex-col items-center justify-center gap-4 px-4 pt-24 pb-28 max-[359px]:px-1">
         <.card class="w-full max-w-xs bg-white px-6 py-4">
           <div class="flex justify-center">
             <.logo />
@@ -49,6 +50,8 @@ defmodule FlamingoWeb.HomeLive do
                 id="avatar-customizer"
                 phx-hook="AvatarCustomizer"
                 phx-update="ignore"
+                data-account-id={@current_scope && @current_scope.user.id}
+                data-saved-avatar={to_string(!!(@current_scope && @current_scope.user.avatar))}
                 class="relative flex flex-col items-center justify-center bg-white px-3 py-5 max-[359px]:px-1 sm:p-4"
               >
                 <input
@@ -318,6 +321,7 @@ defmodule FlamingoWeb.HomeLive do
                     maxlength="20"
                     class="rounded-base border-2 border-border bg-white px-3 py-2 text-sm placeholder:text-gray-400 focus:ring-2 focus:ring-ring focus:ring-offset-2 focus:outline-none"
                     id="name-input"
+                    phx-update="ignore"
                   />
 
                   <div class="sm:col-span-2 lg:col-span-1">
@@ -330,6 +334,7 @@ defmodule FlamingoWeb.HomeLive do
                         placeholder="Room name"
                         class="min-w-0 flex-1 rounded-base border-2 border-border bg-white px-3 py-2 text-sm placeholder:text-gray-400 focus:ring-2 focus:ring-ring focus:ring-offset-2 focus:outline-none"
                         id="room-code-input"
+                        phx-update="ignore"
                       />
                       <.button
                         type="submit"
@@ -338,6 +343,7 @@ defmodule FlamingoWeb.HomeLive do
                         variant="neutral"
                         disabled={String.trim(@name) == "" || String.trim(@room_code) == ""}
                         id="join-button"
+                        phx-update="ignore"
                       >
                         Join
                       </.button>
@@ -351,6 +357,7 @@ defmodule FlamingoWeb.HomeLive do
                       class="w-full"
                       disabled={String.trim(@name) == "" || String.trim(@room_code) != ""}
                       id="create-room-button"
+                      phx-update="ignore"
                     >
                       Create room
                     </.button>
@@ -360,9 +367,25 @@ defmodule FlamingoWeb.HomeLive do
             </div>
           </.form>
         </.card>
+        <Layouts.account_status current_scope={@current_scope} />
       </div>
     </Layouts.app>
     """
+  end
+
+  def handle_event("save_avatar", %{"avatar" => avatar}, socket) do
+    if scope = socket.assigns.current_scope do
+      case Accounts.update_avatar(scope, avatar) do
+        {:ok, user} ->
+          {:reply, %{saved: true},
+           assign(socket, current_scope: %{scope | user: user}, avatar: user.avatar)}
+
+        {:error, _changeset} ->
+          {:reply, %{saved: false}, socket}
+      end
+    else
+      {:reply, %{saved: false}, socket}
+    end
   end
 
   def handle_event("create_room", _params, socket) do

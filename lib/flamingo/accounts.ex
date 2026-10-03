@@ -6,7 +6,7 @@ defmodule Flamingo.Accounts do
   import Ecto.Query, warn: false
   alias Flamingo.Repo
 
-  alias Flamingo.Accounts.{User, UserToken, UserNotifier}
+  alias Flamingo.Accounts.{Scope, User, UserToken, UserNotifier}
 
   ## Database getters
 
@@ -63,6 +63,12 @@ defmodule Flamingo.Accounts do
   end
 
   ## Settings
+
+  def update_avatar(%Scope{user: user}, avatar) do
+    user
+    |> Ecto.Changeset.change(avatar: Flamingo.Avatar.normalize(avatar))
+    |> Repo.update()
+  end
 
   @doc """
   Checks whether the user is in sudo mode.

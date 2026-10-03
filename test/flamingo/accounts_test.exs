@@ -4,7 +4,46 @@ defmodule Flamingo.AccountsTest do
   alias Flamingo.Accounts
 
   import Flamingo.AccountsFixtures
-  alias Flamingo.Accounts.{User, UserToken}
+  alias Flamingo.Accounts.{Scope, User, UserToken}
+
+  test "avatar saves are normalized, preserve drawings, and only update the scoped user" do
+    user = user_fixture()
+    other = user_fixture()
+    drawing = "M 13 4 L 28 9"
+
+    assert {:ok, updated} =
+             Accounts.update_avatar(Scope.for_user(user), %{
+               "head" => "3",
+               "body" => 2,
+               "legs" => 99,
+               "feet" => 1,
+               "head_color" => 6,
+               "head_drawing" => drawing,
+               "body_drawing" => "<script>",
+               "feet_drawing" => String.duplicate("M", 3001),
+               "email" => other.email,
+               "user_id" => other.id
+             })
+
+    assert updated.avatar == %{
+             "head" => 3,
+             "body" => 2,
+             "legs" => 0,
+             "feet" => 1,
+             "head_color" => 6,
+             "body_color" => 0,
+             "legs_color" => 0,
+             "feet_color" => 0,
+             "head_drawing" => drawing,
+             "body_drawing" => "",
+             "legs_drawing" => "",
+             "feet_drawing" => ""
+           }
+
+    assert Accounts.get_user!(user.id).avatar == updated.avatar
+    assert Accounts.get_user!(user.id).email == user.email
+    assert Accounts.get_user!(other.id).avatar == nil
+  end
 
   describe "get_user_by_email/1" do
     test "does not return the user if the email does not exist" do

@@ -6,6 +6,7 @@ defmodule Flamingo.Accounts.User do
   @foreign_key_type :binary_id
   schema "users" do
     field :email, :string
+    field :avatar, :map
     field :confirmed_at, :utc_datetime
     field :authenticated_at, :utc_datetime, virtual: true
 
