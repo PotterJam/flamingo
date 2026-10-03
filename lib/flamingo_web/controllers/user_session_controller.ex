@@ -27,6 +27,31 @@ defmodule FlamingoWeb.UserSessionController do
     |> redirect(to: ~p"/users/log-in")
   end
 
+  def delete_account(conn, %{"confirm" => "true"}) do
+    case Accounts.delete_user(conn.assigns.current_scope) do
+      {:ok, tokens} ->
+        UserAuth.disconnect_sessions(tokens)
+
+        conn
+        |> put_flash(:success, "Your account has been deleted. You can still play as a guest.")
+        |> UserAuth.log_out_user()
+
+      {:error, :reauthenticate} ->
+        conn
+        |> put_flash(
+          :error,
+          "Please sign in with a fresh email link before deleting your account."
+        )
+        |> redirect(to: ~p"/users/log-in")
+    end
+  end
+
+  def delete_account(conn, _params) do
+    conn
+    |> put_flash(:error, "Please confirm that you want to delete your account.")
+    |> redirect(to: ~p"/users/settings")
+  end
+
   def delete(conn, _params) do
     conn
     |> put_flash(:success, "Logged out successfully.")

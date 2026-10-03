@@ -8,6 +8,57 @@ defmodule FlamingoWeb.UserSessionControllerTest do
     %{unconfirmed_user: unconfirmed_user_fixture(), user: user_fixture()}
   end
 
+  describe "DELETE /users/account" do
+    test "deletes only the current account and revokes all its tokens and sessions", %{
+      conn: conn,
+      user: user
+    } do
+      other = user_fixture()
+      other_token = Accounts.generate_user_session_token(other)
+      {magic_link, _} = generate_user_magic_link_token(user)
+      session_token = Accounts.generate_user_session_token(user)
+      topic = "users_sessions:#{Base.url_encode64(session_token)}"
+      FlamingoWeb.Endpoint.subscribe(topic)
+
+      conn =
+        conn
+        |> log_in_user(user)
+        |> delete(~p"/users/account", %{confirm: "true", user_id: other.id})
+
+      assert redirected_to(conn) == ~p"/"
+      refute get_session(conn, :user_token)
+      refute Accounts.get_user_by_email(user.email)
+      refute Accounts.get_user_by_session_token(session_token)
+      refute Accounts.get_user_by_magic_link_token(magic_link)
+      refute Flamingo.Repo.get_by(Accounts.UserToken, user_id: user.id)
+      assert Accounts.get_user_by_session_token(other_token)
+      assert_receive %Phoenix.Socket.Broadcast{topic: ^topic, event: "disconnect"}
+    end
+
+    test "requires both a confirmation and a recent sign-in", %{conn: conn, user: user} do
+      missing_confirmation =
+        conn |> log_in_user(user) |> delete(~p"/users/account", %{confirm: "false"})
+
+      assert redirected_to(missing_confirmation) == ~p"/users/settings"
+      assert Accounts.get_user_by_email(user.email)
+
+      stale =
+        conn
+        |> log_in_user(user,
+          token_authenticated_at: DateTime.add(DateTime.utc_now(:second), -11, :minute)
+        )
+        |> delete(~p"/users/account", %{confirm: "true"})
+
+      assert redirected_to(stale) == ~p"/users/log-in"
+      assert Accounts.get_user_by_email(user.email)
+    end
+
+    test "rejects guests", %{conn: conn} do
+      assert conn |> delete(~p"/users/account", %{confirm: "true"}) |> redirected_to() ==
+               ~p"/users/log-in"
+    end
+  end
+
   describe "POST /users/log-in without a magic token" do
     test "rejects email and password credentials", %{conn: conn, user: user} do
       conn =

@@ -5,6 +5,22 @@ defmodule FlamingoWeb.UserLive.SettingsTest do
   import Phoenix.LiveViewTest
   import Flamingo.AccountsFixtures
 
+  test "account deletion can be cancelled and confirmed through the protected form", %{conn: conn} do
+    user = user_fixture()
+    conn = log_in_user(conn, user)
+    {:ok, view, _} = live(conn, ~p"/users/settings")
+    view |> element("#delete-account") |> render_click()
+    assert has_element?(view, "#delete-account-confirmation")
+    view |> element("#cancel-delete-account") |> render_click()
+    refute has_element?(view, "#delete-account-confirmation")
+    assert Accounts.get_user_by_email(user.email)
+
+    view |> element("#delete-account") |> render_click()
+    conn = view |> form("#delete-account-form", %{confirm: "true"}) |> submit_form(conn)
+    assert redirected_to(conn) == ~p"/"
+    refute Accounts.get_user_by_email(user.email)
+  end
+
   describe "Settings page" do
     test "redirects if user is not logged in", %{conn: conn} do
       assert {:error, redirect} = live(conn, ~p"/users/settings")
@@ -88,7 +104,7 @@ defmodule FlamingoWeb.UserLive.SettingsTest do
 
       assert {:live_redirect, %{to: path, flash: flash}} = redirect
       assert path == ~p"/users/settings"
-      assert %{"info" => message} = flash
+      assert %{"success" => message} = flash
       assert message == "Email changed successfully."
       refute Accounts.get_user_by_email(user.email)
       assert Accounts.get_user_by_email(email)

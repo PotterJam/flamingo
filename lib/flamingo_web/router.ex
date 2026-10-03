@@ -41,6 +41,8 @@ defmodule FlamingoWeb.Router do
   scope "/", FlamingoWeb do
     pipe_through [:browser, :require_authenticated_user]
 
+    delete "/users/account", UserSessionController, :delete_account
+
     live_session :require_authenticated_user,
       on_mount: [{FlamingoWeb.UserAuth, :require_authenticated}] do
       live "/users/settings", UserLive.Settings, :edit

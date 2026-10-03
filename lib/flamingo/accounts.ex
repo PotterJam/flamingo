@@ -83,6 +83,20 @@ defmodule Flamingo.Accounts do
     |> Repo.update()
   end
 
+  def delete_user(%Scope{user: user}) do
+    if sudo_mode?(user, -10) do
+      Repo.transact(fn ->
+        tokens = Repo.all_by(UserToken, user_id: user.id)
+
+        with {:ok, _user} <- Repo.delete(user) do
+          {:ok, tokens}
+        end
+      end)
+    else
+      {:error, :reauthenticate}
+    end
+  end
+
   @doc """
   Checks whether the user is in sudo mode.
 

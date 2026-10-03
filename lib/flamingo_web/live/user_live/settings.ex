@@ -9,31 +9,83 @@ defmodule FlamingoWeb.UserLive.Settings do
   def render(assigns) do
     ~H"""
     <Layouts.app flash={@flash} current_scope={@current_scope} show_sound_controls={false}>
-      <Layouts.account_panel current_scope={@current_scope}>
-        <div class="text-center">
-          <.header>
-            Account Settings
-            <:subtitle>Manage the email address you use to log in</:subtitle>
-          </.header>
-        </div>
+      <Layouts.account_panel current_scope={@current_scope} settings>
+        <h1 class="border-b border-border/30 pb-4 text-2xl font-bold">Account settings</h1>
 
         <.form
           for={@email_form}
           id="email_form"
-          class="space-y-4"
+          class="grid gap-4 sm:grid-cols-[1fr_auto] sm:items-end"
           phx-submit="update_email"
           phx-change="validate_email"
         >
           <.input
             field={@email_form[:email]}
             type="email"
-            label="Email"
+            label="Email address"
             autocomplete="username"
             spellcheck="false"
             required
           />
-          <.button phx-disable-with="Changing...">Change Email</.button>
+          <.button phx-disable-with="Sending..." variant="neutral" class="mb-2 font-bold">
+            Change email
+          </.button>
+          <p class="text-sm text-muted-foreground sm:col-span-2">
+            We'll send a confirmation link to your new address.
+          </p>
         </.form>
+
+        <section class="border-t border-border/30 pt-5" aria-label="Delete account">
+          <%= if @confirm_delete do %>
+            <div id="delete-account-confirmation" class="space-y-4">
+              <h2 class="font-bold">Delete your account?</h2>
+              <p class="text-sm">
+                This permanently deletes your account, saved avatar, and sign-in links.
+                You can still play as a guest. This cannot be undone.
+              </p>
+              <.form
+                for={@delete_form}
+                id="delete-account-form"
+                action={~p"/users/account"}
+                method="delete"
+                class="space-y-4"
+              >
+                <.input
+                  field={@delete_form[:confirm]}
+                  type="checkbox"
+                  label="I understand this permanently deletes my account."
+                  required
+                />
+                <div class="flex flex-wrap gap-3">
+                  <.button
+                    id="confirm-delete-account"
+                    variant="neutral"
+                    class="font-bold text-red-700"
+                  >
+                    Delete my account
+                  </.button>
+                  <.button
+                    id="cancel-delete-account"
+                    type="button"
+                    phx-click="cancel_delete"
+                    variant="neutral"
+                  >
+                    Keep my account
+                  </.button>
+                </div>
+              </.form>
+            </div>
+          <% else %>
+            <button
+              id="delete-account"
+              type="button"
+              phx-click="confirm_delete"
+              class="cursor-pointer text-sm text-red-700 underline underline-offset-4 hover:text-red-900"
+            >
+              Delete account…
+            </button>
+          <% end %>
+        </section>
       </Layouts.account_panel>
     </Layouts.app>
     """
@@ -44,7 +96,7 @@ defmodule FlamingoWeb.UserLive.Settings do
     socket =
       case Accounts.update_user_email(socket.assigns.current_scope.user, token) do
         {:ok, _user} ->
-          put_flash(socket, :info, "Email changed successfully.")
+          put_flash(socket, :success, "Email changed successfully.")
 
         {:error, _} ->
           put_flash(socket, :error, "Email change link is invalid or it has expired.")
@@ -57,10 +109,23 @@ defmodule FlamingoWeb.UserLive.Settings do
     user = socket.assigns.current_scope.user
     email_changeset = Accounts.change_user_email(user, %{}, validate_unique: false)
 
-    {:ok, assign(socket, :email_form, to_form(email_changeset))}
+    {:ok,
+     assign(socket,
+       email_form: to_form(email_changeset),
+       confirm_delete: false,
+       delete_form: to_form(%{"confirm" => false})
+     )}
   end
 
   @impl true
+  def handle_event("confirm_delete", _params, socket) do
+    {:noreply, assign(socket, confirm_delete: true)}
+  end
+
+  def handle_event("cancel_delete", _params, socket) do
+    {:noreply, assign(socket, confirm_delete: false)}
+  end
+
   def handle_event("validate_email", params, socket) do
     %{"user" => user_params} = params
 
