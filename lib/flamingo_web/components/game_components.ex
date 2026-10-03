@@ -6,25 +6,33 @@ defmodule FlamingoWeb.GameComponents do
   import FlamingoWeb.CoreComponents, only: [button: 1, button_group: 1, icon: 1, input: 1]
 
   attr :class, :any, default: nil
+  attr :radius, :string, default: nil, doc: "Optional CSS border radius, such as 30px or 2rem"
+  attr :rest, :global
   slot :inner_block, required: true
 
   def box(assigns) do
     ~H"""
-    <div class={[
-      "rounded-base border-2 border-border shadow-shadow",
-      @class
-    ]}>
+    <div
+      class={[
+        "rounded-base border-2 border-border shadow-shadow",
+        @class
+      ]}
+      style={@radius && "border-radius: #{@radius}"}
+      {@rest}
+    >
       {render_slot(@inner_block)}
     </div>
     """
   end
 
   attr :class, :any, default: nil
+  attr :radius, :string, default: nil, doc: "Optional CSS border radius, forwarded to the box"
+  attr :rest, :global
   slot :inner_block, required: true
 
   def card(assigns) do
     ~H"""
-    <.box class={["bg-background", @class]}>
+    <.box class={["bg-background", @class]} radius={@radius} {@rest}>
       {render_slot(@inner_block)}
     </.box>
     """

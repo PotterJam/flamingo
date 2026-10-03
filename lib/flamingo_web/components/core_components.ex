@@ -63,7 +63,7 @@ defmodule FlamingoWeb.CoreComponents do
   attr :id, :string, doc: "the optional id of flash container"
   attr :flash, :map, default: %{}, doc: "the map of flash messages to display"
   attr :title, :string, default: nil
-  attr :kind, :atom, values: [:info, :error], doc: "used for styling and flash lookup"
+  attr :kind, :atom, values: [:info, :success, :error], doc: "used for styling and flash lookup"
   attr :rest, :global, doc: "the arbitrary HTML attributes to add to the flash container"
 
   slot :inner_block, doc: "the optional inner block that renders the flash message"
@@ -77,23 +77,31 @@ defmodule FlamingoWeb.CoreComponents do
       id={@id}
       phx-click={JS.push("lv:clear-flash", value: %{key: @kind}) |> hide("##{@id}")}
       role="alert"
-      class="toast toast-top toast-end z-50"
+      class="pointer-events-auto w-full"
       {@rest}
     >
       <div class={[
-        "alert w-80 sm:w-96 max-w-80 sm:max-w-96 text-wrap",
-        @kind == :info && "alert-info",
-        @kind == :error && "alert-error"
+        "flex items-start gap-3 rounded-base border-2 p-4 text-sm shadow-[4px_4px_0_0]",
+        @kind == :info &&
+          "border-sky-600 bg-[color-mix(in_oklab,var(--color-sky-50)_25%,white)] text-sky-900 shadow-sky-950",
+        @kind == :success &&
+          "border-green-600 bg-[color-mix(in_oklab,var(--color-green-50)_25%,white)] text-green-900 shadow-green-950",
+        @kind == :error &&
+          "border-red-600 bg-[color-mix(in_oklab,var(--color-red-50)_25%,white)] text-red-900 shadow-red-950"
       ]}>
         <.icon :if={@kind == :info} name={:info} class="size-5 shrink-0" />
+        <.icon :if={@kind == :success} name={:check_circle} class="size-5 shrink-0" />
         <.icon :if={@kind == :error} name={:circle_alert} class="size-5 shrink-0" />
-        <div>
+        <div class="min-w-0 flex-1 break-words">
           <p :if={@title} class="font-semibold">{@title}</p>
           <p>{msg}</p>
         </div>
-        <div class="flex-1" />
-        <button type="button" class="group self-start cursor-pointer" aria-label={gettext("close")}>
-          <.icon name={:x} class="size-5 opacity-40 group-hover:opacity-70" />
+        <button
+          type="button"
+          class="shrink-0 cursor-pointer opacity-60 transition-opacity hover:opacity-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-current"
+          aria-label={gettext("close")}
+        >
+          <.icon name={:x} class="size-5" />
         </button>
       </div>
     </div>
@@ -115,6 +123,7 @@ defmodule FlamingoWeb.CoreComponents do
   attr :class, :any, default: nil
   attr :variant, :string, default: "default", values: ~w(default neutral ghost outline)
   attr :size, :string, default: "default", values: ~w(default sm icon)
+  attr :rounded, :boolean, default: false
   attr :on_confirm_click, :any, default: nil
   slot :inner_block, required: true
 
@@ -124,7 +133,8 @@ defmodule FlamingoWeb.CoreComponents do
       assigns
       |> assign(:confirm_click, JS.transition(on_confirm_click, "confirmed", time: 1000))
       |> assign(:computed_class, [
-        "rounded-base border-2 border-border transition-all cursor-pointer",
+        "border-2 border-border transition-all cursor-pointer",
+        if(assigns.rounded, do: "rounded-full", else: "rounded-base"),
         "disabled:opacity-50 disabled:cursor-not-allowed",
         "group/confirm",
         button_size_classes(assigns.size),
@@ -150,7 +160,8 @@ defmodule FlamingoWeb.CoreComponents do
   def button(%{rest: rest} = assigns) do
     assigns =
       assign(assigns, :computed_class, [
-        "rounded-base border-2 border-border transition-all cursor-pointer",
+        "border-2 border-border transition-all cursor-pointer",
+        if(assigns.rounded, do: "rounded-full", else: "rounded-base"),
         "disabled:opacity-50 disabled:cursor-not-allowed",
         button_size_classes(assigns.size),
         button_variant_classes(assigns.variant),

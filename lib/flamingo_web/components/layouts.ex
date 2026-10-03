@@ -195,8 +195,13 @@ defmodule FlamingoWeb.Layouts do
 
   def flash_group(assigns) do
     ~H"""
-    <div id={@id} aria-live="polite">
+    <div
+      id={@id}
+      aria-live="polite"
+      class="pointer-events-none fixed left-1/2 top-4 z-50 flex w-[calc(100%-2rem)] max-w-sm -translate-x-1/2 flex-col gap-3"
+    >
       <.flash kind={:info} flash={@flash} />
+      <.flash kind={:success} flash={@flash} />
       <.flash kind={:error} flash={@flash} />
 
       <.flash
