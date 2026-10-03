@@ -20,7 +20,7 @@ defmodule FlamingoWeb.UserAuthTest do
     %{user: %{user_fixture() | authenticated_at: DateTime.utc_now(:second)}, conn: conn}
   end
 
-  describe "log_in_user/3" do
+  describe "log_in_user/2" do
     test "stores the user token in the session", %{conn: conn, user: user} do
       conn = UserAuth.log_in_user(conn, user)
       assert token = get_session(conn, :user_token)
@@ -59,50 +59,46 @@ defmodule FlamingoWeb.UserAuthTest do
       refute get_session(conn, :to_be_removed)
     end
 
-    test "redirects to the configured path", %{conn: conn, user: user} do
+    test "always redirects home", %{conn: conn, user: user} do
       conn = conn |> put_session(:user_return_to, "/hello") |> UserAuth.log_in_user(user)
-      assert redirected_to(conn) == "/hello"
+      assert redirected_to(conn) == ~p"/"
     end
 
-    test "writes a cookie if remember_me is configured", %{conn: conn, user: user} do
-      conn = conn |> fetch_cookies() |> UserAuth.log_in_user(user, %{"remember_me" => "true"})
+    test "always writes a signed persistent cookie", %{conn: conn, user: user} do
+      conn = conn |> fetch_cookies() |> UserAuth.log_in_user(user)
       assert get_session(conn, :user_token) == conn.cookies[@remember_me_cookie]
-      assert get_session(conn, :user_remember_me) == true
 
       assert %{value: signed_token, max_age: max_age} = conn.resp_cookies[@remember_me_cookie]
       assert signed_token != get_session(conn, :user_token)
       assert max_age == @remember_me_cookie_max_age
     end
 
-    test "redirects to settings when user is already logged in", %{conn: conn, user: user} do
+    test "redirects home when user is already logged in", %{conn: conn, user: user} do
       conn =
         conn
         |> assign(:current_scope, Scope.for_user(user))
         |> UserAuth.log_in_user(user)
 
-      assert redirected_to(conn) == ~p"/users/settings"
+      assert redirected_to(conn) == ~p"/"
     end
 
-    test "writes a cookie if remember_me was set in previous session", %{conn: conn, user: user} do
-      conn = conn |> fetch_cookies() |> UserAuth.log_in_user(user, %{"remember_me" => "true"})
-      assert get_session(conn, :user_token) == conn.cookies[@remember_me_cookie]
-      assert get_session(conn, :user_remember_me) == true
+    test "refreshes the remembered cookie when logging in again", %{conn: conn, user: user} do
+      conn = conn |> fetch_cookies() |> UserAuth.log_in_user(user)
+      previous_token = get_session(conn, :user_token)
 
       conn =
         conn
         |> recycle()
         |> Map.replace!(:secret_key_base, FlamingoWeb.Endpoint.config(:secret_key_base))
         |> fetch_cookies()
-        |> init_test_session(%{user_remember_me: true})
+        |> init_test_session(%{})
 
-      # the conn is already logged in and has the remember_me cookie set,
-      # now we log in again and even without explicitly setting remember_me,
-      # the cookie should be set again
-      conn = conn |> UserAuth.log_in_user(user, %{})
+      conn = UserAuth.log_in_user(conn, user)
+      assert get_session(conn, :user_token) != previous_token
+      assert get_session(conn, :user_token) == conn.cookies[@remember_me_cookie]
       assert %{value: signed_token, max_age: max_age} = conn.resp_cookies[@remember_me_cookie]
       assert signed_token != get_session(conn, :user_token)
       assert max_age == @remember_me_cookie_max_age
-      assert get_session(conn, :user_remember_me) == true
     end
   end
 
@@ -157,7 +153,7 @@ defmodule FlamingoWeb.UserAuthTest do
 
     test "authenticates user from cookies", %{conn: conn, user: user} do
       logged_in_conn =
-        conn |> fetch_cookies() |> UserAuth.log_in_user(user, %{"remember_me" => "true"})
+        conn |> fetch_cookies() |> UserAuth.log_in_user(user)
 
       user_token = logged_in_conn.cookies[@remember_me_cookie]
       %{value: signed_token} = logged_in_conn.resp_cookies[@remember_me_cookie]
@@ -170,7 +166,6 @@ defmodule FlamingoWeb.UserAuthTest do
       assert conn.assigns.current_scope.user.id == user.id
       assert conn.assigns.current_scope.user.authenticated_at == user.authenticated_at
       assert get_session(conn, :user_token) == user_token
-      assert get_session(conn, :user_remember_me)
 
       assert get_session(conn, :live_socket_id) ==
                "users_sessions:#{Base.url_encode64(user_token)}"
@@ -185,7 +180,7 @@ defmodule FlamingoWeb.UserAuthTest do
 
     test "reissues a new token after a few days and refreshes cookie", %{conn: conn, user: user} do
       logged_in_conn =
-        conn |> fetch_cookies() |> UserAuth.log_in_user(user, %{"remember_me" => "true"})
+        conn |> fetch_cookies() |> UserAuth.log_in_user(user)
 
       token = logged_in_conn.cookies[@remember_me_cookie]
       %{value: signed_token} = logged_in_conn.resp_cookies[@remember_me_cookie]
@@ -196,7 +191,6 @@ defmodule FlamingoWeb.UserAuthTest do
       conn =
         conn
         |> put_session(:user_token, token)
-        |> put_session(:user_remember_me, true)
         |> put_req_cookie(@remember_me_cookie, signed_token)
         |> UserAuth.fetch_current_scope_for_user([])
 
@@ -327,32 +321,6 @@ defmodule FlamingoWeb.UserAuthTest do
 
       assert Phoenix.Flash.get(conn.assigns.flash, :error) ==
                "You must log in to access this page."
-    end
-
-    test "stores the path to redirect to on GET", %{conn: conn} do
-      halted_conn =
-        %{conn | path_info: ["foo"], query_string: ""}
-        |> fetch_flash()
-        |> UserAuth.require_authenticated_user([])
-
-      assert halted_conn.halted
-      assert get_session(halted_conn, :user_return_to) == "/foo"
-
-      halted_conn =
-        %{conn | path_info: ["foo"], query_string: "bar=baz"}
-        |> fetch_flash()
-        |> UserAuth.require_authenticated_user([])
-
-      assert halted_conn.halted
-      assert get_session(halted_conn, :user_return_to) == "/foo?bar=baz"
-
-      halted_conn =
-        %{conn | path_info: ["foo"], query_string: "bar", method: "POST"}
-        |> fetch_flash()
-        |> UserAuth.require_authenticated_user([])
-
-      assert halted_conn.halted
-      refute get_session(halted_conn, :user_return_to)
     end
 
     test "does not redirect if user is authenticated", %{conn: conn, user: user} do

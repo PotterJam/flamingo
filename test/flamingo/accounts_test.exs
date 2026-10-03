@@ -106,6 +106,35 @@ defmodule Flamingo.AccountsTest do
     end
   end
 
+  describe "get_or_register_user/1" do
+    test "creates one unconfirmed account and reuses it on retries" do
+      email = unique_user_email()
+      assert {:ok, user} = Accounts.get_or_register_user(email)
+      assert user.email == email
+      assert is_nil(user.confirmed_at)
+      assert {:ok, ^user} = Accounts.get_or_register_user(email)
+      assert Repo.aggregate(User, :count) == 1
+    end
+
+    test "reuses existing accounts case-insensitively without replacing their data" do
+      user = user_fixture()
+      {:ok, user} = Accounts.update_avatar(Scope.for_user(user), %{"head" => 3})
+
+      assert {:ok, found} = Accounts.get_or_register_user(String.upcase(user.email))
+      assert found == Accounts.get_user!(user.id)
+      assert found.email == user.email
+      assert found.confirmed_at == user.confirmed_at
+      assert found.avatar == user.avatar
+      assert Repo.aggregate(User, :count) == 1
+    end
+
+    test "rejects invalid emails without creating an account" do
+      assert {:error, changeset} = Accounts.get_or_register_user("not an email")
+      assert %{email: ["must have the @ sign and no spaces"]} = errors_on(changeset)
+      assert Repo.aggregate(User, :count) == 0
+    end
+  end
+
   describe "sudo_mode?/2" do
     test "validates the authenticated_at time" do
       now = DateTime.utc_now()

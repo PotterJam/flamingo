@@ -59,7 +59,7 @@ defmodule FlamingoWeb.Router do
       live "/game/:room_id/scribble", ScribbleLive
       live "/game/:room_id/telephone", TelephoneLive
       live "/drawing", DrawingLive
-      live "/users/register", UserLive.Registration, :new
+      live "/users/register", UserLive.Login, :register
       live "/users/log-in", UserLive.Login, :new
       live "/users/log-in/:token", UserLive.Confirmation, :new
     end

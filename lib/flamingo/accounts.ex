@@ -62,6 +62,19 @@ defmodule Flamingo.Accounts do
     |> Repo.insert()
   end
 
+  @doc """
+  Finds or creates an unconfirmed account for the email login flow.
+  Existing accounts are left unchanged, including when requests arrive together.
+  """
+  def get_or_register_user(email) do
+    changeset = User.email_changeset(%User{}, %{email: email}, validate_unique: false)
+
+    with {:ok, _user} <-
+           Repo.insert(changeset, on_conflict: :nothing, conflict_target: :email) do
+      {:ok, get_user_by_email(email)}
+    end
+  end
+
   ## Settings
 
   def update_avatar(%Scope{user: user}, avatar) do

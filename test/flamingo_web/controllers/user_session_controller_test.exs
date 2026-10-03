@@ -31,6 +31,7 @@ defmodule FlamingoWeb.UserSessionControllerTest do
         })
 
       assert get_session(conn, :user_token)
+      assert conn.resp_cookies["_flamingo_web_user_remember_me"]
       assert redirected_to(conn) == ~p"/"
 
       # The next request resolves the authenticated account from the session.
@@ -39,19 +40,19 @@ defmodule FlamingoWeb.UserSessionControllerTest do
       assert conn.assigns.current_scope.user.id == user.id
     end
 
-    test "logs the user in with remember me", %{conn: conn, user: user} do
+    test "cannot opt out of remembered login with an old parameter", %{conn: conn, user: user} do
       {token, _hashed_token} = generate_user_magic_link_token(user)
 
       conn =
         post(conn, ~p"/users/log-in", %{
-          "user" => %{"token" => token, "remember_me" => "true"}
+          "user" => %{"token" => token, "remember_me" => "false"}
         })
 
       assert conn.resp_cookies["_flamingo_web_user_remember_me"]
       assert redirected_to(conn) == ~p"/"
     end
 
-    test "logs the user in with return to", %{conn: conn, user: user} do
+    test "returns home even if an old return path is stored", %{conn: conn, user: user} do
       {token, _hashed_token} = generate_user_magic_link_token(user)
 
       conn =
@@ -59,8 +60,8 @@ defmodule FlamingoWeb.UserSessionControllerTest do
         |> init_test_session(user_return_to: "/foo/bar")
         |> post(~p"/users/log-in", %{"user" => %{"token" => token}})
 
-      assert redirected_to(conn) == "/foo/bar"
-      assert Phoenix.Flash.get(conn.assigns.flash, :info) =~ "Welcome back!"
+      assert redirected_to(conn) == ~p"/"
+      assert Phoenix.Flash.get(conn.assigns.flash, :success) == "Logged in."
     end
 
     test "confirms unconfirmed user", %{conn: conn, unconfirmed_user: user} do
@@ -69,13 +70,13 @@ defmodule FlamingoWeb.UserSessionControllerTest do
 
       conn =
         post(conn, ~p"/users/log-in", %{
-          "user" => %{"token" => token},
-          "_action" => "confirmed"
+          "user" => %{"token" => token}
         })
 
       assert get_session(conn, :user_token)
+      assert conn.resp_cookies["_flamingo_web_user_remember_me"]
       assert redirected_to(conn) == ~p"/"
-      assert Phoenix.Flash.get(conn.assigns.flash, :info) =~ "User confirmed successfully."
+      assert Phoenix.Flash.get(conn.assigns.flash, :success) == "Logged in."
 
       assert Accounts.get_user!(user.id).confirmed_at
 
@@ -113,14 +114,14 @@ defmodule FlamingoWeb.UserSessionControllerTest do
       conn = conn |> log_in_user(user) |> delete(~p"/users/log-out")
       assert redirected_to(conn) == ~p"/"
       refute get_session(conn, :user_token)
-      assert Phoenix.Flash.get(conn.assigns.flash, :info) =~ "Logged out successfully"
+      assert Phoenix.Flash.get(conn.assigns.flash, :success) =~ "Logged out successfully"
     end
 
     test "succeeds even if the user is not logged in", %{conn: conn} do
       conn = delete(conn, ~p"/users/log-out")
       assert redirected_to(conn) == ~p"/"
       refute get_session(conn, :user_token)
-      assert Phoenix.Flash.get(conn.assigns.flash, :info) =~ "Logged out successfully"
+      assert Phoenix.Flash.get(conn.assigns.flash, :success) =~ "Logged out successfully"
     end
   end
 end

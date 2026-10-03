@@ -2,28 +2,38 @@ defmodule FlamingoWeb.UserLive.Login do
   use FlamingoWeb, :live_view
 
   alias Flamingo.Accounts
+  alias Flamingo.Accounts.User
 
   @impl true
   def render(assigns) do
     ~H"""
     <Layouts.app flash={@flash} current_scope={@current_scope} show_sound_controls={false}>
       <Layouts.account_panel current_scope={@current_scope}>
-        <div class="text-center">
-          <.header>
-            <p>Log in</p>
-            <:subtitle>
-              <%= if @current_scope do %>
-                You need to reauthenticate to perform sensitive actions on your account.
-              <% else %>
-                Don't have an account? <.link
-                  navigate={~p"/users/register"}
-                  class="font-semibold underline underline-offset-4"
-                  phx-no-format
-                >Sign up</.link> for an account now.
-              <% end %>
-            </:subtitle>
-          </.header>
+        <div
+          :if={@sent_email}
+          id="login-email-sent"
+          role="status"
+          tabindex="-1"
+          phx-mounted={JS.focus()}
+          class="space-y-3 focus:outline-none"
+        >
+          <h1 class="text-3xl font-bold text-foreground">Check your email</h1>
+          <p class="text-sm text-neutral-600">
+            We've sent a login link to <strong class="break-all text-foreground">{@sent_email}</strong>.
+          </p>
+          <p class="text-sm text-neutral-600">If you don't see it, check your spam folder.</p>
         </div>
+
+        <header :if={!@sent_email} class="space-y-2">
+          <h1 id="login-heading" class="text-3xl font-bold text-foreground">Log in</h1>
+          <p class="text-sm text-neutral-600">
+            <%= if @current_scope do %>
+              Log in again to make changes to your account.
+            <% else %>
+              If you don't already have an email registered this will create your account.
+            <% end %>
+          </p>
+        </header>
 
         <div
           :if={local_mail_adapter?()}
@@ -39,6 +49,7 @@ defmodule FlamingoWeb.UserLive.Login do
         </div>
 
         <.form
+          :if={!@sent_email}
           for={@form}
           id="login_form_magic"
           class="space-y-4"
@@ -56,7 +67,7 @@ defmodule FlamingoWeb.UserLive.Login do
             phx-mounted={JS.focus()}
           />
           <.button id="magic-login-submit" phx-disable-with="Sending link..." class="w-full">
-            Log in with email <span aria-hidden="true">→</span>
+            Log in
           </.button>
         </.form>
       </Layouts.account_panel>
@@ -65,32 +76,41 @@ defmodule FlamingoWeb.UserLive.Login do
   end
 
   @impl true
+  def mount(_params, _session, %{assigns: %{live_action: :register}} = socket) do
+    destination = if socket.assigns.current_scope, do: ~p"/", else: ~p"/users/log-in"
+    {:ok, redirect(socket, to: destination)}
+  end
+
   def mount(_params, _session, socket) do
     email =
       Phoenix.Flash.get(socket.assigns.flash, :email) ||
         get_in(socket.assigns, [:current_scope, Access.key(:user), Access.key(:email)])
 
-    form = to_form(%{"email" => email}, as: "user")
+    form =
+      %User{}
+      |> Accounts.change_user_email(%{email: email}, validate_unique: false)
+      |> to_form(as: "user")
 
-    {:ok, assign(socket, form: form)}
+    {:ok, assign(socket, form: form, sent_email: nil)}
   end
 
   @impl true
   def handle_event("submit_magic", %{"user" => %{"email" => email}}, socket) do
-    if user = Accounts.get_user_by_email(email) do
-      Accounts.deliver_login_instructions(
-        user,
-        &url(~p"/users/log-in/#{&1}")
-      )
+    with {:ok, user} <- Accounts.get_or_register_user(email),
+         {:ok, _email} <-
+           Accounts.deliver_login_instructions(user, &url(~p"/users/log-in/#{&1}")) do
+      {:noreply,
+       socket
+       |> clear_flash()
+       |> assign(sent_email: user.email)}
+    else
+      {:error, %Ecto.Changeset{} = changeset} ->
+        {:noreply, assign(socket, form: to_form(changeset, as: "user"))}
+
+      {:error, _reason} ->
+        {:noreply,
+         put_flash(socket, :error, "We couldn't send your login link. Please try again.")}
     end
-
-    info =
-      "If your email is in our system, you will receive instructions for logging in shortly."
-
-    {:noreply,
-     socket
-     |> put_flash(:info, info)
-     |> push_navigate(to: ~p"/users/log-in")}
   end
 
   defp local_mail_adapter? do

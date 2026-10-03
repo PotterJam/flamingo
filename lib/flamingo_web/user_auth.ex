@@ -19,7 +19,7 @@ defmodule FlamingoWeb.UserAuth do
 
   # How old the session token should be before a new one is issued. When a request is made
   # with a session token older than this value, then a new session token will be created
-  # and the session and remember-me cookies (if set) will be updated with the new token.
+  # and the session and remember-me cookies will be updated with the new token.
   # Lowering this value will result in more tokens being created by active users. Increasing
   # it will result in less time before a session token expires for a user to get issued a new
   # token. This can be set to a value greater than `@max_cookie_age_in_days` to disable
@@ -27,17 +27,12 @@ defmodule FlamingoWeb.UserAuth do
   @session_reissue_age_in_days 7
 
   @doc """
-  Logs the user in.
-
-  Redirects to the session's `:user_return_to` path
-  or falls back to the `signed_in_path/1`.
+  Logs the user in with a remembered session and redirects home.
   """
-  def log_in_user(conn, user, params \\ %{}) do
-    user_return_to = get_session(conn, :user_return_to)
-
+  def log_in_user(conn, user) do
     conn
-    |> create_or_extend_session(user, params)
-    |> redirect(to: user_return_to || signed_in_path(conn))
+    |> create_or_extend_session(user)
+    |> redirect(to: ~p"/")
   end
 
   @doc """
@@ -82,7 +77,7 @@ defmodule FlamingoWeb.UserAuth do
       conn = fetch_cookies(conn, signed: [@remember_me_cookie])
 
       if token = conn.cookies[@remember_me_cookie] do
-        {token, conn |> put_token_in_session(token) |> put_session(:user_remember_me, true)}
+        {token, put_token_in_session(conn, token)}
       else
         nil
       end
@@ -94,7 +89,7 @@ defmodule FlamingoWeb.UserAuth do
     token_age = DateTime.diff(DateTime.utc_now(:second), token_inserted_at, :day)
 
     if token_age >= @session_reissue_age_in_days do
-      create_or_extend_session(conn, user, %{})
+      create_or_extend_session(conn, user)
     else
       conn
     end
@@ -108,14 +103,13 @@ defmodule FlamingoWeb.UserAuth do
   # When the session is created, rather than extended, the renew_session
   # function will clear the session to avoid fixation attacks. See the
   # renew_session function to customize this behaviour.
-  defp create_or_extend_session(conn, user, params) do
+  defp create_or_extend_session(conn, user) do
     token = Accounts.generate_user_session_token(user)
-    remember_me = get_session(conn, :user_remember_me)
 
     conn
     |> renew_session(user)
     |> put_token_in_session(token)
-    |> maybe_write_remember_me_cookie(token, params, remember_me)
+    |> put_resp_cookie(@remember_me_cookie, token, @remember_me_options)
   end
 
   # Do not renew session if the user is already logged in
@@ -146,20 +140,6 @@ defmodule FlamingoWeb.UserAuth do
     conn
     |> configure_session(renew: true)
     |> clear_session()
-  end
-
-  defp maybe_write_remember_me_cookie(conn, token, %{"remember_me" => "true"}, _),
-    do: write_remember_me_cookie(conn, token)
-
-  defp maybe_write_remember_me_cookie(conn, token, _params, true),
-    do: write_remember_me_cookie(conn, token)
-
-  defp maybe_write_remember_me_cookie(conn, _token, _params, _), do: conn
-
-  defp write_remember_me_cookie(conn, token) do
-    conn
-    |> put_session(:user_remember_me, true)
-    |> put_resp_cookie(@remember_me_cookie, token, @remember_me_options)
   end
 
   defp put_token_in_session(conn, token) do
@@ -256,14 +236,6 @@ defmodule FlamingoWeb.UserAuth do
     end)
   end
 
-  @doc "Returns the path to redirect to after log in."
-  # the user was already logged in, redirect to settings
-  def signed_in_path(%Plug.Conn{assigns: %{current_scope: %Scope{user: %Accounts.User{}}}}) do
-    ~p"/users/settings"
-  end
-
-  def signed_in_path(_), do: ~p"/"
-
   @doc """
   Plug for routes that require the user to be authenticated.
   """
@@ -273,15 +245,8 @@ defmodule FlamingoWeb.UserAuth do
     else
       conn
       |> put_flash(:error, "You must log in to access this page.")
-      |> maybe_store_return_to()
       |> redirect(to: ~p"/users/log-in")
       |> halt()
     end
   end
-
-  defp maybe_store_return_to(%{method: "GET"} = conn) do
-    put_session(conn, :user_return_to, current_path(conn))
-  end
-
-  defp maybe_store_return_to(conn), do: conn
 end

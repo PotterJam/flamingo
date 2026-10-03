@@ -101,62 +101,26 @@ defmodule FlamingoWeb.Layouts do
   end
 
   attr :current_scope, :map, default: nil
-
-  def account_nav(assigns) do
-    ~H"""
-    <nav
-      id="account-nav"
-      aria-label="Account"
-      class="flex flex-wrap items-center justify-center gap-3 text-sm"
-    >
-      <%= if @current_scope do %>
-        <span class="max-w-64 truncate">{@current_scope.user.email}</span>
-        <.button id="account-settings" href={~p"/users/settings"} variant="neutral" size="sm">
-          Settings
-        </.button>
-        <.button
-          id="account-log-out"
-          href={~p"/users/log-out"}
-          method="delete"
-          variant="neutral"
-          size="sm"
-        >
-          Log out
-        </.button>
-      <% else %>
-        <span class="text-muted-foreground">No account needed to play.</span>
-        <.link
-          id="account-log-in"
-          navigate={~p"/users/log-in"}
-          class="font-semibold underline underline-offset-4"
-        >
-          Log in
-        </.link>
-        <.link
-          id="account-register"
-          navigate={~p"/users/register"}
-          class="font-semibold underline underline-offset-4"
-        >
-          Register
-        </.link>
-      <% end %>
-    </nav>
-    """
-  end
-
-  attr :current_scope, :map, default: nil
+  attr :settings, :boolean, default: false
   slot :inner_block, required: true
 
   def account_panel(assigns) do
     ~H"""
-    <div class="mx-auto flex min-h-screen max-w-lg flex-col justify-center gap-6 px-4 pt-28 pb-12">
-      <.link navigate={~p"/"} class="self-center font-semibold underline underline-offset-4">
-        Back to Flamingo
-      </.link>
+    <div class={[
+      "mx-auto flex min-h-screen flex-col justify-center gap-5 px-4 pt-28 pb-12",
+      if(@settings, do: "max-w-3xl", else: "max-w-lg")
+    ]}>
+      <.button
+        id="account-back"
+        navigate={~p"/"}
+        variant="neutral"
+        class="inline-flex items-center gap-2 self-start font-bold"
+      >
+        <.icon name={:arrow_left} class="size-4" /> Home
+      </.button>
       <.card class="space-y-6 bg-white p-6 sm:p-8">
         {render_slot(@inner_block)}
       </.card>
-      <.account_nav current_scope={@current_scope} />
     </div>
     """
   end

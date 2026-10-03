@@ -11,28 +11,42 @@ defmodule FlamingoWeb.UserLive.ConfirmationTest do
   end
 
   describe "Confirm user" do
-    test "renders confirmation page for unconfirmed user", %{conn: conn, unconfirmed_user: user} do
+    test "a plain link preview does not consume the token or log in", %{
+      conn: conn,
+      unconfirmed_user: user
+    } do
+      token =
+        extract_user_token(fn url ->
+          Accounts.deliver_login_instructions(user, url)
+        end)
+
+      conn = get(conn, ~p"/users/log-in/#{token}")
+      assert conn.status == 200
+      refute get_session(conn, :user_token)
+      refute conn.resp_cookies["_flamingo_web_user_remember_me"]
+      assert Accounts.get_user_by_magic_link_token(token).id == user.id
+      refute Accounts.get_user!(user.id).confirmed_at
+    end
+
+    test "connected browser automatically submits without session choices", %{
+      conn: conn,
+      confirmed_user: user
+    } do
       token =
         extract_user_token(fn url ->
           Accounts.deliver_login_instructions(user, url)
         end)
 
       {:ok, lv, _html} = live(conn, ~p"/users/log-in/#{token}")
-      assert has_element?(lv, "#confirmation_form button", "Confirm and stay logged in")
+      assert has_element?(lv, "#magic-link-login[hidden][phx-trigger-action]")
+      refute has_element?(lv, "#magic-link-login button")
+      refute has_element?(lv, "[name='user[remember_me]']")
     end
 
-    test "renders login page for confirmed user", %{conn: conn, confirmed_user: user} do
-      token =
-        extract_user_token(fn url ->
-          Accounts.deliver_login_instructions(user, url)
-        end)
-
-      {:ok, lv, _html} = live(conn, ~p"/users/log-in/#{token}")
-      refute has_element?(lv, "#confirmation_form")
-      assert has_element?(lv, "#login_form button", "Keep me logged in on this device")
-    end
-
-    test "renders login page for already logged in user", %{conn: conn, confirmed_user: user} do
+    test "reauthentication also returns home with a remembered session", %{
+      conn: conn,
+      confirmed_user: user
+    } do
       conn = log_in_user(conn, user)
 
       token =
@@ -41,8 +55,9 @@ defmodule FlamingoWeb.UserLive.ConfirmationTest do
         end)
 
       {:ok, lv, _html} = live(conn, ~p"/users/log-in/#{token}")
-      refute has_element?(lv, "#confirmation_form")
-      assert has_element?(lv, "#login_form button", "Log in")
+      conn = lv |> form("#magic-link-login") |> follow_trigger_action(conn)
+      assert redirected_to(conn) == ~p"/"
+      assert conn.resp_cookies["_flamingo_web_user_remember_me"]
     end
 
     test "confirms the given token once", %{conn: conn, unconfirmed_user: user} do
@@ -53,17 +68,15 @@ defmodule FlamingoWeb.UserLive.ConfirmationTest do
 
       {:ok, lv, _html} = live(conn, ~p"/users/log-in/#{token}")
 
-      form = form(lv, "#confirmation_form", %{"user" => %{"token" => token}})
-      render_submit(form)
+      conn = lv |> form("#magic-link-login") |> follow_trigger_action(conn)
 
-      conn = follow_trigger_action(form, conn)
-
-      assert Phoenix.Flash.get(conn.assigns.flash, :info) =~
-               "User confirmed successfully"
+      assert Phoenix.Flash.get(conn.assigns.flash, :success) =~
+               "Logged in."
 
       assert Accounts.get_user!(user.id).confirmed_at
       # we are logged in now
       assert get_session(conn, :user_token)
+      assert conn.resp_cookies["_flamingo_web_user_remember_me"]
       assert redirected_to(conn) == ~p"/"
 
       # log out, new conn
@@ -87,15 +100,13 @@ defmodule FlamingoWeb.UserLive.ConfirmationTest do
 
       {:ok, lv, _html} = live(conn, ~p"/users/log-in/#{token}")
 
-      form = form(lv, "#login_form", %{"user" => %{"token" => token}})
-      render_submit(form)
+      conn = lv |> form("#magic-link-login") |> follow_trigger_action(conn)
 
-      conn = follow_trigger_action(form, conn)
-
-      assert Phoenix.Flash.get(conn.assigns.flash, :info) =~
-               "Welcome back!"
+      assert Phoenix.Flash.get(conn.assigns.flash, :success) =~
+               "Logged in."
 
       assert Accounts.get_user!(user.id).confirmed_at == user.confirmed_at
+      assert conn.resp_cookies["_flamingo_web_user_remember_me"]
 
       # log out, new conn
       conn = build_conn()
