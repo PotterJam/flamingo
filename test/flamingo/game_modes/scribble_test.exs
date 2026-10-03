@@ -217,6 +217,43 @@ defmodule Flamingo.GameModes.ScribbleTest do
     assert classic.constraint == nil
   end
 
+  test "new roulette modifiers preserve events while enforcing brush size and ink timestamps" do
+    for constraint <- [:big_brush, :rainbow_strokes, :fading_ink] do
+      game_context =
+        context(
+          select_candidate: fn candidates ->
+            if constraint in candidates, do: constraint, else: List.first(candidates)
+          end
+        )
+
+      {:ok, %{state: state}} =
+        Scribble.start(admitted(), %{game_variant: :constraint_roulette}, game_context)
+
+      assert state.constraint == constraint
+      {:ok, %{state: state}} = Scribble.command(state, "a", {:select_word, "cat"}, game_context)
+
+      event = %{
+        "event_type" => "start",
+        "x" => 30,
+        "y" => 70,
+        "color" => "#2563eb",
+        "line_width" => 3,
+        "drawn_at" => 0
+      }
+
+      assert :ignored ==
+               Scribble.command(state, "a", {:draw, %{"event_type" => "fill"}}, context())
+
+      assert {:ok, %{state: updated, drawing_delta: delta}} =
+               Scribble.command(state, "a", {:draw, event}, context())
+
+      assert updated.current_drawing == [delta]
+      assert delta["color"] == "#2563eb"
+      assert delta["line_width"] == if(constraint == :big_brush, do: 45, else: 3)
+      assert delta["drawn_at"] == if(constraint == :fading_ink, do: 1_767_225_600_000, else: 0)
+    end
+  end
+
   test "single-stroke and straight-line constraints are enforced by the game" do
     drawing_state = %{
       admitted()

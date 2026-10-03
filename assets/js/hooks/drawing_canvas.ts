@@ -1,13 +1,13 @@
 import { CANVAS_WIDTH, CANVAS_HEIGHT, clear, drawBetween, fill } from "../lib/canvas";
 
-export type DrawEvent =
+export type DrawEvent = { drawn_at?: number } & (
   | { event_type: "start"; x: number; y: number; color: string; line_width: number }
   | { event_type: "draw"; start_x: number; start_y: number; end_x: number; end_y: number; color: string; line_width: number }
   | { event_type: "end"; start_x: number; start_y: number; end_x: number; end_y: number; color: string; line_width: number }
   | { event_type: "fill"; x: number; y: number; color: string }
   | { event_type: "clear" }
   | { event_type: "undo" }
-  | { event_type: "redo" };
+  | { event_type: "redo" });
 
 // Compact representation used for share links and final-drawing payloads:
 // pen stroke polyline (delta-encoded after the first point), flood fill, or
@@ -54,7 +54,7 @@ interface Point {
 }
 
 type ActiveTool = "pen" | "fill";
-type DrawingConstraint = "hidden_canvas" | "single_stroke" | "straight_lines" | "rotating_canvas" | "mirror" | "";
+type DrawingConstraint = "hidden_canvas" | "single_stroke" | "straight_lines" | "rotating_canvas" | "mirror" | "big_brush" | "rainbow_strokes" | "fading_ink" | "";
 
 interface DrawingCanvasHook {
   el: HTMLElement;
@@ -72,6 +72,9 @@ interface DrawingCanvasHook {
   eventStack: DrawEvent[];
   redoStack: DrawEvent[][];
   finalReplayToken: number;
+  fadeTimer?: number;
+  clockOffset: number;
+  redraw: () => void;
   replayFinalDrawingListener?: () => void;
   handleEvent: <T>(event: string, callback: (payload: T) => void) => void;
   pushEvent: (event: string, payload: DrawEvent) => void;
@@ -113,11 +116,23 @@ const renderDrawEvent = (imageData: ImageData, event: DrawEvent) => {
   }
 };
 
-const renderEvents = (ctx: CanvasRenderingContext2D, events: DrawEvent[]) => {
+export const fadingEvent = (event: DrawEvent, now: number): DrawEvent | null => {
+  if (!("color" in event) || event.drawn_at === undefined) return event;
+  const age = Math.max(0, (now - event.drawn_at) / 5000);
+  if (age >= 1) return null;
+  const color = "#" + [1, 3, 5].map((offset) => {
+    const channel = parseInt(event.color.slice(offset, offset + 2), 16);
+    return Math.round(channel + (255 - channel) * age).toString(16).padStart(2, "0");
+  }).join("");
+  return { ...event, color };
+};
+
+const renderEvents = (ctx: CanvasRenderingContext2D, events: DrawEvent[], now?: number) => {
   canvasEffect(ctx, (imageData) => {
     clear(imageData);
     for (const e of events) {
-      renderDrawEvent(imageData, e);
+      const visible = now === undefined ? e : fadingEvent(e, now);
+      if (visible) renderDrawEvent(imageData, visible);
     }
   });
 };
@@ -188,6 +203,12 @@ const DrawingCanvas = {
     this.eventStack = [] as DrawEvent[];
     this.redoStack = [] as DrawEvent[][];
     this.finalReplayToken = 0;
+    this.clockOffset = 0;
+
+    if (this.constraint === "big_brush") this.selectedThickness = 45;
+    if (this.constraint === "fading_ink") {
+      this.fadeTimer = window.setInterval(() => this.redraw(), 100);
+    }
 
     canvasEffect(this.ctx, (imageData: ImageData) => clear(imageData));
 
@@ -224,7 +245,7 @@ const DrawingCanvas = {
         if (idx >= 0) {
           this.eventStack.splice(idx);
         }
-        renderEvents(this.ctx, this.eventStack);
+        this.redraw();
         return;
       }
 
@@ -234,16 +255,26 @@ const DrawingCanvas = {
       });
     });
 
-    this.handleEvent("drawing_state", (data: { events: DrawEvent[] }) => {
+    this.handleEvent("drawing_state", (data: { events: DrawEvent[]; server_now?: number }) => {
+      if (data.server_now !== undefined) this.clockOffset = data.server_now - Date.now();
       this.eventStack = [...data.events];
       this.redoStack = [];
-      renderEvents(this.ctx, data.events);
+      this.redraw();
     });
 
     this.replayFinalDrawingListener = () => {
       this.replayFinalDrawing();
     };
     window.addEventListener("flamingo:replay-final-drawings", this.replayFinalDrawingListener);
+  },
+
+  redraw(this: DrawingCanvasHook) {
+    const fading = this.constraint === "fading_ink" && this.el.dataset.phase === "playing";
+    renderEvents(this.ctx, this.eventStack, fading ? Date.now() + this.clockOffset : undefined);
+  },
+
+  updated(this: DrawingCanvasHook) {
+    if (this.constraint === "fading_ink") this.redraw();
   },
 
   replayFinalDrawing(this: DrawingCanvasHook) {
@@ -263,6 +294,7 @@ const DrawingCanvas = {
     const canvas = this.canvas as HTMLCanvasElement;
 
     const pushDrawEvent = (event: DrawEvent) => {
+      if (this.constraint === "fading_ink") event.drawn_at = Date.now() + this.clockOffset;
       this.eventStack.push(event);
       this.redoStack = [];
       canvasEffect(this.ctx, (imageData: ImageData) => renderDrawEvent(imageData, event));
@@ -272,6 +304,14 @@ const DrawingCanvas = {
     canvas.addEventListener("pointerdown", (e: PointerEvent) => {
       e.preventDefault();
       if (this.constraint === "single_stroke" && this.strokeUsed) return;
+      if (this.isPainting) return;
+
+      if (this.constraint === "rainbow_strokes") {
+        const colors = Array.from(this.el.querySelectorAll<HTMLElement>("[data-color]"),
+          (button) => button.dataset.color!)
+          .filter((color) => color !== this.selectedColor);
+        this.selectedColor = colors[Math.floor(Math.random() * colors.length)];
+      }
 
       const [x, y] = translatePointerToCanvas(e, canvas, this.constraint);
 
@@ -355,7 +395,7 @@ const DrawingCanvas = {
 
     const removed = this.eventStack.splice(idx);
     this.redoStack.push(removed);
-    renderEvents(this.ctx, this.eventStack);
+    this.redraw();
     this.pushEvent("draw_event", { event_type: "undo" });
   },
 
@@ -367,7 +407,7 @@ const DrawingCanvas = {
       this.eventStack.push(event);
       this.pushEvent("draw_event", event);
     }
-    renderEvents(this.ctx, this.eventStack);
+    this.redraw();
   },
 
   performClear(this: DrawingCanvasHook) {
@@ -418,17 +458,29 @@ const DrawingCanvas = {
       });
     }
 
-    if (this.constraint === "straight_lines") {
+    if (["straight_lines", "big_brush", "rainbow_strokes", "fading_ink"].includes(this.constraint)) {
       const fillButton = this.el.querySelector("[data-tool='fill']") as HTMLButtonElement | null;
       if (fillButton) {
         fillButton.disabled = true;
         fillButton.classList.add("cursor-not-allowed", "opacity-30");
       }
     }
+
+    const disabledControls = this.constraint === "big_brush" ? "[data-size]"
+      : this.constraint === "rainbow_strokes" ? "[data-color]"
+      : this.constraint === "fading_ink" ? "[data-action='redo']" : null;
+    if (disabledControls) {
+      this.el.querySelectorAll<HTMLButtonElement>(disabledControls).forEach((button) => {
+        button.disabled = true;
+        button.classList.remove("bg-pink-300", "ring-2", "ring-offset-1");
+        button.classList.add("cursor-not-allowed", "opacity-30");
+      });
+    }
   },
 
   destroyed(this: DrawingCanvasHook) {
     this.finalReplayToken += 1;
+    window.clearInterval(this.fadeTimer);
 
     if (this.replayFinalDrawingListener) {
       window.removeEventListener("flamingo:replay-final-drawings", this.replayFinalDrawingListener);

@@ -6,7 +6,16 @@ defmodule Flamingo.GameModes.Scribble do
 
   alias Flamingo.{DrawingShare, Feed, GameSettings, Scoring}
 
-  @constraints [:hidden_canvas, :single_stroke, :straight_lines, :rotating_canvas, :mirror]
+  @constraints [
+    :big_brush,
+    :rainbow_strokes,
+    :fading_ink,
+    :hidden_canvas,
+    :single_stroke,
+    :straight_lines,
+    :rotating_canvas,
+    :mirror
+  ]
 
   def new do
     Map.merge(GameSettings.defaults(), %{
@@ -129,9 +138,11 @@ defmodule Flamingo.GameModes.Scribble do
     end
   end
 
-  def command(state, actor, {:draw, event}, _context) when is_map(event) do
+  def command(state, actor, {:draw, event}, context) when is_map(event) do
     if state.phase == :playing and actor == state.drawer_id and active?(state, actor) and
          constraint_event_allowed?(state, event) do
+      event = constrain_event(state.constraint, event, context.now)
+
       drawing =
         if event["event_type"] == "undo",
           do: undo(state.current_drawing),
@@ -549,7 +560,18 @@ defmodule Flamingo.GameModes.Scribble do
     end
   end
 
+  defp constraint_event_allowed?(%{constraint: constraint}, %{"event_type" => "fill"})
+       when constraint in [:big_brush, :rainbow_strokes, :fading_ink], do: false
+
   defp constraint_event_allowed?(_state, _event), do: true
+
+  defp constrain_event(:big_brush, %{"event_type" => type} = event, _now)
+       when type in ["start", "draw", "end"], do: Map.put(event, "line_width", 45)
+
+  defp constrain_event(:fading_ink, event, now),
+    do: Map.put(event, "drawn_at", DateTime.to_unix(now, :millisecond))
+
+  defp constrain_event(_constraint, event, _now), do: event
 
   defp transition(_old, {new, timers}, reply), do: ok(new, reply, timers)
 

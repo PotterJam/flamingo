@@ -262,6 +262,9 @@ defmodule FlamingoWeb.ScribbleLiveTest do
     assert state.game_variant == :constraint_roulette
 
     assert state.constraint in [
+             :big_brush,
+             :rainbow_strokes,
+             :fading_ink,
              :hidden_canvas,
              :single_stroke,
              :straight_lines,

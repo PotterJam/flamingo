@@ -109,6 +109,9 @@ defmodule FlamingoWeb.ScribbleLive do
   defp constraint_label(:straight_lines), do: "Straight lines only"
   defp constraint_label(:rotating_canvas), do: "Moving target — the canvas is rotating"
   defp constraint_label(:mirror), do: "Mirror mode — horizontal movement is reversed"
+  defp constraint_label(:big_brush), do: "Heavy hands make big brush strokes"
+  defp constraint_label(:rainbow_strokes), do: "All the colours of the rainbow"
+  defp constraint_label(:fading_ink), do: "Draw fast! Your ink will fade"
   defp constraint_label(_constraint), do: nil
 
   defp constraint_mode(:hidden_canvas), do: "draw blind"
@@ -116,6 +119,9 @@ defmodule FlamingoWeb.ScribbleLive do
   defp constraint_mode(:straight_lines), do: "straight lines only"
   defp constraint_mode(:rotating_canvas), do: "moving target"
   defp constraint_mode(:mirror), do: "mirror mode"
+  defp constraint_mode(:big_brush), do: "big brush"
+  defp constraint_mode(:rainbow_strokes), do: "rainbow strokes"
+  defp constraint_mode(:fading_ink), do: "fading ink"
   defp constraint_mode(_constraint), do: nil
 
   defp winning_player_id(players, player_order) do
@@ -890,7 +896,10 @@ defmodule FlamingoWeb.ScribbleLive do
 
     socket =
       if drawing_visible? && (initial? || not drawing_was_visible?) do
-        push_event(socket, "drawing_state", %{events: snapshot.current_drawing})
+        push_event(socket, "drawing_state", %{
+          events: snapshot.current_drawing,
+          server_now: System.system_time(:millisecond)
+        })
       else
         socket
       end
