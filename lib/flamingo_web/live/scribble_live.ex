@@ -1,7 +1,7 @@
 defmodule FlamingoWeb.ScribbleLive do
   use FlamingoWeb, :live_view
 
-  alias Flamingo.{DrawingShare, Rooms}
+  alias Flamingo.{DrawingShare, Rooms, Words}
   alias FlamingoWeb.RoomRoute
 
   @palette ~w(
@@ -34,6 +34,7 @@ defmodule FlamingoWeb.ScribbleLive do
        round_count: 3,
        game_variant: :classic,
        word_choices: nil,
+       word_list_label: nil,
        turn_end_time: nil,
        word: nil,
        show_word: false,
@@ -387,6 +388,13 @@ defmodule FlamingoWeb.ScribbleLive do
               <% end %>
 
               <.box class="relative z-10 flex min-h-0 w-full flex-1 flex-col bg-white p-0">
+                <p
+                  :if={@word_list_label}
+                  id="word-list-label"
+                  class="absolute -top-8 right-1 whitespace-nowrap text-xl leading-none font-black text-black"
+                >
+                  {@word_list_label}
+                </p>
                 <div
                   id="game-feed"
                   phx-hook=".ScrollFeed"
@@ -864,6 +872,13 @@ defmodule FlamingoWeb.ScribbleLive do
         constraint: snapshot.constraint,
         current_round: snapshot.current_round,
         word_choices: snapshot.word_choices,
+        word_list_label:
+          if(snapshot.word_list != :default,
+            do:
+              Enum.find_value(Words.word_list_options(), fn {label, id} ->
+                if id == snapshot.word_list, do: label
+              end)
+          ),
         turn_end_time: snapshot.turn_end_time,
         word: snapshot.word,
         show_word: snapshot.word_visible?,
