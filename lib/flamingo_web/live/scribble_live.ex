@@ -173,8 +173,8 @@ defmodule FlamingoWeb.ScribbleLive do
           game_mode={@game_variant}
           label={if @game_variant == :constraint_roulette, do: "ROULETTE", else: "SCRIBBLE"}
         />
-        <div class="flex h-screen w-full items-center justify-center p-6">
-          <div class="flex h-[675px] w-full max-w-[1200px] flex-col gap-6">
+        <div class="flex min-h-screen w-full items-center justify-center p-6">
+          <div class="flex min-h-[675px] w-full max-w-[1200px] flex-col gap-10">
             <div
               :if={@participation == :spectator}
               id="spectator-notice"

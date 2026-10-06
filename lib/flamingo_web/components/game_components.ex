@@ -407,28 +407,40 @@ defmodule FlamingoWeb.GameComponents do
       assign(assigns, display: display, hint_chars: hint_chars, letter_count: letter_count)
 
     ~H"""
-    <div class="relative z-10 self-center">
+    <div id="game-header" class="relative z-10 max-w-[calc(100%-10rem)] shrink-0 self-center">
       <div class={[
-        "rounded-full border-2 border-border bg-pink-400 px-10 pt-1 pb-4 shadow-rounded",
+        "rounded-[2rem] border-2 border-border bg-pink-400 px-6 pt-1 pb-4 shadow-rounded sm:px-10",
         if(!@display, do: "invisible")
       ]}>
-        <div class="flex items-center justify-center gap-4">
+        <div class="flex flex-wrap items-center justify-center gap-x-4 gap-y-2">
           <%= if @hint_chars do %>
-            <p class="flex items-baseline gap-[0.18em] font-hero text-5xl leading-none font-black text-white">
-              <span
-                :for={ch <- @hint_chars}
-                class={["inline-block text-center", ch == " " && "w-[0.45em]"]}
-              >
-                {if(ch == " ", do: "", else: ch)}
-              </span>
+            <p
+              id="game-word-hint"
+              class={[
+                "min-w-0 max-w-full text-center font-hero leading-tight font-black tracking-[0.18em] text-white [overflow-wrap:anywhere]",
+                if(String.length(@display) > 30, do: "text-3xl", else: "text-5xl")
+              ]}
+            >
+              {Enum.join(@hint_chars)}
             </p>
           <% else %>
-            <p class="font-hero text-5xl leading-none font-black tracking-widest text-white">
+            <p
+              id="game-word-answer"
+              class={[
+                "min-w-0 max-w-full text-center font-hero leading-tight font-black tracking-widest text-white [overflow-wrap:anywhere]",
+                if(@display && String.length(@display) > 30, do: "text-3xl", else: "text-5xl")
+              ]}
+            >
               {if(@display, do: @display, else: Phoenix.HTML.raw("&nbsp;"))}
             </p>
           <% end %>
           <%= if @hint_chars && @letter_count do %>
-            <p class="font-hero text-2xl leading-none font-bold text-white">{@letter_count}</p>
+            <p
+              id="game-word-lengths"
+              class="max-w-full shrink-0 text-center font-hero text-2xl leading-none font-bold text-white [overflow-wrap:anywhere]"
+            >
+              {@letter_count}
+            </p>
           <% end %>
         </div>
       </div>
