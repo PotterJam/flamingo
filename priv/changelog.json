@@ -1,5 +1,18 @@
 [
   {
+    "date": "2026-10-03",
+    "entries": [
+      {"type": "feature", "text": "Roulette now includes big brushes, colour-changing strokes, and fading ink."}
+    ]
+  },
+  {
+    "date": "2026-09-29",
+    "entries": [
+      {"type": "feature", "text": "Scribble players can vote on drawings while the turn's scores are shown."},
+      {"type": "fix", "text": "Hyphenated words now show their hyphens in hints and accept guesses with spaces or no hyphens."}
+    ]
+  },
+  {
     "date": "2026-09-27",
     "entries": [
       {"type": "feature", "text": "See recent features and fixes from the new What's new menu on home and lobby screens."}
