@@ -19,7 +19,15 @@ defmodule FlamingoWeb.HomeLive do
   def render(assigns) do
     ~H"""
     <Layouts.app flash={@flash} current_scope={@current_scope}>
-      <Layouts.account_menu current_scope={@current_scope} avatar={@avatar} />
+      <Layouts.account_menu current_scope={@current_scope} />
+      <p
+        :if={@current_scope}
+        id="avatar-save-status"
+        role="status"
+        phx-update="ignore"
+        class="sr-only"
+      >
+      </p>
       <div class="flex min-h-screen w-full flex-col items-center justify-center gap-4 px-4 pt-24 pb-28 max-[359px]:px-1">
         <.card class="w-full max-w-xs bg-white px-6 py-4">
           <div class="flex justify-center">

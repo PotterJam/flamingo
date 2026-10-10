@@ -4,46 +4,31 @@ defmodule FlamingoWeb.Layouts do
   embed_templates "layouts/*"
 
   attr :current_scope, :map, required: true
-  attr :avatar, :map, required: true
 
   def account_menu(assigns) do
     ~H"""
-    <details
+    <.box
       :if={@current_scope}
       id="account-menu"
-      class="absolute right-4 top-4 z-40 text-sm"
-      phx-click-away={JS.remove_attribute("open", to: "#account-menu")}
-      phx-window-keydown={JS.remove_attribute("open", to: "#account-menu")}
-      phx-key="escape"
+      role="navigation"
+      aria-label="Account"
+      class="absolute right-4 top-4 z-40 flex max-w-[calc(100%-2rem)] items-center gap-1 bg-white p-1 pl-2 text-sm"
     >
-      <summary class="flex cursor-pointer list-none items-center gap-2 rounded-xl border-2 border-border bg-white px-3 py-2 font-bold shadow-shadow transition-transform hover:-translate-y-0.5 [&::-webkit-details-marker]:hidden">
-        <.flamingo_avatar avatar={@avatar} class="h-8 w-7" /> Account
-        <.icon name={:chevron_down} class="size-4" />
-      </summary>
-      <nav
-        aria-label="Account"
-        class="absolute right-0 mt-3 w-72 max-w-[calc(100vw-2rem)] space-y-3 rounded-xl border-2 border-border bg-white p-4 shadow-shadow"
+      <span class="min-w-0 truncate font-semibold" title={@current_scope.user.email}>
+        {@current_scope.user.email}
+      </span>
+      <.button
+        id="account-settings"
+        navigate={~p"/users/settings"}
+        variant="ghost"
+        size="sm"
+        class="inline-flex shrink-0 items-center justify-center"
+        aria-label="Account settings"
+        title="Account settings"
       >
-        <p class="text-xs text-muted-foreground">Signed in as</p>
-        <p class="break-all font-semibold">{@current_scope.user.email}</p>
-        <.button
-          id="account-settings"
-          navigate={~p"/users/settings"}
-          variant="neutral"
-          class="block text-center"
-        >
-          Account settings
-        </.button>
-        <.link
-          id="account-log-out"
-          href={~p"/users/log-out"}
-          method="delete"
-          class="block underline underline-offset-4"
-        >
-          Log out
-        </.link>
-      </nav>
-    </details>
+        <.icon name={:settings} class="size-5" />
+      </.button>
+    </.box>
     """
   end
 
@@ -53,49 +38,25 @@ defmodule FlamingoWeb.Layouts do
     ~H"""
     <%!-- Guest radius: 20px button radius + 8px vertical padding + 2px border. --%>
     <.box
+      :if={!@current_scope}
       id="account-status"
       role="region"
       aria-label="Your account"
-      radius={if(@current_scope, do: "1rem", else: "30px")}
-      class={[
-        "mt-2 flex w-full max-w-[41rem] flex-col gap-4 bg-white px-3 sm:flex-row sm:items-center sm:justify-between",
-        if(@current_scope, do: "py-5", else: "py-2")
-      ]}
+      radius="30px"
+      class="mt-2 flex w-full max-w-[41rem] flex-col gap-4 bg-white px-3 py-2 sm:flex-row sm:items-center sm:justify-between"
     >
-      <%= if @current_scope do %>
-        <div class="min-w-0">
-          <p class="font-bold">Signed in as</p>
-          <p class="break-all text-sm">{@current_scope.user.email}</p>
-          <p
-            id="avatar-save-status"
-            role="status"
-            phx-update="ignore"
-            class="mt-1 text-xs text-muted-foreground"
-          >
-          </p>
-        </div>
-        <.button
-          id="account-settings-link"
-          navigate={~p"/users/settings"}
-          variant="neutral"
-          class="shrink-0 text-center font-bold"
-        >
-          Account settings
-        </.button>
-      <% else %>
-        <p class="text-sm font-bold">
-          You are currently playing as a guest. Sign in to save your history
-        </p>
-        <.button
-          id="account-log-in"
-          navigate={~p"/users/log-in"}
-          variant="default"
-          rounded
-          class="shrink-0 text-center font-bold"
-        >
-          Sign in
-        </.button>
-      <% end %>
+      <p class="text-sm font-bold">
+        You are currently playing as a guest. Sign in to save your history
+      </p>
+      <.button
+        id="account-log-in"
+        navigate={~p"/users/log-in"}
+        variant="default"
+        rounded
+        class="shrink-0 text-center font-bold"
+      >
+        Sign in
+      </.button>
     </.box>
     """
   end
@@ -118,7 +79,10 @@ defmodule FlamingoWeb.Layouts do
       >
         <.icon name={:arrow_left} class="size-4" /> Home
       </.button>
-      <.card class="space-y-6 bg-white p-6 sm:p-8">
+      <.card class={[
+        "space-y-6 bg-white",
+        if(@settings, do: "p-4 sm:p-5", else: "p-6 sm:p-8")
+      ]}>
         {render_slot(@inner_block)}
       </.card>
     </div>

@@ -76,6 +76,7 @@ defmodule FlamingoWeb.CoreComponents do
       :if={msg = render_slot(@inner_block) || Phoenix.Flash.get(@flash, @kind)}
       id={@id}
       phx-click={JS.push("lv:clear-flash", value: %{key: @kind}) |> hide("##{@id}")}
+      phx-hook={@kind == :success && "FlamingoWeb.CoreComponents.AutoDismissFlash"}
       role="alert"
       class="pointer-events-auto w-full"
       {@rest}
@@ -105,6 +106,24 @@ defmodule FlamingoWeb.CoreComponents do
         </button>
       </div>
     </div>
+    <script :type={Phoenix.LiveView.ColocatedHook} name=".AutoDismissFlash">
+      export default {
+        mounted() {
+          this.startTimer();
+        },
+        updated() {
+          if (this.message !== this.el.textContent) this.startTimer();
+        },
+        startTimer() {
+          clearTimeout(this.timer);
+          this.message = this.el.textContent;
+          this.timer = setTimeout(() => this.el.click(), 5000);
+        },
+        destroyed() {
+          clearTimeout(this.timer);
+        }
+      }
+    </script>
     """
   end
 
@@ -121,7 +140,11 @@ defmodule FlamingoWeb.CoreComponents do
     include: ~w(href navigate patch method download name value disabled type form)
 
   attr :class, :any, default: nil
-  attr :variant, :string, default: "default", values: ~w(default neutral ghost outline)
+
+  attr :variant, :string,
+    default: "default",
+    values: ~w(default neutral ghost danger-ghost outline)
+
   attr :size, :string, default: "default", values: ~w(default sm icon)
   attr :rounded, :boolean, default: false
   attr :on_confirm_click, :any, default: nil
@@ -196,6 +219,10 @@ defmodule FlamingoWeb.CoreComponents do
       "bg-white text-foreground shadow-destructive active:translate-x-box-shadow-x active:translate-y-box-shadow-y active:shadow-none disabled:active:translate-x-0 disabled:active:translate-y-0"
 
   defp button_variant_classes("ghost"), do: "border-transparent shadow-none hover:bg-primary/20"
+
+  defp button_variant_classes("danger-ghost"),
+    do: "border-transparent text-red-700 shadow-none hover:bg-red-50 hover:text-red-900"
+
   defp button_variant_classes("outline"), do: "bg-transparent text-foreground shadow-none"
 
   attr :class, :any, default: nil

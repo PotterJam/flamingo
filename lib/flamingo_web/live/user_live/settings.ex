@@ -10,32 +10,36 @@ defmodule FlamingoWeb.UserLive.Settings do
     ~H"""
     <Layouts.app flash={@flash} current_scope={@current_scope} show_sound_controls={false}>
       <Layouts.account_panel current_scope={@current_scope} settings>
-        <h1 class="border-b border-border/30 pb-4 text-2xl font-bold">Account settings</h1>
+        <h1 class="text-2xl font-bold">Account settings</h1>
 
         <.form
           for={@email_form}
           id="email_form"
-          class="grid gap-4 sm:grid-cols-[1fr_auto] sm:items-end"
+          class="space-y-2"
           phx-submit="update_email"
           phx-change="validate_email"
         >
-          <.input
-            field={@email_form[:email]}
-            type="email"
-            label="Email address"
-            autocomplete="username"
-            spellcheck="false"
-            required
-          />
-          <.button phx-disable-with="Sending..." variant="neutral" class="mb-2 font-bold">
-            Change email
-          </.button>
-          <p class="text-sm text-muted-foreground sm:col-span-2">
-            We'll send a confirmation link to your new address.
-          </p>
+          <label for={@email_form[:email].id} class="block text-sm">Email address</label>
+          <div class="grid items-start gap-2 sm:grid-cols-[minmax(0,1fr)_auto] [&>.fieldset]:py-0">
+            <.input
+              field={@email_form[:email]}
+              type="email"
+              autocomplete="username"
+              spellcheck="false"
+              required
+            />
+            <.button
+              id="change-email-submit"
+              phx-disable-with="Sending..."
+              variant="ghost"
+              class="font-bold"
+            >
+              Change email
+            </.button>
+          </div>
         </.form>
 
-        <section class="border-t border-border/30 pt-5" aria-label="Delete account">
+        <section class="space-y-5 pt-2" aria-label="Account actions">
           <%= if @confirm_delete do %>
             <div id="delete-account-confirmation" class="space-y-4">
               <h2 class="font-bold">Delete your account?</h2>
@@ -75,16 +79,27 @@ defmodule FlamingoWeb.UserLive.Settings do
                 </div>
               </.form>
             </div>
-          <% else %>
-            <button
+          <% end %>
+          <div class="flex flex-wrap items-center justify-between gap-3">
+            <.button
+              :if={!@confirm_delete}
               id="delete-account"
               type="button"
               phx-click="confirm_delete"
-              class="cursor-pointer text-sm text-red-700 underline underline-offset-4 hover:text-red-900"
+              variant="danger-ghost"
             >
-              Delete account…
-            </button>
-          <% end %>
+              Delete account
+            </.button>
+            <.button
+              id="account-log-out"
+              href={~p"/users/log-out"}
+              method="delete"
+              variant="outline"
+              class="ml-auto font-bold"
+            >
+              Log out
+            </.button>
+          </div>
         </section>
       </Layouts.account_panel>
     </Layouts.app>
