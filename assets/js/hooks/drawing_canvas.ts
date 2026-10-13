@@ -73,6 +73,8 @@ interface DrawingCanvasHook {
   redoStack: DrawEvent[][];
   finalReplayToken: number;
   fadeTimer?: number;
+  spinFrame?: number;
+  syncSpin: () => void;
   clockOffset: number;
   redraw: () => void;
   replayFinalDrawingListener?: () => void;
@@ -187,6 +189,11 @@ const translatePointerToCanvas = (
   return [constraint === "mirror" ? CANVAS_WIDTH - localX : localX, localY];
 };
 
+// One second of warning, then one eight-second rotation. Absolute server time
+// means reconnects and unrelated LiveView patches cannot restart the effect.
+export const spinProgress = (startedAt: number, now: number) =>
+  Math.max(0, Math.min(1, (now - startedAt - 1000) / 8000));
+
 const DrawingCanvas = {
   mounted(this: DrawingCanvasHook) {
     this.canvas = this.el.querySelector("canvas") as HTMLCanvasElement;
@@ -260,12 +267,46 @@ const DrawingCanvas = {
       this.eventStack = [...data.events];
       this.redoStack = [];
       this.redraw();
+      this.syncSpin();
     });
 
     this.replayFinalDrawingListener = () => {
       this.replayFinalDrawing();
     };
     window.addEventListener("flamingo:replay-final-drawings", this.replayFinalDrawingListener);
+    this.syncSpin();
+  },
+
+  syncSpin(this: DrawingCanvasHook) {
+    window.cancelAnimationFrame(this.spinFrame ?? 0);
+    const frame = this.canvas.closest<HTMLElement>(".drawing-canvas-frame");
+    const status = this.el.querySelector<HTMLElement>("[data-spin-status]");
+    if (!frame || !status) return;
+    frame.style.removeProperty("transform");
+    status.hidden = true;
+    if (!this.el.dataset.spinStartedAt || this.el.dataset.phase !== "playing") return;
+
+    const startedAt = Number(this.el.dataset.spinStartedAt);
+    const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)");
+    const tick = () => {
+      const now = Date.now() + this.clockOffset;
+      const progress = spinProgress(startedAt, now);
+      if (progress >= 1) {
+        frame.style.removeProperty("transform");
+        status.hidden = true;
+        return;
+      }
+      status.hidden = false;
+      const text = progress === 0 ? "Spin incoming!" : `Canvas spin · ${Math.ceil((1 - progress) * 8)}s`;
+      if (status.textContent !== text) status.textContent = text;
+      if (this.isDrawer && progress > 0) {
+        frame.style.transform = reducedMotion.matches
+          ? "rotate(180deg)"
+          : `rotate(${progress * 360}deg) scale(0.56)`;
+      }
+      this.spinFrame = window.requestAnimationFrame(tick);
+    };
+    tick();
   },
 
   redraw(this: DrawingCanvasHook) {
@@ -275,6 +316,7 @@ const DrawingCanvas = {
 
   updated(this: DrawingCanvasHook) {
     if (this.constraint === "fading_ink") this.redraw();
+    this.syncSpin();
   },
 
   replayFinalDrawing(this: DrawingCanvasHook) {
@@ -483,6 +525,7 @@ const DrawingCanvas = {
   destroyed(this: DrawingCanvasHook) {
     this.finalReplayToken += 1;
     window.clearInterval(this.fadeTimer);
+    window.cancelAnimationFrame(this.spinFrame ?? 0);
 
     if (this.replayFinalDrawingListener) {
       window.removeEventListener("flamingo:replay-final-drawings", this.replayFinalDrawingListener);

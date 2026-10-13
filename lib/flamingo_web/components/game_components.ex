@@ -649,6 +649,7 @@ defmodule FlamingoWeb.GameComponents do
   attr :show_toolbar, :boolean, default: false
   attr :palette, :list, default: []
   attr :constraint, :any, default: nil
+  attr :spin_started_at, :integer, default: nil
   attr :phase, :any, default: nil
   attr :class, :any, default: nil
 
@@ -661,8 +662,16 @@ defmodule FlamingoWeb.GameComponents do
       data-is-drawer={to_string(@is_drawer)}
       data-constraint={@constraint}
       data-phase={@phase}
-      class={["flex w-[704px] max-w-full flex-col gap-2", @class]}
+      data-spin-started-at={@spin_started_at}
+      class={["relative flex w-[704px] max-w-full flex-col gap-2", @class]}
     >
+      <span
+        data-spin-status
+        hidden
+        role="status"
+        class="pointer-events-none absolute inset-x-0 top-3 z-20 mx-auto w-fit rounded-base border-2 border-border bg-yellow-200 px-3 py-1 text-sm font-bold shadow-shadow"
+      >
+      </span>
       <.box class="drawing-canvas-frame relative z-0 bg-white p-0">
         <canvas
           width="700"

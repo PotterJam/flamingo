@@ -1,5 +1,5 @@
-import { expect, test } from "bun:test";
-import DrawingCanvas, { fadingEvent, opsToEvents, type DrawEvent } from "./drawing_canvas";
+import { expect, spyOn, test } from "bun:test";
+import DrawingCanvas, { fadingEvent, opsToEvents, spinProgress, type DrawEvent } from "./drawing_canvas";
 
 test.each(["single_stroke", ""] as const)("pointer release and cancellation with constraint %s", (constraint) => {
   const listeners = new Map<string, (event: PointerEvent) => void>();
@@ -45,6 +45,67 @@ test.each(["single_stroke", ""] as const)("pointer release and cancellation with
   } else {
     expect(sent.map((event) => event.event_type)).toEqual(["start", "draw", "end", "start", "draw", "end"]);
     expect(hook.isPainting).toBe(false);
+  }
+});
+
+test("spin warns for a second and resumes from absolute time without extending expiry", () => {
+  expect(spinProgress(2000, 2500)).toBe(0);
+  expect(spinProgress(2000, 3000)).toBe(0);
+  expect(spinProgress(2000, 5000)).toBe(0.25);
+  expect(spinProgress(2000, 10999)).toBeLessThan(1);
+  expect(spinProgress(2000, 11000)).toBe(1);
+  expect(spinProgress(2000, 15000)).toBe(1);
+});
+
+test("late activation uses the synchronized clock, patches don't restart it, and reveal clears it", () => {
+  let now = 96000;
+  let reduced = false;
+  let tick = () => {};
+  const clock = spyOn(Date, "now").mockImplementation(() => now);
+  const originalWindow = Object.getOwnPropertyDescriptor(globalThis, "window");
+  Object.defineProperty(globalThis, "window", { configurable: true, value: {
+    cancelAnimationFrame() {},
+    requestAnimationFrame(callback: () => void) { tick = callback; return 1; },
+    matchMedia() { return { matches: reduced }; },
+  } });
+  const style = { transform: "", removeProperty() { this.transform = ""; } };
+  const status = { hidden: true, textContent: "" };
+  const dataset = { spinStartedAt: "100000", phase: "playing" };
+  const hook = {
+    el: { dataset, querySelector: () => status },
+    canvas: { closest: () => ({ style }) },
+    isDrawer: true,
+    clockOffset: 5000,
+  } as unknown as ThisParameterType<typeof DrawingCanvas.syncSpin>;
+  try {
+    DrawingCanvas.syncSpin.call(hook);
+    expect(status.textContent).toBe("Spin incoming!");
+    now = 98000;
+    tick();
+    expect(style.transform).toBe("rotate(90deg) scale(0.56)");
+    DrawingCanvas.syncSpin.call(hook);
+    expect(style.transform).toBe("rotate(90deg) scale(0.56)");
+    reduced = true;
+    DrawingCanvas.syncSpin.call(hook);
+    expect(style.transform).toBe("rotate(180deg)");
+    hook.isDrawer = false;
+    DrawingCanvas.syncSpin.call(hook);
+    expect(style.transform).toBe("");
+    expect(status.hidden).toBe(false);
+    now = 104000;
+    tick();
+    expect(status.hidden).toBe(true);
+    now = 98000;
+    hook.isDrawer = true;
+    DrawingCanvas.syncSpin.call(hook);
+    dataset.phase = "turn_reveal";
+    DrawingCanvas.syncSpin.call(hook);
+    expect(style.transform).toBe("");
+    expect(status.hidden).toBe(true);
+  } finally {
+    clock.mockRestore();
+    if (originalWindow) Object.defineProperty(globalThis, "window", originalWindow);
+    else Reflect.deleteProperty(globalThis, "window");
   }
 });
 

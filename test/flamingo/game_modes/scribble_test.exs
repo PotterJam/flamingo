@@ -754,4 +754,153 @@ defmodule Flamingo.GameModes.ScribbleTest do
 
     assert result.drawings == []
   end
+
+  describe "last-place Spin" do
+    setup do
+      roster = %{
+        roster()
+        | players: Map.put(roster().players, "c", %{id: "c", name: "Cara", connected: true}),
+          player_order: ["a", "b", "c"]
+      }
+
+      context = %{context(roster: roster) | word_choices: fn _, _, _ -> ["cat"] end}
+
+      {:ok, %{state: state}} =
+        Scribble.admit_member(admitted(), %{id: "c", name: "Cara"}, context)
+
+      %{state: state, context: context}
+    end
+
+    test "awards only at round boundaries in both variants, replacing unused charges", %{
+      state: state,
+      context: context
+    } do
+      for variant <- [:classic, :constraint_roulette] do
+        {:ok, %{state: state}} =
+          Scribble.start(
+            state,
+            %{round_count: 3, spin_enabled: true, game_variant: variant},
+            context
+          )
+
+        assert state.spin_holder == nil
+
+        state = %{
+          state
+          | phase: :turn_reveal,
+            scores: %{"a" => 600, "b" => -100, "c" => 200},
+            drawn_this_round: MapSet.new(["a", "b"])
+        }
+
+        {:ok, %{state: next}} = Scribble.timeout(state, :turn_reveal, context)
+        assert next.drawer_id == "c"
+        assert next.spin_holder == nil
+
+        {:ok, %{state: awarded}} =
+          Scribble.timeout(
+            %{next | phase: :turn_reveal, drawn_this_round: MapSet.new(["a", "b", "c"])},
+            :turn_reveal,
+            context
+          )
+
+        assert awarded.current_round == 1
+        assert awarded.spin_holder == "b"
+
+        {:ok, %{state: replaced}} =
+          Scribble.timeout(
+            %{
+              awarded
+              | phase: :turn_reveal,
+                scores: %{"a" => 800, "b" => 700, "c" => 300},
+                drawn_this_round: MapSet.new(["a", "b", "c"])
+            },
+            :turn_reveal,
+            context
+          )
+
+        assert replaced.spin_holder == "c"
+      end
+    end
+
+    test "ties, disabled games, and disconnected players", %{state: state, context: context} do
+      boundary = %{
+        state
+        | phase: :turn_reveal,
+          spin_enabled: true,
+          drawn_this_round: MapSet.new(["a", "b", "c"]),
+          scores: %{"a" => 500, "b" => -100, "c" => -100}
+      }
+
+      last = %{context | select_candidate: &List.last/1}
+      {:ok, %{state: tied}} = Scribble.timeout(boundary, :turn_reveal, last)
+      assert tied.spin_holder == "c"
+
+      for candidate <- [
+            %{boundary | scores: %{"a" => 10, "b" => 10, "c" => 10}},
+            %{boundary | spin_enabled: false}
+          ] do
+        {:ok, %{state: next}} = Scribble.timeout(candidate, :turn_reveal, context)
+        assert next.spin_holder == nil
+      end
+
+      offline = put_in(context, [:roster, :players, "c", :connected], false)
+      {:ok, %{state: next}} = Scribble.timeout(boundary, :turn_reveal, offline)
+      assert next.spin_holder == nil
+    end
+
+    test "activation is authorized, consumed once, and survives reconnect without restarting", %{
+      state: state,
+      context: context
+    } do
+      playing = %{
+        state
+        | phase: :playing,
+          spin_enabled: true,
+          spin_holder: "b",
+          drawer_id: "a",
+          word: "cat"
+      }
+
+      assert Scribble.view(playing, "b", context.roster).spin_available?
+
+      for {candidate, actor} <- [
+            {playing, "a"},
+            {playing, "c"},
+            {playing, "unknown"},
+            {%{playing | phase: :word_choice}, "b"},
+            {%{playing | phase: :turn_reveal}, "b"},
+            {%{playing | spin_enabled: false}, "b"},
+            {%{playing | constraint: :rotating_canvas}, "b"},
+            {%{playing | correct_guesses: %{"b" => @now}}, "b"},
+            {%{playing | participants: Map.put(playing.participants, "b", :spectator)}, "b"}
+          ] do
+        assert {:error, :spin_unavailable} =
+                 Scribble.command(candidate, actor, :use_spin, context)
+      end
+
+      offline = put_in(context, [:roster, :players, "c", :connected], false)
+      assert {:error, :spin_unavailable} = Scribble.command(playing, "b", :use_spin, offline)
+
+      {:ok, %{state: used}} =
+        Scribble.command(%{playing | constraint: :mirror}, "b", :use_spin, context)
+
+      assert used.constraint == :mirror
+      assert used.spin_holder == nil
+      assert used.spin_started_at == 1_767_225_600_000
+      assert {:error, :spin_unavailable} = Scribble.command(used, "b", :use_spin, context)
+      {:ok, %{state: reconnected}} = Scribble.connection_changed(used, "b", :online, context)
+      assert reconnected == used
+
+      assert Enum.any?(
+               Scribble.view(used, "a", context.roster).feed,
+               &(&1.text == "Bob used Spin on Alice")
+             )
+
+      {:ok, %{state: reveal}} = Scribble.timeout(used, :playing, context)
+      assert reveal.spin_started_at == nil
+      {:ok, %{state: restarted}} = Scribble.start(used, %{}, context)
+      assert restarted.spin_holder == nil
+      assert restarted.spin_started_at == nil
+    end
+  end
 end

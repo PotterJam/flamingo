@@ -31,6 +31,9 @@ defmodule FlamingoWeb.ScribbleLive do
        host_id: nil,
        drawer_id: nil,
        constraint: nil,
+       spin_holder: nil,
+       spin_available?: false,
+       spin_started_at: nil,
        round_count: 3,
        game_variant: :classic,
        word_choices: nil,
@@ -308,6 +311,7 @@ defmodule FlamingoWeb.ScribbleLive do
                       id="drawing-canvas"
                       is_drawer={@player_id == @drawer_id and @participation == :active}
                       constraint={@constraint}
+                      spin_started_at={@spin_started_at}
                       phase={@phase}
                       show_toolbar={
                         @phase == :playing and @player_id == @drawer_id and
@@ -315,6 +319,25 @@ defmodule FlamingoWeb.ScribbleLive do
                       }
                       palette={palette()}
                     />
+
+                    <div
+                      :if={@spin_holder == @player_id}
+                      id="spin-charge"
+                      class="flex items-center justify-between gap-3 rounded-base border-2 border-border bg-yellow-100 px-4 py-2"
+                    >
+                      <div>
+                        <p class="text-sm font-bold">A little last-place mischief</p>
+                        <p class="text-xs">One spin this round. Use before guessing correctly.</p>
+                      </div>
+                      <.button
+                        id="use-spin"
+                        phx-click="use_spin"
+                        disabled={!@spin_available?}
+                        size="sm"
+                      >
+                        <.icon name={:refresh_cw} class="size-4" /> Spin canvas
+                      </.button>
+                    </div>
 
                     <%= if @phase in [:playing, :turn_reveal] and @player_id != @drawer_id and @participation == :active do %>
                       <div
@@ -776,6 +799,13 @@ defmodule FlamingoWeb.ScribbleLive do
     {:noreply, socket}
   end
 
+  def handle_event("use_spin", _params, socket) do
+    case Rooms.command(socket.assigns.room_id, :use_spin) do
+      :ok -> {:noreply, socket}
+      {:error, _} -> {:noreply, put_flash(socket, :error, "Spin isn't available this turn.")}
+    end
+  end
+
   def handle_event("vote_drawing", %{"vote" => vote}, socket) when vote in ["up", "down"] do
     Rooms.command(socket.assigns.room_id, {:vote_drawing, if(vote == "up", do: :up, else: :down)})
     {:noreply, socket}
@@ -870,6 +900,9 @@ defmodule FlamingoWeb.ScribbleLive do
         round_count: snapshot.round_count,
         game_variant: snapshot.game_variant,
         constraint: snapshot.constraint,
+        spin_holder: snapshot.spin_holder,
+        spin_available?: snapshot.spin_available?,
+        spin_started_at: snapshot.spin_started_at,
         current_round: snapshot.current_round,
         word_choices: snapshot.word_choices,
         word_list_label:

@@ -201,6 +201,18 @@ defmodule FlamingoWeb.LobbyLive do
                       id="word-list-select"
                     />
                   </div>
+                  <div :if={@game_mode == :scribble} class="mt-4 space-y-1">
+                    <.input
+                      field={@settings_form[:spin_enabled]}
+                      type="checkbox"
+                      label="Last-place Spin"
+                      id="spin-enabled-input"
+                    />
+                    <p class="text-xs text-gray-600">
+                      Last place gets one canvas spin for the next round. Requires 3+ players
+                      and 2+ rounds. Use it before guessing correctly.
+                    </p>
+                  </div>
                   <div :if={@word_list == :custom} id="custom-words-settings" class="mt-4">
                     <div class="flex items-end justify-between gap-3">
                       <label for="custom-words-input" class="text-sm">Custom words</label>
@@ -376,6 +388,7 @@ defmodule FlamingoWeb.LobbyLive do
         include_default_words: false,
         word_list: word_list,
         game_mode: game_mode,
+        spin_enabled: params["spin_enabled"] == "true",
         game_variant: game_variant
       }
 
