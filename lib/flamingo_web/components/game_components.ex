@@ -384,15 +384,10 @@ defmodule FlamingoWeb.GameComponents do
           {word, nil, nil}
 
         {word, false} ->
-          revealed = MapSet.new(assigns.revealed_indices)
-
           chars =
             word
+            |> Flamingo.Words.mask(assigns.revealed_indices)
             |> String.graphemes()
-            |> Enum.with_index()
-            |> Enum.map(fn {ch, idx} ->
-              if ch in [" ", "-"] or MapSet.member?(revealed, idx), do: ch, else: "_"
-            end)
 
           count =
             word

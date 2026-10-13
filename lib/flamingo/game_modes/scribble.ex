@@ -663,11 +663,7 @@ defmodule Flamingo.GameModes.Scribble do
   defp project_word(word, _, true), do: word
 
   defp project_word(word, indices, false),
-    do:
-      word
-      |> String.graphemes()
-      |> Enum.with_index()
-      |> Enum.map_join(fn {c, i} -> if c in [" ", "-"] or i in indices, do: c, else: "_" end)
+    do: Flamingo.Words.mask(word, indices)
 
   defp correct?(guess, word) do
     pattern =

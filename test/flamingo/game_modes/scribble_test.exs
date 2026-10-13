@@ -2,6 +2,7 @@ defmodule Flamingo.GameModes.ScribbleTest do
   use ExUnit.Case, async: true
 
   import Flamingo.TestAssertions, only: [assert_fields: 2]
+  require Phoenix.LiveViewTest
 
   alias Flamingo.GameModes.Scribble
 
@@ -614,6 +615,35 @@ defmodule Flamingo.GameModes.ScribbleTest do
     refute guesser.word_visible?
     assert drawer.word == "cat"
     assert drawer.word_visible?
+  end
+
+  test "punctuation stays visible for everyone without revealing letters or numbers" do
+    word = "O'Neil’s well-being (é2/猫)! +?"
+    masked = "_'____’_ ____-_____ (__/_)! +?"
+    state = %{admitted() | phase: :playing, drawer_id: "a", word: word}
+
+    assert Scribble.view(state, "a", roster()).word == word
+
+    for viewer <- ["b", "c", "spectator"] do
+      view = Scribble.view(state, viewer, roster())
+      assert view.word == masked
+      refute view.word_visible?
+    end
+
+    hinted = %{state | revealed_indices: [2]}
+    view = Scribble.view(hinted, "b", roster())
+    assert view.word == "_'N___’_ ____-_____ (__/_)! +?"
+
+    html =
+      Phoenix.LiveViewTest.render_component(&FlamingoWeb.GameComponents.game_header/1,
+        word: view.word,
+        revealed_indices: view.revealed_indices
+      )
+
+    chars = html |> LazyHTML.from_fragment() |> LazyHTML.query("#game-word-hint")
+
+    assert LazyHTML.text(chars) |> String.replace(~r/\s/u, "") ==
+             "_'N___’_____-_____(__/_)!+?"
   end
 
   test "hyphens are visible and optional with or without spaces in guesses" do

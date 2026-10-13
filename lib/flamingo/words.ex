@@ -36,6 +36,22 @@ defmodule Flamingo.Words do
 
   def word_list_options, do: @word_list_options
 
+  @doc """
+  Masks a word while preserving punctuation, symbols, whitespace, and revealed grapheme indices.
+  """
+  def mask(word, revealed_indices \\ []) do
+    revealed = MapSet.new(revealed_indices)
+
+    word
+    |> String.graphemes()
+    |> Enum.with_index()
+    |> Enum.map_join(fn {char, index} ->
+      if char =~ ~r/^[\p{P}\p{S}\s]+$/u or MapSet.member?(revealed, index),
+        do: char,
+        else: "_"
+    end)
+  end
+
   def parse_word_list(value, fallback),
     do: Enum.find(@word_list_ids, fallback, &(Atom.to_string(&1) == value))
 
