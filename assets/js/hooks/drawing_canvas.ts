@@ -368,6 +368,8 @@ const DrawingCanvas = {
 
     const handlePointerUp = (e: PointerEvent) => {
       if (!this.isPainting) return;
+      // One Stroke stays connected even after releasing or cancelling the pointer.
+      if (this.constraint === "single_stroke") return;
       this.isPainting = false;
 
       const [x, y] = translatePointerToCanvas(e, canvas, this.constraint);
