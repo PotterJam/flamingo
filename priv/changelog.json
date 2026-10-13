@@ -1,5 +1,12 @@
 [
   {
+    "date": "2026-10-06",
+    "entries": [
+      {"type": "feature", "text": "Scribble now shows the selected film, landmarks, or custom word theme above the chat."},
+      {"type": "fix", "text": "Long word hints and answers now wrap instead of overflowing the game layout."}
+    ]
+  },
+  {
     "date": "2026-10-03",
     "entries": [
       {"type": "feature", "text": "Roulette now includes big brushes, colour-changing strokes, and fading ink."}
