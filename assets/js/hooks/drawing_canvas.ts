@@ -75,6 +75,7 @@ interface DrawingCanvasHook {
   fadeTimer?: number;
   spinFrame?: number;
   syncSpin: () => void;
+  voteFlash?: Animation;
   clockOffset: number;
   redraw: () => void;
   replayFinalDrawingListener?: () => void;
@@ -268,6 +269,20 @@ const DrawingCanvas = {
       this.redoStack = [];
       this.redraw();
       this.syncSpin();
+    });
+
+    this.handleEvent("drawing_vote", ({ vote }: { vote: "up" | "down" }) => {
+      const overlay = this.el.querySelector<HTMLElement>("[data-vote-flash]");
+      if (!overlay) return;
+
+      this.voteFlash?.cancel();
+      const color = vote === "up" ? "34, 197, 94" : "239, 68, 68";
+      overlay.style.boxShadow = `inset 0 0 90px 30px rgba(${color}, 0.85), inset 0 0 24px 8px rgb(${color})`;
+      const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+      this.voteFlash = overlay.animate(
+        [{ opacity: reducedMotion ? 0.35 : 1 }, { opacity: 0 }],
+        { duration: reducedMotion ? 250 : 800, easing: "ease-out" }
+      );
     });
 
     this.replayFinalDrawingListener = () => {
@@ -526,6 +541,7 @@ const DrawingCanvas = {
     this.finalReplayToken += 1;
     window.clearInterval(this.fadeTimer);
     window.cancelAnimationFrame(this.spinFrame ?? 0);
+    this.voteFlash?.cancel();
 
     if (this.replayFinalDrawingListener) {
       window.removeEventListener("flamingo:replay-final-drawings", this.replayFinalDrawingListener);

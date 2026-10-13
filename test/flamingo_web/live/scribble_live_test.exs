@@ -472,7 +472,17 @@ defmodule FlamingoWeb.ScribbleLiveTest do
     word = List.first(state.word_choices)
     :ok = select_word_as(room_id, drawer_token, word)
 
+    {:ok, drawer_view, _} =
+      live(conn, ~p"/game/#{room_id}/scribble?resume_token=#{drawer_token}")
+
     view |> element("#vote-drawing-up") |> render_click()
+    assert_push_event(view, "drawing_vote", %{vote: "up"})
+    assert_push_event(drawer_view, "drawing_vote", %{vote: "up"})
+
+    {:ok, reconnected_view, _} =
+      live(conn, ~p"/game/#{room_id}/scribble?resume_token=#{guesser_token}")
+
+    refute_push_event(reconnected_view, "drawing_vote", %{})
     view |> form("#guess-form", guess_form: %{guess: word}) |> render_submit()
 
     assert has_element?(view, "#turn-reveal-score-gains")
@@ -480,6 +490,8 @@ defmodule FlamingoWeb.ScribbleLiveTest do
     assert has_element?(view, "#vote-drawing-up[aria-pressed=true]")
 
     view |> element("#vote-drawing-down") |> render_click()
+    assert_push_event(view, "drawing_vote", %{vote: "down"})
+    assert_push_event(drawer_view, "drawing_vote", %{vote: "down"})
     assert has_element?(view, "#vote-drawing-down[aria-pressed=true]")
     assert has_element?(view, "#vote-drawing-up[aria-pressed=false]")
 

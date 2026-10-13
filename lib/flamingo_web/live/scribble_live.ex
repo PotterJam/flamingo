@@ -943,6 +943,21 @@ defmodule FlamingoWeb.ScribbleLive do
     drawing_was_visible? = old_phase in [:playing, :turn_reveal]
 
     socket =
+      if not initial? and drawing_visible? do
+        Enum.reduce(snapshot.feed, socket, fn entry, socket ->
+          if entry.kind in [:like, :dislike] and not MapSet.member?(old_feed_ids, entry.id) do
+            push_event(socket, "drawing_vote", %{
+              vote: if(entry.kind == :like, do: "up", else: "down")
+            })
+          else
+            socket
+          end
+        end)
+      else
+        socket
+      end
+
+    socket =
       if drawing_visible? && (initial? || not drawing_was_visible?) do
         push_event(socket, "drawing_state", %{
           events: snapshot.current_drawing,

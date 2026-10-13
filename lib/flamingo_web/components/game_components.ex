@@ -677,6 +677,12 @@ defmodule FlamingoWeb.GameComponents do
           ]}
         >
         </canvas>
+        <div
+          data-vote-flash
+          aria-hidden="true"
+          class="pointer-events-none absolute inset-0 z-10 opacity-0"
+        >
+        </div>
       </.box>
 
       <%= if @show_toolbar do %>
