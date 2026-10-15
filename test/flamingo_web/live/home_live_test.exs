@@ -28,9 +28,15 @@ defmodule FlamingoWeb.HomeLiveTest do
   test "submitting the lobby form creates when room name is empty", %{conn: conn} do
     {:ok, view, _html} = live(conn, ~p"/")
 
+    drawing =
+      Jason.encode!([
+        %{path: "M 30 20 L 45 35", width: 2},
+        %{path: "M 60 40 L 85 50", width: 10}
+      ])
+
     view
     |> form("#lobby-form", lobby: %{name: "Alice", room_code: ""})
-    |> render_submit()
+    |> render_submit(%{lobby: %{head_drawing: drawing}})
 
     {path, _flash} = assert_redirect(view)
     uri = URI.parse(path)
@@ -38,5 +44,17 @@ defmodule FlamingoWeb.HomeLiveTest do
     assert uri.path =~ ~r(^/game/.+)
     assert %{"resume_token" => resume_token} = URI.decode_query(uri.query)
     assert resume_token != ""
+
+    {:ok, lobby, _html} = live(conn, path)
+
+    assert has_element?(
+             lobby,
+             "[id^='lobby-player-row-'] [data-avatar-part-root='head'] path[stroke-width='2'][d='M 30 20 L 45 35']"
+           )
+
+    assert has_element?(
+             lobby,
+             "[id^='lobby-player-row-'] [data-avatar-part-root='head'] path[stroke-width='10'][d='M 60 40 L 85 50']"
+           )
   end
 end

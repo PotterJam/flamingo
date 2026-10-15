@@ -203,29 +203,53 @@ defmodule FlamingoWeb.HomeLive do
                     </div>
                   </div>
 
-                  <div
+                  <dialog
+                    id="avatar-drawing-editor"
                     data-avatar-drawing-editor
-                    hidden
-                    class="absolute inset-x-0 top-1/2 z-40 mx-auto w-[min(100%,22rem)] -translate-y-1/2 rounded-base border-2 border-border bg-pink-50 p-3 shadow-shadow"
+                    aria-labelledby="avatar-drawing-heading"
+                    class="m-auto max-h-[calc(100dvh-2rem)] w-[calc(100%-2rem)] max-w-xl overflow-y-auto rounded-base border-2 border-border bg-pink-50 p-4 shadow-shadow backdrop:bg-gray-950/40 sm:p-6"
                   >
-                    <div class="mb-2 flex items-center justify-between gap-2">
+                    <div class="mb-4 flex items-center justify-between gap-2">
                       <div>
                         <p class="text-[0.65rem] font-black tracking-[0.16em] text-pink-500 uppercase">
                           Make it yours
                         </p>
-                        <h2 class="text-sm font-black capitalize">
+                        <h2 id="avatar-drawing-heading" class="text-lg font-black capitalize">
                           Draw your own <span data-avatar-drawing-title>part</span>
                         </h2>
                       </div>
-                      <span class="rounded-full border-2 border-border bg-yellow-200 px-2 py-0.5 text-[0.65rem] font-bold">
-                        Draw in the glow
-                      </span>
+                      <div
+                        class="h-16 w-14 shrink-0"
+                        data-avatar-drawing-preview
+                        aria-label="Character preview"
+                      >
+                      </div>
+                    </div>
+
+                    <div class="mb-3 flex gap-2" role="group" aria-label="Brush size">
+                      <button
+                        :for={
+                          {label, width, size} <- [
+                            {"Fine", 2, "size-1"},
+                            {"Regular", 6, "size-2"},
+                            {"Bold", 10, "size-3"}
+                          ]
+                        }
+                        type="button"
+                        id={"avatar-brush-#{width}"}
+                        data-avatar-brush={width}
+                        aria-pressed={to_string(width == 6)}
+                        class="flex flex-1 items-center justify-center gap-2 rounded-full border-2 border-border bg-white px-3 py-2 text-xs font-bold transition-colors hover:bg-pink-100 aria-pressed:bg-pink-200 focus-visible:outline-2 focus-visible:outline-offset-2"
+                      >
+                        <span aria-hidden="true" class={["rounded-full bg-gray-900", size]}></span>
+                        {label}
+                      </button>
                     </div>
 
                     <svg
                       data-avatar-drawing-surface
                       viewBox="0 0 130 145"
-                      class="h-36 w-full touch-none cursor-crosshair rounded-lg border-2 border-dashed border-pink-300 bg-white"
+                      class="h-[min(45dvh,20rem)] w-full touch-none cursor-crosshair rounded-lg border-2 border-dashed border-pink-300 bg-white"
                       aria-label="Drawing surface"
                     >
                       <rect
@@ -237,30 +261,31 @@ defmodule FlamingoWeb.HomeLive do
                         rx="10"
                         fill="#fce7f3"
                       />
-                      <path
-                        data-avatar-drawing-shadow
+                      <g
+                        data-avatar-drawing-strokes
                         fill="none"
-                        stroke="#111827"
-                        stroke-width="10"
                         stroke-linecap="round"
                         stroke-linejoin="round"
-                      />
-                      <path
-                        data-avatar-drawing-path
-                        fill="none"
-                        stroke="#f472b6"
-                        stroke-width="6"
-                        stroke-linecap="round"
-                        stroke-linejoin="round"
-                      />
+                      >
+                      </g>
                     </svg>
 
-                    <div class="mt-2 flex items-center justify-between gap-2">
+                    <p class="mt-2 text-xs text-gray-600">
+                      Zoomed in for drawing. The pink area keeps this part inside your character.
+                    </p>
+                    <p
+                      data-avatar-drawing-status
+                      role="status"
+                      class="text-xs font-bold text-pink-700"
+                    >
+                    </p>
+
+                    <div class="mt-4 flex items-center justify-between gap-2">
                       <div class="flex gap-1">
                         <button
                           type="button"
                           data-avatar-drawing-undo
-                          class="flex size-8 items-center justify-center rounded-full transition-colors hover:bg-white"
+                          class="flex size-10 items-center justify-center rounded-full transition-colors hover:bg-white"
                           aria-label="Undo last stroke"
                         >
                           <.icon name={:undo_2} class="size-4" />
@@ -268,7 +293,7 @@ defmodule FlamingoWeb.HomeLive do
                         <button
                           type="button"
                           data-avatar-drawing-clear
-                          class="flex size-8 items-center justify-center rounded-full transition-colors hover:bg-white"
+                          class="flex size-10 items-center justify-center rounded-full transition-colors hover:bg-white"
                           aria-label="Clear drawing"
                         >
                           <.icon name={:trash_2} class="size-4" />
@@ -291,7 +316,7 @@ defmodule FlamingoWeb.HomeLive do
                         </button>
                       </div>
                     </div>
-                  </div>
+                  </dialog>
 
                   <button
                     type="button"

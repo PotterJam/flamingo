@@ -138,10 +138,7 @@ defmodule FlamingoWeb.GameComponents do
     >
       <%!-- Feet --%>
       <g data-avatar-part-root="feet" fill="none" stroke-linecap="round" stroke-linejoin="round">
-        <g :if={@avatar["feet_drawing"] != ""}>
-          <path d={@avatar["feet_drawing"]} stroke="#111827" stroke-width="8" />
-          <path d={@avatar["feet_drawing"]} stroke="var(--f)" stroke-width="4" />
-        </g>
+        <.avatar_drawing drawing={@avatar["feet_drawing"]} color="var(--f)" default_width={4} />
         <g :if={@avatar["feet_drawing"] == "" and @avatar["feet"] == 0} stroke-width="5">
           <path
             d="M45 134 L34 140 M45 134 L45 141 M83 134 L72 140 M83 134 L85 141"
@@ -192,10 +189,7 @@ defmodule FlamingoWeb.GameComponents do
 
       <%!-- Legs --%>
       <g data-avatar-part-root="legs" fill="none" stroke-linecap="round" stroke-linejoin="round">
-        <g :if={@avatar["legs_drawing"] != ""}>
-          <path d={@avatar["legs_drawing"]} stroke="#111827" stroke-width="10" />
-          <path d={@avatar["legs_drawing"]} stroke="var(--l)" stroke-width="6" />
-        </g>
+        <.avatar_drawing drawing={@avatar["legs_drawing"]} color="var(--l)" />
         <g :if={@avatar["legs_drawing"] == "" and @avatar["legs"] == 0}>
           <path d="M48 96 L45 134 M72 96 L83 134" stroke="#111827" stroke-width="8" />
           <path d="M48 96 L45 134 M72 96 L83 134" stroke="var(--l)" stroke-width="4" />
@@ -228,10 +222,7 @@ defmodule FlamingoWeb.GameComponents do
 
       <%!-- Body --%>
       <g data-avatar-part-root="body" stroke="#111827" stroke-width="4" stroke-linejoin="round">
-        <g :if={@avatar["body_drawing"] != ""} fill="none" stroke-linecap="round">
-          <path d={@avatar["body_drawing"]} stroke="#111827" stroke-width="10" />
-          <path d={@avatar["body_drawing"]} stroke="var(--b)" stroke-width="6" />
-        </g>
+        <.avatar_drawing drawing={@avatar["body_drawing"]} color="var(--b)" />
         <g :if={@avatar["body_drawing"] == "" and @avatar["body"] == 0}>
           <path
             d="M28 72 L10 64 L18 82 Q22 103 62 105 Q94 105 103 82 Q86 65 55 65 Q37 65 28 72 Z"
@@ -285,10 +276,7 @@ defmodule FlamingoWeb.GameComponents do
         stroke-linecap="round"
         stroke-linejoin="round"
       >
-        <g :if={@avatar["head_drawing"] != ""} fill="none">
-          <path d={@avatar["head_drawing"]} stroke="#111827" stroke-width="10" />
-          <path d={@avatar["head_drawing"]} stroke="var(--h)" stroke-width="6" />
-        </g>
+        <.avatar_drawing drawing={@avatar["head_drawing"]} color="var(--h)" />
         <g :if={@avatar["head_drawing"] == "" and @avatar["head"] == 0}>
           <path d="M51 68 Q36 51 54 38" fill="none" stroke="#111827" stroke-width="19" />
           <path d="M51 68 Q36 51 54 38" fill="none" stroke="var(--h)" stroke-width="13" />
@@ -365,6 +353,22 @@ defmodule FlamingoWeb.GameComponents do
         </g>
       </g>
     </svg>
+    """
+  end
+
+  attr :drawing, :string, required: true
+  attr :color, :string, required: true
+  attr :default_width, :integer, default: 6
+
+  defp avatar_drawing(assigns) do
+    assigns =
+      assign(assigns, :strokes, Avatar.drawing_strokes(assigns.drawing, assigns.default_width))
+
+    ~H"""
+    <g :for={stroke <- @strokes} fill="none" stroke-linecap="round" stroke-linejoin="round">
+      <path d={stroke["path"]} stroke="#111827" stroke-width={stroke["width"] + 4} />
+      <path d={stroke["path"]} stroke={@color} stroke-width={stroke["width"]} />
+    </g>
     """
   end
 
