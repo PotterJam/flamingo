@@ -1,5 +1,21 @@
 [
   {
+    "date": "2026-10-15",
+    "entries": [
+      {"type": "feature", "text": "Draw your avatar in a larger editor with brush sizes and a live preview."},
+      {"type": "fix", "text": "Avatar strokes now follow your pointer accurately and stay inside the chosen body part."}
+    ]
+  },
+  {
+    "date": "2026-10-13",
+    "entries": [
+      {"type": "feature", "text": "Hosts can enable Last-place Spin in Classic and Roulette, letting a trailing player spin the drawer's canvas in games with three or more players."},
+      {"type": "feature", "text": "Drawing votes now flash the canvas edges green for thumbs up and red for thumbs down."},
+      {"type": "fix", "text": "One Stroke now keeps drawing after you release the pointer, so you can continue the same line."},
+      {"type": "fix", "text": "Word hints now keep punctuation and symbols visible while hiding letters and numbers."}
+    ]
+  },
+  {
     "date": "2026-10-06",
     "entries": [
       {"type": "feature", "text": "Scribble now shows the selected film, landmarks, or custom word theme above the chat."},
