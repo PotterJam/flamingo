@@ -314,7 +314,7 @@ const DrawingCanvas = {
       status.hidden = false;
       const text = progress === 0 ? "Spin incoming!" : `Canvas spin · ${Math.ceil((1 - progress) * 8)}s`;
       if (status.textContent !== text) status.textContent = text;
-      if (this.isDrawer && progress > 0) {
+      if (progress > 0) {
         frame.style.transform = reducedMotion.matches
           ? "rotate(180deg)"
           : `rotate(${progress * 360}deg) scale(0.56)`;

@@ -57,7 +57,7 @@ test("spin warns for a second and resumes from absolute time without extending e
   expect(spinProgress(2000, 15000)).toBe(1);
 });
 
-test("late activation uses the synchronized clock, patches don't restart it, and reveal clears it", () => {
+test.each([true, false])("spin is synchronized through patches and reveal with drawer=%s", (isDrawer) => {
   let now = 96000;
   let reduced = false;
   let tick = () => {};
@@ -74,7 +74,7 @@ test("late activation uses the synchronized clock, patches don't restart it, and
   const hook = {
     el: { dataset, querySelector: () => status },
     canvas: { closest: () => ({ style }) },
-    isDrawer: true,
+    isDrawer,
     clockOffset: 5000,
   } as unknown as ThisParameterType<typeof DrawingCanvas.syncSpin>;
   try {
@@ -88,15 +88,12 @@ test("late activation uses the synchronized clock, patches don't restart it, and
     reduced = true;
     DrawingCanvas.syncSpin.call(hook);
     expect(style.transform).toBe("rotate(180deg)");
-    hook.isDrawer = false;
-    DrawingCanvas.syncSpin.call(hook);
-    expect(style.transform).toBe("");
     expect(status.hidden).toBe(false);
     now = 104000;
     tick();
+    expect(style.transform).toBe("");
     expect(status.hidden).toBe(true);
     now = 98000;
-    hook.isDrawer = true;
     DrawingCanvas.syncSpin.call(hook);
     dataset.phase = "turn_reveal";
     DrawingCanvas.syncSpin.call(hook);
