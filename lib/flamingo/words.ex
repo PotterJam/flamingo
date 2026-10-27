@@ -4,6 +4,7 @@ defmodule Flamingo.Words do
     {"Default", :default},
     {"Films", :films},
     {"Landmarks & places", :landmarks},
+    {"Animals", :animals},
     {"Custom", :custom}
   ]
   @word_list_ids Enum.map(@word_list_options, &elem(&1, 1))
@@ -11,15 +12,18 @@ defmodule Flamingo.Words do
   @default_words_path Path.expand("../../priv/words/default.txt", __DIR__)
   @films_words_path Path.expand("../../priv/words/films.txt", __DIR__)
   @landmarks_words_path Path.expand("../../priv/words/landmarks.txt", __DIR__)
+  @animals_words_path Path.expand("../../priv/words/animals.txt", __DIR__)
 
   @external_resource @default_words_path
   @external_resource @films_words_path
   @external_resource @landmarks_words_path
+  @external_resource @animals_words_path
 
   @word_lists %{
     default: File.read!(@default_words_path) |> String.split("\n", trim: true),
     films: File.read!(@films_words_path) |> String.split("\n", trim: true),
-    landmarks: File.read!(@landmarks_words_path) |> String.split("\n", trim: true)
+    landmarks: File.read!(@landmarks_words_path) |> String.split("\n", trim: true),
+    animals: File.read!(@animals_words_path) |> String.split("\n", trim: true)
   }
 
   def random_choices(n \\ 3, excluded_words \\ MapSet.new(), options \\ []) do

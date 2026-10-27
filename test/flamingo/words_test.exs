@@ -72,6 +72,7 @@ defmodule Flamingo.WordsTest do
              {"Default", :default},
              {"Films", :films},
              {"Landmarks & places", :landmarks},
+             {"Animals", :animals},
              {"Custom", :custom}
            ]
 
