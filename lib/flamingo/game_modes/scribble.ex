@@ -620,7 +620,7 @@ defmodule Flamingo.GameModes.Scribble do
   end
 
   defp constraint_event_allowed?(%{constraint: constraint}, %{"event_type" => "fill"})
-       when constraint in [:big_brush, :rainbow_strokes, :fading_ink], do: false
+       when constraint in [:big_brush, :fading_ink], do: false
 
   defp constraint_event_allowed?(_state, _event), do: true
 

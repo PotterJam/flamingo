@@ -242,8 +242,14 @@ defmodule Flamingo.GameModes.ScribbleTest do
         "drawn_at" => 0
       }
 
-      assert :ignored ==
-               Scribble.command(state, "a", {:draw, %{"event_type" => "fill"}}, context())
+      fill = %{"event_type" => "fill", "x" => 10, "y" => 10, "color" => "#dc2626"}
+
+      if constraint == :rainbow_strokes do
+        assert {:ok, %{drawing_delta: %{"event_type" => "fill"}}} =
+                 Scribble.command(state, "a", {:draw, fill}, context())
+      else
+        assert :ignored == Scribble.command(state, "a", {:draw, fill}, context())
+      end
 
       assert {:ok, %{state: updated, drawing_delta: delta}} =
                Scribble.command(state, "a", {:draw, event}, context())

@@ -517,7 +517,7 @@ const DrawingCanvas = {
       });
     }
 
-    if (["straight_lines", "big_brush", "rainbow_strokes", "fading_ink"].includes(this.constraint)) {
+    if (["straight_lines", "big_brush", "fading_ink"].includes(this.constraint)) {
       const fillButton = this.el.querySelector("[data-tool='fill']") as HTMLButtonElement | null;
       if (fillButton) {
         fillButton.disabled = true;
