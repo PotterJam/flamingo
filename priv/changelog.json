@@ -1,5 +1,12 @@
 [
   {
+    "date": "2026-10-20",
+    "entries": [
+      {"type": "fix", "text": "Last-place Spin now spins the canvas for everyone, not just the drawer."},
+      {"type": "fix", "text": "Long Scribble chats now scroll inside the game instead of stretching the page."}
+    ]
+  },
+  {
     "date": "2026-10-15",
     "entries": [
       {"type": "feature", "text": "Draw your avatar in a larger editor with brush sizes and a live preview."},
