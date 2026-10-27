@@ -669,10 +669,14 @@ defmodule Flamingo.GameModes.Scribble do
     pattern =
       word
       |> String.downcase()
-      |> String.split("-")
-      |> Enum.map_join(" *-? *", &Regex.escape/1)
+      |> String.graphemes()
+      |> Enum.map_join(fn char ->
+        if char =~ ~r/^[\p{P}\p{S}]+$/u,
+          do: " *[\\p{P}\\p{S}]? *",
+          else: Regex.escape(char)
+      end)
 
-    Regex.match?(Regex.compile!("\\A#{pattern}\\z"), String.downcase(String.trim(guess)))
+    Regex.match?(Regex.compile!("\\A#{pattern}\\z", "u"), String.downcase(String.trim(guess)))
   end
 
   defp normalize(t), do: t |> String.downcase() |> String.replace(~r/[^\p{L}\p{N}]/u, "")

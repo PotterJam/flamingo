@@ -671,6 +671,30 @@ defmodule Flamingo.GameModes.ScribbleTest do
     end
   end
 
+  test "punctuation in the word is optional in guesses" do
+    state = %{admitted() | phase: :playing, drawer_id: "a", word: "Doge’s Palace (Mr. X)"}
+
+    for guess <- [
+          "doges palace mr x",
+          "Doge’s Palace (Mr. X)",
+          "doge's palace mr x",
+          "doge s palace ( mr . x )"
+        ] do
+      assert {:ok, %{reply: :correct}} =
+               Scribble.command(state, "b", {:guess, guess}, context())
+    end
+
+    for guess <- [
+          "dogespalace mr x",
+          "doges palace mr x)!",
+          "doge''s palace mr x",
+          "doges palace mr"
+        ] do
+      assert {:ok, %{reply: reply}} = Scribble.command(state, "b", {:guess, guess}, context())
+      refute reply == :correct
+    end
+  end
+
   test "correct guesses preserve other punctuation and spacing behavior" do
     state = %{admitted() | phase: :playing, drawer_id: "a", word: "cat"}
 
