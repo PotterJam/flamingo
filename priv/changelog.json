@@ -1,5 +1,19 @@
 [
   {
+    "date": "2026-10-28",
+    "entries": [
+      {"type": "fix", "text": "Scribble game panels no longer stretch on tall screens."}
+    ]
+  },
+  {
+    "date": "2026-10-27",
+    "entries": [
+      {"type": "feature", "text": "Hosts can choose an Animals word theme."},
+      {"type": "feature", "text": "Rainbow Roulette now lets you use the fill tool with a random colour."},
+      {"type": "fix", "text": "Guesses now accept answers without punctuation, such as apostrophes and brackets."}
+    ]
+  },
+  {
     "date": "2026-10-20",
     "entries": [
       {"type": "fix", "text": "Last-place Spin now spins the canvas for everyone, not just the drawer."},
