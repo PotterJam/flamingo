@@ -4,7 +4,7 @@ defmodule FlamingoWeb.HomeLiveTest do
   import Phoenix.LiveViewTest
   import Flamingo.AccountsFixtures
 
-  alias Flamingo.{Accounts, Rooms, RoomSupervisor}
+  alias Flamingo.{Accounts, Rooms, RoomSupervisor, SavedLobbies}
 
   test "signed-in avatar changes persist across mounts including changing back", %{conn: conn} do
     user = user_fixture()
@@ -61,5 +61,33 @@ defmodule FlamingoWeb.HomeLiveTest do
     assert uri.path =~ ~r(^/game/.+)
     assert %{"resume_token" => resume_token} = URI.decode_query(uri.query)
     assert resume_token != ""
+  end
+
+  describe "saved lobby links" do
+    setup do
+      room_id = "home-saved-#{System.unique_integer([:positive])}"
+      name = "crew-#{System.unique_integer([:positive])}"
+      {:ok, ^room_id} = RoomSupervisor.start_room(room_id)
+      {:ok, token, _} = Rooms.join(room_id, "Alice")
+      {:ok, _} = Rooms.connect(room_id, token)
+      {:ok, _} = SavedLobbies.save_room(user_scope_fixture(), room_id, %{name: name})
+      %{room_id: room_id, name: name}
+    end
+
+    test "join the lobby's running room as a guest", %{conn: conn, room_id: room_id, name: name} do
+      {:ok, view, _html} = live(conn, ~p"/saved-lobby/#{String.upcase(name)}")
+      refute has_element?(view, "#create-room-button")
+
+      view |> form("#lobby-form", lobby: %{name: "Bob"}) |> render_submit()
+      {path, _flash} = assert_redirect(view)
+      assert path =~ "/game/#{room_id}?resume_token="
+    end
+
+    test "send unknown names home with an explanation", %{conn: conn} do
+      assert {:error, {:live_redirect, %{to: "/", flash: flash}}} =
+               live(conn, ~p"/saved-lobby/nobody-saved-this")
+
+      assert flash["error"] =~ "doesn't exist"
+    end
   end
 end

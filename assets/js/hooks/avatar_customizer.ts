@@ -175,11 +175,13 @@ const updateLobbyActions = (form: HTMLFormElement) => {
   const room = form.elements.namedItem("lobby[room_code]") as HTMLInputElement | null;
   const join = form.querySelector<HTMLButtonElement>("#join-button");
   const create = form.querySelector<HTMLButtonElement>("#create-room-button");
+  const joinSaved = form.querySelector<HTMLButtonElement>("#join-saved-lobby-button");
   const nameEmpty = !name?.value.trim();
   const roomEmpty = !room?.value.trim();
 
   if (join) join.disabled = nameEmpty || roomEmpty;
   if (create) create.disabled = nameEmpty || !roomEmpty;
+  if (joinSaved) joinSaved.disabled = nameEmpty;
 };
 
 const AvatarCustomizer = {

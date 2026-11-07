@@ -1,7 +1,21 @@
 defmodule FlamingoWeb.HomeLive do
   use FlamingoWeb, :live_view
 
-  alias Flamingo.{Accounts, Avatar, Rooms}
+  alias Flamingo.{Accounts, Avatar, Rooms, SavedLobbies}
+
+  def mount(%{"saved_lobby_name" => name} = params, session, socket) do
+    case SavedLobbies.get_saved_lobby_by_name(name) do
+      nil ->
+        {:ok,
+         socket
+         |> put_flash(:error, "That saved lobby doesn't exist.")
+         |> push_navigate(to: ~p"/")}
+
+      saved_lobby ->
+        {:ok, socket} = mount(Map.delete(params, "saved_lobby_name"), session, socket)
+        {:ok, assign(socket, saved_lobby: saved_lobby)}
+    end
+  end
 
   def mount(params, _session, socket) do
     room_code = Map.get(params, "room_code", "")
@@ -11,6 +25,7 @@ defmodule FlamingoWeb.HomeLive do
      assign(socket,
        name: "",
        room_code: room_code,
+       saved_lobby: nil,
        avatar: saved_avatar || Avatar.random(),
        error: nil
      )}
@@ -332,7 +347,27 @@ defmodule FlamingoWeb.HomeLive do
                     phx-update="ignore"
                   />
 
-                  <div class="sm:col-span-2 lg:col-span-1">
+                  <div :if={@saved_lobby} class="sm:col-span-2 lg:col-span-1">
+                    <p :if={@error} class="mb-2 text-sm text-red-400">{@error}</p>
+                    <p class="text-xs text-gray-500">Saved lobby</p>
+                    <p id="saved-lobby-name" class="mb-3 truncate text-lg font-bold">
+                      {@saved_lobby.name}
+                    </p>
+                    <.button
+                      type="submit"
+                      name="lobby[action]"
+                      value="join_saved_lobby"
+                      variant="default"
+                      class="w-full"
+                      disabled={String.trim(@name) == ""}
+                      id="join-saved-lobby-button"
+                      phx-update="ignore"
+                    >
+                      Join lobby
+                    </.button>
+                  </div>
+
+                  <div :if={!@saved_lobby} class="sm:col-span-2 lg:col-span-1">
                     <p :if={@error} class="mb-2 text-sm text-red-400">{@error}</p>
                     <div class="flex flex-row items-start gap-2">
                       <input
@@ -416,6 +451,9 @@ defmodule FlamingoWeb.HomeLive do
     submit_lobby(socket, params["action"])
   end
 
+  defp submit_lobby(%{assigns: %{saved_lobby: %{}}} = socket, _action),
+    do: join_saved_lobby(socket)
+
   defp submit_lobby(socket, "create"), do: create_room(socket)
   defp submit_lobby(socket, "join"), do: join_room(socket)
 
@@ -461,6 +499,19 @@ defmodule FlamingoWeb.HomeLive do
           {:error, :not_found} ->
             {:noreply, assign(socket, error: "Room not found")}
         end
+    end
+  end
+
+  defp join_saved_lobby(socket) do
+    name = String.trim(socket.assigns.name)
+
+    with {:name, true} <- {:name, name != ""},
+         {:ok, room_id} <- Rooms.open_saved_lobby(socket.assigns.saved_lobby.name),
+         {:ok, resume_token, _snapshot} <- Rooms.join(room_id, name, socket.assigns.avatar) do
+      {:noreply, push_navigate(socket, to: ~p"/game/#{room_id}?resume_token=#{resume_token}")}
+    else
+      {:name, false} -> {:noreply, assign(socket, error: "Name cannot be empty")}
+      _ -> {:noreply, assign(socket, error: "Couldn't open the saved lobby. Try again.")}
     end
   end
 end

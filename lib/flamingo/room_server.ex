@@ -8,6 +8,7 @@ defmodule Flamingo.RoomServer do
 
   defstruct [
     :room_id,
+    :saved_lobby,
     :phase_timer,
     :hint_timer,
     :turn_end_time,
@@ -19,7 +20,8 @@ defmodule Flamingo.RoomServer do
     connections: %{}
   ]
 
-  def start_link(id), do: GenServer.start_link(__MODULE__, id, name: via(id))
+  def start_link({id, opts}), do: GenServer.start_link(__MODULE__, {id, opts}, name: via(id))
+  def start_link(id), do: start_link({id, []})
   def join(id, name, avatar), do: call(id, {:join, name, avatar}, {:error, :not_found})
   def connect(id, token), do: call(id, {:connect, token}, {:error, :not_found})
   def prepare_handoff(id), do: call(id, :prepare_handoff, {:error, :not_found})
@@ -31,6 +33,15 @@ defmodule Flamingo.RoomServer do
   def guess(id, text), do: GenServer.call(via(id), {:guess, self(), text})
   def command(id, command), do: GenServer.call(via(id), {:command, self(), command})
   def snapshot(id), do: call(id, {:snapshot, self()}, {:error, :not_found})
+  def save_lobby(id, name), do: call(id, {:save_lobby, self(), name}, {:error, :not_found})
+
+  @doc "Returns the id of the running room for a saved lobby, if any."
+  def saved_lobby_room(name) do
+    case Registry.lookup(Flamingo.SavedLobbyRegistry, name) do
+      [{_pid, room_id}] -> {:ok, room_id}
+      [] -> :error
+    end
+  end
 
   defp call(id, message, fallback) do
     GenServer.call(via(id), message)
@@ -39,8 +50,25 @@ defmodule Flamingo.RoomServer do
   end
 
   defp via(id), do: {:via, :global, {:flamingo_room, id}}
+
+  # Rooms live on one node, so saved lobby names only need local registration.
+  defp register_saved_lobby(name, room_id),
+    do: Registry.register(Flamingo.SavedLobbyRegistry, name, room_id)
+
   @impl true
-  def init(id), do: {:ok, %__MODULE__{room_id: id}}
+  def init({id, opts}) do
+    case Keyword.get(opts, :saved_lobby) do
+      nil ->
+        {:ok, %__MODULE__{room_id: id}}
+
+      name ->
+        # Another arrival may have opened this saved lobby's room first.
+        case register_saved_lobby(name, id) do
+          {:ok, _} -> {:ok, %__MODULE__{room_id: id, saved_lobby: name}}
+          {:error, {:already_registered, _}} -> :ignore
+        end
+    end
+  end
 
   @impl true
   def handle_call({:join, name, avatar}, _from, state) do
@@ -86,6 +114,27 @@ defmodule Flamingo.RoomServer do
 
       :error ->
         {:reply, {:error, :not_found}, state}
+    end
+  end
+
+  def handle_call({:save_lobby, pid, name}, _, state) do
+    actor = player_id(state, pid)
+
+    cond do
+      is_nil(actor) ->
+        {:reply, {:error, :not_found}, state}
+
+      actor != state.members.host_id ->
+        {:reply, {:error, :not_host}, state}
+
+      state.saved_lobby ->
+        {:reply, {:error, :already_saved}, state}
+
+      match?({:error, _}, register_saved_lobby(name, state.room_id)) ->
+        {:reply, {:error, :already_open}, state}
+
+      true ->
+        {:reply, :ok, commit(%{state | saved_lobby: name})}
     end
   end
 
@@ -422,6 +471,7 @@ defmodule Flamingo.RoomServer do
     |> Map.merge(%{
       phase: :lobby,
       mode: :scribble,
+      saved_lobby: state.saved_lobby,
       viewer_id: id,
       round_count: 3,
       game_variant: :classic,

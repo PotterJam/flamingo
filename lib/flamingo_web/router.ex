@@ -57,6 +57,7 @@ defmodule FlamingoWeb.Router do
       on_mount: [{FlamingoWeb.UserAuth, :mount_current_scope}] do
       live "/", HomeLive
       live "/join/:room_code", HomeLive
+      live "/saved-lobby/:saved_lobby_name", HomeLive
       live "/game/:room_id", LobbyLive
       live "/game/:room_id/scribble", ScribbleLive
       live "/game/:room_id/telephone", TelephoneLive
