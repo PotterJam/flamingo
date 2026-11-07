@@ -84,7 +84,7 @@ defmodule FlamingoWeb.LobbyLive do
   end
 
   defp game_mode_option_class("coop", selected?) do
-    if selected?, do: "bg-green-400", else: "bg-gray-200 hover:bg-green-400"
+    if selected?, do: "bg-orange-400", else: "bg-gray-200 hover:bg-orange-400"
   end
 
   defp game_mode_option_class(_mode, selected?) do

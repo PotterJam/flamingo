@@ -134,7 +134,7 @@
 }
 
 .lobby-background-teams {
-  background-color: var(--color-green-100);
+  background-color: var(--color-orange-100);
 }
 
 @keyframes drift-left {

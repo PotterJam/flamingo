@@ -101,7 +101,7 @@ defmodule FlamingoWeb.GameComponents do
     do: {"bg-purple-100", "text-purple-300"}
 
   defp flamingo_background_classes(:telephone), do: {"bg-sky-100", "text-sky-300"}
-  defp flamingo_background_classes(:coop), do: {"bg-green-100", "text-green-300"}
+  defp flamingo_background_classes(:coop), do: {"bg-orange-100", "text-orange-300"}
   defp flamingo_background_classes(_game_mode), do: {"bg-pink-200", "text-pink-300"}
 
   def logo(assigns) do
