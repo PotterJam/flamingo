@@ -441,7 +441,7 @@
   transition: transform 900ms var(--selection-easing);
 }
 
-.podium-player[aria-pressed="true"] .podium-player-details::after {
+.podium-player[data-selected="true"] .podium-player-details::after {
   transform: scaleX(1);
   transform-origin: left;
 }
@@ -462,7 +462,7 @@
   transform: rotate(45deg) translateX(240px);
 }
 
-.podium-player[aria-pressed="true"] .podium-stripe {
+.podium-player[data-selected="true"] .podium-stripe {
   transform: rotate(45deg) translateX(0);
 }
 

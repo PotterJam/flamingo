@@ -114,6 +114,443 @@ defmodule FlamingoWeb.ScribbleLive do
     """
   end
 
+  attr :player_id, :string, required: true
+  attr :host_id, :string, required: true
+  attr :final_players, :map, required: true
+  attr :final_drawings, :list, required: true
+  attr :selected_player_id, :string, default: nil
+  attr :selected_drawing_index, :integer, required: true
+  attr :show_artist, :boolean, default: false
+  slot :inner_block, required: true
+
+  defp final_results(assigns) do
+    selected_drawings = drawings_for_player(assigns.final_drawings, assigns.selected_player_id)
+
+    assigns =
+      assign(assigns,
+        selected_drawings: selected_drawings,
+        drawing: Enum.at(selected_drawings, assigns.selected_drawing_index)
+      )
+
+    ~H"""
+    <div class="flex min-h-dvh w-full items-center justify-center p-4 sm:p-8">
+      <.card class="grid w-full max-w-6xl overflow-hidden bg-white p-0 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.1fr)]">
+        <div
+          id="final-leaderboard"
+          class="flex min-h-0 min-w-0 flex-col border-b-2 border-border lg:border-r-2 lg:border-b-0"
+        >
+          <div class="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto pb-4">
+            <h2 class="px-4 pt-4 text-3xl font-bold">Results</h2>
+            {render_slot(@inner_block)}
+          </div>
+          <div class="mt-auto border-t-2 border-border">
+            <.button
+              :if={@player_id == @host_id}
+              id="return-to-lobby"
+              phx-click="return_to_lobby"
+              variant="ghost"
+              class="flex w-full items-center justify-start gap-2 rounded-none border-0! px-3! py-2!"
+            >
+              <.icon name={:arrow_left} class="h-5 w-5" /> Back to lobby
+            </.button>
+            <p :if={@player_id != @host_id} class="px-3 py-2 text-sm text-gray-600">
+              Waiting for the host to return to the lobby.
+            </p>
+          </div>
+        </div>
+
+        <div
+          id="final-drawings"
+          aria-label="Selected player's drawings"
+          class="flex min-w-0 flex-col justify-center p-4 sm:p-6"
+          phx-hook="FinalDrawingShowcase"
+          data-selected-player-id={@selected_player_id}
+        >
+          <%= if is_nil(@drawing) do %>
+            <div class="bg-white p-6 text-center font-bold">
+              No drawings to show
+            </div>
+          <% else %>
+            <% share_url = drawing_share_url(@drawing, @final_players) %>
+            <% drawing_constraint = constraint_mode(Map.get(@drawing, :constraint)) %>
+            <div class="w-full">
+              <div class="mb-4 grid grid-cols-[3rem_minmax(0,1fr)_3rem] items-center">
+                <div class="col-start-2 text-center">
+                  <h3 id="final-drawing-word" class="text-2xl font-bold">
+                    {@drawing.word}
+                  </h3>
+                  <p
+                    :if={@show_artist}
+                    id="final-drawing-artist"
+                    class="text-sm font-semibold text-gray-600"
+                  >
+                    by {@final_players[@drawing.drawer_id].name}
+                  </p>
+                </div>
+                <.button
+                  id="replay-final-drawing"
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  class="text-black"
+                  data-replay-final-drawings
+                  aria-label="Replay drawing"
+                >
+                  <.icon name={:refresh_cw} class="h-5 w-5" />
+                </.button>
+              </div>
+              <div
+                id={"final-drawing-#{@drawing.drawer_id}-round-#{@drawing.round_number}"}
+                phx-hook="DrawingCanvas"
+                phx-update="ignore"
+                data-is-drawer="false"
+                data-final-drawing-replay="true"
+                data-final-drawing-events={Jason.encode!(@drawing.ops)}
+              >
+                <canvas width="700" height="500" class="aspect-[7/5] w-full bg-white"></canvas>
+              </div>
+              <p
+                :if={drawing_constraint}
+                id={"final-drawing-constraint-#{@drawing.drawer_id}-round-#{@drawing.round_number}"}
+                class="mt-2 text-center text-sm font-bold text-yellow-600"
+              >
+                drawn with {drawing_constraint}
+              </p>
+              <nav
+                aria-label="Drawing navigation"
+                class="mt-4 flex items-center justify-center gap-2"
+              >
+                <.button
+                  id="previous-final-drawing"
+                  variant="ghost"
+                  phx-click="previous_drawing"
+                  disabled={@selected_drawing_index == 0}
+                  class="flex items-center gap-1"
+                  aria-label="Previous drawing"
+                >
+                  <.icon name={:arrow_left} class="h-4 w-4" /> Prev
+                </.button>
+                <.button
+                  variant="ghost"
+                  on_confirm_click={JS.dispatch("phx:copy", detail: %{text: share_url})}
+                  id={"copy-final-drawing-#{@drawing.drawer_id}-round-#{@drawing.round_number}"}
+                  data-drawing-share-url={share_url}
+                >
+                  <span class="flex items-center gap-1">
+                    <.icon name={:copy} class="h-4 w-4" /> Copy
+                  </span>
+                </.button>
+                <.button
+                  id="next-final-drawing"
+                  variant="ghost"
+                  phx-click="next_drawing"
+                  disabled={@selected_drawing_index >= length(@selected_drawings) - 1}
+                  class="flex items-center gap-1"
+                  aria-label="Next drawing"
+                >
+                  Next <.icon name={:arrow_right} class="h-4 w-4" />
+                </.button>
+              </nav>
+            </div>
+          <% end %>
+        </div>
+      </.card>
+    </div>
+    """
+  end
+
+  attr :final_players, :map, required: true
+  attr :final_player_order, :list, required: true
+  attr :selected_player_id, :string, default: nil
+
+  defp player_standings(assigns) do
+    assigns =
+      assign(
+        assigns,
+        :ranked_players,
+        Enum.sort_by(assigns.final_player_order, &(-Map.fetch!(assigns.final_players, &1).score))
+      )
+
+    ~H"""
+    <div id="final-score-rows" class="w-full">
+      <.podium>
+        <%= for {pid, idx} <- @ranked_players |> Enum.take(3) |> Enum.with_index() do %>
+          <% player = Map.fetch!(@final_players, pid) %>
+          <li id={"final-score-row-#{pid}"} value={idx + 1} class={podium_slot_class(idx)}>
+            <button
+              type="button"
+              class="podium-player relative flex h-full w-full cursor-pointer items-center justify-center focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-pink-500"
+              phx-click="select_player"
+              phx-value-player-id={pid}
+              data-player-id={pid}
+              data-selected={to_string(pid == @selected_player_id)}
+              aria-pressed={to_string(pid == @selected_player_id)}
+              aria-label={"Rank #{idx + 1}: #{player.name}, #{player.score} points"}
+            >
+              <span class={podium_label_class(idx)}>
+                <.flamingo_avatar
+                  avatar={Map.get(player, :avatar, %{})}
+                  class="h-10 w-10 shrink-0"
+                  label={"#{player.name}'s avatar"}
+                />
+                <.podium_details
+                  rank={idx}
+                  name={player.name}
+                  votes={player}
+                  score={player.score}
+                  id={pid}
+                />
+              </span>
+              <.podium_step rank={idx} />
+            </button>
+          </li>
+        <% end %>
+      </.podium>
+      <ol id="final-remaining-players" start="4">
+        <%= for {pid, idx} <- @ranked_players |> Enum.drop(3) |> Enum.with_index(3) do %>
+          <li
+            id={"final-score-row-#{pid}"}
+            class={[
+              "flex min-w-0 items-center transition-colors",
+              pid == @selected_player_id && "bg-pink-100",
+              pid != @selected_player_id && "hover:bg-pink-50"
+            ]}
+          >
+            <button
+              type="button"
+              class="flex min-w-0 flex-1 items-center gap-2 px-3 py-2 text-left"
+              phx-click="select_player"
+              phx-value-player-id={pid}
+              data-player-id={pid}
+              data-selected={to_string(pid == @selected_player_id)}
+              aria-pressed={to_string(pid == @selected_player_id)}
+            >
+              <span class="text-lg">
+                {idx + 1}
+              </span>
+              <.flamingo_avatar
+                avatar={Map.get(Map.get(@final_players, pid), :avatar, %{})}
+                class="h-10 w-10 shrink-0"
+                label={"#{Map.get(@final_players, pid).name}'s avatar"}
+              />
+              <span class="min-w-0 flex-1 truncate font-bold">
+                {Map.get(@final_players, pid).name}
+              </span>
+              <.final_votes player={Map.fetch!(@final_players, pid)} id={pid} />
+              <span class="shrink-0 text-pink-500 font-semibold">
+                {Map.get(@final_players, pid).score}
+              </span>
+            </button>
+          </li>
+        <% end %>
+      </ol>
+    </div>
+    """
+  end
+
+  attr :teams, :map, required: true
+  attr :team_scores, :map, required: true
+  attr :final_players, :map, required: true
+  attr :final_player_order, :list, required: true
+  attr :selected_player_id, :string, default: nil
+
+  defp team_standings(assigns) do
+    ranked_teams =
+      assigns.teams
+      |> Map.values()
+      |> Enum.uniq()
+      |> Enum.sort_by(&{-Map.get(assigns.team_scores, &1, 0), &1})
+      |> Enum.map(fn team ->
+        members = Enum.filter(assigns.final_player_order, &(assigns.teams[&1] == team))
+
+        votes = %{
+          thumbs_up: Enum.sum(Enum.map(members, &assigns.final_players[&1].thumbs_up)),
+          thumbs_down: Enum.sum(Enum.map(members, &assigns.final_players[&1].thumbs_down))
+        }
+
+        %{
+          id: team,
+          members: members,
+          score: Map.get(assigns.team_scores, team, 0),
+          votes: votes,
+          selected?: assigns.selected_player_id in members
+        }
+      end)
+
+    assigns = assign(assigns, :ranked_teams, ranked_teams)
+
+    ~H"""
+    <div id="final-team-rows" class="w-full">
+      <.podium>
+        <li
+          :for={{team, idx} <- @ranked_teams |> Enum.take(3) |> Enum.with_index()}
+          id={"final-team-row-#{team.id}"}
+          value={idx + 1}
+          class={["podium-player" | podium_slot_class(idx)]}
+          data-selected={to_string(team.selected?)}
+        >
+          <div class={podium_label_class(idx)}>
+            <.team_avatars
+              team={team}
+              final_players={@final_players}
+              selected_player_id={@selected_player_id}
+            />
+            <.podium_details
+              rank={idx}
+              name={"Team #{team.id}"}
+              votes={team.votes}
+              score={team.score}
+              id={"team-#{team.id}"}
+            />
+          </div>
+          <button
+            type="button"
+            class="flex h-full w-full cursor-pointer focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-pink-500"
+            phx-click="select_player"
+            phx-value-player-id={hd(team.members)}
+            aria-label={"Rank #{idx + 1}: Team #{team.id}, #{team.score} points"}
+          >
+            <.podium_step rank={idx} />
+          </button>
+        </li>
+      </.podium>
+      <ol id="final-remaining-teams" start="4">
+        <li
+          :for={{team, idx} <- @ranked_teams |> Enum.drop(3) |> Enum.with_index(3)}
+          id={"final-team-row-#{team.id}"}
+          class={[
+            "flex min-w-0 items-center gap-2 px-3 py-2 transition-colors",
+            team.selected? && "bg-pink-100"
+          ]}
+        >
+          <span class="text-lg">{idx + 1}</span>
+          <.team_avatars
+            team={team}
+            final_players={@final_players}
+            selected_player_id={@selected_player_id}
+          />
+          <span class="min-w-0 flex-1 truncate font-bold">Team {team.id}</span>
+          <.final_votes player={team.votes} id={"team-#{team.id}"} />
+          <span class="shrink-0 font-semibold text-pink-500">{team.score}</span>
+        </li>
+      </ol>
+    </div>
+    """
+  end
+
+  attr :team, :map, required: true
+  attr :final_players, :map, required: true
+  attr :selected_player_id, :string, default: nil
+
+  defp team_avatars(assigns) do
+    ~H"""
+    <span class="flex shrink-0 -space-x-1.5">
+      <button
+        :for={id <- @team.members}
+        type="button"
+        id={"final-player-#{id}"}
+        class={[
+          "relative shrink-0 cursor-pointer rounded-full border-2 bg-white p-0.5 transition-transform hover:z-20 hover:-translate-y-0.5 focus-visible:outline-2 focus-visible:outline-pink-500",
+          if(id == @selected_player_id,
+            do: "z-10 border-pink-500",
+            else: "border-border"
+          )
+        ]}
+        phx-click="select_player"
+        phx-value-player-id={id}
+        data-player-id={id}
+        data-selected={to_string(id == @selected_player_id)}
+        aria-pressed={to_string(id == @selected_player_id)}
+        title={@final_players[id].name}
+      >
+        <.flamingo_avatar
+          avatar={Map.get(@final_players[id], :avatar, %{})}
+          class="h-7 w-7"
+          label={"#{@final_players[id].name}'s drawings"}
+        />
+      </button>
+    </span>
+    """
+  end
+
+  slot :inner_block, required: true
+
+  defp podium(assigns) do
+    ~H"""
+    <div class="overflow-x-auto">
+      <div class="min-w-[29rem] sm:min-w-[33rem]">
+        <ol
+          id="final-podium"
+          aria-label="Podium"
+          class="mx-auto grid w-fit grid-cols-[repeat(3,2.5rem)] items-end pt-16 pb-6 sm:grid-cols-[repeat(3,3rem)]"
+        >
+          {render_slot(@inner_block)}
+        </ol>
+      </div>
+    </div>
+    """
+  end
+
+  attr :rank, :integer, required: true
+  attr :name, :string, required: true
+  attr :votes, :map, required: true
+  attr :score, :integer, required: true
+  attr :id, :string, required: true
+
+  defp podium_details(assigns) do
+    ~H"""
+    <span class={[
+      "flex w-40 min-w-0 items-center text-sm sm:w-46 sm:text-base",
+      @rank == 1 && "justify-end text-right"
+    ]}>
+      <span class="podium-player-details relative flex min-w-0 items-center gap-1 sm:gap-2">
+        <span class="min-w-0 truncate font-bold" title={@name}>{@name}</span>
+        <.final_votes player={@votes} id={@id} />
+        <span class="shrink-0 font-semibold text-pink-500">{@score}</span>
+      </span>
+    </span>
+    """
+  end
+
+  attr :rank, :integer, required: true
+
+  defp podium_step(assigns) do
+    ~H"""
+    <span
+      aria-hidden="true"
+      class={[
+        "relative z-10 flex h-full w-full items-center justify-center overflow-hidden border-2 border-border text-xl font-black",
+        @rank == 0 && "bg-yellow-300 text-yellow-400",
+        @rank == 1 && "border-r-0 bg-slate-200 text-slate-300",
+        @rank == 2 && "border-l-0 bg-orange-300 text-[#d9a36b]"
+      ]}
+    >
+      <span
+        :for={stripe <- 0..11}
+        class="podium-stripe pointer-events-none"
+        style={"--stripe-index: #{stripe}; --stripe-delay: #{rem(stripe, 3) * 60}ms"}
+      >
+      </span>
+      <span class="relative text-black">{@rank + 1}</span>
+    </span>
+    """
+  end
+
+  defp podium_slot_class(rank),
+    do: [
+      "relative row-start-1",
+      rank == 0 && "col-start-2 h-26",
+      rank == 1 && "col-start-1 h-16",
+      rank == 2 && "col-start-3 h-6"
+    ]
+
+  defp podium_label_class(rank),
+    do: [
+      "absolute bottom-full -mb-2 flex items-center gap-2 px-3 py-2",
+      rank == 1 && "right-1/2 -mr-8 flex-row-reverse",
+      rank != 1 && "left-1/2 -ml-8"
+    ]
+
   defp constraint_label(:hidden_canvas), do: "Draw blind — your canvas is hidden"
   defp constraint_label(:single_stroke), do: "One stroke — don't lift your pen"
   defp constraint_label(:straight_lines), do: "Straight lines only"
@@ -504,269 +941,31 @@ defmodule FlamingoWeb.ScribbleLive do
             @final_player_order,
             @selected_player_id
           ) %>
-        <% selected_drawings = drawings_for_player(@final_drawings, selected_player_id) %>
-        <% drawing = Enum.at(selected_drawings, @selected_drawing_index) %>
-        <% ranked_players =
-          Enum.sort_by(@final_player_order, &(-Map.fetch!(@final_players, &1).score)) %>
-        <div class="flex min-h-dvh w-full items-center justify-center p-4 sm:p-8">
-          <.card class="grid w-full max-w-6xl overflow-hidden bg-white p-0 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.1fr)]">
-            <div
-              id="final-leaderboard"
-              class="flex min-h-0 min-w-0 flex-col border-b-2 border-border lg:border-r-2 lg:border-b-0"
-            >
-              <div class="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto pb-4">
-                <h2 class="px-4 pt-4 text-3xl font-bold">Results</h2>
-                <ul :if={@game_variant == :coop} id="coop-final-teams" class="space-y-3 px-4">
-                  <li
-                    :for={
-                      {team, _members} <-
-                        Enum.group_by(@teams, fn {_id, team} -> team end)
-                        |> Enum.sort_by(fn {team, _} -> {-@team_scores[team], team} end)
-                    }
-                    class="rounded-base border-2 border-border p-3"
-                  >
-                    <h3 class="flex justify-between font-bold">
-                      <span>Team {team}</span><span>{@team_scores[team]} pts</span>
-                    </h3>
-                    <div class="mt-2 flex flex-wrap gap-2">
-                      <.button
-                        :for={id <- Enum.filter(@final_player_order, &(@teams[&1] == team))}
-                        id={"coop-final-player-#{id}"}
-                        size="sm"
-                        variant={if id == selected_player_id, do: "default", else: "outline"}
-                        phx-click="select_player"
-                        phx-value-player-id={id}
-                        aria-pressed={to_string(id == selected_player_id)}
-                      >
-                        {@final_players[id].name}
-                      </.button>
-                    </div>
-                  </li>
-                </ul>
-                <div :if={@game_variant != :coop} id="final-score-rows" class="w-full">
-                  <div class="overflow-x-auto">
-                    <div class="min-w-[29rem] sm:min-w-[33rem]">
-                      <ol
-                        id="final-podium"
-                        aria-label="Podium"
-                        class="mx-auto grid w-fit grid-cols-[repeat(3,2.5rem)] items-end pt-16 pb-6 sm:grid-cols-[repeat(3,3rem)]"
-                      >
-                        <%= for {pid, idx} <- ranked_players |> Enum.take(3) |> Enum.with_index() do %>
-                          <% player = Map.fetch!(@final_players, pid) %>
-                          <li
-                            id={"final-score-row-#{pid}"}
-                            value={idx + 1}
-                            class={[
-                              "relative row-start-1",
-                              idx == 0 && "col-start-2 h-26",
-                              idx == 1 && "col-start-1 h-16",
-                              idx == 2 && "col-start-3 h-6"
-                            ]}
-                          >
-                            <button
-                              type="button"
-                              class="podium-player relative flex h-full w-full cursor-pointer items-center justify-center focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-pink-500"
-                              phx-click="select_player"
-                              phx-value-player-id={pid}
-                              data-player-id={pid}
-                              data-selected={if(pid == selected_player_id, do: "true", else: "false")}
-                              aria-pressed={if(pid == selected_player_id, do: "true", else: "false")}
-                              aria-label={"Rank #{idx + 1}: #{player.name}, #{player.score} points"}
-                            >
-                              <span class={[
-                                "absolute bottom-full -mb-2 flex items-center gap-2 px-3 py-2",
-                                idx == 1 && "right-1/2 -mr-8 flex-row-reverse",
-                                idx != 1 && "left-1/2 -ml-8"
-                              ]}>
-                                <.flamingo_avatar
-                                  avatar={Map.get(player, :avatar, %{})}
-                                  class="h-10 w-10 shrink-0"
-                                  label={"#{player.name}'s avatar"}
-                                />
-                                <span class={[
-                                  "flex w-40 min-w-0 items-center text-sm sm:w-46 sm:text-base",
-                                  idx == 1 && "justify-end text-right"
-                                ]}>
-                                  <span class="podium-player-details relative flex min-w-0 items-center gap-1 sm:gap-2">
-                                    <span class="min-w-0 truncate font-bold" title={player.name}>
-                                      {player.name}
-                                    </span>
-                                    <.final_votes player={player} id={pid} />
-                                    <span class="shrink-0 font-semibold text-pink-500">
-                                      {player.score}
-                                    </span>
-                                  </span>
-                                </span>
-                              </span>
-                              <span
-                                aria-hidden="true"
-                                class={[
-                                  "relative z-10 flex h-full w-full items-center justify-center overflow-hidden border-2 border-border text-xl font-black",
-                                  idx == 0 && "bg-yellow-300 text-yellow-400",
-                                  idx == 1 && "border-r-0 bg-slate-200 text-slate-300",
-                                  idx == 2 && "border-l-0 bg-orange-300 text-[#d9a36b]"
-                                ]}
-                              >
-                                <span
-                                  :for={stripe <- 0..11}
-                                  class="podium-stripe pointer-events-none"
-                                  style={"--stripe-index: #{stripe}; --stripe-delay: #{rem(stripe, 3) * 60}ms"}
-                                >
-                                </span>
-                                <span class="relative text-black">{idx + 1}</span>
-                              </span>
-                            </button>
-                          </li>
-                        <% end %>
-                      </ol>
-                    </div>
-                  </div>
-                  <ol id="final-remaining-players" start="4">
-                    <%= for {pid, idx} <- ranked_players |> Enum.drop(3) |> Enum.with_index(3) do %>
-                      <li
-                        id={"final-score-row-#{pid}"}
-                        class={[
-                          "flex min-w-0 items-center transition-colors",
-                          pid == selected_player_id && "bg-pink-100",
-                          pid != selected_player_id && "hover:bg-pink-50"
-                        ]}
-                      >
-                        <button
-                          type="button"
-                          class={[
-                            "flex min-w-0 flex-1 items-center gap-2 px-3 py-2 text-left"
-                          ]}
-                          phx-click="select_player"
-                          phx-value-player-id={pid}
-                          data-player-id={pid}
-                          data-selected={if(pid == selected_player_id, do: "true", else: "false")}
-                          aria-pressed={if(pid == selected_player_id, do: "true", else: "false")}
-                        >
-                          <span class="text-lg">
-                            {idx + 1}
-                          </span>
-                          <.flamingo_avatar
-                            avatar={Map.get(Map.get(@final_players, pid), :avatar, %{})}
-                            class="h-10 w-10 shrink-0"
-                            label={"#{Map.get(@final_players, pid).name}'s avatar"}
-                          />
-                          <span class="min-w-0 flex-1 truncate font-bold">
-                            {Map.get(@final_players, pid).name}
-                          </span>
-                          <.final_votes player={Map.fetch!(@final_players, pid)} id={pid} />
-                          <span class="shrink-0 text-pink-500 font-semibold">
-                            {Map.get(@final_players, pid).score}
-                          </span>
-                        </button>
-                      </li>
-                    <% end %>
-                  </ol>
-                </div>
-              </div>
-              <div class="mt-auto border-t-2 border-border">
-                <.button
-                  :if={@player_id == @host_id}
-                  id="return-to-lobby"
-                  phx-click="return_to_lobby"
-                  variant="ghost"
-                  class="flex w-full items-center justify-start gap-2 rounded-none border-0! px-3! py-2!"
-                >
-                  <.icon name={:arrow_left} class="h-5 w-5" /> Back to lobby
-                </.button>
-                <p :if={@player_id != @host_id} class="px-3 py-2 text-sm text-gray-600">
-                  Waiting for the host to return to the lobby.
-                </p>
-              </div>
-            </div>
-
-            <div
-              id="final-drawings"
-              aria-label="Selected player's drawings"
-              class="flex min-w-0 flex-col justify-center p-4 sm:p-6"
-              phx-hook="FinalDrawingShowcase"
-              data-selected-player-id={selected_player_id}
-            >
-              <%= if is_nil(drawing) do %>
-                <div class="bg-white p-6 text-center font-bold">
-                  No drawings to show
-                </div>
-              <% else %>
-                <% share_url = drawing_share_url(drawing, @final_players) %>
-                <% drawing_constraint = constraint_mode(Map.get(drawing, :constraint)) %>
-                <div class="w-full">
-                  <div class="mb-4 grid grid-cols-[3rem_minmax(0,1fr)_3rem] items-center">
-                    <h3 id="final-drawing-word" class="col-start-2 text-center text-2xl font-bold">
-                      {drawing.word}
-                    </h3>
-                    <.button
-                      id="replay-final-drawing"
-                      type="button"
-                      variant="ghost"
-                      size="icon"
-                      class="text-black"
-                      data-replay-final-drawings
-                      aria-label="Replay drawing"
-                    >
-                      <.icon name={:refresh_cw} class="h-5 w-5" />
-                    </.button>
-                  </div>
-                  <div
-                    id={"final-drawing-#{drawing.drawer_id}-round-#{drawing.round_number}"}
-                    phx-hook="DrawingCanvas"
-                    phx-update="ignore"
-                    data-is-drawer="false"
-                    data-final-drawing-replay="true"
-                    data-final-drawing-events={Jason.encode!(drawing.ops)}
-                  >
-                    <canvas width="700" height="500" class="aspect-[7/5] w-full bg-white"></canvas>
-                  </div>
-                  <p
-                    :if={drawing_constraint}
-                    id={"final-drawing-constraint-#{drawing.drawer_id}-round-#{drawing.round_number}"}
-                    class="mt-2 text-center text-sm font-bold text-yellow-600"
-                  >
-                    drawn with {drawing_constraint}
-                  </p>
-                  <nav
-                    aria-label="Drawing navigation"
-                    class="mt-4 flex items-center justify-center gap-2"
-                  >
-                    <.button
-                      id="previous-final-drawing"
-                      variant="ghost"
-                      phx-click="previous_drawing"
-                      disabled={@selected_drawing_index == 0}
-                      class="flex items-center gap-1"
-                      aria-label="Previous drawing"
-                    >
-                      <.icon name={:arrow_left} class="h-4 w-4" /> Prev
-                    </.button>
-                    <.button
-                      variant="ghost"
-                      on_confirm_click={JS.dispatch("phx:copy", detail: %{text: share_url})}
-                      id={"copy-final-drawing-#{drawing.drawer_id}-round-#{drawing.round_number}"}
-                      data-drawing-share-url={share_url}
-                    >
-                      <span class="flex items-center gap-1">
-                        <.icon name={:copy} class="h-4 w-4" /> Copy
-                      </span>
-                    </.button>
-                    <.button
-                      id="next-final-drawing"
-                      variant="ghost"
-                      phx-click="next_drawing"
-                      disabled={@selected_drawing_index >= length(selected_drawings) - 1}
-                      class="flex items-center gap-1"
-                      aria-label="Next drawing"
-                    >
-                      Next <.icon name={:arrow_right} class="h-4 w-4" />
-                    </.button>
-                  </nav>
-                </div>
-              <% end %>
-            </div>
-          </.card>
-        </div>
+        <.final_results
+          player_id={@player_id}
+          host_id={@host_id}
+          final_players={@final_players}
+          final_drawings={@final_drawings}
+          selected_player_id={selected_player_id}
+          selected_drawing_index={@selected_drawing_index}
+          show_artist={@game_variant == :coop}
+        >
+          <%= if @game_variant == :coop do %>
+            <.team_standings
+              teams={@teams}
+              team_scores={@team_scores}
+              final_players={@final_players}
+              final_player_order={@final_player_order}
+              selected_player_id={selected_player_id}
+            />
+          <% else %>
+            <.player_standings
+              final_players={@final_players}
+              final_player_order={@final_player_order}
+              selected_player_id={selected_player_id}
+            />
+          <% end %>
+        </.final_results>
       <% end %>
 
       <.clipboard_handler />
