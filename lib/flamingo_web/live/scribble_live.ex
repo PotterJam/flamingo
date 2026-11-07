@@ -444,16 +444,16 @@ defmodule FlamingoWeb.ScribbleLive do
 
   defp team_avatars(assigns) do
     ~H"""
-    <span class="flex shrink-0 -space-x-1.5">
+    <span class="flex shrink-0 items-end gap-0.5">
       <button
         :for={id <- @team.members}
         type="button"
         id={"final-player-#{id}"}
         class={[
-          "relative shrink-0 cursor-pointer rounded-full border-2 bg-white p-0.5 transition-transform hover:z-20 hover:-translate-y-0.5 focus-visible:outline-2 focus-visible:outline-pink-500",
+          "relative shrink-0 cursor-pointer border-b-2 pb-0.5 transition-transform hover:-translate-y-0.5 focus-visible:outline-2 focus-visible:outline-pink-500",
           if(id == @selected_player_id,
-            do: "z-10 border-pink-500",
-            else: "border-border"
+            do: "border-pink-500",
+            else: "border-transparent"
           )
         ]}
         phx-click="select_player"
@@ -465,7 +465,7 @@ defmodule FlamingoWeb.ScribbleLive do
       >
         <.flamingo_avatar
           avatar={Map.get(@final_players[id], :avatar, %{})}
-          class="h-7 w-7"
+          class="h-8 w-8"
           label={"#{@final_players[id].name}'s drawings"}
         />
       </button>
@@ -571,7 +571,7 @@ defmodule FlamingoWeb.ScribbleLive do
   defp constraint_mode(:fading_ink), do: "fading ink"
   defp constraint_mode(_constraint), do: nil
 
-  defp mode_label(:coop), do: "CO-OP"
+  defp mode_label(:coop), do: "TEAMS"
   defp mode_label(:constraint_roulette), do: "ROULETTE"
   defp mode_label(_variant), do: "SCRIBBLE"
 

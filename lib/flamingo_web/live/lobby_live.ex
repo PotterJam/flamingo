@@ -53,6 +53,9 @@ defmodule FlamingoWeb.LobbyLive do
   defp lobby_background(:telephone, _variant),
     do: "grid-background lobby-background-telephone transition-colors duration-300"
 
+  defp lobby_background(:coop, _variant),
+    do: "grid-background lobby-background-teams transition-colors duration-300"
+
   defp lobby_background(:scribble, :constraint_roulette),
     do: "grid-background lobby-background-constraint transition-colors duration-300"
 
@@ -78,6 +81,10 @@ defmodule FlamingoWeb.LobbyLive do
 
   defp game_mode_option_class("telephone", selected?) do
     if selected?, do: "bg-sky-400", else: "bg-gray-200 hover:bg-sky-400"
+  end
+
+  defp game_mode_option_class("coop", selected?) do
+    if selected?, do: "bg-green-400", else: "bg-gray-200 hover:bg-green-400"
   end
 
   defp game_mode_option_class(_mode, selected?) do
@@ -109,7 +116,7 @@ defmodule FlamingoWeb.LobbyLive do
                       {"classic", "Classic"},
                       {"constraint_roulette", "Roulette"},
                       {"telephone", "Telephone"},
-                      {"coop", "Co-op"}
+                      {"coop", "Teams"}
                     ]
                   }
                   type="button"

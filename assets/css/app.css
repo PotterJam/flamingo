@@ -133,6 +133,10 @@
   background-color: var(--color-sky-100);
 }
 
+.lobby-background-teams {
+  background-color: var(--color-green-100);
+}
+
 @keyframes drift-left {
   0% { transform: translateX(-100px); }
   100% { transform: translateX(100px); }
