@@ -555,6 +555,26 @@ defmodule Flamingo.RoomServerTest do
     assert opponent.team_scores == %{1 => 400, 2 => 0}
   end
 
+  test "a co-op team survives a member refreshing mid-race", %{room_id: room_id} do
+    [{host_token, _}, {teammate_token, _}, {opponent_token, _}, _] =
+      for name <- ["Alice", "Bob", "Cara", "Drew"] do
+        {:ok, token, snapshot} = join_connected(room_id, name)
+        {token, snapshot.viewer_id}
+      end
+
+    :ok =
+      start_game_as(room_id, host_token, %{game_mode: :coop, custom_words: ["cat", "dog", "bird"]})
+
+    :ok = select_word_as(room_id, host_token, "cat")
+    :ok = select_word_as(room_id, opponent_token, "dog")
+
+    stop_supervised!(Process.get({:player_child, teammate_token}))
+    {_child_id, _pid, resumed} = start_connection(room_id, teammate_token)
+    assert resumed.phase == :playing
+    refute resumed.team_finished?
+    assert resumed.can_guess?
+  end
+
   test "telephone dispatches private drawings and advances when drawing time expires", %{
     room_id: room_id
   } do

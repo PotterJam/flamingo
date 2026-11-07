@@ -194,9 +194,14 @@ defmodule FlamingoWeb.ScribbleLive do
               class="mx-auto -mb-3 flex items-center gap-2 rounded-full border-2 border-pink-300 bg-white px-4 py-2 text-sm font-bold text-pink-700 shadow-sm"
             >
               <.icon name={:eye} class="h-4 w-4" />
-              {if @game_variant == :coop,
-                do: "Spectating until the next game",
-                else: "Spectating this turn"}
+              <%= cond do %>
+                <% @game_variant != :coop -> %>
+                  Spectating this turn
+                <% @teams[@player_id] -> %>
+                  Your team sits out this round
+                <% true -> %>
+                  Spectating until the next game
+              <% end %>
             </div>
             <p
               :if={@game_variant == :coop and @participation == :active}

@@ -490,7 +490,7 @@ defmodule FlamingoWeb.GameComponents do
       <div
         id="player-list-scroll"
         class={[
-          "min-h-0 flex-grow overflow-y-auto overflow-x-hidden pb-1 pr-1",
+          "-mr-1 -mb-1 min-h-0 flex-grow overflow-y-auto overflow-x-hidden pr-1 pb-1",
           @teams != %{} && "space-y-3"
         ]}
       >

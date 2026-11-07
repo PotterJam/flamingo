@@ -159,19 +159,16 @@ defmodule Flamingo.GameModes.Coop do
 
   def timeout(_, _, _), do: :ignored
 
-  def connection_changed(state, id, :offline, context), do: reconcile(state, id, context)
-  def connection_changed(state, _, :online, _), do: ok(state)
-  def remove_member(state, id, _removed, context), do: reconcile(state, id, context)
+  # Like Scribble, a brief disconnect (such as a refresh) keeps the team racing;
+  # only removal after the grace period ends a team's turn.
+  def connection_changed(state, _, _, _), do: ok(state)
 
-  defp reconcile(state, id, context) do
+  def remove_member(state, id, _removed, context) do
     team = state.teams[id]
     game = state.games[team]
 
-    online =
-      Enum.filter(team_ids(state, team, context.roster), &context.roster.players[&1].connected)
-
     if (state.phase in [:word_choice, :playing] and game) &&
-         (id == game.drawer_id or Enum.all?(online, &(&1 == game.drawer_id))) do
+         (id == game.drawer_id or team_ids(state, team, context.roster) == [game.drawer_id]) do
       state =
         if game.phase == :word_choice do
           {:ok, result} = Scribble.timeout(game, :word_choice, team_context(state, team, context))

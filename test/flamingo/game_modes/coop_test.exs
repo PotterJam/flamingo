@@ -112,7 +112,7 @@ defmodule Flamingo.GameModes.CoopTest do
     assert Coop.view(state, "5", context.roster).current_round == 1
   end
 
-  test "late joiners spectate without private words; disconnected drawers only end their own team" do
+  test "late joiners spectate without private words; removed drawers only end their own team" do
     {state, context} = game()
     newcomer = %{id: "6", name: "Late", connected: true}
 
@@ -129,15 +129,23 @@ defmodule Flamingo.GameModes.CoopTest do
     assert Coop.view(state, "6", context.roster).participation == :spectator
     assert Coop.view(state, "6", context.roster).word == nil
     assert Coop.view(state, "6", context.roster).current_drawing == []
-    offline = put_in(context, [:roster, :players, "1", :connected], false)
-    {:ok, %{state: state}} = Coop.connection_changed(state, "1", :offline, offline)
-    assert Coop.view(state, "3", context.roster).phase == :word_choice
-    state = command(state, "3", {:select_word, "dog"}, offline)
-    assert Coop.view(state, "2", context.roster).team_finished?
-    assert Coop.view(state, "4", context.roster).can_guess?
-    {:ok, %{state: state}} = Coop.connection_changed(state, "1", :online, context)
-    assert Coop.view(state, "1", context.roster).teams["1"] == 1
-    state = command(state, "5", {:guess, "dog"}, context)
-    assert Coop.view(state, "4", context.roster).team_scores == %{1 => 0, 2 => 400}
+    roster = context.roster
+
+    removed = %{
+      context
+      | roster: %{
+          roster
+          | players: Map.delete(roster.players, "1"),
+            player_order: List.delete(roster.player_order, "1")
+        }
+    }
+
+    {:ok, %{state: state}} = Coop.remove_member(state, "1", %{id: "1", name: "Player 1"}, removed)
+    assert Coop.view(state, "3", removed.roster).phase == :word_choice
+    state = command(state, "3", {:select_word, "dog"}, removed)
+    assert Coop.view(state, "2", removed.roster).team_finished?
+    assert Coop.view(state, "4", removed.roster).can_guess?
+    state = command(state, "5", {:guess, "dog"}, removed)
+    assert Coop.view(state, "4", removed.roster).team_scores == %{1 => 0, 2 => 400}
   end
 end
