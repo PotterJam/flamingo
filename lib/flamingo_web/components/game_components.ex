@@ -56,7 +56,7 @@ defmodule FlamingoWeb.GameComponents do
 
   attr :game_mode, :atom,
     default: :classic,
-    values: [:classic, :constraint_roulette, :telephone]
+    values: [:classic, :constraint_roulette, :telephone, :coop]
 
   attr :label, :string, default: "SCRIBBLE"
 
@@ -458,17 +458,25 @@ defmodule FlamingoWeb.GameComponents do
 
   attr :players, :map, required: true
   attr :player_order, :list, required: true
+  attr :teams, :map, default: %{}
+  attr :team_scores, :map, default: %{}
+  attr :team_drawers, :list, default: []
   attr :drawer_id, :string, default: nil
   attr :correct_guesses, :any, default: MapSet.new()
   attr :current_round, :integer, required: true
   attr :round_count, :integer, required: true
 
   def player_list_panel(assigns) do
+    player_order =
+      Enum.sort_by(assigns.player_order, fn pid -> -Map.fetch!(assigns.players, pid).score end)
+
     assigns =
       assign(
         assigns,
-        :player_order,
-        Enum.sort_by(assigns.player_order, fn pid -> -Map.fetch!(assigns.players, pid).score end)
+        :player_groups,
+        player_order
+        |> Enum.group_by(&Map.get(assigns.teams, &1))
+        |> Enum.sort_by(fn {team, _players} -> {is_nil(team), team} end)
       )
 
     ~H"""
@@ -479,16 +487,33 @@ defmodule FlamingoWeb.GameComponents do
         current={@current_round}
         total={@round_count}
       />
-      <.box class="flex min-h-0 flex-1 flex-col bg-white p-0">
-        <div id="player-list-scroll" class="min-h-0 flex-grow overflow-y-auto overflow-x-hidden">
-          <ul>
-            <%= for pid <- @player_order do %>
+      <div
+        id="player-list-scroll"
+        class={[
+          "min-h-0 flex-grow overflow-y-auto overflow-x-hidden pb-1 pr-1",
+          @teams != %{} && "space-y-3"
+        ]}
+      >
+        <.box
+          :for={{team, player_order} <- @player_groups}
+          class={["overflow-hidden bg-white p-0", @teams == %{} && "min-h-full"]}
+        >
+          <h3
+            :if={@teams != %{}}
+            id={"team-title-#{team || "spectators"}"}
+            class="border-b-2 border-border bg-pink-100 px-3 py-2 text-sm font-bold"
+          >
+            {if team, do: "Team #{team}", else: "Spectators"}
+            <span :if={team} class="float-right tabular-nums">{@team_scores[team]} pts</span>
+          </h3>
+          <ul id={if @teams != %{}, do: "team-players-#{team || "spectators"}", else: "player-list"}>
+            <%= for pid <- player_order do %>
               <% connected = Map.get(Map.get(@players, pid), :connected, true) %>
               <li
                 id={"player-row-#{pid}"}
                 class={[
                   "flex min-w-0 items-center gap-2 px-3 py-2 transition-opacity",
-                  pid == @drawer_id && "bg-pink-100 font-semibold",
+                  (pid == @drawer_id or pid in @team_drawers) && "bg-pink-100 font-semibold",
                   pid != @drawer_id && MapSet.member?(@correct_guesses, pid) && "bg-green-100",
                   !connected && "opacity-40"
                 ]}
@@ -502,7 +527,7 @@ defmodule FlamingoWeb.GameComponents do
                   <%= cond do %>
                     <% !connected -> %>
                       <.icon name={:wifi_off} class="h-4 w-4 text-gray-500" />
-                    <% pid == @drawer_id -> %>
+                    <% pid == @drawer_id or pid in @team_drawers -> %>
                       <.icon name={:paintbrush} class="h-4 w-4" />
                     <% MapSet.member?(@correct_guesses, pid) -> %>
                       <.icon name={:check} class="h-4 w-4 text-green-600" />
@@ -510,12 +535,14 @@ defmodule FlamingoWeb.GameComponents do
                   <% end %>
                 </span>
                 <span class="min-w-0 flex-1 truncate">{Map.get(@players, pid).name}</span>
-                <span class="shrink-0 text-sm font-semibold">{Map.get(@players, pid).score}</span>
+                <span :if={@teams == %{}} class="shrink-0 text-sm font-semibold">
+                  {Map.get(@players, pid).score}
+                </span>
               </li>
             <% end %>
           </ul>
-        </div>
-      </.box>
+        </.box>
+      </div>
     </div>
     """
   end
@@ -659,10 +686,11 @@ defmodule FlamingoWeb.GameComponents do
       phx-hook="DrawingCanvas"
       phx-update="ignore"
       data-is-drawer={to_string(@is_drawer)}
+      data-show-toolbar={to_string(@show_toolbar)}
       data-constraint={@constraint}
       data-phase={@phase}
       data-spin-started-at={@spin_started_at}
-      class={["relative flex w-[704px] max-w-full flex-col gap-2", @class]}
+      class={["group/canvas relative flex w-[704px] max-w-full flex-col gap-2", @class]}
     >
       <span
         data-spin-status
@@ -690,7 +718,7 @@ defmodule FlamingoWeb.GameComponents do
       </.box>
 
       <%= if @show_toolbar do %>
-        <.box class="relative z-10 bg-white p-0">
+        <.box class="relative z-10 bg-white p-0 group-data-[show-toolbar=false]/canvas:hidden">
           <.drawing_toolbar palette={@palette} />
         </.box>
       <% end %>

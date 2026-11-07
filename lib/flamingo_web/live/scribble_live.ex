@@ -36,6 +36,12 @@ defmodule FlamingoWeb.ScribbleLive do
        spin_started_at: nil,
        round_count: 3,
        game_variant: :classic,
+       teams: %{},
+       team_scores: %{},
+       team_gains: %{},
+       team_drawers: [],
+       team_finished?: false,
+       can_guess?: false,
        word_choices: nil,
        word_list_label: nil,
        turn_end_time: nil,
@@ -128,6 +134,10 @@ defmodule FlamingoWeb.ScribbleLive do
   defp constraint_mode(:fading_ink), do: "fading ink"
   defp constraint_mode(_constraint), do: nil
 
+  defp mode_label(:coop), do: "CO-OP"
+  defp mode_label(:constraint_roulette), do: "ROULETTE"
+  defp mode_label(_variant), do: "SCRIBBLE"
+
   defp winning_player_id(players, player_order) do
     Enum.max_by(player_order, fn pid -> Map.get(players, pid).score end, fn -> nil end)
   end
@@ -174,7 +184,7 @@ defmodule FlamingoWeb.ScribbleLive do
       <%= if @phase in [:word_choice, :playing, :turn_reveal] do %>
         <.flamingo_background
           game_mode={@game_variant}
-          label={if @game_variant == :constraint_roulette, do: "ROULETTE", else: "SCRIBBLE"}
+          label={mode_label(@game_variant)}
         />
         <div class="flex min-h-screen w-full items-center justify-center p-6">
           <div class="flex h-[675px] w-full max-w-[1200px] flex-col gap-10">
@@ -183,8 +193,18 @@ defmodule FlamingoWeb.ScribbleLive do
               id="spectator-notice"
               class="mx-auto -mb-3 flex items-center gap-2 rounded-full border-2 border-pink-300 bg-white px-4 py-2 text-sm font-bold text-pink-700 shadow-sm"
             >
-              <.icon name={:eye} class="h-4 w-4" /> Spectating this turn
+              <.icon name={:eye} class="h-4 w-4" />
+              {if @game_variant == :coop,
+                do: "Spectating until the next game",
+                else: "Spectating this turn"}
             </div>
+            <p
+              :if={@game_variant == :coop and @participation == :active}
+              id="coop-team-notice"
+              class="mx-auto -mb-3 rounded-full border-2 border-border bg-white px-4 py-2 text-sm font-bold"
+            >
+              Team {@teams[@player_id]} · Race together for a shared score
+            </p>
             <.game_header
               word={@word}
               show_word={@show_word or MapSet.member?(@correct_guesses, @player_id)}
@@ -197,6 +217,9 @@ defmodule FlamingoWeb.ScribbleLive do
               <.player_list_panel
                 players={@players}
                 player_order={@player_order}
+                teams={@teams}
+                team_scores={@team_scores}
+                team_drawers={@team_drawers}
                 drawer_id={@drawer_id}
                 correct_guesses={@correct_guesses}
                 current_round={@current_round + 1}
@@ -206,7 +229,7 @@ defmodule FlamingoWeb.ScribbleLive do
               <%= cond do %>
                 <% @phase == :word_choice -> %>
                   <.box class="flex w-[704px] shrink-0 items-center justify-center bg-white">
-                    <%= if @player_id == @drawer_id and @participation == :active do %>
+                    <%= if @player_id == @drawer_id and @participation == :active and @word_choices != [] do %>
                       <div class="relative flex flex-col items-center gap-8">
                         <.starburst_timer
                           position_class="absolute -top-36 -right-16"
@@ -231,7 +254,11 @@ defmodule FlamingoWeb.ScribbleLive do
                           end_time={@turn_end_time && DateTime.to_iso8601(@turn_end_time)}
                         />
                         <p class="text-3xl font-black">
-                          <span class="font-hero text-[2.5rem] leading-none text-pink-400">{Map.get(@players, @drawer_id).name}</span>{" "}is picking a word
+                          <%= if @game_variant == :coop do %>
+                            Waiting for team drawers to choose
+                          <% else %>
+                            <span class="font-hero text-[2.5rem] leading-none text-pink-400">{Map.get(@players, @drawer_id).name}</span>{" "}is picking a word
+                          <% end %>
                         </p>
                       </div>
                     <% end %>
@@ -247,7 +274,7 @@ defmodule FlamingoWeb.ScribbleLive do
                         {constraint_label(@constraint)}
                       </span>
                     </div>
-                    <%= if @phase == :turn_reveal do %>
+                    <%= if @phase == :turn_reveal or @team_finished? do %>
                       <div
                         id="turn-reveal-overlay"
                         class={[
@@ -262,7 +289,11 @@ defmodule FlamingoWeb.ScribbleLive do
                       >
                         <div class="flex w-full flex-col items-center gap-4 px-6">
                           <div>
-                            <p class="text-xl font-black">The word was</p>
+                            <p class="text-xl font-black">
+                              {if @team_finished? and @phase == :playing,
+                                do: "Team finished — others are still guessing",
+                                else: "The word was"}
+                            </p>
                             <p class="font-hero text-5xl leading-none font-black text-pink-400">
                               {@word}
                             </p>
@@ -296,6 +327,15 @@ defmodule FlamingoWeb.ScribbleLive do
                               </li>
                             <% end %>
                           </ul>
+                          <ul
+                            :if={@game_variant == :coop}
+                            id="coop-score-gains"
+                            class="space-y-1 font-bold"
+                          >
+                            <li :for={{team, gain} <- Enum.sort(@team_gains)}>
+                              Team {team} +{gain}
+                            </li>
+                          </ul>
                           <.starburst_timer
                             position_class=""
                             size_class="h-20 w-20"
@@ -309,13 +349,15 @@ defmodule FlamingoWeb.ScribbleLive do
 
                     <.drawing_canvas
                       id="drawing-canvas"
-                      is_drawer={@player_id == @drawer_id and @participation == :active}
+                      is_drawer={
+                        @player_id == @drawer_id and @participation == :active and not @team_finished?
+                      }
                       constraint={@constraint}
                       spin_started_at={@spin_started_at}
                       phase={@phase}
                       show_toolbar={
                         @phase == :playing and @player_id == @drawer_id and
-                          @participation == :active
+                          @participation == :active and not @team_finished?
                       }
                       palette={palette()}
                     />
@@ -339,7 +381,7 @@ defmodule FlamingoWeb.ScribbleLive do
                       </.button>
                     </div>
 
-                    <%= if @phase in [:playing, :turn_reveal] and @player_id != @drawer_id and @participation == :active do %>
+                    <%= if @phase in [:playing, :turn_reveal] and (@can_guess? or (@game_variant == :coop and @participation == :active and @player_id != @drawer_id)) do %>
                       <div
                         id="guess-row"
                         class={[
@@ -376,7 +418,7 @@ defmodule FlamingoWeb.ScribbleLive do
                             <.icon name={icon} class="h-5 w-5" />
                           </.button>
                         </div>
-                        <%= if @phase == :playing do %>
+                        <%= if @phase == :playing and not @team_finished? do %>
                           <%= if MapSet.member?(@correct_guesses, @player_id) do %>
                             <.box class="min-w-0 flex-1 bg-green-100 p-3 text-center font-bold text-green-800">
                               You guessed it!
@@ -449,7 +491,7 @@ defmodule FlamingoWeb.ScribbleLive do
       <%= if @phase == :game_ended do %>
         <.flamingo_background
           game_mode={@game_variant}
-          label={if @game_variant == :constraint_roulette, do: "ROULETTE", else: "SCRIBBLE"}
+          label={mode_label(@game_variant)}
         />
         <% selected_player_id =
           selected_or_winning_player_id(
@@ -469,7 +511,34 @@ defmodule FlamingoWeb.ScribbleLive do
             >
               <div class="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto pb-4">
                 <h2 class="px-4 pt-4 text-3xl font-bold">Results</h2>
-                <div id="final-score-rows" class="w-full">
+                <ul :if={@game_variant == :coop} id="coop-final-teams" class="space-y-3 px-4">
+                  <li
+                    :for={
+                      {team, _members} <-
+                        Enum.group_by(@teams, fn {_id, team} -> team end)
+                        |> Enum.sort_by(fn {team, _} -> {-@team_scores[team], team} end)
+                    }
+                    class="rounded-base border-2 border-border p-3"
+                  >
+                    <h3 class="flex justify-between font-bold">
+                      <span>Team {team}</span><span>{@team_scores[team]} pts</span>
+                    </h3>
+                    <div class="mt-2 flex flex-wrap gap-2">
+                      <.button
+                        :for={id <- Enum.filter(@final_player_order, &(@teams[&1] == team))}
+                        id={"coop-final-player-#{id}"}
+                        size="sm"
+                        variant={if id == selected_player_id, do: "default", else: "outline"}
+                        phx-click="select_player"
+                        phx-value-player-id={id}
+                        aria-pressed={to_string(id == selected_player_id)}
+                      >
+                        {@final_players[id].name}
+                      </.button>
+                    </div>
+                  </li>
+                </ul>
+                <div :if={@game_variant != :coop} id="final-score-rows" class="w-full">
                   <div class="overflow-x-auto">
                     <div class="min-w-[29rem] sm:min-w-[33rem]">
                       <ol
@@ -899,6 +968,12 @@ defmodule FlamingoWeb.ScribbleLive do
           ),
         round_count: snapshot.round_count,
         game_variant: snapshot.game_variant,
+        teams: snapshot.teams,
+        team_scores: Map.get(snapshot, :team_scores, %{}),
+        team_gains: Map.get(snapshot, :team_gains, %{}),
+        team_drawers: Map.get(snapshot, :team_drawers, []),
+        team_finished?: Map.get(snapshot, :team_finished?, false),
+        can_guess?: snapshot.can_guess?,
         constraint: snapshot.constraint,
         spin_holder: snapshot.spin_holder,
         spin_available?: snapshot.spin_available?,

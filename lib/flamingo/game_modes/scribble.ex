@@ -109,8 +109,10 @@ defmodule Flamingo.GameModes.Scribble do
          true <- is_boolean(spin_enabled) || {:error, :invalid_spin_enabled},
          {:ok, shared_settings} <- GameSettings.validate(settings, state),
          true <-
-           game_variant in [:classic, :constraint_roulette] || {:error, :invalid_game_variant} do
+           game_variant in [:classic, :constraint_roulette] ||
+             {:error, :invalid_game_variant} do
       participants = Map.new(state.participants, fn {id, _} -> {id, :active} end)
+
       state = Map.merge(state, shared_settings)
 
       state = %{
@@ -322,6 +324,8 @@ defmodule Flamingo.GameModes.Scribble do
         if(viewer == roster.host_id, do: state.include_default_words, else: false),
       word_list: state.word_list,
       game_variant: state.game_variant,
+      teams: %{},
+      can_guess?: active?(state, viewer) and viewer != state.drawer_id,
       constraint: state.constraint,
       spin_enabled: state.spin_enabled,
       spin_holder: state.spin_holder,
@@ -424,7 +428,8 @@ defmodule Flamingo.GameModes.Scribble do
   defp schedule_hint(state), do: ok(state, :ok, [:cancel_hint_timeout])
 
   defp enter_reveal(state, context) do
-    active_order = Enum.filter(context.roster.player_order, &active?(state, &1))
+    active_order =
+      Enum.filter(context.roster.player_order, &active?(state, &1))
 
     gains =
       Scoring.calculate_round_scores(
@@ -464,6 +469,7 @@ defmodule Flamingo.GameModes.Scribble do
 
   defp next_turn(state, context) do
     participants = Map.new(state.participants, fn {id, _} -> {id, :active} end)
+
     state = %{state | score_gains: %{}, participants: participants}
 
     next =

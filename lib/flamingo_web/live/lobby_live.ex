@@ -46,6 +46,7 @@ defmodule FlamingoWeb.LobbyLive do
     do: {:noreply, push_navigate(socket, to: ~p"/")}
 
   defp selected_game_mode(:telephone, _variant), do: "telephone"
+  defp selected_game_mode(:coop, _variant), do: "coop"
   defp selected_game_mode(:scribble, :constraint_roulette), do: "constraint_roulette"
   defp selected_game_mode(_mode, _variant), do: "classic"
 
@@ -63,6 +64,10 @@ defmodule FlamingoWeb.LobbyLive do
 
   defp game_mode_description("telephone"),
     do: "Cycle through guessing and drawing before revealing the chaos"
+
+  defp game_mode_description("coop"),
+    do:
+      "Race in pairs, with one trio for odd numbers. Each team draws and guesses together for a shared score."
 
   defp game_mode_description(_mode),
     do: "Take turns drawing a word while everyone guesses"
@@ -93,13 +98,18 @@ defmodule FlamingoWeb.LobbyLive do
           <%= if @player_id == @host_id do %>
             <fieldset class="w-full max-w-sm">
               <legend class="sr-only">Game mode</legend>
-              <div id="game-mode-selector" class="grid grid-cols-3 gap-2" role="radiogroup">
+              <div
+                id="game-mode-selector"
+                class="grid grid-cols-2 gap-2 sm:grid-cols-4"
+                role="radiogroup"
+              >
                 <button
                   :for={
                     {value, title} <- [
                       {"classic", "Classic"},
                       {"constraint_roulette", "Roulette"},
-                      {"telephone", "Telephone"}
+                      {"telephone", "Telephone"},
+                      {"coop", "Co-op"}
                     ]
                   }
                   type="button"
@@ -201,7 +211,7 @@ defmodule FlamingoWeb.LobbyLive do
                       id="word-list-select"
                     />
                   </div>
-                  <div :if={@game_mode == :scribble} class="mt-4 space-y-1">
+                  <div :if={@game_mode == :scribble and @game_variant != :coop} class="mt-4 space-y-1">
                     <.input
                       field={@settings_form[:spin_enabled]}
                       type="checkbox"
@@ -429,6 +439,7 @@ defmodule FlamingoWeb.LobbyLive do
   end
 
   defp parse_game_mode("telephone", _mode, _variant), do: {:telephone, :classic}
+  defp parse_game_mode("coop", _mode, _variant), do: {:coop, :coop}
 
   defp parse_game_mode("constraint_roulette", _mode, _variant),
     do: {:scribble, :constraint_roulette}

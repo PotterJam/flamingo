@@ -43,6 +43,79 @@ defmodule FlamingoWeb.LobbyLiveTest do
     assert snapshot.custom_words == ["orbital llama", "velvet cactus", "disco teapot"]
   end
 
+  test "co-op selection starts simultaneous teams with private guesses and shared scores",
+       context do
+    %{conn: conn, host: host, room_id: room_id, token: token} = context
+
+    guests =
+      for name <- ["Bob", "Cara", "Drew", "Eve"] do
+        {:ok, guest_token, _} = Rooms.join(room_id, name)
+        {:ok, guest, _} = live(conn, ~p"/game/#{room_id}?resume_token=#{guest_token}")
+        {guest_token, guest}
+      end
+
+    host |> element("#game-mode-coop") |> render_click()
+    host |> form("#settings-form") |> render_submit()
+    path = ~p"/game/#{room_id}/scribble?resume_token=#{token}"
+    assert_redirect(host, path)
+    {:ok, game, _} = live(conn, path)
+
+    [teammate, other_drawer, other_guesser, trio_guesser] =
+      for {guest_token, guest} <- guests do
+        path = ~p"/game/#{room_id}/scribble?resume_token=#{guest_token}"
+        assert_redirect(guest, path)
+        {:ok, view, _} = live(conn, path)
+        view
+      end
+
+    game |> element("#scribble-word-choice-0") |> render_click()
+    refute has_element?(teammate, "#guess-form")
+
+    other_word =
+      other_drawer
+      |> element("#scribble-word-choice-1")
+      |> render()
+      |> LazyHTML.from_fragment()
+      |> LazyHTML.text()
+      |> String.trim()
+
+    other_drawer |> element("#scribble-word-choice-1") |> render_click()
+    assert has_element?(teammate, "#guess-form")
+    assert has_element?(other_guesser, "#guess-form")
+    assert has_element?(trio_guesser, "#guess-form")
+
+    for name <- ["Alice", "Bob"] do
+      assert has_element?(game, "#team-players-1 li", name)
+      refute has_element?(game, "#team-players-2 li", name)
+    end
+
+    for name <- ["Cara", "Drew", "Eve"] do
+      assert has_element?(game, "#team-players-2 li", name)
+      refute has_element?(game, "#team-players-1 li", name)
+    end
+
+    other_guesser |> form("#guess-form", guess_form: %{guess: "private guess"}) |> render_submit()
+    refute has_element?(game, "#game-feed", "private guess")
+
+    {:ok, snapshot} = Rooms.connect(room_id, token)
+    teammate |> form("#guess-form", guess_form: %{guess: snapshot.word}) |> render_submit()
+    assert has_element?(game, "#coop-score-gains", "Team 1 +400")
+    assert has_element?(game, "#team-title-1", "400 pts")
+    assert has_element?(other_guesser, "#guess-form")
+
+    trio_guesser
+    |> form("#guess-form", guess_form: %{guess: other_word})
+    |> render_submit()
+
+    refute has_element?(other_guesser, "#guess-form")
+    assert {:ok, %{phase: :turn_reveal, game_variant: :coop}} = Rooms.snapshot(room_id)
+
+    {:ok, _late_token, _} = Rooms.join(room_id, "Late player")
+    assert has_element?(game, "#team-players-spectators li", "Late player")
+    refute has_element?(game, "#team-players-1 li", "Late player")
+    refute has_element?(game, "#team-players-2 li", "Late player")
+  end
+
   test "a guest's forged start event leaves the room unchanged", context do
     %{conn: conn, room_id: room_id, token: token} = context
     {:ok, guest_token, _} = Rooms.join(room_id, "Bob")
