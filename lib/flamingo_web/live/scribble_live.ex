@@ -640,13 +640,6 @@ defmodule FlamingoWeb.ScribbleLive do
                   Spectating until the next game
               <% end %>
             </div>
-            <p
-              :if={@game_variant == :coop and @participation == :active}
-              id="coop-team-notice"
-              class="mx-auto -mb-3 rounded-full border-2 border-border bg-white px-4 py-2 text-sm font-bold"
-            >
-              Team {@teams[@player_id]} · Race together for a shared score
-            </p>
             <.game_header
               word={@word}
               show_word={@show_word or MapSet.member?(@correct_guesses, @player_id)}
@@ -662,6 +655,7 @@ defmodule FlamingoWeb.ScribbleLive do
                 teams={@teams}
                 team_scores={@team_scores}
                 team_drawers={@team_drawers}
+                viewer_id={@player_id}
                 drawer_id={@drawer_id}
                 correct_guesses={@correct_guesses}
                 current_round={@current_round + 1}

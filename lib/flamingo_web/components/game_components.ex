@@ -462,6 +462,7 @@ defmodule FlamingoWeb.GameComponents do
   attr :teams, :map, default: %{}
   attr :team_scores, :map, default: %{}
   attr :team_drawers, :list, default: []
+  attr :viewer_id, :string, default: nil
   attr :drawer_id, :string, default: nil
   attr :correct_guesses, :any, default: MapSet.new()
   attr :current_round, :integer, required: true
@@ -477,7 +478,9 @@ defmodule FlamingoWeb.GameComponents do
         :player_groups,
         player_order
         |> Enum.group_by(&Map.get(assigns.teams, &1))
-        |> Enum.sort_by(fn {team, _players} -> {is_nil(team), team} end)
+        |> Enum.sort_by(fn {team, _players} ->
+          {is_nil(team), -Map.get(assigns.team_scores, team, 0), team}
+        end)
       )
 
     ~H"""
@@ -497,15 +500,26 @@ defmodule FlamingoWeb.GameComponents do
       >
         <.box
           :for={{team, player_order} <- @player_groups}
-          class={["overflow-hidden bg-white p-0", @teams == %{} && "min-h-full"]}
+          class={["shrink-0 overflow-hidden bg-white p-0", @teams == %{} && "min-h-full"]}
         >
+          <% own? = team != nil and team == @teams[@viewer_id] %>
           <h3
             :if={@teams != %{}}
             id={"team-title-#{team || "spectators"}"}
-            class="border-b-2 border-border bg-pink-100 px-3 py-2 text-sm font-bold"
+            data-own-team={to_string(own?)}
+            class={[
+              "flex items-center gap-2 border-b-2 border-border px-3 py-2 text-sm font-bold whitespace-nowrap",
+              if(own?, do: "bg-pink-300", else: "bg-pink-100")
+            ]}
           >
             {if team, do: "Team #{team}", else: "Spectators"}
-            <span :if={team} class="float-right tabular-nums">{@team_scores[team]} pts</span>
+            <span
+              :if={own?}
+              class="rounded-full bg-black px-2 py-0.5 text-[0.65rem] uppercase tracking-wide text-white"
+            >
+              You
+            </span>
+            <span :if={team} class="ml-auto tabular-nums">{@team_scores[team]} pts</span>
           </h3>
           <ul id={if @teams != %{}, do: "team-players-#{team || "spectators"}", else: "player-list"}>
             <%= for pid <- player_order do %>
