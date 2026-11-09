@@ -513,12 +513,6 @@ defmodule FlamingoWeb.GameComponents do
             ]}
           >
             {if team, do: "Team #{team}", else: "Spectators"}
-            <span
-              :if={own?}
-              class="rounded-full bg-black px-2 py-0.5 text-[0.65rem] uppercase tracking-wide text-white"
-            >
-              You
-            </span>
             <span :if={team} class="ml-auto tabular-nums">{@team_scores[team]} pts</span>
           </h3>
           <ul id={if @teams != %{}, do: "team-players-#{team || "spectators"}", else: "player-list"}>
