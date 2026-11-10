@@ -1,5 +1,5 @@
 import { expect, spyOn, test } from "bun:test";
-import DrawingCanvas, { fadingEvent, opsToEvents, spinProgress, type DrawEvent } from "./drawing_canvas";
+import DrawingCanvas, { fadingEvent, kaleidoscopeEvents, opsToEvents, spinProgress, type DrawEvent } from "./drawing_canvas";
 
 test.each(["single_stroke", ""] as const)("pointer release and cancellation with constraint %s", (constraint) => {
   const listeners = new Map<string, (event: PointerEvent) => void>();
@@ -126,4 +126,14 @@ test("final replay retains rainbow colours and big brush widths without fading",
     { event_type: "start", x: 90, y: 20, color: "#db2777", line_width: 9 },
   ]);
   expect(fadingEvent(events[0], 999999)).toEqual(events[0]);
+});
+
+test("kaleidoscope reflects strokes eight ways and drops off-canvas fills", () => {
+  const start = kaleidoscopeEvents({ event_type: "start", x: 400, y: 260, color: "#000000", line_width: 9 });
+  expect(start.map((e) => e.event_type === "start" && [e.x, e.y])).toEqual([
+    [400, 260], [340, 300], [300, 240], [360, 200], [300, 260], [360, 300], [400, 240], [340, 200],
+  ]);
+  const fills = kaleidoscopeEvents({ event_type: "fill", x: 10, y: 20, color: "#dc2626" });
+  expect(fills.map((e) => e.event_type === "fill" && [e.x, e.y])).toEqual([[10, 20], [690, 480], [690, 20], [10, 480]]);
+  expect(kaleidoscopeEvents({ event_type: "clear" })).toEqual([{ event_type: "clear" }]);
 });

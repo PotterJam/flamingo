@@ -265,6 +265,7 @@ defmodule FlamingoWeb.ScribbleLiveTest do
              :big_brush,
              :rainbow_strokes,
              :fading_ink,
+             :kaleidoscope,
              :hidden_canvas,
              :single_stroke,
              :straight_lines,

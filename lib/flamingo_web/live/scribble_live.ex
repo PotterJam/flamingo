@@ -217,6 +217,7 @@ defmodule FlamingoWeb.ScribbleLive do
                 data-is-drawer="false"
                 data-final-drawing-replay="true"
                 data-final-drawing-events={Jason.encode!(@drawing.ops)}
+                data-constraint={Map.get(@drawing, :constraint)}
               >
                 <canvas width="700" height="500" class="aspect-[7/5] w-full bg-white"></canvas>
               </div>
@@ -556,6 +557,7 @@ defmodule FlamingoWeb.ScribbleLive do
   defp constraint_label(:big_brush), do: "Heavy hands make big brush strokes"
   defp constraint_label(:rainbow_strokes), do: "All the colours of the rainbow"
   defp constraint_label(:fading_ink), do: "Draw fast! Your ink will fade"
+  defp constraint_label(:kaleidoscope), do: "Kaleidoscope — every stroke is reflected eight ways"
   defp constraint_label(_constraint), do: nil
 
   defp constraint_mode(:hidden_canvas), do: "draw blind"
@@ -566,6 +568,7 @@ defmodule FlamingoWeb.ScribbleLive do
   defp constraint_mode(:big_brush), do: "big brush"
   defp constraint_mode(:rainbow_strokes), do: "rainbow strokes"
   defp constraint_mode(:fading_ink), do: "fading ink"
+  defp constraint_mode(:kaleidoscope), do: "kaleidoscope"
   defp constraint_mode(_constraint), do: nil
 
   defp mode_label(:coop), do: "TEAMS"

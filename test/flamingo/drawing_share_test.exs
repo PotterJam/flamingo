@@ -181,6 +181,23 @@ defmodule Flamingo.DrawingShareTest do
     assert [%{"event_type" => "start"}] = decoded.events
   end
 
+  test "share links carry the Roulette constraint so kaleidoscope copies render" do
+    ops = [["p", "#000000", 9, [400, 260, 10, 40]]]
+    drawing = %{drawer_name: "Alice", word: "flamingo", round_number: 1, ops: ops}
+
+    assert {:ok, %{constraint: "kaleidoscope"}} =
+             drawing
+             |> Map.put(:constraint, :kaleidoscope)
+             |> DrawingShare.encode()
+             |> DrawingShare.decode()
+
+    assert {:ok, %{constraint: nil}} =
+             drawing
+             |> Map.put(:constraint, nil)
+             |> DrawingShare.encode()
+             |> DrawingShare.decode()
+  end
+
   test "rejects invalid drawing payloads" do
     assert {:error, :invalid_drawing} = DrawingShare.decode("not-base64")
     assert {:error, :invalid_drawing} = DrawingShare.decode("znot-valid-zlib")

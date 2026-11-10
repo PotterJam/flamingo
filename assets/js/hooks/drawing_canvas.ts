@@ -54,7 +54,7 @@ interface Point {
 }
 
 type ActiveTool = "pen" | "fill";
-type DrawingConstraint = "hidden_canvas" | "single_stroke" | "straight_lines" | "rotating_canvas" | "mirror" | "big_brush" | "rainbow_strokes" | "fading_ink" | "";
+export type DrawingConstraint = "hidden_canvas" | "single_stroke" | "straight_lines" | "rotating_canvas" | "mirror" | "big_brush" | "rainbow_strokes" | "fading_ink" | "kaleidoscope" | "";
 
 interface DrawingCanvasHook {
   el: HTMLElement;
@@ -119,6 +119,48 @@ const renderDrawEvent = (imageData: ImageData, event: DrawEvent) => {
   }
 };
 
+// The four quarter-turns about the canvas centre and their reflections, as
+// [a, b, c, d] in (x, y) -> (a·x + b·y, c·x + d·y). Stored drawings keep only
+// the drawer's own strokes; every canvas adds the copies when rendering.
+const KALEIDOSCOPE = [
+  [1, 0, 0, 1], [0, -1, 1, 0], [-1, 0, 0, -1], [0, 1, -1, 0],
+  [-1, 0, 0, 1], [0, 1, 1, 0], [1, 0, 0, -1], [0, -1, -1, 0],
+];
+
+export const kaleidoscopeEvents = (event: DrawEvent) => {
+  if (!("color" in event)) return [event];
+
+  return KALEIDOSCOPE.flatMap(([a, b, c, d]): DrawEvent[] => {
+    const cx = CANVAS_WIDTH / 2;
+    const cy = CANVAS_HEIGHT / 2;
+    const at = (x: number, y: number) =>
+      [cx + a * (x - cx) + b * (y - cy), cy + c * (x - cx) + d * (y - cy)];
+
+    switch (event.event_type) {
+      case "start": {
+        const [x, y] = at(event.x, event.y);
+        return [{ ...event, x, y }];
+      }
+      case "draw":
+      case "end": {
+        const [start_x, start_y] = at(event.start_x, event.start_y);
+        const [end_x, end_y] = at(event.end_x, event.end_y);
+        return [{ ...event, start_x, start_y, end_x, end_y }];
+      }
+      case "fill": {
+        const [x, y] = at(event.x, event.y);
+        const inside = x >= 0 && x < CANVAS_WIDTH && y >= 0 && y < CANVAS_HEIGHT;
+        return inside ? [{ ...event, x, y }] : [];
+      }
+    }
+  });
+};
+
+const renderConstrainedEvent = (imageData: ImageData, event: DrawEvent, constraint: DrawingConstraint) => {
+  const events = constraint === "kaleidoscope" ? kaleidoscopeEvents(event) : [event];
+  for (const e of events) renderDrawEvent(imageData, e);
+};
+
 export const fadingEvent = (event: DrawEvent, now: number): DrawEvent | null => {
   if (!("color" in event) || event.drawn_at === undefined) return event;
   const age = Math.max(0, (now - event.drawn_at) / 5000);
@@ -130,12 +172,17 @@ export const fadingEvent = (event: DrawEvent, now: number): DrawEvent | null => 
   return { ...event, color };
 };
 
-const renderEvents = (ctx: CanvasRenderingContext2D, events: DrawEvent[], now?: number) => {
+const renderEvents = (
+  ctx: CanvasRenderingContext2D,
+  events: DrawEvent[],
+  now?: number,
+  constraint: DrawingConstraint = ""
+) => {
   canvasEffect(ctx, (imageData) => {
     clear(imageData);
     for (const e of events) {
       const visible = now === undefined ? e : fadingEvent(e, now);
-      if (visible) renderDrawEvent(imageData, visible);
+      if (visible) renderConstrainedEvent(imageData, visible, constraint);
     }
   });
 };
@@ -144,6 +191,7 @@ export const replayEvents = (
   ctx: CanvasRenderingContext2D,
   events: DrawEvent[],
   isCurrentReplay: () => boolean,
+  constraint: DrawingConstraint = "",
   delayMs = 15
 ) => {
   canvasEffect(ctx, (imageData) => clear(imageData));
@@ -156,7 +204,7 @@ export const replayEvents = (
     if (!isCurrentReplay()) return;
 
     canvasEffect(ctx, (imageData) => {
-      renderDrawEvent(imageData, events[index]);
+      renderConstrainedEvent(imageData, events[index], constraint);
     });
 
     index += 1;
@@ -214,7 +262,7 @@ const DrawingCanvas = {
     this.clockOffset = 0;
 
     if (this.constraint === "big_brush") this.selectedThickness = 45;
-    if (this.constraint === "fading_ink") {
+    if (this.constraint === "fading_ink" && !this.el.dataset.finalDrawingEvents) {
       this.fadeTimer = window.setInterval(() => this.redraw(), 100);
     }
 
@@ -233,7 +281,7 @@ const DrawingCanvas = {
     if (this.el.dataset.finalDrawingEvents) {
       const ops = JSON.parse(this.el.dataset.finalDrawingEvents) as CompactOp[];
       this.eventStack = opsToEvents(ops);
-      renderEvents(this.ctx, this.eventStack);
+      renderEvents(this.ctx, this.eventStack, undefined, this.constraint);
 
       if (this.el.dataset.finalDrawingReplay === "true") {
         this.replayFinalDrawing();
@@ -259,7 +307,7 @@ const DrawingCanvas = {
 
       this.eventStack.push(event);
       canvasEffect(this.ctx, (imageData: ImageData) => {
-        renderDrawEvent(imageData, event);
+        renderConstrainedEvent(imageData, event, this.constraint);
       });
     });
 
@@ -326,11 +374,11 @@ const DrawingCanvas = {
 
   redraw(this: DrawingCanvasHook) {
     const fading = this.constraint === "fading_ink" && this.el.dataset.phase === "playing";
-    renderEvents(this.ctx, this.eventStack, fading ? Date.now() + this.clockOffset : undefined);
+    renderEvents(this.ctx, this.eventStack, fading ? Date.now() + this.clockOffset : undefined, this.constraint);
   },
 
   updated(this: DrawingCanvasHook) {
-    if (this.constraint === "fading_ink") this.redraw();
+    if (this.fadeTimer) this.redraw();
     this.syncSpin();
   },
 
@@ -343,7 +391,8 @@ const DrawingCanvas = {
     replayEvents(
       this.ctx,
       this.eventStack,
-      () => this.finalReplayToken === token
+      () => this.finalReplayToken === token,
+      this.constraint
     );
   },
 
@@ -354,7 +403,7 @@ const DrawingCanvas = {
       if (this.constraint === "fading_ink") event.drawn_at = Date.now() + this.clockOffset;
       this.eventStack.push(event);
       this.redoStack = [];
-      canvasEffect(this.ctx, (imageData: ImageData) => renderDrawEvent(imageData, event));
+      canvasEffect(this.ctx, (imageData: ImageData) => renderConstrainedEvent(imageData, event, this.constraint));
       this.pushEvent("draw_event", event);
     };
 
