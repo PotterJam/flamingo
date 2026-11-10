@@ -345,6 +345,10 @@
   animation-play-state: paused;
 }
 
+#drawing-canvas[data-is-drawer="true"][data-constraint="big_brush"] canvas {
+  cursor: url("/images/heavy-hand.svg") 40 6, crosshair;
+}
+
 .nb-slider {
   -webkit-appearance: none;
   appearance: none;
