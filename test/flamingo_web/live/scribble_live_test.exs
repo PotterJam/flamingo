@@ -787,6 +787,59 @@ defmodule FlamingoWeb.ScribbleLiveTest do
     assert_redirect(view, ~p"/game/#{room_id}?resume_token=#{p1_token}")
   end
 
+  test "teams final results step through the selected team's drawings by every drawer", %{
+    conn: conn,
+    room_id: room_id
+  } do
+    [{_, host_token} | _] =
+      for name <- ["Alice", "Bob", "Cara", "Drew"] do
+        {:ok, token, %{viewer_id: id}} = join_connected(room_id, name)
+        {id, token}
+      end
+
+    :ok = start_game_as(room_id, host_token, %{game_mode: :coop, round_count: 2})
+    {:ok, view, _html} = live(conn, ~p"/game/#{room_id}/scribble?resume_token=#{host_token}")
+    pid = room_pid(room_id)
+
+    Enum.reduce_while(1..20, nil, fn _, _ ->
+      case :sys.get_state(pid) do
+        %{game: %{phase: :game_ended}} ->
+          {:halt, nil}
+
+        %{phase_timer: timer} ->
+          send(pid, {:game_timeout, :phase, timer.key, timer.generation})
+          {:cont, nil}
+      end
+    end)
+
+    {:ok, snapshot} = snapshot_as(room_id, host_token)
+    assert snapshot.phase == :game_ended
+    members = Enum.filter(snapshot.final_player_order, &(snapshot.teams[&1] == 2))
+    [round_1, round_2] = Enum.filter(snapshot.final_drawings, &(&1.drawer_id in members))
+    assert round_1.drawer_id != round_2.drawer_id
+
+    view |> element("#final-team-row-2 button") |> render_click()
+    assert has_element?(view, "#final-team-row-2 [aria-pressed='true']")
+    assert has_element?(view, "#final-drawing-#{round_1.drawer_id}-round-1")
+
+    assert has_element?(
+             view,
+             "#final-drawing-artist",
+             snapshot.final_players[round_1.drawer_id].name
+           )
+
+    view |> element("#next-final-drawing") |> render_click()
+    assert has_element?(view, "#final-drawing-#{round_2.drawer_id}-round-2")
+
+    assert has_element?(
+             view,
+             "#final-drawing-artist",
+             snapshot.final_players[round_2.drawer_id].name
+           )
+
+    assert has_element?(view, "#next-final-drawing[disabled]")
+  end
+
   test "final results preserve each artist's votes in podium and remaining rows", %{
     conn: conn,
     room_id: room_id

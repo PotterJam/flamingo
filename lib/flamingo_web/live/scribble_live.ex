@@ -120,11 +120,12 @@ defmodule FlamingoWeb.ScribbleLive do
   attr :final_drawings, :list, required: true
   attr :selected_player_id, :string, default: nil
   attr :selected_drawing_index, :integer, required: true
-  attr :show_artist, :boolean, default: false
+  attr :teams, :map, default: %{}
   slot :inner_block, required: true
 
   defp final_results(assigns) do
-    selected_drawings = drawings_for_player(assigns.final_drawings, assigns.selected_player_id)
+    selected_drawings =
+      drawings_for_player(assigns.final_drawings, assigns.teams, assigns.selected_player_id)
 
     assigns =
       assign(assigns,
@@ -161,7 +162,9 @@ defmodule FlamingoWeb.ScribbleLive do
 
         <div
           id="final-drawings"
-          aria-label="Selected player's drawings"
+          aria-label={
+            if(@teams == %{}, do: "Selected player's drawings", else: "Selected team's drawings")
+          }
           class="flex min-w-0 flex-col justify-center p-4 sm:p-6"
           phx-hook="FinalDrawingShowcase"
           data-selected-player-id={@selected_player_id}
@@ -179,12 +182,20 @@ defmodule FlamingoWeb.ScribbleLive do
                   <h3 id="final-drawing-word" class="text-2xl font-bold">
                     {@drawing.word}
                   </h3>
+                  <% artist = @final_players[@drawing.drawer_id] %>
                   <p
-                    :if={@show_artist}
+                    :if={@teams != %{}}
                     id="final-drawing-artist"
-                    class="text-sm font-semibold text-gray-600"
+                    class="mt-1 flex items-center justify-center gap-2 text-sm font-semibold text-gray-600"
                   >
-                    by {@final_players[@drawing.drawer_id].name}
+                    <.flamingo_avatar
+                      avatar={Map.get(artist, :avatar, %{})}
+                      class="h-7 w-7 shrink-0"
+                      label={"#{artist.name}'s avatar"}
+                    />
+                    <span class="min-w-0 truncate">
+                      Drawn by <span class="font-bold text-black">{artist.name}</span>
+                    </span>
                   </p>
                 </div>
                 <.button
@@ -386,30 +397,28 @@ defmodule FlamingoWeb.ScribbleLive do
           :for={{team, idx} <- @ranked_teams |> Enum.take(3) |> Enum.with_index()}
           id={"final-team-row-#{team.id}"}
           value={idx + 1}
-          class={["podium-player" | podium_slot_class(idx)]}
-          data-selected={to_string(team.selected?)}
+          class={podium_slot_class(idx)}
         >
-          <div class={podium_label_class(idx)}>
-            <.team_avatars
-              team={team}
-              final_players={@final_players}
-              selected_player_id={@selected_player_id}
-            />
-            <.podium_details
-              rank={idx}
-              name={"Team #{team.id}"}
-              votes={team.votes}
-              score={team.score}
-              id={"team-#{team.id}"}
-            />
-          </div>
           <button
             type="button"
-            class="flex h-full w-full cursor-pointer focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-pink-500"
+            class="podium-player relative flex h-full w-full cursor-pointer items-center justify-center focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-pink-500"
             phx-click="select_player"
             phx-value-player-id={hd(team.members)}
+            data-team-id={team.id}
+            data-selected={to_string(team.selected?)}
+            aria-pressed={to_string(team.selected?)}
             aria-label={"Rank #{idx + 1}: Team #{team.id}, #{team.score} points"}
           >
+            <span class={podium_label_class(idx)}>
+              <.team_avatars team={team} final_players={@final_players} />
+              <.podium_details
+                rank={idx}
+                name={"Team #{team.id}"}
+                votes={team.votes}
+                score={team.score}
+                id={"team-#{team.id}"}
+              />
+            </span>
             <.podium_step rank={idx} />
           </button>
         </li>
@@ -419,19 +428,26 @@ defmodule FlamingoWeb.ScribbleLive do
           :for={{team, idx} <- @ranked_teams |> Enum.drop(3) |> Enum.with_index(3)}
           id={"final-team-row-#{team.id}"}
           class={[
-            "flex min-w-0 items-center gap-2 px-3 py-2 transition-colors",
-            team.selected? && "bg-pink-100"
+            "flex min-w-0 items-center transition-colors",
+            team.selected? && "bg-pink-100",
+            !team.selected? && "hover:bg-pink-50"
           ]}
         >
-          <span class="text-lg">{idx + 1}</span>
-          <.team_avatars
-            team={team}
-            final_players={@final_players}
-            selected_player_id={@selected_player_id}
-          />
-          <span class="min-w-0 flex-1 truncate font-bold">Team {team.id}</span>
-          <.final_votes player={team.votes} id={"team-#{team.id}"} />
-          <span class="shrink-0 font-semibold text-pink-500">{team.score}</span>
+          <button
+            type="button"
+            class="flex min-w-0 flex-1 cursor-pointer items-center gap-2 px-3 py-2 text-left"
+            phx-click="select_player"
+            phx-value-player-id={hd(team.members)}
+            data-team-id={team.id}
+            data-selected={to_string(team.selected?)}
+            aria-pressed={to_string(team.selected?)}
+          >
+            <span class="text-lg">{idx + 1}</span>
+            <.team_avatars team={team} final_players={@final_players} />
+            <span class="min-w-0 flex-1 truncate font-bold">Team {team.id}</span>
+            <.final_votes player={team.votes} id={"team-#{team.id}"} />
+            <span class="shrink-0 font-semibold text-pink-500">{team.score}</span>
+          </button>
         </li>
       </ol>
     </div>
@@ -440,35 +456,16 @@ defmodule FlamingoWeb.ScribbleLive do
 
   attr :team, :map, required: true
   attr :final_players, :map, required: true
-  attr :selected_player_id, :string, default: nil
 
   defp team_avatars(assigns) do
     ~H"""
     <span class="flex shrink-0 items-end gap-0.5">
-      <button
+      <.flamingo_avatar
         :for={id <- @team.members}
-        type="button"
-        id={"final-player-#{id}"}
-        class={[
-          "relative shrink-0 cursor-pointer border-b-2 pb-0.5 transition-transform hover:-translate-y-0.5 focus-visible:outline-2 focus-visible:outline-pink-500",
-          if(id == @selected_player_id,
-            do: "border-pink-500",
-            else: "border-transparent"
-          )
-        ]}
-        phx-click="select_player"
-        phx-value-player-id={id}
-        data-player-id={id}
-        data-selected={to_string(id == @selected_player_id)}
-        aria-pressed={to_string(id == @selected_player_id)}
-        title={@final_players[id].name}
-      >
-        <.flamingo_avatar
-          avatar={Map.get(@final_players[id], :avatar, %{})}
-          class="h-8 w-8"
-          label={"#{@final_players[id].name}'s drawings"}
-        />
-      </button>
+        avatar={Map.get(@final_players[id], :avatar, %{})}
+        class="h-8 w-8"
+        label={@final_players[id].name}
+      />
     </span>
     """
   end
@@ -587,9 +584,12 @@ defmodule FlamingoWeb.ScribbleLive do
     end
   end
 
-  defp drawings_for_player(final_drawings, player_id) do
+  # In Teams mode a selection covers every drawing by the selected player's team.
+  defp drawings_for_player(final_drawings, teams, player_id) do
+    team = Map.get(teams, player_id)
+
     final_drawings
-    |> Enum.filter(&(&1.drawer_id == player_id))
+    |> Enum.filter(&(&1.drawer_id == player_id or (team && teams[&1.drawer_id] == team)))
     |> Enum.sort_by(& &1.round_number)
   end
 
@@ -948,7 +948,7 @@ defmodule FlamingoWeb.ScribbleLive do
           final_drawings={@final_drawings}
           selected_player_id={selected_player_id}
           selected_drawing_index={@selected_drawing_index}
-          show_artist={@game_variant == :coop}
+          teams={if(@game_variant == :coop, do: @teams, else: %{})}
         >
           <%= if @game_variant == :coop do %>
             <.team_standings
@@ -1065,7 +1065,8 @@ defmodule FlamingoWeb.ScribbleLive do
         assigns.selected_player_id
       )
 
-    last_index = max(length(drawings_for_player(assigns.final_drawings, player_id)) - 1, 0)
+    drawings = drawings_for_player(assigns.final_drawings, assigns.teams, player_id)
+    last_index = max(length(drawings) - 1, 0)
     {:noreply, update(socket, :selected_drawing_index, &min(&1 + 1, last_index))}
   end
 
