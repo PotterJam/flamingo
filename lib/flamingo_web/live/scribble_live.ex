@@ -662,231 +662,238 @@ defmodule FlamingoWeb.ScribbleLive do
                 round_count={@round_count}
               />
 
-              <%= cond do %>
-                <% @phase == :word_choice -> %>
-                  <.box class="flex w-[704px] shrink-0 items-center justify-center bg-white">
-                    <%= if @player_id == @drawer_id and @participation == :active and @word_choices != [] do %>
-                      <div class="relative flex flex-col items-center gap-8">
-                        <.starburst_timer
-                          position_class="absolute -top-36 -right-16"
-                          timer_id="word-choice-timer"
-                          end_time={@turn_end_time && DateTime.to_iso8601(@turn_end_time)}
-                        />
-                        <h2 class="text-3xl font-black">Choose a word</h2>
-                        <.word_choice_buttons
-                          choices={@word_choices}
-                          id="scribble-word-choices"
-                          id_prefix="scribble-word-choice"
-                          event="select_word"
-                        />
-                      </div>
-                    <% else %>
-                      <div class="relative flex flex-col items-center gap-3">
-                        <.starburst_timer
-                          position_class="absolute -bottom-32 -right-20"
-                          size_class="h-28 w-28"
-                          text_class="text-2xl"
-                          timer_id="word-choice-timer"
-                          end_time={@turn_end_time && DateTime.to_iso8601(@turn_end_time)}
-                        />
-                        <p class="text-3xl font-black">
-                          <%= if @game_variant == :coop do %>
-                            Waiting for team drawers to choose
-                          <% else %>
-                            <span class="font-hero text-[2.5rem] leading-none text-pink-400">{Map.get(@players, @drawer_id).name}</span>{" "}is picking a word
-                          <% end %>
-                        </p>
-                      </div>
-                    <% end %>
-                  </.box>
-                <% true -> %>
-                  <div class="relative flex w-[704px] shrink-0 flex-col gap-4">
-                    <div
-                      :if={@constraint}
-                      id="constraint-banner"
-                      class="absolute inset-x-8 -top-5 z-20 flex items-center justify-center"
-                    >
-                      <span class="border-2 border-border bg-yellow-200 px-4 py-1 font-hero text-lg font-black shadow-shadow">
-                        {constraint_label(@constraint)}
-                      </span>
-                    </div>
-                    <%= if @phase == :turn_reveal or @team_finished? do %>
-                      <div
-                        id="turn-reveal-overlay"
-                        class={[
-                          "absolute inset-x-0 top-0 z-10 m-[2px] flex h-[500px] items-center justify-center text-center",
-                          if(
-                            @constraint == :hidden_canvas and @player_id == @drawer_id and
-                              @participation == :active,
-                            do: "bg-white/20",
-                            else: "bg-white/75 backdrop-blur-[2px]"
-                          )
-                        ]}
-                      >
-                        <div class="flex w-full flex-col items-center gap-4 px-6">
-                          <div>
-                            <p class="text-xl font-black">
-                              {if @team_finished? and @phase == :playing,
-                                do: "Team finished — others are still guessing",
-                                else: "The word was"}
-                            </p>
-                            <p class="font-hero text-5xl leading-none font-black text-pink-400">
-                              {@word}
-                            </p>
-                          </div>
-                          <ul
-                            id="turn-reveal-score-gains"
-                            class="grid w-fit grid-flow-col grid-rows-5 auto-cols-[18rem] gap-x-4 gap-y-1"
-                          >
-                            <%= for {pid, gain} <- Enum.sort_by(@score_gains, fn {_pid, g} -> -g end) do %>
-                              <li
-                                id={"score-gain-row-#{pid}"}
-                                class="flex min-w-0 items-center gap-2 px-3 py-1"
-                              >
-                                <.flamingo_avatar
-                                  avatar={Map.get(Map.get(@players, pid), :avatar, %{})}
-                                  class="h-8 w-8 shrink-0"
-                                  label={"#{Map.get(@players, pid).name}'s avatar"}
-                                />
-                                <span class="min-w-0 flex-1 truncate">
-                                  {Map.get(@players, pid).name}
-                                </span>
-                                <span class={[
-                                  "shrink-0",
-                                  "font-semibold",
-                                  if(gain > 0, do: "text-green-700"),
-                                  if(gain < 0, do: "text-red-600"),
-                                  if(gain == 0, do: "text-gray-700")
-                                ]}>
-                                  {if(gain > 0, do: "+#{gain}", else: "#{gain}")}
-                                </span>
-                              </li>
-                            <% end %>
-                          </ul>
-                          <ul
-                            :if={@game_variant == :coop}
-                            id="coop-score-gains"
-                            class="space-y-1 font-bold"
-                          >
-                            <li :for={{team, gain} <- Enum.sort(@team_gains)}>
-                              Team {team} +{gain}
-                            </li>
-                          </ul>
+              <%!-- A stable wrapper lets LiveView swap the phase panel in place; without
+                   it the chat box is moved in the DOM, which resets its scroll position --%>
+              <div id="scribble-stage" class="flex w-[704px] shrink-0">
+                <%= cond do %>
+                  <% @phase == :word_choice -> %>
+                    <.box class="flex w-full items-center justify-center bg-white">
+                      <%= if @player_id == @drawer_id and @participation == :active and @word_choices != [] do %>
+                        <div class="relative flex flex-col items-center gap-8">
                           <.starburst_timer
-                            position_class=""
-                            size_class="h-20 w-20"
-                            text_class="text-xl"
-                            timer_id="turn-reveal-timer"
+                            position_class="absolute -top-36 -right-16"
+                            timer_id="word-choice-timer"
                             end_time={@turn_end_time && DateTime.to_iso8601(@turn_end_time)}
                           />
+                          <h2 class="text-3xl font-black">Choose a word</h2>
+                          <.word_choice_buttons
+                            choices={@word_choices}
+                            id="scribble-word-choices"
+                            id_prefix="scribble-word-choice"
+                            event="select_word"
+                          />
                         </div>
-                      </div>
-                    <% end %>
-
-                    <.drawing_canvas
-                      id="drawing-canvas"
-                      is_drawer={
-                        @player_id == @drawer_id and @participation == :active and not @team_finished?
-                      }
-                      constraint={@constraint}
-                      spin_started_at={@spin_started_at}
-                      phase={@phase}
-                      show_toolbar={
-                        @phase == :playing and @player_id == @drawer_id and
-                          @participation == :active and not @team_finished?
-                      }
-                      palette={palette()}
-                    />
-
-                    <div
-                      :if={@spin_holder == @player_id}
-                      id="spin-charge"
-                      class="flex items-center justify-between gap-3 rounded-base border-2 border-border bg-yellow-100 px-4 py-2"
-                    >
-                      <div>
-                        <p class="text-sm font-bold">A little last-place mischief</p>
-                        <p class="text-xs">One spin this round. Use before guessing correctly.</p>
-                      </div>
-                      <.button
-                        id="use-spin"
-                        phx-click="use_spin"
-                        disabled={!@spin_available?}
-                        size="sm"
-                      >
-                        <.icon name={:refresh_cw} class="size-4" /> Spin canvas
-                      </.button>
-                    </div>
-
-                    <%= if @phase in [:playing, :turn_reveal] and (@can_guess? or (@game_variant == :coop and @participation == :active and @player_id != @drawer_id)) do %>
+                      <% else %>
+                        <div class="relative flex flex-col items-center gap-3">
+                          <.starburst_timer
+                            position_class="absolute -bottom-32 -right-20"
+                            size_class="h-28 w-28"
+                            text_class="text-2xl"
+                            timer_id="word-choice-timer"
+                            end_time={@turn_end_time && DateTime.to_iso8601(@turn_end_time)}
+                          />
+                          <p class="text-3xl font-black">
+                            <%= if @game_variant == :coop do %>
+                              Waiting for team drawers to choose
+                            <% else %>
+                              <span class="font-hero text-[2.5rem] leading-none text-pink-400">{Map.get(@players, @drawer_id).name}</span>{" "}is picking a word
+                            <% end %>
+                          </p>
+                        </div>
+                      <% end %>
+                    </.box>
+                  <% true -> %>
+                    <div class="relative flex w-full flex-col gap-4">
                       <div
-                        id="guess-row"
-                        class={[
-                          "relative z-10 flex w-full items-center gap-2",
-                          @phase == :turn_reveal && "justify-center"
-                        ]}
+                        :if={@constraint}
+                        id="constraint-banner"
+                        class="absolute inset-x-8 -top-5 z-20 flex items-center justify-center"
                       >
-                        <span :if={@phase == :turn_reveal} class="font-hero text-xl font-bold">
-                          Cast your vote
+                        <span class="border-2 border-border bg-yellow-200 px-4 py-1 font-hero text-lg font-black shadow-shadow">
+                          {constraint_label(@constraint)}
                         </span>
-                        <div id="drawing-votes" class="flex shrink-0">
-                          <.button
-                            :for={{vote, icon} <- [{:down, :thumbs_down}, {:up, :thumbs_up}]}
-                            id={"vote-drawing-#{vote}"}
-                            type="button"
-                            variant="ghost"
-                            size="sm"
-                            class="drawing-vote flex h-10 w-10 items-center justify-center"
-                            data-vote={vote}
-                            phx-click={
-                              JS.set_attribute({"aria-pressed", "false"}, to: "#drawing-votes button")
-                              |> JS.set_attribute({"aria-pressed", "true"})
-                              |> JS.push("vote_drawing")
-                              |> JS.transition("drawing-vote-pop",
-                                to: "#vote-drawing-#{vote} svg",
-                                time: 280,
-                                blocking: false
-                              )
-                            }
-                            phx-value-vote={vote}
-                            aria-label={"Thumbs #{vote}"}
-                            aria-pressed={to_string(@drawing_vote == vote)}
-                          >
-                            <.icon name={icon} class="h-5 w-5" />
-                          </.button>
-                        </div>
-                        <%= if @phase == :playing and not @team_finished? do %>
-                          <%= if MapSet.member?(@correct_guesses, @player_id) do %>
-                            <.box class="min-w-0 flex-1 bg-green-100 p-3 text-center font-bold text-green-800">
-                              You guessed it!
-                            </.box>
-                          <% else %>
-                            <.word_submission_form
-                              form={@guess_form}
-                              field={@guess_form[:guess]}
-                              id="guess-form"
-                              input_id="guess-input"
-                              button_id="guess-button"
-                              submit="guess"
-                              placeholder="Type your guess..."
-                              button_label="Guess"
-                              class="min-w-0 flex-1"
-                              hook="FlamingoWeb.ScribbleLive.GuessForm"
-                              mounted={JS.focus()}
-                            >
-                              <:prefix>
-                                <span
-                                  id="guess-letter-count"
-                                  class="absolute left-0 top-full mt-1 font-hero text-sm leading-none font-medium text-black"
-                                >
-                                </span>
-                              </:prefix>
-                            </.word_submission_form>
-                          <% end %>
-                        <% end %>
                       </div>
-                    <% end %>
-                  </div>
-              <% end %>
+                      <%= if @phase == :turn_reveal or @team_finished? do %>
+                        <div
+                          id="turn-reveal-overlay"
+                          class={[
+                            "absolute inset-x-0 top-0 z-10 m-[2px] flex h-[500px] items-center justify-center text-center",
+                            if(
+                              @constraint == :hidden_canvas and @player_id == @drawer_id and
+                                @participation == :active,
+                              do: "bg-white/20",
+                              else: "bg-white/75 backdrop-blur-[2px]"
+                            )
+                          ]}
+                        >
+                          <div class="flex w-full flex-col items-center gap-4 px-6">
+                            <div>
+                              <p class="text-xl font-black">
+                                {if @team_finished? and @phase == :playing,
+                                  do: "Team finished — others are still guessing",
+                                  else: "The word was"}
+                              </p>
+                              <p class="font-hero text-5xl leading-none font-black text-pink-400">
+                                {@word}
+                              </p>
+                            </div>
+                            <ul
+                              id="turn-reveal-score-gains"
+                              class="grid w-fit grid-flow-col grid-rows-5 auto-cols-[18rem] gap-x-4 gap-y-1"
+                            >
+                              <%= for {pid, gain} <- Enum.sort_by(@score_gains, fn {_pid, g} -> -g end) do %>
+                                <li
+                                  id={"score-gain-row-#{pid}"}
+                                  class="flex min-w-0 items-center gap-2 px-3 py-1"
+                                >
+                                  <.flamingo_avatar
+                                    avatar={Map.get(Map.get(@players, pid), :avatar, %{})}
+                                    class="h-8 w-8 shrink-0"
+                                    label={"#{Map.get(@players, pid).name}'s avatar"}
+                                  />
+                                  <span class="min-w-0 flex-1 truncate">
+                                    {Map.get(@players, pid).name}
+                                  </span>
+                                  <span class={[
+                                    "shrink-0",
+                                    "font-semibold",
+                                    if(gain > 0, do: "text-green-700"),
+                                    if(gain < 0, do: "text-red-600"),
+                                    if(gain == 0, do: "text-gray-700")
+                                  ]}>
+                                    {if(gain > 0, do: "+#{gain}", else: "#{gain}")}
+                                  </span>
+                                </li>
+                              <% end %>
+                            </ul>
+                            <ul
+                              :if={@game_variant == :coop}
+                              id="coop-score-gains"
+                              class="space-y-1 font-bold"
+                            >
+                              <li :for={{team, gain} <- Enum.sort(@team_gains)}>
+                                Team {team} +{gain}
+                              </li>
+                            </ul>
+                            <.starburst_timer
+                              position_class=""
+                              size_class="h-20 w-20"
+                              text_class="text-xl"
+                              timer_id="turn-reveal-timer"
+                              end_time={@turn_end_time && DateTime.to_iso8601(@turn_end_time)}
+                            />
+                          </div>
+                        </div>
+                      <% end %>
+
+                      <.drawing_canvas
+                        id="drawing-canvas"
+                        is_drawer={
+                          @player_id == @drawer_id and @participation == :active and
+                            not @team_finished?
+                        }
+                        constraint={@constraint}
+                        spin_started_at={@spin_started_at}
+                        phase={@phase}
+                        show_toolbar={
+                          @phase == :playing and @player_id == @drawer_id and
+                            @participation == :active and not @team_finished?
+                        }
+                        palette={palette()}
+                      />
+
+                      <div
+                        :if={@spin_holder == @player_id}
+                        id="spin-charge"
+                        class="flex items-center justify-between gap-3 rounded-base border-2 border-border bg-yellow-100 px-4 py-2"
+                      >
+                        <div>
+                          <p class="text-sm font-bold">A little last-place mischief</p>
+                          <p class="text-xs">One spin this round. Use before guessing correctly.</p>
+                        </div>
+                        <.button
+                          id="use-spin"
+                          phx-click="use_spin"
+                          disabled={!@spin_available?}
+                          size="sm"
+                        >
+                          <.icon name={:refresh_cw} class="size-4" /> Spin canvas
+                        </.button>
+                      </div>
+
+                      <%= if @phase in [:playing, :turn_reveal] and (@can_guess? or (@game_variant == :coop and @participation == :active and @player_id != @drawer_id)) do %>
+                        <div
+                          id="guess-row"
+                          class={[
+                            "relative z-10 flex w-full items-center gap-2",
+                            @phase == :turn_reveal && "justify-center"
+                          ]}
+                        >
+                          <span :if={@phase == :turn_reveal} class="font-hero text-xl font-bold">
+                            Cast your vote
+                          </span>
+                          <div id="drawing-votes" class="flex shrink-0">
+                            <.button
+                              :for={{vote, icon} <- [{:down, :thumbs_down}, {:up, :thumbs_up}]}
+                              id={"vote-drawing-#{vote}"}
+                              type="button"
+                              variant="ghost"
+                              size="sm"
+                              class="drawing-vote flex h-10 w-10 items-center justify-center"
+                              data-vote={vote}
+                              phx-click={
+                                JS.set_attribute({"aria-pressed", "false"},
+                                  to: "#drawing-votes button"
+                                )
+                                |> JS.set_attribute({"aria-pressed", "true"})
+                                |> JS.push("vote_drawing")
+                                |> JS.transition("drawing-vote-pop",
+                                  to: "#vote-drawing-#{vote} svg",
+                                  time: 280,
+                                  blocking: false
+                                )
+                              }
+                              phx-value-vote={vote}
+                              aria-label={"Thumbs #{vote}"}
+                              aria-pressed={to_string(@drawing_vote == vote)}
+                            >
+                              <.icon name={icon} class="h-5 w-5" />
+                            </.button>
+                          </div>
+                          <%= if @phase == :playing and not @team_finished? do %>
+                            <%= if MapSet.member?(@correct_guesses, @player_id) do %>
+                              <.box class="min-w-0 flex-1 bg-green-100 p-3 text-center font-bold text-green-800">
+                                You guessed it!
+                              </.box>
+                            <% else %>
+                              <.word_submission_form
+                                form={@guess_form}
+                                field={@guess_form[:guess]}
+                                id="guess-form"
+                                input_id="guess-input"
+                                button_id="guess-button"
+                                submit="guess"
+                                placeholder="Type your guess..."
+                                button_label="Guess"
+                                class="min-w-0 flex-1"
+                                hook="FlamingoWeb.ScribbleLive.GuessForm"
+                                mounted={JS.focus()}
+                              >
+                                <:prefix>
+                                  <span
+                                    id="guess-letter-count"
+                                    class="absolute left-0 top-full mt-1 font-hero text-sm leading-none font-medium text-black"
+                                  >
+                                  </span>
+                                </:prefix>
+                              </.word_submission_form>
+                            <% end %>
+                          <% end %>
+                        </div>
+                      <% end %>
+                    </div>
+                <% end %>
+              </div>
 
               <.box class="relative z-10 flex min-h-0 w-full flex-1 flex-col bg-white p-0">
                 <p
@@ -896,28 +903,27 @@ defmodule FlamingoWeb.ScribbleLive do
                 >
                   {@word_list_label}
                 </p>
-                <div
-                  id="game-feed"
-                  phx-hook=".ScrollFeed"
-                  phx-update="stream"
-                  class="flex min-h-0 flex-1 flex-col gap-0 overflow-y-auto"
-                >
-                  <p
-                    :for={{dom_id, entry} <- @streams.feed}
-                    id={dom_id}
-                    class={[
-                      "p-1 text-xs",
-                      entry.kind == :system && "font-semibold text-pink-600",
-                      entry.kind == :correct && "font-semibold text-green-600",
-                      entry.kind == :like && "font-semibold text-emerald-600",
-                      entry.kind == :dislike && "font-semibold text-red-600",
-                      entry.kind == :close && "font-semibold text-amber-600",
-                      entry.kind == :guess && "text-foreground",
-                      entry.kind == :info && "text-gray-500"
-                    ]}
-                  >
-                    {entry.text}
-                  </p>
+                <%!-- column-reverse anchors the scroll position to the bottom, so the
+                     browser keeps the newest message in view without any JS --%>
+                <div class="flex min-h-0 flex-1 flex-col-reverse overflow-y-auto">
+                  <div id="game-feed" phx-update="stream" class="mb-auto flex flex-col">
+                    <p
+                      :for={{dom_id, entry} <- @streams.feed}
+                      id={dom_id}
+                      class={[
+                        "p-1 text-xs",
+                        entry.kind == :system && "font-semibold text-pink-600",
+                        entry.kind == :correct && "font-semibold text-green-600",
+                        entry.kind == :like && "font-semibold text-emerald-600",
+                        entry.kind == :dislike && "font-semibold text-red-600",
+                        entry.kind == :close && "font-semibold text-amber-600",
+                        entry.kind == :guess && "text-foreground",
+                        entry.kind == :info && "text-gray-500"
+                      ]}
+                    >
+                      {entry.text}
+                    </p>
+                  </div>
                 </div>
               </.box>
             </div>
@@ -991,53 +997,6 @@ defmodule FlamingoWeb.ScribbleLive do
                 update()
                 input.focus()
               }, 0)
-            })
-          }
-        }
-      </script>
-      <script :type={Phoenix.LiveView.ColocatedHook} name=".ScrollFeed">
-        export default {
-          mounted() {
-            // Follow new messages only while the user is at (or near) the
-            // bottom; never yank the feed around while they're reading back.
-            this.pinned = true
-            this.el.addEventListener("scroll", () => {
-              // A stream reset briefly clamps scrollTop to zero. Preserve the
-              // user's pre-patch position until the replacement has settled.
-              if (this.patching) return
-
-              const distanceFromBottom =
-                this.el.scrollHeight - this.el.scrollTop - this.el.clientHeight
-              this.pinned = distanceFromBottom < 32
-            })
-            this.scrollToBottom()
-            this.handleEvent("scroll_feed", () => this.pinned && this.scrollToBottom())
-          },
-          beforeUpdate() {
-            this.previousScrollTop = this.el.scrollTop
-            this.patching = true
-          },
-          updated() {
-            if (this.pinned) this.scrollToBottom()
-            else this.restoreScrollPosition()
-          },
-          scrollToBottom() {
-            // Wait a frame so layout has settled; scrolling while the panel is
-            // mid-patch (height not yet computed) silently clamps to the top.
-            requestAnimationFrame(() => {
-              this.el.scrollTop = this.el.scrollHeight
-              this.finishScroll()
-            })
-          },
-          restoreScrollPosition() {
-            requestAnimationFrame(() => {
-              this.el.scrollTop = this.previousScrollTop
-              this.finishScroll()
-            })
-          },
-          finishScroll() {
-            requestAnimationFrame(() => {
-              this.patching = false
             })
           }
         }
@@ -1132,8 +1091,9 @@ defmodule FlamingoWeb.ScribbleLive do
     old_turn_end_time = socket.assigns.turn_end_time
     old_count = map_size(socket.assigns.players)
     old_feed_ids = socket.assigns.feed_ids
-    feed_ids = MapSet.new(snapshot.feed, & &1.id)
-    feed_changed? = feed_ids != old_feed_ids
+    # The feed only grows during a game, so append new entries instead of
+    # resetting the stream, which would empty the container and lose its scroll.
+    new_feed = Enum.reject(snapshot.feed, &MapSet.member?(old_feed_ids, &1.id))
     newly_correct = MapSet.difference(snapshot.correct_guesses, socket.assigns.correct_guesses)
     game_ended? = snapshot.phase == :game_ended
 
@@ -1191,18 +1151,11 @@ defmodule FlamingoWeb.ScribbleLive do
         correct_guesses: snapshot.correct_guesses,
         drawing_vote: snapshot.drawing_vote,
         revealed_indices: snapshot.revealed_indices,
-        feed_ids: feed_ids,
+        feed_ids: MapSet.new(snapshot.feed, & &1.id),
         score_gains: snapshot.score_gains
       )
 
-    socket =
-      if feed_changed? do
-        socket
-        |> stream(:feed, snapshot.feed, reset: true)
-        |> push_event("scroll_feed", %{})
-      else
-        socket
-      end
+    socket = stream(socket, :feed, new_feed)
 
     socket =
       if snapshot.turn_end_time && snapshot.phase in [:word_choice, :playing, :turn_reveal] &&
@@ -1217,8 +1170,8 @@ defmodule FlamingoWeb.ScribbleLive do
 
     socket =
       if not initial? and drawing_visible? do
-        Enum.reduce(snapshot.feed, socket, fn entry, socket ->
-          if entry.kind in [:like, :dislike] and not MapSet.member?(old_feed_ids, entry.id) do
+        Enum.reduce(new_feed, socket, fn entry, socket ->
+          if entry.kind in [:like, :dislike] do
             push_event(socket, "drawing_vote", %{
               vote: if(entry.kind == :like, do: "up", else: "down")
             })
