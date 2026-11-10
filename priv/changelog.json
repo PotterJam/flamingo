@@ -1,5 +1,11 @@
 [
   {
+    "date": "2026-11-09",
+    "entries": [
+      {"type": "new_mode", "text": "Teams: race to draw and guess in pairs, with one trio for odd numbers, and earn a shared team score."}
+    ]
+  },
+  {
     "date": "2026-10-28",
     "entries": [
       {"type": "fix", "text": "Scribble game panels no longer stretch on tall screens."}
