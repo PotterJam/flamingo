@@ -24,22 +24,29 @@ defmodule Flamingo.SavedLobbiesTest do
   defp join_elsewhere(room_id, name) do
     parent = self()
 
-    start_supervised!(
-      Supervisor.child_spec(
-        {Task,
-         fn ->
-           send(parent, {:joined, join_connected(room_id, name)})
+    pid =
+      start_supervised!(
+        Supervisor.child_spec(
+          {Task,
+           fn ->
+             send(parent, {:joined, join_connected(room_id, name)})
 
-           receive do
-             :stop -> :ok
-           end
-         end},
-        id: {:player, name}
+             receive do
+               {:leave, caller} -> send(caller, {:left, Rooms.leave(room_id)})
+             end
+           end},
+          id: {:player, name}
+        )
       )
-    )
 
     assert_receive {:joined, snapshot}
+    Process.put({:player, name}, pid)
     snapshot
+  end
+
+  defp leave_elsewhere(name) do
+    send(Process.get({:player, name}), {:leave, self()})
+    assert_receive {:left, :ok}
   end
 
   describe "names" do
@@ -142,6 +149,24 @@ defmodule Flamingo.SavedLobbiesTest do
       second = join_connected(room_id, "Bob")
       assert first.host_id == first.viewer_id
       assert second.host_id == first.viewer_id
+    end
+
+    test "opens a fresh lobby after everyone leaves a game" do
+      room_id = start_room()
+      %{viewer_id: alice} = join_connected(room_id, "Alice")
+      name = unique_name()
+      {:ok, _} = SavedLobbies.save_room(user_scope_fixture(), room_id, %{name: name})
+      join_elsewhere(room_id, "Bob")
+      assert :ok = Rooms.start_game(room_id, %{game_mode: :scribble})
+
+      :ok = Rooms.leave(room_id)
+      leave_elsewhere("Bob")
+
+      assert {:ok, ^room_id} = Rooms.open_saved_lobby(name)
+      assert {:ok, _token, snapshot} = Rooms.join(room_id, "Carol")
+      assert snapshot.phase == :lobby
+      assert snapshot.host_id == snapshot.viewer_id
+      refute alice in snapshot.player_order
     end
 
     test "lets late arrivals join a running game" do
