@@ -35,11 +35,38 @@ Sign in with Google only: there are no passwords and the app sends no email. An
 account saves the player's avatar and lets a host save a lobby under a permanent
 link. Sessions are revocable database tokens behind a 14-day remember-me cookie.
 
-In development, the sign-in page has a "Sign in as test user" button that skips
-Google; it is not compiled into production. To try real Google sign-in locally,
-create a separate Google OAuth client with the redirect
-`http://localhost:4000/auth/google/callback` and set `GOOGLE_CLIENT_ID` and
-`GOOGLE_CLIENT_SECRET`. Tests replace Google with `Flamingo.FakeGoogleStrategy`.
+### Signing in during development
+
+You don't need Google to work on the app. Open `/dev/log-in/<email>` to sign in as
+a test account for that email, created on first use. Add `?return_to=/some/path`
+to land on a page, for example
+`/dev/log-in/alice@example.com?return_to=/saved-lobby/thursday-crew`. Use a
+different email in each browser window to play as several people. The sign-in
+page's "Sign in as test user" button does the same for `test-user@flamingo.dev`.
+These routes only exist in development.
+
+### Testing real Google sign-in
+
+Google only sends people back to redirect URIs registered on the OAuth client, so
+use the separate **Flamingo Dev** client (Testing mode, with your Google account
+added as a test user). It has two redirect URIs:
+
+* `http://localhost:4000/auth/google/callback` for your own machine.
+* `https://flamingo-dev--flamingo-inc.onamp.dev/auth/google/callback` for an Amp
+  orb. Orbs normally get a new portal address per thread, which Google would
+  reject, so to test Google sign-in in an orb, ask that thread's agent to give the
+  orb this fixed hostname. It belongs to one orb at a time, and restarting the
+  orb's processes drops it, so redo this after a restart. The commands are:
+
+  ```sh
+  amp orb portal 4000 --hostname flamingo-dev--flamingo-inc.onamp.dev --take-over
+  amp orb service restart web
+  ```
+
+The app reads `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET` from the environment.
+Orbs get them from the project's secrets in Amp Settings; locally, export them
+before `mix dev`. Without them, "Sign in with Google" shows an error and the dev
+sign-in still works. Tests replace Google with `Flamingo.FakeGoogleStrategy`.
 
 Run `mix precommit` for compilation, formatting, and the full test suite. The test
 alias creates and migrates `flamingo_test` (with `MIX_TEST_PARTITION` suffix when

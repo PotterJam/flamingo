@@ -38,19 +38,29 @@ defmodule FlamingoWeb.UserSessionController do
     end
   end
 
-  @doc "Development only: signs in as a fixed test user without Google."
-  def dev_log_in(conn, _params) do
+  @doc """
+  Development only: signs in as the test account for `email` without Google,
+  creating it on first use, then returns to `return_to` if it is a local path.
+  """
+  def dev_log_in(conn, %{"email" => email} = params) do
     {:ok, user} =
       Accounts.sign_in_with_google(%{
-        "sub" => "dev-test-user",
-        "email" => "test-user@flamingo.dev",
+        "sub" => "dev:" <> email,
+        "email" => email,
         "email_verified" => true
       })
 
     conn
-    |> put_flash(:success, "Signed in as the test user.")
-    |> UserAuth.log_in_user(user)
+    |> put_flash(:success, "Signed in as #{email}.")
+    |> UserAuth.log_in_user(user, local_path(params["return_to"]))
   end
+
+  # Only same-site paths, so the route can't be used to redirect elsewhere.
+  defp local_path("/" <> rest = path) do
+    if String.starts_with?(rest, ["/", "\\"]), do: ~p"/", else: path
+  end
+
+  defp local_path(_), do: ~p"/"
 
   def delete_account(conn, %{"confirm" => "true"}) do
     case Accounts.delete_user(conn.assigns.current_scope) do

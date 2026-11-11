@@ -53,13 +53,16 @@ defmodule FlamingoWeb.UserLive.Login do
           class="space-y-3 rounded-base border-2 border-dashed border-border bg-secondary p-3 text-sm"
         >
           <p>
-            Development only: sign in without Google as a shared test user.
+            Development only: sign in without Google. Any other test account works at <code>/dev/log-in/&lt;email&gt;</code>.
           </p>
-          <.form for={%{}} action="/dev/log-in" method="post">
-            <.button id="dev-sign-in-button" variant="outline" class="w-full font-bold">
-              Sign in as test user
-            </.button>
-          </.form>
+          <.button
+            id="dev-sign-in-button"
+            href="/dev/log-in/test-user@flamingo.dev"
+            variant="outline"
+            class="w-full font-bold"
+          >
+            Sign in as test user
+          </.button>
         </div>
       </Layouts.account_panel>
     </Layouts.app>

@@ -21,7 +21,7 @@ defmodule FlamingoWeb.Router do
   if Application.compile_env(:flamingo, :dev_routes) do
     scope "/dev", FlamingoWeb do
       pipe_through :browser
-      post "/log-in", UserSessionController, :dev_log_in
+      get "/log-in/:email", UserSessionController, :dev_log_in
     end
 
     scope "/preview", FlamingoWeb do

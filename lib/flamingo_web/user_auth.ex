@@ -27,12 +27,13 @@ defmodule FlamingoWeb.UserAuth do
   @session_reissue_age_in_days 7
 
   @doc """
-  Logs the user in with a remembered session and redirects home.
+  Logs the user in with a remembered session and redirects to `return_to`,
+  which must be a path on this site.
   """
-  def log_in_user(conn, user) do
+  def log_in_user(conn, user, return_to \\ ~p"/") do
     conn
     |> create_or_extend_session(user)
-    |> redirect(to: ~p"/")
+    |> redirect(to: return_to)
   end
 
   @doc """
