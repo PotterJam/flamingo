@@ -64,7 +64,7 @@ defmodule FlamingoWeb.GameComponents do
 
   attr :game_mode, :atom,
     default: :classic,
-    values: [:classic, :constraint_roulette, :telephone]
+    values: [:classic, :constraint_roulette, :telephone, :coop]
 
   attr :label, :string, default: "SCRIBBLE"
 
@@ -109,6 +109,7 @@ defmodule FlamingoWeb.GameComponents do
     do: {"bg-purple-100", "text-purple-300"}
 
   defp flamingo_background_classes(:telephone), do: {"bg-sky-100", "text-sky-300"}
+  defp flamingo_background_classes(:coop), do: {"bg-green-100", "text-green-300"}
   defp flamingo_background_classes(_game_mode), do: {"bg-pink-200", "text-pink-300"}
 
   def logo(assigns) do
@@ -146,10 +147,7 @@ defmodule FlamingoWeb.GameComponents do
     >
       <%!-- Feet --%>
       <g data-avatar-part-root="feet" fill="none" stroke-linecap="round" stroke-linejoin="round">
-        <g :if={@avatar["feet_drawing"] != ""}>
-          <path d={@avatar["feet_drawing"]} stroke="#111827" stroke-width="8" />
-          <path d={@avatar["feet_drawing"]} stroke="var(--f)" stroke-width="4" />
-        </g>
+        <.avatar_drawing drawing={@avatar["feet_drawing"]} color="var(--f)" default_width={4} />
         <g :if={@avatar["feet_drawing"] == "" and @avatar["feet"] == 0} stroke-width="5">
           <path
             d="M45 134 L34 140 M45 134 L45 141 M83 134 L72 140 M83 134 L85 141"
@@ -200,10 +198,7 @@ defmodule FlamingoWeb.GameComponents do
 
       <%!-- Legs --%>
       <g data-avatar-part-root="legs" fill="none" stroke-linecap="round" stroke-linejoin="round">
-        <g :if={@avatar["legs_drawing"] != ""}>
-          <path d={@avatar["legs_drawing"]} stroke="#111827" stroke-width="10" />
-          <path d={@avatar["legs_drawing"]} stroke="var(--l)" stroke-width="6" />
-        </g>
+        <.avatar_drawing drawing={@avatar["legs_drawing"]} color="var(--l)" />
         <g :if={@avatar["legs_drawing"] == "" and @avatar["legs"] == 0}>
           <path d="M48 96 L45 134 M72 96 L83 134" stroke="#111827" stroke-width="8" />
           <path d="M48 96 L45 134 M72 96 L83 134" stroke="var(--l)" stroke-width="4" />
@@ -236,10 +231,7 @@ defmodule FlamingoWeb.GameComponents do
 
       <%!-- Body --%>
       <g data-avatar-part-root="body" stroke="#111827" stroke-width="4" stroke-linejoin="round">
-        <g :if={@avatar["body_drawing"] != ""} fill="none" stroke-linecap="round">
-          <path d={@avatar["body_drawing"]} stroke="#111827" stroke-width="10" />
-          <path d={@avatar["body_drawing"]} stroke="var(--b)" stroke-width="6" />
-        </g>
+        <.avatar_drawing drawing={@avatar["body_drawing"]} color="var(--b)" />
         <g :if={@avatar["body_drawing"] == "" and @avatar["body"] == 0}>
           <path
             d="M28 72 L10 64 L18 82 Q22 103 62 105 Q94 105 103 82 Q86 65 55 65 Q37 65 28 72 Z"
@@ -293,10 +285,7 @@ defmodule FlamingoWeb.GameComponents do
         stroke-linecap="round"
         stroke-linejoin="round"
       >
-        <g :if={@avatar["head_drawing"] != ""} fill="none">
-          <path d={@avatar["head_drawing"]} stroke="#111827" stroke-width="10" />
-          <path d={@avatar["head_drawing"]} stroke="var(--h)" stroke-width="6" />
-        </g>
+        <.avatar_drawing drawing={@avatar["head_drawing"]} color="var(--h)" />
         <g :if={@avatar["head_drawing"] == "" and @avatar["head"] == 0}>
           <path d="M51 68 Q36 51 54 38" fill="none" stroke="#111827" stroke-width="19" />
           <path d="M51 68 Q36 51 54 38" fill="none" stroke="var(--h)" stroke-width="13" />
@@ -376,6 +365,22 @@ defmodule FlamingoWeb.GameComponents do
     """
   end
 
+  attr :drawing, :string, required: true
+  attr :color, :string, required: true
+  attr :default_width, :integer, default: 6
+
+  defp avatar_drawing(assigns) do
+    assigns =
+      assign(assigns, :strokes, Avatar.drawing_strokes(assigns.drawing, assigns.default_width))
+
+    ~H"""
+    <g :for={stroke <- @strokes} fill="none" stroke-linecap="round" stroke-linejoin="round">
+      <path d={stroke["path"]} stroke="#111827" stroke-width={stroke["width"] + 4} />
+      <path d={stroke["path"]} stroke={@color} stroke-width={stroke["width"]} />
+    </g>
+    """
+  end
+
   attr :word, :string, default: nil
   attr :show_word, :boolean, default: false
   attr :revealed_indices, :list, default: []
@@ -392,19 +397,14 @@ defmodule FlamingoWeb.GameComponents do
           {word, nil, nil}
 
         {word, false} ->
-          revealed = MapSet.new(assigns.revealed_indices)
-
           chars =
             word
+            |> Flamingo.Words.mask(assigns.revealed_indices)
             |> String.graphemes()
-            |> Enum.with_index()
-            |> Enum.map(fn {ch, idx} ->
-              if ch == " " or MapSet.member?(revealed, idx), do: ch, else: "_"
-            end)
 
           count =
             word
-            |> String.split(" ")
+            |> String.split([" ", "-"], trim: true)
             |> Enum.map(&String.length/1)
             |> Enum.join("-")
 
@@ -415,28 +415,40 @@ defmodule FlamingoWeb.GameComponents do
       assign(assigns, display: display, hint_chars: hint_chars, letter_count: letter_count)
 
     ~H"""
-    <div class="relative z-10 self-center">
+    <div id="game-header" class="relative z-10 max-w-[calc(100%-10rem)] shrink-0 self-center">
       <div class={[
-        "rounded-full border-2 border-border bg-pink-400 px-10 pt-1 pb-4 shadow-rounded",
+        "rounded-[2rem] border-2 border-border bg-pink-400 px-6 pt-1 pb-4 shadow-rounded sm:px-10",
         if(!@display, do: "invisible")
       ]}>
-        <div class="flex items-center justify-center gap-4">
+        <div class="flex flex-wrap items-center justify-center gap-x-4 gap-y-2">
           <%= if @hint_chars do %>
-            <p class="flex items-baseline gap-[0.18em] font-hero text-5xl leading-none font-black text-white">
-              <span
-                :for={ch <- @hint_chars}
-                class={["inline-block text-center", ch == " " && "w-[0.45em]"]}
-              >
-                {if(ch == " ", do: "", else: ch)}
-              </span>
+            <p
+              id="game-word-hint"
+              class={[
+                "min-w-0 max-w-full text-center font-hero leading-tight font-black tracking-[0.18em] text-white [overflow-wrap:anywhere]",
+                if(String.length(@display) > 30, do: "text-3xl", else: "text-5xl")
+              ]}
+            >
+              {Enum.join(@hint_chars)}
             </p>
           <% else %>
-            <p class="font-hero text-5xl leading-none font-black tracking-widest text-white">
+            <p
+              id="game-word-answer"
+              class={[
+                "min-w-0 max-w-full text-center font-hero leading-tight font-black tracking-widest text-white [overflow-wrap:anywhere]",
+                if(@display && String.length(@display) > 30, do: "text-3xl", else: "text-5xl")
+              ]}
+            >
               {if(@display, do: @display, else: Phoenix.HTML.raw("&nbsp;"))}
             </p>
           <% end %>
           <%= if @hint_chars && @letter_count do %>
-            <p class="font-hero text-2xl leading-none font-bold text-white">{@letter_count}</p>
+            <p
+              id="game-word-lengths"
+              class="max-w-full shrink-0 text-center font-hero text-2xl leading-none font-bold text-white [overflow-wrap:anywhere]"
+            >
+              {@letter_count}
+            </p>
           <% end %>
         </div>
       </div>
@@ -455,17 +467,28 @@ defmodule FlamingoWeb.GameComponents do
 
   attr :players, :map, required: true
   attr :player_order, :list, required: true
+  attr :teams, :map, default: %{}
+  attr :team_scores, :map, default: %{}
+  attr :team_drawers, :list, default: []
+  attr :viewer_id, :string, default: nil
   attr :drawer_id, :string, default: nil
   attr :correct_guesses, :any, default: MapSet.new()
   attr :current_round, :integer, required: true
   attr :round_count, :integer, required: true
 
   def player_list_panel(assigns) do
+    player_order =
+      Enum.sort_by(assigns.player_order, fn pid -> -Map.fetch!(assigns.players, pid).score end)
+
     assigns =
       assign(
         assigns,
-        :player_order,
-        Enum.sort_by(assigns.player_order, fn pid -> -Map.fetch!(assigns.players, pid).score end)
+        :player_groups,
+        player_order
+        |> Enum.group_by(&Map.get(assigns.teams, &1))
+        |> Enum.sort_by(fn {team, _players} ->
+          {is_nil(team), -Map.get(assigns.team_scores, team, 0), team}
+        end)
       )
 
     ~H"""
@@ -476,16 +499,38 @@ defmodule FlamingoWeb.GameComponents do
         current={@current_round}
         total={@round_count}
       />
-      <.box class="flex min-h-0 flex-1 flex-col bg-white p-0">
-        <div id="player-list-scroll" class="min-h-0 flex-grow overflow-y-auto overflow-x-hidden">
-          <ul>
-            <%= for pid <- @player_order do %>
+      <div
+        id="player-list-scroll"
+        class={[
+          "-mr-1 -mb-1 min-h-0 flex-grow overflow-y-auto overflow-x-hidden pr-1 pb-1",
+          @teams != %{} && "space-y-3"
+        ]}
+      >
+        <.box
+          :for={{team, player_order} <- @player_groups}
+          class={["shrink-0 overflow-hidden bg-white p-0", @teams == %{} && "min-h-full"]}
+        >
+          <% own? = team != nil and team == @teams[@viewer_id] %>
+          <h3
+            :if={@teams != %{}}
+            id={"team-title-#{team || "spectators"}"}
+            data-own-team={to_string(own?)}
+            class={[
+              "flex items-center gap-2 border-b-2 border-border px-3 py-2 text-sm font-bold whitespace-nowrap",
+              if(own?, do: "bg-pink-300", else: "bg-pink-100")
+            ]}
+          >
+            {if team, do: "Team #{team}", else: "Spectators"}
+            <span :if={team} class="ml-auto tabular-nums">{@team_scores[team]} pts</span>
+          </h3>
+          <ul id={if @teams != %{}, do: "team-players-#{team || "spectators"}", else: "player-list"}>
+            <%= for pid <- player_order do %>
               <% connected = Map.get(Map.get(@players, pid), :connected, true) %>
               <li
                 id={"player-row-#{pid}"}
                 class={[
                   "flex min-w-0 items-center gap-2 px-3 py-2 transition-opacity",
-                  pid == @drawer_id && "bg-pink-100 font-semibold",
+                  (pid == @drawer_id or pid in @team_drawers) && "bg-pink-100 font-semibold",
                   pid != @drawer_id && MapSet.member?(@correct_guesses, pid) && "bg-green-100",
                   !connected && "opacity-40"
                 ]}
@@ -499,7 +544,7 @@ defmodule FlamingoWeb.GameComponents do
                   <%= cond do %>
                     <% !connected -> %>
                       <.icon name={:wifi_off} class="h-4 w-4 text-gray-500" />
-                    <% pid == @drawer_id -> %>
+                    <% pid == @drawer_id or pid in @team_drawers -> %>
                       <.icon name={:paintbrush} class="h-4 w-4" />
                     <% MapSet.member?(@correct_guesses, pid) -> %>
                       <.icon name={:check} class="h-4 w-4 text-green-600" />
@@ -507,12 +552,14 @@ defmodule FlamingoWeb.GameComponents do
                   <% end %>
                 </span>
                 <span class="min-w-0 flex-1 truncate">{Map.get(@players, pid).name}</span>
-                <span class="shrink-0 text-sm font-semibold">{Map.get(@players, pid).score}</span>
+                <span :if={@teams == %{}} class="shrink-0 text-sm font-semibold">
+                  {Map.get(@players, pid).score}
+                </span>
               </li>
             <% end %>
           </ul>
-        </div>
-      </.box>
+        </.box>
+      </div>
     </div>
     """
   end
@@ -645,6 +692,7 @@ defmodule FlamingoWeb.GameComponents do
   attr :show_toolbar, :boolean, default: false
   attr :palette, :list, default: []
   attr :constraint, :any, default: nil
+  attr :spin_started_at, :integer, default: nil
   attr :phase, :any, default: nil
   attr :class, :any, default: nil
 
@@ -655,10 +703,19 @@ defmodule FlamingoWeb.GameComponents do
       phx-hook="DrawingCanvas"
       phx-update="ignore"
       data-is-drawer={to_string(@is_drawer)}
+      data-show-toolbar={to_string(@show_toolbar)}
       data-constraint={@constraint}
       data-phase={@phase}
-      class={["flex w-[704px] max-w-full flex-col gap-2", @class]}
+      data-spin-started-at={@spin_started_at}
+      class={["group/canvas relative flex w-[704px] max-w-full flex-col gap-2", @class]}
     >
+      <span
+        data-spin-status
+        hidden
+        role="status"
+        class="pointer-events-none absolute inset-x-0 top-3 z-20 mx-auto w-fit rounded-base border-2 border-border bg-yellow-200 px-3 py-1 text-sm font-bold shadow-shadow"
+      >
+      </span>
       <.box class="drawing-canvas-frame relative z-0 bg-white p-0">
         <canvas
           width="700"
@@ -669,10 +726,16 @@ defmodule FlamingoWeb.GameComponents do
           ]}
         >
         </canvas>
+        <div
+          data-vote-flash
+          aria-hidden="true"
+          class="pointer-events-none absolute inset-0 z-10 opacity-0"
+        >
+        </div>
       </.box>
 
       <%= if @show_toolbar do %>
-        <.box class="relative z-10 bg-white p-0">
+        <.box class="relative z-10 bg-white p-0 group-data-[show-toolbar=false]/canvas:hidden">
           <.drawing_toolbar palette={@palette} />
         </.box>
       <% end %>

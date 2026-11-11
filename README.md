@@ -102,6 +102,19 @@ OAuth client, and deployment must be completed separately before sign-in is live
 The app still requires one machine for in-memory games; adding Postgres does not
 make active games durable or enable multi-machine room routing.
 
+## In-app changelog
+
+Edit `priv/changelog.json` to add user-facing changes. Keep release groups newest
+first, with one group per release date (`YYYY-MM-DD`) and an `entries` list of
+`{"type": "feature", "text": "What changed for players."}` objects. Supported types
+are `feature`, `fix`, and `new_mode`. Use actual release dates rather than weekly
+report dates, and omit weeks without user-facing changes.
+
+The feed is compiled into the app and appears only on home and lobby screens.
+Content changes require an app deployment. Run `mix precommit` before shipping.
+The initial backfill comes from the weekly changelog reports, with dates checked
+against successful Fly deployment runs.
+
 ## Learn more
 
 * Official website: https://www.phoenixframework.org/

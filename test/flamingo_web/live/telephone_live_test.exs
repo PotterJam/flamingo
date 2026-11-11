@@ -270,6 +270,10 @@ defmodule FlamingoWeb.TelephoneLiveTest do
 
     assert has_element?(bob_view, "#waiting-for-reveal-host")
     refute has_element?(bob_view, "#advance-telephone-reveal")
+    assert has_element?(host, "#advance-telephone-reveal", "Reveal drawing")
+    assert has_element?(host, "#reveal-vote-placeholder", "Voting opens after the first drawing")
+    refute has_element?(host, "#reveal-votes button")
+    assert has_element?(host, "#reveal-drawing-placeholder")
 
     host |> element("#advance-telephone-reveal") |> render_click()
 
@@ -277,6 +281,31 @@ defmodule FlamingoWeb.TelephoneLiveTest do
     assert_push_event(bob_view, "scroll_telephone_reveal", %{})
     assert has_element?(host, "#revealed-entries article:nth-child(2)")
     assert has_element?(bob_view, "#revealed-entries article:nth-child(2)")
+    refute has_element?(host, "#reveal-drawing-placeholder")
+    assert has_element?(host, "#reveal-votes button")
+    refute has_element?(host, "#reveal-vote-placeholder")
+    assert has_element?(host, "#advance-telephone-reveal", "Reveal guess")
+
+    host |> element("#advance-telephone-reveal") |> render_click()
+
+    refute has_element?(host, "#reveal-drawing-placeholder")
+    assert has_element?(host, "#revealed-entries article:nth-child(1)[data-entry-type='drawing']")
+    assert has_element?(host, "#revealed-entries article:nth-child(2)[data-entry-type='guess']")
+    refute has_element?(host, "#revealed-entries article:nth-child(3)")
+    refute has_element?(host, "#revealed-entries [data-entry-type='prompt']")
+    assert has_element?(host, "#revealed-entries [data-entry-type='guess']")
+    assert has_element?(host, "#advance-telephone-reveal", "Next chain")
+
+    host |> element("#advance-telephone-reveal") |> render_click()
+    assert has_element?(host, "#advance-telephone-reveal", "Reveal drawing")
+    assert has_element?(host, "#reveal-vote-placeholder", "Voting opens after the first drawing")
+    refute has_element?(host, "#reveal-votes button")
+    assert has_element?(host, "#reveal-drawing-placeholder")
+    refute has_element?(host, "#revealed-entries [data-entry-type='drawing']")
+    refute has_element?(host, "#revealed-entries [data-entry-type='guess']")
+    host |> element("#advance-telephone-reveal") |> render_click()
+    host |> element("#advance-telephone-reveal") |> render_click()
+    assert has_element?(host, "#advance-telephone-reveal", "Show awards")
   end
 
   test "drawing deltas stay private and reconnect receives the current baseline", %{
@@ -332,8 +361,16 @@ defmodule FlamingoWeb.TelephoneLiveTest do
     vote_id = "vote-worst_drawing-#{drawing.id}"
     assert has_element?(host, "##{vote_id}")
     host |> element("##{vote_id}") |> render_click()
-    assert has_element?(host, "##{vote_id}.bg-yellow-200")
-    assert has_element?(host, "##{vote_id} span", "1")
+    assert has_element?(host, "##{vote_id}[aria-pressed='true']")
+    :ok = command_as(room_id, bob_token, {:vote, :worst_drawing, drawing.id})
+
+    assert host
+           |> element("##{vote_id}")
+           |> render()
+           |> LazyHTML.from_fragment()
+           |> LazyHTML.text()
+           |> String.trim() ==
+             "Wildest drawing"
 
     for _ <- 1..5 do
       host |> element("#advance-telephone-reveal") |> render_click()

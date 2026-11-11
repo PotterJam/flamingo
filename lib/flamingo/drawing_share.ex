@@ -22,7 +22,8 @@ defmodule Flamingo.DrawingShare do
           required(:drawer_name) => String.t(),
           required(:word) => String.t(),
           required(:round_number) => pos_integer(),
-          required(:ops) => list(list())
+          required(:ops) => list(list()),
+          optional(:constraint) => atom() | nil
         }
 
   @version_prefix "z"
@@ -42,6 +43,14 @@ defmodule Flamingo.DrawingShare do
       "r" => Map.fetch!(drawing, :round_number),
       "o" => Map.fetch!(drawing, :ops)
     }
+
+    # The Roulette constraint travels with the drawing because some, like
+    # kaleidoscope, change how the ops render.
+    payload =
+      case Map.get(drawing, :constraint) do
+        nil -> payload
+        constraint -> Map.put(payload, "c", constraint)
+      end
 
     compressed =
       payload
@@ -272,7 +281,9 @@ defmodule Flamingo.DrawingShare do
     _error -> {:error, :invalid_drawing}
   end
 
-  defp normalize_v2(%{"v" => 2, "n" => name, "w" => word, "r" => round_number, "o" => ops})
+  defp normalize_v2(
+         %{"v" => 2, "n" => name, "w" => word, "r" => round_number, "o" => ops} = payload
+       )
        when is_binary(name) and is_binary(word) and is_integer(round_number) and
               round_number > 0 and is_list(ops) do
     if Enum.all?(ops, &valid_op?/1) do
@@ -281,6 +292,7 @@ defmodule Flamingo.DrawingShare do
          drawer_name: name,
          word: word,
          round_number: round_number,
+         constraint: payload["c"],
          events: expand_ops(ops)
        }}
     else

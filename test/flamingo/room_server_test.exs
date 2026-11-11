@@ -531,6 +531,68 @@ defmodule Flamingo.RoomServerTest do
     assert state.current_drawing == [first_event]
   end
 
+  test "co-op deltas and reconnect snapshots stay inside the drawer's team", %{room_id: room_id} do
+    [{host_token, _}, {teammate_token, _}, {opponent_token, _}, {other_guesser_token, _}] =
+      for name <- ["Alice", "Bob", "Cara", "Drew"] do
+        {:ok, token, snapshot} = join_connected(room_id, name)
+        {token, snapshot.viewer_id}
+      end
+
+    :ok =
+      start_game_as(room_id, host_token, %{game_mode: :coop, custom_words: ["cat", "dog", "bird"]})
+
+    {:ok, host} = snapshot_as(room_id, host_token)
+    {:ok, opponent} = snapshot_as(room_id, opponent_token)
+    assert host.word_choices == opponent.word_choices
+    :ok = select_word_as(room_id, host_token, "cat")
+    :ok = select_word_as(room_id, opponent_token, "dog")
+    {:ok, late_token, _} = join_connected(room_id, "Late")
+    flush_room_snapshots()
+
+    event = %{"event_type" => "start", "x" => 15, "y" => 27}
+    :ok = draw_event_as(room_id, host_token, event)
+    _ = :sys.get_state(room_pid(room_id))
+    teammate_pid = Process.get({:player, teammate_token})
+    assert_receive {:draw_event, ^teammate_pid, ^event}
+    refute_receive {:draw_event, _, _}
+
+    {:ok, teammate} = snapshot_as(room_id, teammate_token)
+    {:ok, opponent} = snapshot_as(room_id, other_guesser_token)
+    {:ok, late} = snapshot_as(room_id, late_token)
+    assert teammate.current_drawing == [event]
+    assert teammate.word == "___"
+    assert opponent.current_drawing == []
+    assert late.current_drawing == []
+    assert late.word == nil
+    {_child_id, _pid, resumed} = start_connection(room_id, teammate_token)
+    assert resumed.current_drawing == [event]
+    assert resumed.teams == teammate.teams
+    assert :correct = guess_as(room_id, teammate_token, "cat")
+    {:ok, opponent} = snapshot_as(room_id, other_guesser_token)
+    assert opponent.can_guess?
+    assert opponent.team_scores == %{1 => 400, 2 => 0}
+  end
+
+  test "a co-op team survives a member refreshing mid-race", %{room_id: room_id} do
+    [{host_token, _}, {teammate_token, _}, {opponent_token, _}, _] =
+      for name <- ["Alice", "Bob", "Cara", "Drew"] do
+        {:ok, token, snapshot} = join_connected(room_id, name)
+        {token, snapshot.viewer_id}
+      end
+
+    :ok =
+      start_game_as(room_id, host_token, %{game_mode: :coop, custom_words: ["cat", "dog", "bird"]})
+
+    :ok = select_word_as(room_id, host_token, "cat")
+    :ok = select_word_as(room_id, opponent_token, "dog")
+
+    stop_supervised!(Process.get({:player_child, teammate_token}))
+    {_child_id, _pid, resumed} = start_connection(room_id, teammate_token)
+    assert resumed.phase == :playing
+    refute resumed.team_finished?
+    assert resumed.can_guess?
+  end
+
   test "telephone dispatches private drawings and advances when drawing time expires", %{
     room_id: room_id
   } do

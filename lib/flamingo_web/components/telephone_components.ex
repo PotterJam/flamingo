@@ -325,49 +325,43 @@ defmodule FlamingoWeb.TelephoneComponents do
   def reveal_phase(assigns) do
     chain = assigns.reveal && Map.get(assigns.reveal, :chain)
     entries = if chain, do: Map.get(chain, :entries, []), else: []
+    entries = Enum.take(entries, -2)
+    current_entry = List.last(entries)
+    drawing = Enum.find(entries, &(&1.type == :drawing))
 
     assigns =
       assign(assigns,
         chain: chain,
         entries: entries,
-        current_entry: List.last(entries),
+        drawing: drawing,
+        current_entry: current_entry,
         entry_count: Map.get(assigns.reveal || %{}, :entry_count, 0),
         categories: @categories
       )
 
     ~H"""
-    <section id="telephone-reveal-phase" phx-hook=".ScrollReveal" class="space-y-6 pb-6">
-      <.box class="relative mx-auto max-w-4xl overflow-hidden bg-sky-100 p-5 text-center sm:p-8">
-        <div aria-hidden="true" class="pointer-events-none absolute inset-0 overflow-hidden">
-          <.icon
-            name={:sparkles}
-            class="telephone-float absolute top-6 left-[7%] h-16 w-16 rotate-[-12deg] text-yellow-500 opacity-60"
-          />
-          <.icon
-            name={:shuffle}
-            class="telephone-float absolute top-5 right-[7%] h-14 w-14 rotate-12 text-pink-500 opacity-50 [animation-delay:350ms]"
-          />
-        </div>
-        <div class="relative">
-          <h2 class="font-hero text-4xl leading-none font-black text-black sm:text-5xl">
-            Watch the story unravel
-          </h2>
-
+    <section id="telephone-reveal-phase" class="mx-auto w-full max-w-2xl space-y-5 pb-6">
+      <.card class="overflow-hidden bg-white p-0">
+        <div class="border-b-2 border-border px-4 py-4 text-center sm:px-6">
+          <h2 class="mb-4 text-xl font-bold sm:text-2xl">Telephone chain</h2>
           <div
             id="reveal-journey-progress"
-            class="mx-auto mt-5 flex max-w-xl items-end gap-1"
+            class="mx-auto flex max-w-sm items-end gap-1"
             aria-label="Chain journey progress"
           >
             <div :for={index <- progress_indices(@entry_count)} class="min-w-0 flex-1">
               <p
-                class="mb-1 flex h-4 items-center justify-center truncate text-xs font-bold text-gray-700"
+                class={[
+                  "mb-1 flex h-4 items-center justify-center truncate text-xs font-bold transition-colors",
+                  cond do
+                    index == @reveal.entry_index -> "text-pink-400"
+                    index < @reveal.entry_index -> "text-gray-300"
+                    true -> "text-gray-700"
+                  end
+                ]}
                 aria-label={journey_label(index)}
               >
-                <%= if icon = journey_icon(index) do %>
-                  <.icon name={icon} class="h-4 w-4" />
-                <% else %>
-                  {journey_label(index)}
-                <% end %>
+                <.icon name={journey_icon(index)} class="h-4 w-4" />
               </p>
               <span
                 data-state={progress_state(index, Map.get(@reveal || %{}, :entry_index))}
@@ -380,117 +374,222 @@ defmodule FlamingoWeb.TelephoneComponents do
             </div>
           </div>
         </div>
-      </.box>
-      <div
-        id="revealed-entries"
-        class="flex flex-col gap-5"
-      >
-        <article
-          :for={entry <- @entries}
-          id={"telephone-entry-#{entry.id}"}
-          data-current={to_string(current_entry?(entry, @current_entry))}
-          data-entry-type={entry.type}
-          class={[
-            "mx-auto flex w-full max-w-3xl flex-col rounded-base border-2 border-border p-3 shadow-shadow",
-            current_entry?(entry, @current_entry) && "telephone-reveal-current",
-            entry.type == :drawing && "bg-white",
-            entry.type != :drawing && "bg-yellow-50"
-          ]}
+        <div
+          id="revealed-entries"
+          phx-hook=".RevealConveyor"
+          data-chain-index={@reveal.chain_index}
+          data-last-entry={to_string(@reveal.entry_index + 1 == @reveal.entry_count)}
+          class="flex flex-col overflow-hidden"
         >
-          <%= if entry.type == :drawing do %>
-            <div class="mb-1 flex items-center gap-2">
-              <.flamingo_avatar
-                avatar={player_avatar(@players, entry.player_id || @chain.origin_player_id)}
-                class="h-8 w-8"
-                label={
-                  "#{player_name(@players, entry.player_id || @chain.origin_player_id)}'s avatar"
-                }
-              />
-              <div>
-                <p class="font-bold">
-                  {player_name(@players, entry.player_id || @chain.origin_player_id)}
-                </p>
-              </div>
-            </div>
-            <div
-              id={"reveal-drawing-#{entry.id}"}
-              phx-hook="DrawingCanvas"
-              phx-update="ignore"
-              data-is-drawer="false"
-              data-final-drawing-replay="true"
-              data-final-drawing-events={Jason.encode!(entry.value || [])}
-            >
-              <div class="relative aspect-[7/5] w-full bg-white">
-                <canvas width="700" height="500" class="absolute inset-0 h-full w-full"></canvas>
-                <.drawing_fallback ops={entry.value || []} />
-              </div>
-            </div>
-          <% else %>
-            <div class="grid grid-cols-[1fr_auto_1fr] items-center gap-2">
-              <div class="flex min-w-0 items-center gap-2 justify-self-start">
+          <article
+            :for={entry <- @entries}
+            id={"telephone-entry-#{entry.id}"}
+            data-current={to_string(current_entry?(entry, @current_entry))}
+            data-entry-type={entry.type}
+            class="flex w-full flex-col"
+          >
+            <%= if entry.type == :drawing do %>
+              <div class="flex h-12 items-center gap-2 p-2">
                 <.flamingo_avatar
                   avatar={player_avatar(@players, entry.player_id || @chain.origin_player_id)}
-                  class="h-8 w-8 shrink-0"
+                  class="h-8 w-8"
                   label={
+                  "#{player_name(@players, entry.player_id || @chain.origin_player_id)}'s avatar"
+                }
+                />
+                <div>
+                  <p class="font-bold">
+                    {player_name(@players, entry.player_id || @chain.origin_player_id)}
+                  </p>
+                </div>
+              </div>
+              <div
+                id={"reveal-drawing-#{entry.id}"}
+                phx-hook="DrawingCanvas"
+                phx-update="ignore"
+                data-is-drawer="false"
+                data-final-drawing-replay="true"
+                data-final-drawing-events={Jason.encode!(entry.value || [])}
+              >
+                <div class="relative aspect-[7/5] w-full bg-white">
+                  <canvas width="700" height="500" class="absolute inset-0 h-full w-full"></canvas>
+                  <.drawing_fallback ops={entry.value || []} />
+                </div>
+              </div>
+            <% else %>
+              <div class="flex min-h-12 items-center gap-4 p-2">
+                <div class="flex max-w-[35%] shrink-0 items-center gap-2">
+                  <.flamingo_avatar
+                    avatar={player_avatar(@players, entry.player_id || @chain.origin_player_id)}
+                    class="h-8 w-8 shrink-0"
+                    label={
                     "#{player_name(@players, entry.player_id || @chain.origin_player_id)}'s avatar"
                   }
-                />
-                <span class="truncate font-bold">
-                  {player_name(@players, entry.player_id || @chain.origin_player_id)}
-                </span>
+                  />
+                  <span class="truncate font-bold">
+                    {player_name(@players, entry.player_id || @chain.origin_player_id)}
+                  </span>
+                </div>
+                <p
+                  id={"reveal-text-#{entry.id}"}
+                  class="min-w-0 flex-1 text-center text-lg leading-tight font-bold break-words text-black sm:text-xl"
+                >
+                  {present_text(entry.value)}
+                </p>
               </div>
-              <p
-                id={"reveal-text-#{entry.id}"}
-                class="text-center font-hero text-2xl leading-tight font-black text-black"
-              >
-                {present_text(entry.value)}
-              </p>
-              <span aria-hidden="true"></span>
-            </div>
-          <% end %>
-          <div :if={@participation == :active} class="mt-2 flex flex-wrap justify-center gap-2">
-            <button
-              :for={{category, label, icon} <- applicable_categories(@categories, entry)}
-              id={"vote-#{category}-#{entry.id}"}
-              phx-click="vote"
-              phx-value-category={category}
-              phx-value-entry-id={entry.id}
-              class={[
-                "flex items-center gap-1 rounded-full border-2 border-border px-3 py-1.5 text-xs font-bold transition hover:bg-yellow-100",
-                Map.get(@votes, category) == entry.id && "bg-yellow-200 shadow-shadow"
-              ]}
+            <% end %>
+            <div
+              :if={!current_entry?(entry, @current_entry) || entry.type == :prompt}
+              aria-hidden="true"
+              class="mx-2 border-b-2 border-dashed border-border"
             >
-              <.icon name={icon} class="h-4 w-4" />{label}<span class="rounded-full bg-white px-1.5">{vote_count(@vote_counts, category, entry.id)}</span>
-            </button>
+            </div>
+          </article>
+          <div :if={!@drawing} id="reveal-drawing-placeholder" aria-label="Drawing not revealed">
+            <div class="h-12"></div>
+            <div class="flex aspect-[7/5] items-center justify-center bg-white px-6 text-center text-sm text-gray-400">
+              <%= if @reveal.entry_index + 1 < @reveal.entry_count do %>
+                The drawing will be revealed soon
+              <% else %>
+                That’s how this story ended
+              <% end %>
+            </div>
           </div>
-        </article>
-      </div>
-      <div id="reveal-controls" class="flex justify-center">
+          <div
+            id="reveal-votes"
+            class="flex h-24 items-center gap-2 border-t-2 border-border p-2 sm:h-12"
+          >
+            <%= if @participation == :active && applicable_categories(@categories, @current_entry) != [] do %>
+              <span class="shrink-0 text-sm font-bold">Cast your vote</span>
+              <div class="flex flex-1 flex-wrap items-center justify-end gap-1">
+                <.button
+                  :for={
+                    {category, label, _icon} <- applicable_categories(@categories, @current_entry)
+                  }
+                  id={"vote-#{category}-#{@current_entry.id}"}
+                  variant="ghost"
+                  size="sm"
+                  phx-click="vote"
+                  phx-value-category={category}
+                  phx-value-entry-id={@current_entry.id}
+                  aria-pressed={to_string(Map.get(@votes, category) == @current_entry.id)}
+                  class={[
+                    "inline-flex items-center gap-2",
+                    Map.get(@votes, category) == @current_entry.id && "bg-primary/20"
+                  ]}
+                >
+                  {label}
+                </.button>
+              </div>
+            <% else %>
+              <p id="reveal-vote-placeholder" class="w-full text-center text-sm text-gray-500">
+                <%= if @participation == :active do %>
+                  Voting opens after the first drawing
+                <% else %>
+                  Players are casting their votes
+                <% end %>
+              </p>
+            <% end %>
+          </div>
+        </div>
+      </.card>
+      <div id="reveal-controls" class="flex justify-end">
         <.button
           :if={@viewer_id == @host_id}
           id="advance-telephone-reveal"
           phx-click="advance_reveal"
           class="inline-flex items-center gap-1"
         >
-          <%= if final_reveal?(@reveal) do %>
-            Finish
-          <% else %>
-            Next <.icon name={:arrow_down} class="h-4 w-4" />
-          <% end %>
+          {advance_label(@reveal)} <.icon name={:arrow_right} class="h-4 w-4" />
         </.button>
         <p :if={@viewer_id != @host_id} id="waiting-for-reveal-host" class="font-bold text-gray-600">
           The host is choosing the dramatic moment… hold your breath.
         </p>
       </div>
     </section>
-    <script :type={Phoenix.LiveView.ColocatedHook} name=".ScrollReveal">
+    <div
+      id="reveal-transition-overlay"
+      phx-update="ignore"
+      aria-hidden="true"
+      class="pointer-events-none fixed z-20 overflow-hidden"
+    >
+    </div>
+    <script :type={Phoenix.LiveView.ColocatedHook} name=".RevealConveyor">
       export default {
-        mounted() {
-          this.handleEvent("scroll_telephone_reveal", () => {
-            window.requestAnimationFrame(() => {
-              window.scrollTo({top: document.documentElement.scrollHeight, behavior: "smooth"})
+        beforeUpdate() {
+          this.chainIndex = this.el.dataset.chainIndex
+          this.outgoing = null
+          if (this.el.dataset.lastEntry === "true" &&
+              !window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
+            this.bounds = this.el.getBoundingClientRect()
+            this.outgoing = this.el.cloneNode(true)
+            const originals = this.el.querySelectorAll("canvas")
+            this.outgoing.querySelectorAll("canvas").forEach((canvas, index) => {
+              canvas.getContext("2d").drawImage(originals[index], 0, 0)
             })
-          })
+            for (const node of [this.outgoing, ...this.outgoing.querySelectorAll("*")]) {
+              node.removeAttribute("id")
+              node.removeAttribute("phx-hook")
+            }
+            this.outgoing.inert = true
+          }
+          this.positions = new Map(
+            Array.from(this.el.querySelectorAll(":scope > article"), entry => [
+              entry.id, entry.getBoundingClientRect()
+            ])
+          )
+        },
+        updated() {
+          const entries = Array.from(this.el.querySelectorAll(":scope > article"))
+          if (!this.positions || entries.every(entry => this.positions.has(entry.id))) return
+
+          const previousBottom = Math.max(...Array.from(this.positions.values(), rect => rect.bottom))
+          const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches
+          const timing = {duration: 420, easing: "cubic-bezier(0.22, 1, 0.36, 1)"}
+          const overlay = document.getElementById("reveal-transition-overlay")
+          overlay.replaceChildren()
+          this.el.getAnimations().forEach(animation => animation.cancel())
+
+          if (this.chainIndex !== this.el.dataset.chainIndex) {
+            if (!reducedMotion && this.outgoing) {
+              const {left, top, width, height} = this.bounds
+              const clipHeight = Math.min(height, this.el.getBoundingClientRect().height)
+              Object.assign(overlay.style, {
+                left: `${left}px`, top: `${top}px`, width: `${width}px`, height: `${clipHeight}px`
+              })
+              overlay.append(this.outgoing)
+              const outgoing = this.outgoing
+              outgoing.style.background = "white"
+              const exit = outgoing.animate(
+                [{transform: "translateX(0)"}, {transform: "translateX(-100%)"}], timing
+              )
+              exit.finished.then(() => outgoing.remove(), () => outgoing.remove())
+              this.el.animate(
+                [{transform: "translateX(100%)"}, {transform: "translateX(0)"}], timing
+              )
+            }
+            this.outgoing = null
+            return
+          }
+
+          for (const entry of entries) {
+            const previous = this.positions.get(entry.id)
+            entry.getAnimations().forEach(animation => animation.cancel())
+            if (reducedMotion) continue
+
+            const top = entry.getBoundingClientRect().top
+            const offset = previous ? previous.top - top : Math.max(32, previousBottom - top)
+            entry.animate(
+              [
+                {transform: `translateY(${offset}px)`, opacity: previous ? 1 : 0},
+                {transform: "translateY(0)", opacity: 1}
+              ],
+              timing
+            )
+          }
+        },
+        destroyed() {
+          document.getElementById("reveal-transition-overlay")?.replaceChildren()
         }
       }
     </script>
@@ -573,7 +672,7 @@ defmodule FlamingoWeb.TelephoneComponents do
                 </div>
               </div>
             <% else %>
-              <p class="mt-8 text-gray-600">No votes this time—chaos made winners of everyone.</p>
+              <p class="mt-8 text-gray-600">No votes for this category</p>
             <% end %>
           </div>
         </div>
@@ -696,20 +795,30 @@ defmodule FlamingoWeb.TelephoneComponents do
   defp journey_label(index) when rem(index, 2) == 1, do: "Drawing"
   defp journey_label(_index), do: "Guess"
 
-  defp journey_icon(0), do: nil
+  defp journey_icon(0), do: :pen
   defp journey_icon(index) when rem(index, 2) == 1, do: :paintbrush
   defp journey_icon(_index), do: :message_circle
 
-  defp progress_class(index, current) when index < current, do: "border-solid bg-white"
+  defp progress_class(index, current) when index < current, do: "border-solid bg-gray-300"
   defp progress_class(index, index), do: "border-solid bg-pink-400"
   defp progress_class(_index, _current), do: "border-dotted bg-transparent"
 
   defp current_entry?(%{id: id}, %{id: id}), do: true
   defp current_entry?(_entry, _current), do: false
 
-  defp final_reveal?(reveal) do
-    reveal.entry_index + 1 == reveal.entry_count and
-      reveal.chain_index + 1 == reveal.chain_count
+  defp advance_label(reveal) do
+    cond do
+      reveal.entry_index + 1 == reveal.entry_count ->
+        if reveal.chain_index + 1 == reveal.chain_count,
+          do: "Show awards",
+          else: "Next chain"
+
+      rem(reveal.entry_index, 2) == 0 ->
+        "Reveal drawing"
+
+      true ->
+        "Reveal guess"
+    end
   end
 
   defp award_card_class(:derailment),
@@ -726,9 +835,6 @@ defmodule FlamingoWeb.TelephoneComponents do
 
   defp applicable_categories(categories, _entry),
     do: Enum.reject(categories, &(elem(&1, 0) == :worst_drawing))
-
-  defp vote_count(counts, category, entry_id),
-    do: counts |> Map.get(category, %{}) |> Map.get(entry_id, 0)
 
   defp player(players, id), do: Map.get(players, id, %{})
   defp player_name(_players, nil), do: "an unknown player"

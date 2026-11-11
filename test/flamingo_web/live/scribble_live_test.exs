@@ -262,6 +262,10 @@ defmodule FlamingoWeb.ScribbleLiveTest do
     assert state.game_variant == :constraint_roulette
 
     assert state.constraint in [
+             :big_brush,
+             :rainbow_strokes,
+             :fading_ink,
+             :kaleidoscope,
              :hidden_canvas,
              :single_stroke,
              :straight_lines,
@@ -454,6 +458,51 @@ defmodule FlamingoWeb.ScribbleLiveTest do
       live(conn, ~p"/game/#{room_id}/scribble?resume_token=#{guesser_token}")
 
     assert_push_event(guesser_view, "drawing_state", %{events: [^first_event, ^second_event]})
+  end
+
+  test "guessers can change their drawing vote while turn scores are shown", %{
+    conn: conn,
+    room_id: room_id
+  } do
+    {:ok, drawer_token, _} = join_connected(room_id, "Alice")
+    {:ok, guesser_token, _} = join_connected(room_id, "Bob")
+    :ok = start_game_as(room_id, drawer_token, %{custom_words: ["secret"]})
+
+    {:ok, view, _} = live(conn, ~p"/game/#{room_id}/scribble?resume_token=#{guesser_token}")
+    {:ok, state} = room_snapshot(room_id)
+    word = List.first(state.word_choices)
+    :ok = select_word_as(room_id, drawer_token, word)
+
+    {:ok, drawer_view, _} =
+      live(conn, ~p"/game/#{room_id}/scribble?resume_token=#{drawer_token}")
+
+    view |> element("#vote-drawing-up") |> render_click()
+    assert_push_event(view, "drawing_vote", %{vote: "up"})
+    assert_push_event(drawer_view, "drawing_vote", %{vote: "up"})
+
+    {:ok, reconnected_view, _} =
+      live(conn, ~p"/game/#{room_id}/scribble?resume_token=#{guesser_token}")
+
+    refute_push_event(reconnected_view, "drawing_vote", %{})
+    view |> form("#guess-form", guess_form: %{guess: word}) |> render_submit()
+
+    assert has_element?(view, "#turn-reveal-score-gains")
+    refute has_element?(view, "#guess-form")
+    assert has_element?(view, "#vote-drawing-up[aria-pressed=true]")
+
+    view |> element("#vote-drawing-down") |> render_click()
+    assert_push_event(view, "drawing_vote", %{vote: "down"})
+    assert_push_event(drawer_view, "drawing_vote", %{vote: "down"})
+    assert has_element?(view, "#vote-drawing-down[aria-pressed=true]")
+    assert has_element?(view, "#vote-drawing-up[aria-pressed=false]")
+
+    assert %{thumbs_up: 0, thumbs_down: 1} =
+             room_id
+             |> room_pid()
+             |> :sys.get_state()
+             |> Map.fetch!(:game)
+             |> Map.fetch!(:final_drawings)
+             |> List.last()
   end
 
   test "a spectator joining during turn reveal receives the drawing baseline", %{
@@ -737,6 +786,59 @@ defmodule FlamingoWeb.ScribbleLiveTest do
 
     view |> element("#return-to-lobby") |> render_click()
     assert_redirect(view, ~p"/game/#{room_id}?resume_token=#{p1_token}")
+  end
+
+  test "teams final results step through the selected team's drawings by every drawer", %{
+    conn: conn,
+    room_id: room_id
+  } do
+    [{_, host_token} | _] =
+      for name <- ["Alice", "Bob", "Cara", "Drew"] do
+        {:ok, token, %{viewer_id: id}} = join_connected(room_id, name)
+        {id, token}
+      end
+
+    :ok = start_game_as(room_id, host_token, %{game_mode: :coop, round_count: 2})
+    {:ok, view, _html} = live(conn, ~p"/game/#{room_id}/scribble?resume_token=#{host_token}")
+    pid = room_pid(room_id)
+
+    Enum.reduce_while(1..20, nil, fn _, _ ->
+      case :sys.get_state(pid) do
+        %{game: %{phase: :game_ended}} ->
+          {:halt, nil}
+
+        %{phase_timer: timer} ->
+          send(pid, {:game_timeout, :phase, timer.key, timer.generation})
+          {:cont, nil}
+      end
+    end)
+
+    {:ok, snapshot} = snapshot_as(room_id, host_token)
+    assert snapshot.phase == :game_ended
+    members = Enum.filter(snapshot.final_player_order, &(snapshot.teams[&1] == 2))
+    [round_1, round_2] = Enum.filter(snapshot.final_drawings, &(&1.drawer_id in members))
+    assert round_1.drawer_id != round_2.drawer_id
+
+    view |> element("#final-team-row-2 button") |> render_click()
+    assert has_element?(view, "#final-team-row-2 [aria-pressed='true']")
+    assert has_element?(view, "#final-drawing-#{round_1.drawer_id}-round-1")
+
+    assert has_element?(
+             view,
+             "#final-drawing-artist",
+             snapshot.final_players[round_1.drawer_id].name
+           )
+
+    view |> element("#next-final-drawing") |> render_click()
+    assert has_element?(view, "#final-drawing-#{round_2.drawer_id}-round-2")
+
+    assert has_element?(
+             view,
+             "#final-drawing-artist",
+             snapshot.final_players[round_2.drawer_id].name
+           )
+
+    assert has_element?(view, "#next-final-drawing[disabled]")
   end
 
   test "final results preserve each artist's votes in podium and remaining rows", %{

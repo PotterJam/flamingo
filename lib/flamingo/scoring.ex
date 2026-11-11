@@ -40,12 +40,12 @@ defmodule Flamingo.Scoring do
     Map.put(guesser_scores, drawer_id, drawer_score)
   end
 
-  defp calculate_guesser_scores(correct_guesses, _turn_length)
-       when map_size(correct_guesses) == 0 do
+  def calculate_guesser_scores(correct_guesses, _turn_length)
+      when map_size(correct_guesses) == 0 do
     %{}
   end
 
-  defp calculate_guesser_scores(correct_guesses, turn_length) do
+  def calculate_guesser_scores(correct_guesses, turn_length) do
     sorted =
       correct_guesses
       |> Enum.sort_by(fn {_id, time} -> DateTime.to_unix(time, :microsecond) end)

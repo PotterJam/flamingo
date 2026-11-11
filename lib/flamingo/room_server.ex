@@ -199,9 +199,15 @@ defmodule Flamingo.RoomServer do
     case state.game_module.command(state.game, actor, {:draw, event}, context) do
       {:ok, result} ->
         Enum.each(state.connections, fn {other, connection} ->
+          in_scope? =
+            case Map.get(result, :drawing_scope) do
+              :actor -> connection.player_id == actor
+              {:players, ids} -> connection.player_id in ids
+              _ -> true
+            end
+
           deliver? =
-            other != pid and
-              (Map.get(result, :drawing_scope) != :actor or connection.player_id == actor)
+            other != pid and in_scope?
 
           if deliver?, do: send(other, {:draw_event, result.drawing_delta})
         end)
@@ -509,6 +515,7 @@ defmodule Flamingo.RoomServer do
       |> Map.put(:turn_end_time, state.turn_end_time)
 
   defp mode_module(:telephone), do: {:ok, Telephone}
+  defp mode_module(:coop), do: {:ok, Flamingo.GameModes.Coop}
   defp mode_module(:scribble), do: {:ok, Scribble}
   defp mode_module(_mode), do: {:error, :invalid_game_mode}
 

@@ -18,6 +18,7 @@ defmodule FlamingoWeb.RoomRoute do
   # The room snapshot determines which page to show, not the URL or settings draft.
   def screen(%{phase: :lobby}), do: :lobby
   def screen(%{mode: :telephone}), do: :telephone
+  def screen(%{mode: :coop}), do: :scribble
   def screen(%{mode: :scribble}), do: :scribble
 
   def path(snapshot, room_id, token) do

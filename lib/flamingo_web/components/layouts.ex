@@ -93,6 +93,7 @@ defmodule FlamingoWeb.Layouts do
   attr :current_scope, :map, default: nil
   attr :background, :string, default: "grid-background"
   attr :show_sound_controls, :boolean, default: true
+  attr :changelog, :boolean, default: false
   slot :inner_block, required: true
 
   def app(assigns) do
@@ -100,6 +101,7 @@ defmodule FlamingoWeb.Layouts do
     <main class={[@background, "min-h-screen"]}>
       {render_slot(@inner_block)}
     </main>
+    <FlamingoWeb.Changelog.feed :if={@changelog} />
     <.flash_group flash={@flash} />
     <div id="sound-manager" phx-hook="SoundManager" phx-update="ignore"></div>
     <div

@@ -1,9 +1,10 @@
-import { CompactOp, DrawEvent, opsToEvents, replayEvents } from "./drawing_canvas";
+import { CompactOp, DrawEvent, DrawingConstraint, opsToEvents, replayEvents } from "./drawing_canvas";
 
 type SharedDrawingPayload = {
   drawer_name: string;
   word: string;
   round_number: number;
+  constraint?: DrawingConstraint;
   events: DrawEvent[];
 };
 
@@ -13,6 +14,7 @@ type CompactPayload = {
   w: string;
   r: number;
   o: CompactOp[];
+  c?: DrawingConstraint;
 };
 
 interface SharedDrawingHook {
@@ -20,6 +22,7 @@ interface SharedDrawingHook {
   canvas: HTMLCanvasElement;
   ctx: CanvasRenderingContext2D;
   events: DrawEvent[];
+  constraint: DrawingConstraint;
   replayToken: number;
   loadDrawing: () => Promise<void>;
   replay: () => void;
@@ -58,6 +61,7 @@ const decodeCompressed = async (encoded: string): Promise<SharedDrawingPayload> 
     drawer_name: payload.n,
     word: payload.w,
     round_number: payload.r,
+    constraint: payload.c,
     events: opsToEvents(payload.o),
   };
 };
@@ -67,6 +71,7 @@ const SharedDrawing = {
     this.canvas = this.el.querySelector("canvas") as HTMLCanvasElement;
     this.ctx = this.canvas.getContext("2d", { willReadFrequently: true })!;
     this.events = [];
+    this.constraint = "";
     this.replayToken = 0;
 
     this.el.querySelector("[data-replay-shared-drawing]")?.addEventListener("click", () => {
@@ -99,7 +104,7 @@ const SharedDrawing = {
     this.replayToken += 1;
     const token = this.replayToken;
 
-    replayEvents(this.ctx, this.events, () => this.replayToken === token);
+    replayEvents(this.ctx, this.events, () => this.replayToken === token, this.constraint);
   },
 
   showInvalid() {
@@ -114,6 +119,7 @@ const SharedDrawing = {
     this.el.querySelector("[data-shared-drawing-content]")?.classList.add("flex");
 
     this.events = drawing.events;
+    this.constraint = drawing.constraint ?? "";
     this.replay();
   },
 };

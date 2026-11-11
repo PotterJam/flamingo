@@ -79,8 +79,35 @@ defmodule Flamingo.Avatar do
 
   defp normalize_value(_value, default, _range), do: default
 
-  defp normalize_drawing(value) when is_binary(value) and byte_size(value) <= 3_000 do
-    if Regex.match?(~r/\A[ML0-9 .-]*\z/, value), do: value, else: ""
+  def drawing_strokes(value, default_width \\ 6) do
+    cond do
+      value == "" ->
+        []
+
+      valid_path?(value) ->
+        [%{"path" => value, "width" => default_width}]
+
+      true ->
+        case Jason.decode(value) do
+          {:ok, strokes} when is_list(strokes) ->
+            if Enum.all?(strokes, &valid_stroke?/1), do: strokes, else: []
+
+          _ ->
+            []
+        end
+    end
+  end
+
+  defp valid_stroke?(%{"path" => path, "width" => width} = stroke)
+       when map_size(stroke) == 2 and width in [2, 4, 6, 10],
+       do: is_binary(path) and path != "" and valid_path?(path)
+
+  defp valid_stroke?(_), do: false
+
+  defp valid_path?(value), do: Regex.match?(~r/\A[ML0-9 .-]*\z/, value)
+
+  defp normalize_drawing(value) when is_binary(value) and byte_size(value) <= 24_000 do
+    if drawing_strokes(value) == [], do: "", else: value
   end
 
   defp normalize_drawing(_value), do: ""

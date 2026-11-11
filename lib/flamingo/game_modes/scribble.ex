@@ -6,7 +6,17 @@ defmodule Flamingo.GameModes.Scribble do
 
   alias Flamingo.{DrawingShare, Feed, GameSettings, Scoring}
 
-  @constraints [:hidden_canvas, :single_stroke, :straight_lines, :rotating_canvas, :mirror]
+  @constraints [
+    :big_brush,
+    :rainbow_strokes,
+    :fading_ink,
+    :kaleidoscope,
+    :hidden_canvas,
+    :single_stroke,
+    :straight_lines,
+    :rotating_canvas,
+    :mirror
+  ]
 
   def new do
     Map.merge(GameSettings.defaults(), %{
@@ -16,6 +26,9 @@ defmodule Flamingo.GameModes.Scribble do
       round_count: 3,
       game_variant: :classic,
       constraint: nil,
+      spin_enabled: false,
+      spin_holder: nil,
+      spin_started_at: nil,
       remaining_constraints: %{},
       drawer_id: nil,
       current_round: 0,
@@ -88,21 +101,28 @@ defmodule Flamingo.GameModes.Scribble do
   def start(state, settings, context) do
     round_count = Map.get(settings, :round_count, state.round_count)
     game_variant = Map.get(settings, :game_variant, state.game_variant)
+    spin_enabled = Map.get(settings, :spin_enabled, state.spin_enabled)
     roster = context.roster
 
     with true <- context.actor_id == roster.host_id || {:error, :not_host},
          true <- online_count(roster) >= 2 || {:error, :not_enough_players},
          true <- round_count in 1..5 || {:error, :invalid_round_count},
+         true <- is_boolean(spin_enabled) || {:error, :invalid_spin_enabled},
          {:ok, shared_settings} <- GameSettings.validate(settings, state),
          true <-
-           game_variant in [:classic, :constraint_roulette] || {:error, :invalid_game_variant} do
+           game_variant in [:classic, :constraint_roulette] ||
+             {:error, :invalid_game_variant} do
       participants = Map.new(state.participants, fn {id, _} -> {id, :active} end)
+
       state = Map.merge(state, shared_settings)
 
       state = %{
         state
         | round_count: round_count,
           game_variant: game_variant,
+          spin_enabled: spin_enabled,
+          spin_holder: nil,
+          spin_started_at: nil,
           constraint: nil,
           remaining_constraints: %{},
           participants: participants,
@@ -129,9 +149,11 @@ defmodule Flamingo.GameModes.Scribble do
     end
   end
 
-  def command(state, actor, {:draw, event}, _context) when is_map(event) do
+  def command(state, actor, {:draw, event}, context) when is_map(event) do
     if state.phase == :playing and actor == state.drawer_id and active?(state, actor) and
          constraint_event_allowed?(state, event) do
+      event = constrain_event(state.constraint, event, context.now)
+
       drawing =
         if event["event_type"] == "undo",
           do: undo(state.current_drawing),
@@ -147,9 +169,29 @@ defmodule Flamingo.GameModes.Scribble do
 
   def command(_state, _actor, {:draw, _event}, _context), do: :ignored
 
+  def command(state, actor, :use_spin, context) do
+    if spin_available?(state, actor, context.roster) do
+      {feed, _} =
+        Feed.spin_used(
+          state.feed,
+          context.roster.players[actor].name,
+          context.roster.players[state.drawer_id].name
+        )
+
+      ok(%{
+        state
+        | spin_holder: nil,
+          spin_started_at: DateTime.to_unix(context.now, :millisecond),
+          feed: feed
+      })
+    else
+      {:error, :spin_unavailable}
+    end
+  end
+
   def command(state, actor, {:vote_drawing, vote}, context) when vote in [:up, :down] do
     cond do
-      state.phase != :playing ->
+      state.phase not in [:playing, :turn_reveal] ->
         {:error, :not_playing}
 
       not active?(state, actor) ->
@@ -163,7 +205,22 @@ defmodule Flamingo.GameModes.Scribble do
 
       true ->
         {feed, _} = Feed.drawing_vote(state.feed, actor, context.roster.players[actor].name, vote)
-        ok(%{state | drawing_votes: Map.put(state.drawing_votes, actor, vote), feed: feed})
+        votes = Map.put(state.drawing_votes, actor, vote)
+
+        drawings =
+          if state.phase == :turn_reveal do
+            List.update_at(state.final_drawings, -1, fn drawing ->
+              %{
+                drawing
+                | thumbs_up: Enum.count(votes, fn {_, vote} -> vote == :up end),
+                  thumbs_down: Enum.count(votes, fn {_, vote} -> vote == :down end)
+              }
+            end)
+          else
+            state.final_drawings
+          end
+
+        ok(%{state | drawing_votes: votes, final_drawings: drawings, feed: feed})
     end
   end
 
@@ -268,7 +325,13 @@ defmodule Flamingo.GameModes.Scribble do
         if(viewer == roster.host_id, do: state.include_default_words, else: false),
       word_list: state.word_list,
       game_variant: state.game_variant,
+      teams: %{},
+      can_guess?: active?(state, viewer) and viewer != state.drawer_id,
       constraint: state.constraint,
+      spin_enabled: state.spin_enabled,
+      spin_holder: state.spin_holder,
+      spin_available?: spin_available?(state, viewer, roster),
+      spin_started_at: state.spin_started_at,
       word_choices:
         if(state.phase == :word_choice and viewer == state.drawer_id,
           do: state.word_choices,
@@ -312,6 +375,7 @@ defmodule Flamingo.GameModes.Scribble do
     state = %{
       state
       | phase: :word_choice,
+        spin_started_at: nil,
         word_choices: choices,
         word: nil,
         drawing_votes: %{},
@@ -365,7 +429,8 @@ defmodule Flamingo.GameModes.Scribble do
   defp schedule_hint(state), do: ok(state, :ok, [:cancel_hint_timeout])
 
   defp enter_reveal(state, context) do
-    active_order = Enum.filter(context.roster.player_order, &active?(state, &1))
+    active_order =
+      Enum.filter(context.roster.player_order, &active?(state, &1))
 
     gains =
       Scoring.calculate_round_scores(
@@ -393,6 +458,7 @@ defmodule Flamingo.GameModes.Scribble do
     {%{
        state
        | phase: :turn_reveal,
+         spin_started_at: nil,
          drawn_this_round: MapSet.put(state.drawn_this_round, state.drawer_id),
          final_drawings: state.final_drawings ++ [drawing],
          score_gains: gains,
@@ -404,6 +470,7 @@ defmodule Flamingo.GameModes.Scribble do
 
   defp next_turn(state, context) do
     participants = Map.new(state.participants, fn {id, _} -> {id, :active} end)
+
     state = %{state | score_gains: %{}, participants: participants}
 
     next =
@@ -429,6 +496,7 @@ defmodule Flamingo.GameModes.Scribble do
           %{
             state
             | current_round: state.current_round + 1,
+              spin_holder: award_spin(state, context),
               drawn_this_round: MapSet.new(),
               drawer_id: first
           },
@@ -456,6 +524,8 @@ defmodule Flamingo.GameModes.Scribble do
     {%{
        state
        | phase: :game_ended,
+         spin_holder: nil,
+         spin_started_at: nil,
          pending_hint_delays: [],
          final_result: %{
            players: players,
@@ -486,6 +556,28 @@ defmodule Flamingo.GameModes.Scribble do
 
   defp active?(%{participants: participants}, id), do: active?(participants, id)
   defp active?(participants, id), do: Map.get(participants, id) == :active
+
+  defp spin_available?(state, actor, roster) do
+    state.spin_enabled and state.phase == :playing and not is_nil(actor) and
+      state.spin_holder == actor and actor != state.drawer_id and active?(state, actor) and
+      online?(roster, actor) and online_count(roster) >= 3 and
+      not Map.has_key?(state.correct_guesses, actor) and state.constraint != :rotating_canvas
+  end
+
+  defp award_spin(state, context) do
+    eligible =
+      Enum.filter(
+        context.roster.player_order,
+        &(active?(state, &1) and online?(context.roster, &1))
+      )
+
+    scores = Enum.map(eligible, &Map.fetch!(state.scores, &1))
+
+    if state.spin_enabled and length(eligible) >= 3 and length(Enum.uniq(scores)) > 1 do
+      lowest = Enum.min(scores)
+      choose(context, Enum.filter(eligible, &(state.scores[&1] == lowest)))
+    end
+  end
 
   defp online?(roster, id), do: roster.players[id].connected
   defp online_count(roster), do: Enum.count(roster.players, fn {_, p} -> p.connected end)
@@ -534,7 +626,18 @@ defmodule Flamingo.GameModes.Scribble do
     end
   end
 
+  defp constraint_event_allowed?(%{constraint: constraint}, %{"event_type" => "fill"})
+       when constraint in [:big_brush, :fading_ink], do: false
+
   defp constraint_event_allowed?(_state, _event), do: true
+
+  defp constrain_event(:big_brush, %{"event_type" => type} = event, _now)
+       when type in ["start", "draw", "end"], do: Map.put(event, "line_width", 45)
+
+  defp constrain_event(:fading_ink, event, now),
+    do: Map.put(event, "drawn_at", DateTime.to_unix(now, :millisecond))
+
+  defp constrain_event(_constraint, event, _now), do: event
 
   defp transition(_old, {new, timers}, reply), do: ok(new, reply, timers)
 
@@ -567,14 +670,21 @@ defmodule Flamingo.GameModes.Scribble do
   defp project_word(word, _, true), do: word
 
   defp project_word(word, indices, false),
-    do:
-      word
-      |> String.graphemes()
-      |> Enum.with_index()
-      |> Enum.map_join(fn {c, i} -> if c == " " or i in indices, do: c, else: "_" end)
+    do: Flamingo.Words.mask(word, indices)
 
-  defp correct?(guess, word),
-    do: String.downcase(String.trim(guess)) == String.downcase(word)
+  defp correct?(guess, word) do
+    pattern =
+      word
+      |> String.downcase()
+      |> String.graphemes()
+      |> Enum.map_join(fn char ->
+        if char =~ ~r/^[\p{P}\p{S}]+$/u,
+          do: " *[\\p{P}\\p{S}]? *",
+          else: Regex.escape(char)
+      end)
+
+    Regex.match?(Regex.compile!("\\A#{pattern}\\z", "u"), String.downcase(String.trim(guess)))
+  end
 
   defp normalize(t), do: t |> String.downcase() |> String.replace(~r/[^\p{L}\p{N}]/u, "")
 

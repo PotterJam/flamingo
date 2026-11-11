@@ -53,6 +53,29 @@ defmodule Flamingo.Room.MembersTest do
     assert :error = Members.resolve(members, "bob-token")
   end
 
+  test "custom brush widths survive membership while invalid stroke data is discarded" do
+    strokes = [
+      %{"path" => "M 30 20 L 45 35", "width" => 2},
+      %{"path" => "M 60 40 L 85 50", "width" => 10}
+    ]
+
+    drawing = Jason.encode!(strokes)
+    avatar = %{"head_drawing" => drawing}
+    {:ok, members} = Members.add(Members.new(), "alice", "alice-token", "Alice", avatar)
+    saved = Members.fetch!(members, "alice").avatar["head_drawing"]
+    assert Flamingo.Avatar.drawing_strokes(saved) == strokes
+
+    for invalid <- [
+          "not json",
+          Jason.encode!([%{"path" => "<script>", "width" => 2}]),
+          Jason.encode!([%{"path" => "M 30 20", "width" => 999}]),
+          Jason.encode!([%{"path" => 123, "width" => 2}]),
+          String.duplicate(" ", 24_001)
+        ] do
+      assert Flamingo.Avatar.normalize(%{"head_drawing" => invalid})["head_drawing"] == ""
+    end
+  end
+
   test "removing the host promotes the first remaining seat" do
     members = members_fixture()
 

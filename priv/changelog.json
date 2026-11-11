@@ -1,0 +1,140 @@
+[
+  {
+    "date": "2026-11-09",
+    "entries": [
+      {"type": "new_mode", "text": "Teams: race to draw and guess in pairs, with one trio for odd numbers, and earn a shared team score."}
+    ]
+  },
+  {
+    "date": "2026-10-28",
+    "entries": [
+      {"type": "fix", "text": "Scribble game panels no longer stretch on tall screens."}
+    ]
+  },
+  {
+    "date": "2026-10-27",
+    "entries": [
+      {"type": "feature", "text": "Hosts can choose an Animals word theme."},
+      {"type": "feature", "text": "Rainbow Roulette now lets you use the fill tool with a random colour."},
+      {"type": "fix", "text": "Guesses now accept answers without punctuation, such as apostrophes and brackets."}
+    ]
+  },
+  {
+    "date": "2026-10-20",
+    "entries": [
+      {"type": "fix", "text": "Last-place Spin now spins the canvas for everyone, not just the drawer."},
+      {"type": "fix", "text": "Long Scribble chats now scroll inside the game instead of stretching the page."}
+    ]
+  },
+  {
+    "date": "2026-10-15",
+    "entries": [
+      {"type": "feature", "text": "Draw your avatar in a larger editor with brush sizes and a live preview."},
+      {"type": "fix", "text": "Avatar strokes now follow your pointer accurately and stay inside the chosen body part."}
+    ]
+  },
+  {
+    "date": "2026-10-13",
+    "entries": [
+      {"type": "feature", "text": "Hosts can enable Last-place Spin in Classic and Roulette, letting a trailing player spin the drawer's canvas in games with three or more players."},
+      {"type": "feature", "text": "Drawing votes now flash the canvas edges green for thumbs up and red for thumbs down."},
+      {"type": "fix", "text": "One Stroke now keeps drawing after you release the pointer, so you can continue the same line."},
+      {"type": "fix", "text": "Word hints now keep punctuation and symbols visible while hiding letters and numbers."}
+    ]
+  },
+  {
+    "date": "2026-10-06",
+    "entries": [
+      {"type": "feature", "text": "Scribble now shows the selected film, landmarks, or custom word theme above the chat."},
+      {"type": "fix", "text": "Long word hints and answers now wrap instead of overflowing the game layout."}
+    ]
+  },
+  {
+    "date": "2026-10-03",
+    "entries": [
+      {"type": "feature", "text": "Roulette now includes big brushes, colour-changing strokes, and fading ink."}
+    ]
+  },
+  {
+    "date": "2026-09-29",
+    "entries": [
+      {"type": "feature", "text": "Scribble players can vote on drawings while the turn's scores are shown."},
+      {"type": "fix", "text": "Hyphenated words now show their hyphens in hints and accept guesses with spaces or no hyphens."}
+    ]
+  },
+  {
+    "date": "2026-09-27",
+    "entries": [
+      {"type": "feature", "text": "See recent features and fixes from the new What's new menu on home and lobby screens."}
+    ]
+  },
+  {
+    "date": "2026-09-25",
+    "entries": [
+      {"type": "feature", "text": "Telephone chain reveals now animate each drawing and guess as the story unfolds."}
+    ]
+  },
+  {
+    "date": "2026-09-24",
+    "entries": [
+      {"type": "feature", "text": "Telephone awards now show the winning drawing and its place in the story."}
+    ]
+  },
+  {
+    "date": "2026-09-23",
+    "entries": [
+      {"type": "feature", "text": "Hosts can return everyone to the lobby after results and start another game in the same room."},
+      {"type": "feature", "text": "Scribble players can vote thumbs up or down on drawings and see each artist's totals in the results."},
+      {"type": "feature", "text": "Scribble results now show a podium and let you browse every player's drawings one at a time."}
+    ]
+  },
+  {
+    "date": "2026-09-22",
+    "entries": [
+      {"type": "fix", "text": "Slow-loading players no longer make the first Scribble turn end early."},
+      {"type": "fix", "text": "Using the browser Back button from a game now returns you home instead of reopening the game."}
+    ]
+  },
+  {
+    "date": "2026-09-07",
+    "entries": [
+      {"type": "fix", "text": "Lobbies now consistently start with 30-second turns."}
+    ]
+  },
+  {
+    "date": "2026-09-03",
+    "entries": [
+      {"type": "feature", "text": "Hosts can choose a landmarks and places word theme."}
+    ]
+  },
+  {
+    "date": "2026-08-25",
+    "entries": [
+      {"type": "feature", "text": "Your name is remembered for the rest of your browser session."},
+      {"type": "feature", "text": "Browser tabs now show a pixel flamingo icon."},
+      {"type": "fix", "text": "Players are no longer kicked out mid-game when an extra game server shuts down."}
+    ]
+  },
+  {
+    "date": "2026-08-19",
+    "entries": [
+      {"type": "feature", "text": "Your avatar customizations are saved for future visits."}
+    ]
+  },
+  {
+    "date": "2026-08-18",
+    "entries": [
+      {"type": "feature", "text": "Draw your own head, body, legs, and feet for your avatar."},
+      {"type": "feature", "text": "Scribble hosts can choose default, film, or custom word themes."},
+      {"type": "feature", "text": "Telephone turns now include game music and a final countdown warning."},
+      {"type": "feature", "text": "Game sidebars now rank players by score."},
+      {"type": "fix", "text": "Telephone story reveals now scroll to each new entry automatically."}
+    ]
+  },
+  {
+    "date": "2026-08-11",
+    "entries": [
+      {"type": "new_mode", "text": "Telephone: pass drawings and guesses around, then reveal how each story changes along the way."}
+    ]
+  }
+]

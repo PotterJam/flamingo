@@ -20,6 +20,8 @@ defmodule Flamingo.Feed do
 
   def word_revealed(feed, word), do: add(feed, {:word_revealed, word})
 
+  def spin_used(feed, name, drawer), do: add(feed, {:spin_used, name, drawer})
+
   defp add(feed, event) do
     entry = %{id: feed.next_id, event: event}
     {%{feed | events: feed.events ++ [entry], next_id: feed.next_id + 1}, entry}
@@ -58,4 +60,7 @@ defmodule Flamingo.Feed do
     do: {:dislike, "#{name} disliked the drawing"}
 
   defp format_event({:word_revealed, word}, _viewer), do: {:system, "The word was #{word}"}
+
+  defp format_event({:spin_used, name, drawer}, _viewer),
+    do: {:system, "#{name} used Spin on #{drawer}"}
 end

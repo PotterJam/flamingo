@@ -2,6 +2,7 @@ defmodule Flamingo.GameModes.ScribbleTest do
   use ExUnit.Case, async: true
 
   import Flamingo.TestAssertions, only: [assert_fields: 2]
+  require Phoenix.LiveViewTest
 
   alias Flamingo.GameModes.Scribble
 
@@ -81,8 +82,9 @@ defmodule Flamingo.GameModes.ScribbleTest do
     state = %{admitted() | phase: :playing, drawer_id: "a", word: "cat"}
     {:ok, %{state: state}} = Scribble.admit_member(state, %{id: "c", name: "Cara"}, context())
 
-    for actor <- ["a", "c", "unknown"] do
-      assert {:error, _} = Scribble.command(state, actor, {:vote_drawing, :up}, context())
+    for phase <- [:playing, :turn_reveal], actor <- ["a", "c", "unknown"] do
+      assert {:error, _} =
+               Scribble.command(%{state | phase: phase}, actor, {:vote_drawing, :up}, context())
     end
   end
 
@@ -93,10 +95,10 @@ defmodule Flamingo.GameModes.ScribbleTest do
              Scribble.command(state, "b", {:vote_drawing, :invalid}, context())
   end
 
-  test "voting is only available during drawing" do
+  test "voting is only available during drawing and turn reveal" do
     state = %{admitted() | drawer_id: "a", word: "cat"}
 
-    for phase <- [:lobby, :word_choice, :turn_reveal, :game_ended] do
+    for phase <- [:lobby, :word_choice, :game_ended] do
       assert {:error, :not_playing} =
                Scribble.command(%{state | phase: phase}, "b", {:vote_drawing, :up}, context())
     end
@@ -147,12 +149,20 @@ defmodule Flamingo.GameModes.ScribbleTest do
           end
 
         {:ok, %{state: state}} = Scribble.timeout(state, :playing, game_context)
+        reveal_vote = if drawer == "a", do: :down, else: vote || :up
+
+        {:ok, %{state: state}} =
+          Scribble.command(state, guesser, {:vote_drawing, reveal_vote}, game_context)
+
+        {:ok, %{state: state}} =
+          Scribble.command(state, guesser, {:vote_drawing, reveal_vote}, game_context)
+
         {:ok, %{state: state}} = Scribble.timeout(state, :turn_reveal, game_context)
         state
       end)
 
-    assert %{thumbs_up: 2, thumbs_down: 0} = finished.final_result.players["a"]
-    assert %{thumbs_up: 0, thumbs_down: 1} = finished.final_result.players["b"]
+    assert %{thumbs_up: 0, thumbs_down: 2} = finished.final_result.players["a"]
+    assert %{thumbs_up: 1, thumbs_down: 1} = finished.final_result.players["b"]
   end
 
   test "starting a new game clears previous voting results" do
@@ -206,6 +216,49 @@ defmodule Flamingo.GameModes.ScribbleTest do
 
     {:ok, %{state: classic}} = Scribble.start(admitted(), %{round_count: 1}, context())
     assert classic.constraint == nil
+  end
+
+  test "new roulette modifiers preserve events while enforcing brush size and ink timestamps" do
+    for constraint <- [:big_brush, :rainbow_strokes, :fading_ink] do
+      game_context =
+        context(
+          select_candidate: fn candidates ->
+            if constraint in candidates, do: constraint, else: List.first(candidates)
+          end
+        )
+
+      {:ok, %{state: state}} =
+        Scribble.start(admitted(), %{game_variant: :constraint_roulette}, game_context)
+
+      assert state.constraint == constraint
+      {:ok, %{state: state}} = Scribble.command(state, "a", {:select_word, "cat"}, game_context)
+
+      event = %{
+        "event_type" => "start",
+        "x" => 30,
+        "y" => 70,
+        "color" => "#2563eb",
+        "line_width" => 3,
+        "drawn_at" => 0
+      }
+
+      fill = %{"event_type" => "fill", "x" => 10, "y" => 10, "color" => "#dc2626"}
+
+      if constraint == :rainbow_strokes do
+        assert {:ok, %{drawing_delta: %{"event_type" => "fill"}}} =
+                 Scribble.command(state, "a", {:draw, fill}, context())
+      else
+        assert :ignored == Scribble.command(state, "a", {:draw, fill}, context())
+      end
+
+      assert {:ok, %{state: updated, drawing_delta: delta}} =
+               Scribble.command(state, "a", {:draw, event}, context())
+
+      assert updated.current_drawing == [delta]
+      assert delta["color"] == "#2563eb"
+      assert delta["line_width"] == if(constraint == :big_brush, do: 45, else: 3)
+      assert delta["drawn_at"] == if(constraint == :fading_ink, do: 1_767_225_600_000, else: 0)
+    end
   end
 
   test "single-stroke and straight-line constraints are enforced by the game" do
@@ -570,7 +623,79 @@ defmodule Flamingo.GameModes.ScribbleTest do
     assert drawer.word_visible?
   end
 
-  test "correct guesses preserve exact punctuation and spacing behavior" do
+  test "punctuation stays visible for everyone without revealing letters or numbers" do
+    word = "O'Neil’s well-being (é2/猫)! +?"
+    masked = "_'____’_ ____-_____ (__/_)! +?"
+    state = %{admitted() | phase: :playing, drawer_id: "a", word: word}
+
+    assert Scribble.view(state, "a", roster()).word == word
+
+    for viewer <- ["b", "c", "spectator"] do
+      view = Scribble.view(state, viewer, roster())
+      assert view.word == masked
+      refute view.word_visible?
+    end
+
+    hinted = %{state | revealed_indices: [2]}
+    view = Scribble.view(hinted, "b", roster())
+    assert view.word == "_'N___’_ ____-_____ (__/_)! +?"
+
+    html =
+      Phoenix.LiveViewTest.render_component(&FlamingoWeb.GameComponents.game_header/1,
+        word: view.word,
+        revealed_indices: view.revealed_indices
+      )
+
+    chars = html |> LazyHTML.from_fragment() |> LazyHTML.query("#game-word-hint")
+
+    assert LazyHTML.text(chars) |> String.replace(~r/\s/u, "") ==
+             "_'N___’_____-_____(__/_)!+?"
+  end
+
+  test "hyphens are visible and optional with or without spaces in guesses" do
+    state = %{admitted() | phase: :playing, drawer_id: "a", word: "Jack-in-the-box"}
+
+    assert Scribble.view(state, "b", roster()).word == "____-__-___-___"
+
+    hinted = %{state | revealed_indices: [5]}
+    assert Scribble.view(hinted, "b", roster()).word == "____-i_-___-___"
+
+    for guess <- ["Jack-in-the-box", "jackinthebox", "jack in the box", " JACK - in-the box "] do
+      assert {:ok, %{reply: :correct}} =
+               Scribble.command(state, "b", {:guess, guess}, context())
+    end
+
+    for guess <- ["j ackinthebox", "jackinthebox!", "jack--in-the-box"] do
+      assert {:ok, %{reply: :incorrect}} =
+               Scribble.command(state, "b", {:guess, guess}, context())
+    end
+  end
+
+  test "punctuation in the word is optional in guesses" do
+    state = %{admitted() | phase: :playing, drawer_id: "a", word: "Doge’s Palace (Mr. X)"}
+
+    for guess <- [
+          "doges palace mr x",
+          "Doge’s Palace (Mr. X)",
+          "doge's palace mr x",
+          "doge s palace ( mr . x )"
+        ] do
+      assert {:ok, %{reply: :correct}} =
+               Scribble.command(state, "b", {:guess, guess}, context())
+    end
+
+    for guess <- [
+          "dogespalace mr x",
+          "doges palace mr x)!",
+          "doge''s palace mr x",
+          "doges palace mr"
+        ] do
+      assert {:ok, %{reply: reply}} = Scribble.command(state, "b", {:guess, guess}, context())
+      refute reply == :correct
+    end
+  end
+
+  test "correct guesses preserve other punctuation and spacing behavior" do
     state = %{admitted() | phase: :playing, drawer_id: "a", word: "cat"}
 
     for correct_guess <- ["CAT", " cat "] do
@@ -688,5 +813,154 @@ defmodule Flamingo.GameModes.ScribbleTest do
             }} = Scribble.start(admitted(), %{round_count: 1}, exhausted_context)
 
     assert result.drawings == []
+  end
+
+  describe "last-place Spin" do
+    setup do
+      roster = %{
+        roster()
+        | players: Map.put(roster().players, "c", %{id: "c", name: "Cara", connected: true}),
+          player_order: ["a", "b", "c"]
+      }
+
+      context = %{context(roster: roster) | word_choices: fn _, _, _ -> ["cat"] end}
+
+      {:ok, %{state: state}} =
+        Scribble.admit_member(admitted(), %{id: "c", name: "Cara"}, context)
+
+      %{state: state, context: context}
+    end
+
+    test "awards only at round boundaries in both variants, replacing unused charges", %{
+      state: state,
+      context: context
+    } do
+      for variant <- [:classic, :constraint_roulette] do
+        {:ok, %{state: state}} =
+          Scribble.start(
+            state,
+            %{round_count: 3, spin_enabled: true, game_variant: variant},
+            context
+          )
+
+        assert state.spin_holder == nil
+
+        state = %{
+          state
+          | phase: :turn_reveal,
+            scores: %{"a" => 600, "b" => -100, "c" => 200},
+            drawn_this_round: MapSet.new(["a", "b"])
+        }
+
+        {:ok, %{state: next}} = Scribble.timeout(state, :turn_reveal, context)
+        assert next.drawer_id == "c"
+        assert next.spin_holder == nil
+
+        {:ok, %{state: awarded}} =
+          Scribble.timeout(
+            %{next | phase: :turn_reveal, drawn_this_round: MapSet.new(["a", "b", "c"])},
+            :turn_reveal,
+            context
+          )
+
+        assert awarded.current_round == 1
+        assert awarded.spin_holder == "b"
+
+        {:ok, %{state: replaced}} =
+          Scribble.timeout(
+            %{
+              awarded
+              | phase: :turn_reveal,
+                scores: %{"a" => 800, "b" => 700, "c" => 300},
+                drawn_this_round: MapSet.new(["a", "b", "c"])
+            },
+            :turn_reveal,
+            context
+          )
+
+        assert replaced.spin_holder == "c"
+      end
+    end
+
+    test "ties, disabled games, and disconnected players", %{state: state, context: context} do
+      boundary = %{
+        state
+        | phase: :turn_reveal,
+          spin_enabled: true,
+          drawn_this_round: MapSet.new(["a", "b", "c"]),
+          scores: %{"a" => 500, "b" => -100, "c" => -100}
+      }
+
+      last = %{context | select_candidate: &List.last/1}
+      {:ok, %{state: tied}} = Scribble.timeout(boundary, :turn_reveal, last)
+      assert tied.spin_holder == "c"
+
+      for candidate <- [
+            %{boundary | scores: %{"a" => 10, "b" => 10, "c" => 10}},
+            %{boundary | spin_enabled: false}
+          ] do
+        {:ok, %{state: next}} = Scribble.timeout(candidate, :turn_reveal, context)
+        assert next.spin_holder == nil
+      end
+
+      offline = put_in(context, [:roster, :players, "c", :connected], false)
+      {:ok, %{state: next}} = Scribble.timeout(boundary, :turn_reveal, offline)
+      assert next.spin_holder == nil
+    end
+
+    test "activation is authorized, consumed once, and survives reconnect without restarting", %{
+      state: state,
+      context: context
+    } do
+      playing = %{
+        state
+        | phase: :playing,
+          spin_enabled: true,
+          spin_holder: "b",
+          drawer_id: "a",
+          word: "cat"
+      }
+
+      assert Scribble.view(playing, "b", context.roster).spin_available?
+
+      for {candidate, actor} <- [
+            {playing, "a"},
+            {playing, "c"},
+            {playing, "unknown"},
+            {%{playing | phase: :word_choice}, "b"},
+            {%{playing | phase: :turn_reveal}, "b"},
+            {%{playing | spin_enabled: false}, "b"},
+            {%{playing | constraint: :rotating_canvas}, "b"},
+            {%{playing | correct_guesses: %{"b" => @now}}, "b"},
+            {%{playing | participants: Map.put(playing.participants, "b", :spectator)}, "b"}
+          ] do
+        assert {:error, :spin_unavailable} =
+                 Scribble.command(candidate, actor, :use_spin, context)
+      end
+
+      offline = put_in(context, [:roster, :players, "c", :connected], false)
+      assert {:error, :spin_unavailable} = Scribble.command(playing, "b", :use_spin, offline)
+
+      {:ok, %{state: used}} =
+        Scribble.command(%{playing | constraint: :mirror}, "b", :use_spin, context)
+
+      assert used.constraint == :mirror
+      assert used.spin_holder == nil
+      assert used.spin_started_at == 1_767_225_600_000
+      assert {:error, :spin_unavailable} = Scribble.command(used, "b", :use_spin, context)
+      {:ok, %{state: reconnected}} = Scribble.connection_changed(used, "b", :online, context)
+      assert reconnected == used
+
+      assert Enum.any?(
+               Scribble.view(used, "a", context.roster).feed,
+               &(&1.text == "Bob used Spin on Alice")
+             )
+
+      {:ok, %{state: reveal}} = Scribble.timeout(used, :playing, context)
+      assert reveal.spin_started_at == nil
+      {:ok, %{state: restarted}} = Scribble.start(used, %{}, context)
+      assert restarted.spin_holder == nil
+      assert restarted.spin_started_at == nil
+    end
   end
 end

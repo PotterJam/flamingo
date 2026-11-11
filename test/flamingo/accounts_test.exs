@@ -20,7 +20,7 @@ defmodule Flamingo.AccountsTest do
                "head_color" => 6,
                "head_drawing" => drawing,
                "body_drawing" => "<script>",
-               "feet_drawing" => String.duplicate("M", 3001),
+               "feet_drawing" => String.duplicate("M", 24_001),
                "email" => other.email,
                "user_id" => other.id
              })

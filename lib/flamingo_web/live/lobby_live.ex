@@ -49,11 +49,15 @@ defmodule FlamingoWeb.LobbyLive do
     do: {:noreply, push_navigate(socket, to: ~p"/")}
 
   defp selected_game_mode(:telephone, _variant), do: "telephone"
+  defp selected_game_mode(:coop, _variant), do: "coop"
   defp selected_game_mode(:scribble, :constraint_roulette), do: "constraint_roulette"
   defp selected_game_mode(_mode, _variant), do: "classic"
 
   defp lobby_background(:telephone, _variant),
     do: "grid-background lobby-background-telephone transition-colors duration-300"
+
+  defp lobby_background(:coop, _variant),
+    do: "grid-background lobby-background-teams transition-colors duration-300"
 
   defp lobby_background(:scribble, :constraint_roulette),
     do: "grid-background lobby-background-constraint transition-colors duration-300"
@@ -67,6 +71,10 @@ defmodule FlamingoWeb.LobbyLive do
   defp game_mode_description("telephone"),
     do: "Cycle through guessing and drawing before revealing the chaos"
 
+  defp game_mode_description("coop"),
+    do:
+      "Race in pairs, with one trio for odd numbers. Each team draws and guesses together for a shared score."
+
   defp game_mode_description(_mode),
     do: "Take turns drawing a word while everyone guesses"
 
@@ -76,6 +84,10 @@ defmodule FlamingoWeb.LobbyLive do
 
   defp game_mode_option_class("telephone", selected?) do
     if selected?, do: "bg-sky-400", else: "bg-gray-200 hover:bg-sky-400"
+  end
+
+  defp game_mode_option_class("coop", selected?) do
+    if selected?, do: "bg-green-400", else: "bg-gray-200 hover:bg-green-400"
   end
 
   defp game_mode_option_class(_mode, selected?) do
@@ -90,19 +102,24 @@ defmodule FlamingoWeb.LobbyLive do
       )
 
     ~H"""
-    <Layouts.app flash={@flash} background={lobby_background(@game_mode, @game_variant)}>
+    <Layouts.app flash={@flash} background={lobby_background(@game_mode, @game_variant)} changelog>
       <div class="flex h-screen w-full items-center justify-center px-4 py-8">
         <div class="flex h-full w-full max-w-3xl flex-col items-center justify-center gap-4">
           <%= if @player_id == @host_id do %>
             <fieldset class="w-full max-w-sm">
               <legend class="sr-only">Game mode</legend>
-              <div id="game-mode-selector" class="grid grid-cols-3 gap-2" role="radiogroup">
+              <div
+                id="game-mode-selector"
+                class="grid grid-cols-2 gap-2 sm:grid-cols-4"
+                role="radiogroup"
+              >
                 <button
                   :for={
                     {value, title} <- [
                       {"classic", "Classic"},
                       {"constraint_roulette", "Roulette"},
-                      {"telephone", "Telephone"}
+                      {"telephone", "Telephone"},
+                      {"coop", "Teams"}
                     ]
                   }
                   type="button"
@@ -203,6 +220,18 @@ defmodule FlamingoWeb.LobbyLive do
                       options={Words.word_list_options()}
                       id="word-list-select"
                     />
+                  </div>
+                  <div :if={@game_mode == :scribble and @game_variant != :coop} class="mt-4 space-y-1">
+                    <.input
+                      field={@settings_form[:spin_enabled]}
+                      type="checkbox"
+                      label="Last-place Spin"
+                      id="spin-enabled-input"
+                    />
+                    <p class="text-xs text-gray-600">
+                      Last place gets one canvas spin for the next round. Requires 3+ players
+                      and 2+ rounds. Use it before guessing correctly.
+                    </p>
                   </div>
                   <div :if={@word_list == :custom} id="custom-words-settings" class="mt-4">
                     <div class="flex items-end justify-between gap-3">
@@ -486,6 +515,7 @@ defmodule FlamingoWeb.LobbyLive do
         include_default_words: false,
         word_list: word_list,
         game_mode: game_mode,
+        spin_enabled: params["spin_enabled"] == "true",
         game_variant: game_variant
       }
 
@@ -526,6 +556,7 @@ defmodule FlamingoWeb.LobbyLive do
   end
 
   defp parse_game_mode("telephone", _mode, _variant), do: {:telephone, :classic}
+  defp parse_game_mode("coop", _mode, _variant), do: {:coop, :coop}
 
   defp parse_game_mode("constraint_roulette", _mode, _variant),
     do: {:scribble, :constraint_roulette}

@@ -3,6 +3,13 @@ defmodule Flamingo.WordsTest do
 
   alias Flamingo.Words
 
+  test "mask preserves punctuation and reveals by grapheme index" do
+    word = "e\u0301's-猫2!"
+
+    assert Words.mask(word) == "_'_-__!"
+    assert Words.mask(word, [0, 4]) == "e\u0301'_-猫_!"
+  end
+
   test "random_choices returns expected number of unused words when enough remain" do
     words = all_words()
     excluded_words = words |> Enum.drop(3) |> MapSet.new()
@@ -65,6 +72,7 @@ defmodule Flamingo.WordsTest do
              {"Default", :default},
              {"Films", :films},
              {"Landmarks & places", :landmarks},
+             {"Animals", :animals},
              {"Custom", :custom}
            ]
 

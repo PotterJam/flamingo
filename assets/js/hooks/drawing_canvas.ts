@@ -1,13 +1,13 @@
 import { CANVAS_WIDTH, CANVAS_HEIGHT, clear, drawBetween, fill } from "../lib/canvas";
 
-export type DrawEvent =
+export type DrawEvent = { drawn_at?: number } & (
   | { event_type: "start"; x: number; y: number; color: string; line_width: number }
   | { event_type: "draw"; start_x: number; start_y: number; end_x: number; end_y: number; color: string; line_width: number }
   | { event_type: "end"; start_x: number; start_y: number; end_x: number; end_y: number; color: string; line_width: number }
   | { event_type: "fill"; x: number; y: number; color: string }
   | { event_type: "clear" }
   | { event_type: "undo" }
-  | { event_type: "redo" };
+  | { event_type: "redo" });
 
 // Compact representation used for share links and final-drawing payloads:
 // pen stroke polyline (delta-encoded after the first point), flood fill, or
@@ -54,7 +54,7 @@ interface Point {
 }
 
 type ActiveTool = "pen" | "fill";
-type DrawingConstraint = "hidden_canvas" | "single_stroke" | "straight_lines" | "rotating_canvas" | "mirror" | "";
+export type DrawingConstraint = "hidden_canvas" | "single_stroke" | "straight_lines" | "rotating_canvas" | "mirror" | "big_brush" | "rainbow_strokes" | "fading_ink" | "kaleidoscope" | "";
 
 interface DrawingCanvasHook {
   el: HTMLElement;
@@ -72,6 +72,12 @@ interface DrawingCanvasHook {
   eventStack: DrawEvent[];
   redoStack: DrawEvent[][];
   finalReplayToken: number;
+  fadeTimer?: number;
+  spinFrame?: number;
+  syncSpin: () => void;
+  voteFlash?: Animation;
+  clockOffset: number;
+  redraw: () => void;
   replayFinalDrawingListener?: () => void;
   handleEvent: <T>(event: string, callback: (payload: T) => void) => void;
   pushEvent: (event: string, payload: DrawEvent) => void;
@@ -113,11 +119,70 @@ const renderDrawEvent = (imageData: ImageData, event: DrawEvent) => {
   }
 };
 
-const renderEvents = (ctx: CanvasRenderingContext2D, events: DrawEvent[]) => {
+// The four quarter-turns about the canvas centre and their reflections, as
+// [a, b, c, d] in (x, y) -> (a·x + b·y, c·x + d·y). Stored drawings keep only
+// the drawer's own strokes; every canvas adds the copies when rendering.
+const KALEIDOSCOPE = [
+  [1, 0, 0, 1], [0, -1, 1, 0], [-1, 0, 0, -1], [0, 1, -1, 0],
+  [-1, 0, 0, 1], [0, 1, 1, 0], [1, 0, 0, -1], [0, -1, -1, 0],
+];
+
+export const kaleidoscopeEvents = (event: DrawEvent) => {
+  if (!("color" in event)) return [event];
+
+  return KALEIDOSCOPE.flatMap(([a, b, c, d]): DrawEvent[] => {
+    const cx = CANVAS_WIDTH / 2;
+    const cy = CANVAS_HEIGHT / 2;
+    const at = (x: number, y: number) =>
+      [cx + a * (x - cx) + b * (y - cy), cy + c * (x - cx) + d * (y - cy)];
+
+    switch (event.event_type) {
+      case "start": {
+        const [x, y] = at(event.x, event.y);
+        return [{ ...event, x, y }];
+      }
+      case "draw":
+      case "end": {
+        const [start_x, start_y] = at(event.start_x, event.start_y);
+        const [end_x, end_y] = at(event.end_x, event.end_y);
+        return [{ ...event, start_x, start_y, end_x, end_y }];
+      }
+      case "fill": {
+        const [x, y] = at(event.x, event.y);
+        const inside = x >= 0 && x < CANVAS_WIDTH && y >= 0 && y < CANVAS_HEIGHT;
+        return inside ? [{ ...event, x, y }] : [];
+      }
+    }
+  });
+};
+
+const renderConstrainedEvent = (imageData: ImageData, event: DrawEvent, constraint: DrawingConstraint) => {
+  const events = constraint === "kaleidoscope" ? kaleidoscopeEvents(event) : [event];
+  for (const e of events) renderDrawEvent(imageData, e);
+};
+
+export const fadingEvent = (event: DrawEvent, now: number): DrawEvent | null => {
+  if (!("color" in event) || event.drawn_at === undefined) return event;
+  const age = Math.max(0, (now - event.drawn_at) / 5000);
+  if (age >= 1) return null;
+  const color = "#" + [1, 3, 5].map((offset) => {
+    const channel = parseInt(event.color.slice(offset, offset + 2), 16);
+    return Math.round(channel + (255 - channel) * age).toString(16).padStart(2, "0");
+  }).join("");
+  return { ...event, color };
+};
+
+const renderEvents = (
+  ctx: CanvasRenderingContext2D,
+  events: DrawEvent[],
+  now?: number,
+  constraint: DrawingConstraint = ""
+) => {
   canvasEffect(ctx, (imageData) => {
     clear(imageData);
     for (const e of events) {
-      renderDrawEvent(imageData, e);
+      const visible = now === undefined ? e : fadingEvent(e, now);
+      if (visible) renderConstrainedEvent(imageData, visible, constraint);
     }
   });
 };
@@ -126,6 +191,7 @@ export const replayEvents = (
   ctx: CanvasRenderingContext2D,
   events: DrawEvent[],
   isCurrentReplay: () => boolean,
+  constraint: DrawingConstraint = "",
   delayMs = 15
 ) => {
   canvasEffect(ctx, (imageData) => clear(imageData));
@@ -138,7 +204,7 @@ export const replayEvents = (
     if (!isCurrentReplay()) return;
 
     canvasEffect(ctx, (imageData) => {
-      renderDrawEvent(imageData, events[index]);
+      renderConstrainedEvent(imageData, events[index], constraint);
     });
 
     index += 1;
@@ -172,6 +238,11 @@ const translatePointerToCanvas = (
   return [constraint === "mirror" ? CANVAS_WIDTH - localX : localX, localY];
 };
 
+// One second of warning, then one eight-second rotation. Absolute server time
+// means reconnects and unrelated LiveView patches cannot restart the effect.
+export const spinProgress = (startedAt: number, now: number) =>
+  Math.max(0, Math.min(1, (now - startedAt - 1000) / 8000));
+
 const DrawingCanvas = {
   mounted(this: DrawingCanvasHook) {
     this.canvas = this.el.querySelector("canvas") as HTMLCanvasElement;
@@ -188,6 +259,12 @@ const DrawingCanvas = {
     this.eventStack = [] as DrawEvent[];
     this.redoStack = [] as DrawEvent[][];
     this.finalReplayToken = 0;
+    this.clockOffset = 0;
+
+    if (this.constraint === "big_brush") this.selectedThickness = 45;
+    if (this.constraint === "fading_ink" && !this.el.dataset.finalDrawingEvents) {
+      this.fadeTimer = window.setInterval(() => this.redraw(), 100);
+    }
 
     canvasEffect(this.ctx, (imageData: ImageData) => clear(imageData));
 
@@ -204,7 +281,7 @@ const DrawingCanvas = {
     if (this.el.dataset.finalDrawingEvents) {
       const ops = JSON.parse(this.el.dataset.finalDrawingEvents) as CompactOp[];
       this.eventStack = opsToEvents(ops);
-      renderEvents(this.ctx, this.eventStack);
+      renderEvents(this.ctx, this.eventStack, undefined, this.constraint);
 
       if (this.el.dataset.finalDrawingReplay === "true") {
         this.replayFinalDrawing();
@@ -224,26 +301,85 @@ const DrawingCanvas = {
         if (idx >= 0) {
           this.eventStack.splice(idx);
         }
-        renderEvents(this.ctx, this.eventStack);
+        this.redraw();
         return;
       }
 
       this.eventStack.push(event);
       canvasEffect(this.ctx, (imageData: ImageData) => {
-        renderDrawEvent(imageData, event);
+        renderConstrainedEvent(imageData, event, this.constraint);
       });
     });
 
-    this.handleEvent("drawing_state", (data: { events: DrawEvent[] }) => {
+    this.handleEvent("drawing_state", (data: { events: DrawEvent[]; server_now?: number }) => {
+      if (data.server_now !== undefined) this.clockOffset = data.server_now - Date.now();
       this.eventStack = [...data.events];
       this.redoStack = [];
-      renderEvents(this.ctx, data.events);
+      this.redraw();
+      this.syncSpin();
+    });
+
+    this.handleEvent("drawing_vote", ({ vote }: { vote: "up" | "down" }) => {
+      const overlay = this.el.querySelector<HTMLElement>("[data-vote-flash]");
+      if (!overlay) return;
+
+      this.voteFlash?.cancel();
+      const color = vote === "up" ? "34, 197, 94" : "239, 68, 68";
+      overlay.style.boxShadow = `inset 0 0 90px 30px rgba(${color}, 0.85), inset 0 0 24px 8px rgb(${color})`;
+      const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+      this.voteFlash = overlay.animate(
+        [{ opacity: reducedMotion ? 0.35 : 1 }, { opacity: 0 }],
+        { duration: reducedMotion ? 250 : 800, easing: "ease-out" }
+      );
     });
 
     this.replayFinalDrawingListener = () => {
       this.replayFinalDrawing();
     };
     window.addEventListener("flamingo:replay-final-drawings", this.replayFinalDrawingListener);
+    this.syncSpin();
+  },
+
+  syncSpin(this: DrawingCanvasHook) {
+    window.cancelAnimationFrame(this.spinFrame ?? 0);
+    const frame = this.canvas.closest<HTMLElement>(".drawing-canvas-frame");
+    const status = this.el.querySelector<HTMLElement>("[data-spin-status]");
+    if (!frame || !status) return;
+    frame.style.removeProperty("transform");
+    status.hidden = true;
+    if (!this.el.dataset.spinStartedAt || this.el.dataset.phase !== "playing") return;
+
+    const startedAt = Number(this.el.dataset.spinStartedAt);
+    const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)");
+    const tick = () => {
+      const now = Date.now() + this.clockOffset;
+      const progress = spinProgress(startedAt, now);
+      if (progress >= 1) {
+        frame.style.removeProperty("transform");
+        status.hidden = true;
+        return;
+      }
+      status.hidden = false;
+      const text = progress === 0 ? "Spin incoming!" : `Canvas spin · ${Math.ceil((1 - progress) * 8)}s`;
+      if (status.textContent !== text) status.textContent = text;
+      if (progress > 0) {
+        frame.style.transform = reducedMotion.matches
+          ? "rotate(180deg)"
+          : `rotate(${progress * 360}deg) scale(0.56)`;
+      }
+      this.spinFrame = window.requestAnimationFrame(tick);
+    };
+    tick();
+  },
+
+  redraw(this: DrawingCanvasHook) {
+    const fading = this.constraint === "fading_ink" && this.el.dataset.phase === "playing";
+    renderEvents(this.ctx, this.eventStack, fading ? Date.now() + this.clockOffset : undefined, this.constraint);
+  },
+
+  updated(this: DrawingCanvasHook) {
+    if (this.fadeTimer) this.redraw();
+    this.syncSpin();
   },
 
   replayFinalDrawing(this: DrawingCanvasHook) {
@@ -255,7 +391,8 @@ const DrawingCanvas = {
     replayEvents(
       this.ctx,
       this.eventStack,
-      () => this.finalReplayToken === token
+      () => this.finalReplayToken === token,
+      this.constraint
     );
   },
 
@@ -263,15 +400,24 @@ const DrawingCanvas = {
     const canvas = this.canvas as HTMLCanvasElement;
 
     const pushDrawEvent = (event: DrawEvent) => {
+      if (this.constraint === "fading_ink") event.drawn_at = Date.now() + this.clockOffset;
       this.eventStack.push(event);
       this.redoStack = [];
-      canvasEffect(this.ctx, (imageData: ImageData) => renderDrawEvent(imageData, event));
+      canvasEffect(this.ctx, (imageData: ImageData) => renderConstrainedEvent(imageData, event, this.constraint));
       this.pushEvent("draw_event", event);
     };
 
     canvas.addEventListener("pointerdown", (e: PointerEvent) => {
       e.preventDefault();
       if (this.constraint === "single_stroke" && this.strokeUsed) return;
+      if (this.isPainting) return;
+
+      if (this.constraint === "rainbow_strokes") {
+        const colors = Array.from(this.el.querySelectorAll<HTMLElement>("[data-color]"),
+          (button) => button.dataset.color!)
+          .filter((color) => color !== this.selectedColor);
+        this.selectedColor = colors[Math.floor(Math.random() * colors.length)];
+      }
 
       const [x, y] = translatePointerToCanvas(e, canvas, this.constraint);
 
@@ -328,6 +474,8 @@ const DrawingCanvas = {
 
     const handlePointerUp = (e: PointerEvent) => {
       if (!this.isPainting) return;
+      // One Stroke stays connected even after releasing or cancelling the pointer.
+      if (this.constraint === "single_stroke") return;
       this.isPainting = false;
 
       const [x, y] = translatePointerToCanvas(e, canvas, this.constraint);
@@ -355,7 +503,7 @@ const DrawingCanvas = {
 
     const removed = this.eventStack.splice(idx);
     this.redoStack.push(removed);
-    renderEvents(this.ctx, this.eventStack);
+    this.redraw();
     this.pushEvent("draw_event", { event_type: "undo" });
   },
 
@@ -367,7 +515,7 @@ const DrawingCanvas = {
       this.eventStack.push(event);
       this.pushEvent("draw_event", event);
     }
-    renderEvents(this.ctx, this.eventStack);
+    this.redraw();
   },
 
   performClear(this: DrawingCanvasHook) {
@@ -418,17 +566,31 @@ const DrawingCanvas = {
       });
     }
 
-    if (this.constraint === "straight_lines") {
+    if (["straight_lines", "big_brush", "fading_ink"].includes(this.constraint)) {
       const fillButton = this.el.querySelector("[data-tool='fill']") as HTMLButtonElement | null;
       if (fillButton) {
         fillButton.disabled = true;
         fillButton.classList.add("cursor-not-allowed", "opacity-30");
       }
     }
+
+    const disabledControls = this.constraint === "big_brush" ? "[data-size]"
+      : this.constraint === "rainbow_strokes" ? "[data-color]"
+      : this.constraint === "fading_ink" ? "[data-action='redo']" : null;
+    if (disabledControls) {
+      this.el.querySelectorAll<HTMLButtonElement>(disabledControls).forEach((button) => {
+        button.disabled = true;
+        button.classList.remove("bg-pink-300", "ring-2", "ring-offset-1");
+        button.classList.add("cursor-not-allowed", "opacity-30");
+      });
+    }
   },
 
   destroyed(this: DrawingCanvasHook) {
     this.finalReplayToken += 1;
+    window.clearInterval(this.fadeTimer);
+    window.cancelAnimationFrame(this.spinFrame ?? 0);
+    this.voteFlash?.cancel();
 
     if (this.replayFinalDrawingListener) {
       window.removeEventListener("flamingo:replay-final-drawings", this.replayFinalDrawingListener);
