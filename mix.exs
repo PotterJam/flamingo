@@ -44,7 +44,7 @@ defmodule Flamingo.MixProject do
       {:phoenix_ecto, "~> 4.6"},
       {:ecto_sql, "~> 3.13"},
       {:postgrex, ">= 0.0.0"},
-      {:swoosh, "~> 1.16"},
+      {:assent, "~> 0.3"},
       {:req, "~> 0.5"},
       {:phoenix_html, "~> 4.1"},
       {:phoenix_live_reload, "~> 1.2", only: :dev},

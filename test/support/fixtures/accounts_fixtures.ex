@@ -11,32 +11,17 @@ defmodule Flamingo.AccountsFixtures do
 
   def unique_user_email, do: "user#{System.unique_integer()}@example.com"
 
-  def valid_user_attributes(attrs \\ %{}) do
+  @doc "Claims as Google returns them for a verified account."
+  def google_claims(attrs \\ %{}) do
     Enum.into(attrs, %{
-      email: unique_user_email()
+      "sub" => "google-#{System.unique_integer([:positive])}",
+      "email" => unique_user_email(),
+      "email_verified" => true
     })
   end
 
-  def unconfirmed_user_fixture(attrs \\ %{}) do
-    {:ok, user} =
-      attrs
-      |> valid_user_attributes()
-      |> Accounts.register_user()
-
-    user
-  end
-
   def user_fixture(attrs \\ %{}) do
-    user = unconfirmed_user_fixture(attrs)
-
-    token =
-      extract_user_token(fn url ->
-        Accounts.deliver_login_instructions(user, url)
-      end)
-
-    {:ok, {user, _expired_tokens}} =
-      Accounts.login_user_by_magic_link(token)
-
+    {:ok, user} = attrs |> google_claims() |> Accounts.sign_in_with_google()
     user
   end
 
@@ -49,12 +34,6 @@ defmodule Flamingo.AccountsFixtures do
     Scope.for_user(user)
   end
 
-  def extract_user_token(fun) do
-    {:ok, captured_email} = fun.(&"[TOKEN]#{&1}[TOKEN]")
-    [_, token | _] = String.split(captured_email.text_body, "[TOKEN]")
-    token
-  end
-
   def override_token_authenticated_at(token, authenticated_at) when is_binary(token) do
     Flamingo.Repo.update_all(
       from(t in Accounts.UserToken,
@@ -62,12 +41,6 @@ defmodule Flamingo.AccountsFixtures do
       ),
       set: [authenticated_at: authenticated_at]
     )
-  end
-
-  def generate_user_magic_link_token(user) do
-    {encoded_token, user_token} = Accounts.UserToken.build_email_token(user, "login")
-    Flamingo.Repo.insert!(user_token)
-    {encoded_token, user_token.token}
   end
 
   def offset_user_token(token, amount_to_add, unit) do

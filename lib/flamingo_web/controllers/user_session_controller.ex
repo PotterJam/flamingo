@@ -4,27 +4,52 @@ defmodule FlamingoWeb.UserSessionController do
   alias Flamingo.Accounts
   alias FlamingoWeb.UserAuth
 
-  # magic link login
-  def create(conn, %{"user" => %{"token" => token}}) do
-    case Accounts.login_user_by_magic_link(token) do
-      {:ok, {user, tokens_to_disconnect}} ->
-        UserAuth.disconnect_sessions(tokens_to_disconnect)
-
-        conn
-        |> put_flash(:success, "Logged in.")
-        |> UserAuth.log_in_user(user)
-
-      _ ->
-        conn
-        |> put_flash(:error, "The link is invalid or it has expired.")
-        |> redirect(to: ~p"/users/log-in")
+  @doc "Sends the player to Google to sign in."
+  def google_request(conn, _params) do
+    with {:ok, config} <- google_config(),
+         {:ok, %{url: url, session_params: session_params}} <-
+           google_strategy().authorize_url(config) do
+      conn
+      |> put_session(:google_session_params, session_params)
+      |> redirect(external: url)
+    else
+      _ -> sign_in_failed(conn)
     end
   end
 
-  def create(conn, _params) do
+  @doc "Handles Google sending the player back after they sign in."
+  def google_callback(conn, params) do
+    session_params = get_session(conn, :google_session_params)
+    conn = delete_session(conn, :google_session_params)
+
+    with %{} <- session_params,
+         {:ok, config} <- google_config(),
+         {:ok, %{user: claims}} <-
+           google_strategy().callback(
+             Keyword.put(config, :session_params, session_params),
+             params
+           ),
+         {:ok, user} <- Accounts.sign_in_with_google(claims) do
+      conn
+      |> put_flash(:success, "Signed in.")
+      |> UserAuth.log_in_user(user)
+    else
+      _ -> sign_in_failed(conn)
+    end
+  end
+
+  @doc "Development only: signs in as a fixed test user without Google."
+  def dev_log_in(conn, _params) do
+    {:ok, user} =
+      Accounts.sign_in_with_google(%{
+        "sub" => "dev-test-user",
+        "email" => "test-user@flamingo.dev",
+        "email_verified" => true
+      })
+
     conn
-    |> put_flash(:error, "Use an email link to log in.")
-    |> redirect(to: ~p"/users/log-in")
+    |> put_flash(:success, "Signed in as the test user.")
+    |> UserAuth.log_in_user(user)
   end
 
   def delete_account(conn, %{"confirm" => "true"}) do
@@ -38,10 +63,7 @@ defmodule FlamingoWeb.UserSessionController do
 
       {:error, :reauthenticate} ->
         conn
-        |> put_flash(
-          :error,
-          "Please sign in with a fresh email link before deleting your account."
-        )
+        |> put_flash(:error, "Please sign in again before deleting your account.")
         |> redirect(to: ~p"/users/log-in")
     end
   end
@@ -56,5 +78,29 @@ defmodule FlamingoWeb.UserSessionController do
     conn
     |> put_flash(:success, "Logged out successfully.")
     |> UserAuth.log_out_user()
+  end
+
+  defp google_config do
+    case Application.get_env(:flamingo, :google_oauth) do
+      nil ->
+        :not_configured
+
+      config ->
+        {:ok,
+         Keyword.merge(config,
+           redirect_uri: url(~p"/auth/google/callback"),
+           code_verifier: true,
+           nonce: true
+         )}
+    end
+  end
+
+  defp google_strategy,
+    do: Application.get_env(:flamingo, :google_strategy, Assent.Strategy.Google)
+
+  defp sign_in_failed(conn) do
+    conn
+    |> put_flash(:error, "Google sign-in didn't complete. Please try again.")
+    |> redirect(to: ~p"/users/log-in")
   end
 end

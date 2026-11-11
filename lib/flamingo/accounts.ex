@@ -1,79 +1,33 @@
 defmodule Flamingo.Accounts do
   @moduledoc """
-  The Accounts context.
+  The Accounts context. Google proves who someone is; we keep their account
+  and our own revocable login sessions.
   """
 
   import Ecto.Query, warn: false
   alias Flamingo.Repo
 
-  alias Flamingo.Accounts.{Scope, User, UserToken, UserNotifier}
+  alias Flamingo.Accounts.{Scope, User, UserToken}
 
-  ## Database getters
-
-  @doc """
-  Gets a user by email.
-
-  ## Examples
-
-      iex> get_user_by_email("foo@example.com")
-      %User{}
-
-      iex> get_user_by_email("unknown@example.com")
-      nil
-
-  """
-  def get_user_by_email(email) when is_binary(email) do
-    Repo.get_by(User, email: email)
-  end
+  ## Sign-in
 
   @doc """
-  Gets a single user.
+  Finds or creates the account for a Google sign-in and refreshes its email.
 
-  Raises `Ecto.NoResultsError` if the User does not exist.
-
-  ## Examples
-
-      iex> get_user!(123)
-      %User{}
-
-      iex> get_user!(456)
-      ** (Ecto.NoResultsError)
-
+  Takes the claims Google returned. Only accounts whose email Google has
+  verified may sign in.
   """
-  def get_user!(id), do: Repo.get!(User, id)
-
-  ## User registration
-
-  @doc """
-  Registers a user.
-
-  ## Examples
-
-      iex> register_user(%{field: value})
-      {:ok, %User{}}
-
-      iex> register_user(%{field: bad_value})
-      {:error, %Ecto.Changeset{}}
-
-  """
-  def register_user(attrs) do
+  def sign_in_with_google(%{"sub" => sub, "email" => email, "email_verified" => true}) do
     %User{}
-    |> User.email_changeset(attrs)
-    |> Repo.insert()
+    |> User.google_changeset(%{google_sub: sub, email: email})
+    |> Repo.insert(
+      on_conflict: {:replace, [:email, :updated_at]},
+      conflict_target: :google_sub,
+      returning: true
+    )
   end
 
-  @doc """
-  Finds or creates an unconfirmed account for the email login flow.
-  Existing accounts are left unchanged, including when requests arrive together.
-  """
-  def get_or_register_user(email) do
-    changeset = User.email_changeset(%User{}, %{email: email}, validate_unique: false)
-
-    with {:ok, _user} <-
-           Repo.insert(changeset, on_conflict: :nothing, conflict_target: :email) do
-      {:ok, get_user_by_email(email)}
-    end
-  end
+  def sign_in_with_google(_claims), do: {:error, :unverified_email}
 
   ## Settings
 
@@ -83,6 +37,10 @@ defmodule Flamingo.Accounts do
     |> Repo.update()
   end
 
+  @doc """
+  Deletes the account, returning its session tokens so their sockets can be
+  disconnected. Requires a sign-in within the last 10 minutes.
+  """
   def delete_user(%Scope{user: user}) do
     if sudo_mode?(user, -10) do
       Repo.transact(fn ->
@@ -98,10 +56,8 @@ defmodule Flamingo.Accounts do
   end
 
   @doc """
-  Checks whether the user is in sudo mode.
-
-  The user is in sudo mode when the last authentication was done no further
-  than 20 minutes ago. The limit can be given as second argument in minutes.
+  Checks whether the user signed in within the given number of minutes
+  (negative, defaulting to 20 minutes ago).
   """
   def sudo_mode?(user, minutes \\ -20)
 
@@ -110,42 +66,6 @@ defmodule Flamingo.Accounts do
   end
 
   def sudo_mode?(_user, _minutes), do: false
-
-  @doc """
-  Returns an `%Ecto.Changeset{}` for changing the user email.
-
-  See `Flamingo.Accounts.User.email_changeset/3` for a list of supported options.
-
-  ## Examples
-
-      iex> change_user_email(user)
-      %Ecto.Changeset{data: %User{}}
-
-  """
-  def change_user_email(user, attrs \\ %{}, opts \\ []) do
-    User.email_changeset(user, attrs, opts)
-  end
-
-  @doc """
-  Updates the user email using the given token.
-
-  If the token matches, the user email is updated and the token is deleted.
-  """
-  def update_user_email(user, token) do
-    context = "change:#{user.email}"
-
-    Repo.transact(fn ->
-      with {:ok, query} <- UserToken.verify_change_email_token_query(token, context),
-           %UserToken{sent_to: email} <- Repo.one(query),
-           {:ok, user} <- Repo.update(User.email_changeset(user, %{email: email})),
-           {_count, _result} <-
-             Repo.delete_all(from(UserToken, where: [user_id: ^user.id, context: ^context])) do
-        {:ok, user}
-      else
-        _ -> {:error, :transaction_aborted}
-      end
-    end)
-  end
 
   ## Session
 
@@ -169,89 +89,10 @@ defmodule Flamingo.Accounts do
   end
 
   @doc """
-  Gets the user with the given magic link token.
-  """
-  def get_user_by_magic_link_token(token) do
-    with {:ok, query} <- UserToken.verify_magic_link_token_query(token),
-         {user, _token} <- Repo.one(query) do
-      user
-    else
-      _ -> nil
-    end
-  end
-
-  @doc """
-  Logs the user in by magic link.
-
-  For confirmed users, the magic link is consumed. On first confirmation,
-  all existing tokens, including sessions, are revoked before logging in.
-  """
-  def login_user_by_magic_link(token) do
-    with {:ok, query} <- UserToken.verify_magic_link_token_query(token) do
-      case Repo.one(query) do
-        {%User{confirmed_at: nil} = user, _token} ->
-          user
-          |> User.confirm_changeset()
-          |> update_user_and_delete_all_tokens()
-
-        {user, token} ->
-          Repo.delete!(token)
-          {:ok, {user, []}}
-
-        nil ->
-          {:error, :not_found}
-      end
-    else
-      :error -> {:error, :not_found}
-    end
-  end
-
-  @doc ~S"""
-  Delivers the update email instructions to the given user.
-
-  ## Examples
-
-      iex> deliver_user_update_email_instructions(user, current_email, &url(~p"/users/settings/confirm-email/#{&1}"))
-      {:ok, %{to: ..., body: ...}}
-
-  """
-  def deliver_user_update_email_instructions(%User{} = user, current_email, update_email_url_fun)
-      when is_function(update_email_url_fun, 1) do
-    {encoded_token, user_token} = UserToken.build_email_token(user, "change:#{current_email}")
-
-    Repo.insert!(user_token)
-    UserNotifier.deliver_update_email_instructions(user, update_email_url_fun.(encoded_token))
-  end
-
-  @doc """
-  Delivers the magic link login instructions to the given user.
-  """
-  def deliver_login_instructions(%User{} = user, magic_link_url_fun)
-      when is_function(magic_link_url_fun, 1) do
-    {encoded_token, user_token} = UserToken.build_email_token(user, "login")
-    Repo.insert!(user_token)
-    UserNotifier.deliver_login_instructions(user, magic_link_url_fun.(encoded_token))
-  end
-
-  @doc """
   Deletes the signed token with the given context.
   """
   def delete_user_session_token(token) do
     Repo.delete_all(from(UserToken, where: [token: ^token, context: "session"]))
     :ok
-  end
-
-  ## Token helper
-
-  defp update_user_and_delete_all_tokens(changeset) do
-    Repo.transact(fn ->
-      with {:ok, user} <- Repo.update(changeset) do
-        tokens_to_expire = Repo.all_by(UserToken, user_id: user.id)
-
-        Repo.delete_all(from(t in UserToken, where: t.id in ^Enum.map(tokens_to_expire, & &1.id)))
-
-        {:ok, {user, tokens_to_expire}}
-      end
-    end)
   end
 end

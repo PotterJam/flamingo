@@ -30,6 +30,14 @@ if config_env() == :dev && System.get_env("PUBLIC_URL") do
     url: [host: public_url.host, scheme: public_url.scheme, port: public_url.port]
 end
 
+# Real Google sign-in in development needs its own OAuth client with a
+# localhost redirect; without one, use the dev-only test user sign-in.
+if config_env() == :dev && System.get_env("GOOGLE_CLIENT_ID") do
+  config :flamingo, :google_oauth,
+    client_id: System.fetch_env!("GOOGLE_CLIENT_ID"),
+    client_secret: System.fetch_env!("GOOGLE_CLIENT_SECRET")
+end
+
 if config_env() == :prod do
   database_url = System.fetch_env!("DATABASE_URL")
 
@@ -43,11 +51,9 @@ if config_env() == :prod do
         else: false
       )
 
-  config :flamingo, Flamingo.Mailer,
-    adapter: Swoosh.Adapters.Resend,
-    api_key: System.fetch_env!("RESEND_API_KEY")
-
-  config :flamingo, :mail_from, System.fetch_env!("MAIL_FROM")
+  config :flamingo, :google_oauth,
+    client_id: System.fetch_env!("GOOGLE_CLIENT_ID"),
+    client_secret: System.fetch_env!("GOOGLE_CLIENT_SECRET")
 
   # The secret key base is used to sign/encrypt cookies and other secrets.
   # A default value is used in config/dev.exs and config/test.exs but you

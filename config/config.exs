@@ -24,9 +24,7 @@ config :flamingo,
   ecto_repos: [Flamingo.Repo],
   generators: [timestamp_type: :utc_datetime, binary_id: true]
 
-config :flamingo, Flamingo.Mailer, adapter: Swoosh.Adapters.Local
-config :flamingo, :mail_from, "hello@example.com"
-config :swoosh, :api_client, Swoosh.ApiClient.Req
+config :assent, http_adapter: Assent.HTTPAdapter.Req
 
 # Configure the endpoint
 config :flamingo, FlamingoWeb.Endpoint,

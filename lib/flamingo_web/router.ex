@@ -19,9 +19,9 @@ defmodule FlamingoWeb.Router do
 
   # Local review fixture; remove before shipping.
   if Application.compile_env(:flamingo, :dev_routes) do
-    scope "/dev" do
+    scope "/dev", FlamingoWeb do
       pipe_through :browser
-      forward "/mailbox", Plug.Swoosh.MailboxPreview
+      post "/log-in", UserSessionController, :dev_log_in
     end
 
     scope "/preview", FlamingoWeb do
@@ -46,7 +46,6 @@ defmodule FlamingoWeb.Router do
     live_session :require_authenticated_user,
       on_mount: [{FlamingoWeb.UserAuth, :require_authenticated}] do
       live "/users/settings", UserLive.Settings, :edit
-      live "/users/settings/confirm-email/:token", UserLive.Settings, :confirm_email
     end
   end
 
@@ -62,12 +61,11 @@ defmodule FlamingoWeb.Router do
       live "/game/:room_id/scribble", ScribbleLive
       live "/game/:room_id/telephone", TelephoneLive
       live "/drawing", DrawingLive
-      live "/users/register", UserLive.Login, :register
       live "/users/log-in", UserLive.Login, :new
-      live "/users/log-in/:token", UserLive.Confirmation, :new
     end
 
-    post "/users/log-in", UserSessionController, :create
+    get "/auth/google", UserSessionController, :google_request
+    get "/auth/google/callback", UserSessionController, :google_callback
     delete "/users/log-out", UserSessionController, :delete
   end
 end

@@ -5,8 +5,18 @@ defmodule FlamingoWeb.UserSessionControllerTest do
   alias Flamingo.Accounts
 
   setup do
-    %{unconfirmed_user: unconfirmed_user_fixture(), user: user_fixture()}
+    %{user: user_fixture()}
   end
+
+  # Starts a sign-in and returns the conn holding its session, plus its state.
+  defp start_google_sign_in(conn) do
+    conn = get(conn, ~p"/auth/google")
+    %URI{query: query} = URI.parse(redirected_to(conn))
+    {conn, URI.decode_query(query)["state"]}
+  end
+
+  defp google_callback(conn, state, claims),
+    do: get(conn, ~p"/auth/google/callback", %{state: state, code: JSON.encode!(claims)})
 
   describe "DELETE /users/account" do
     test "deletes only the current account and revokes all its tokens and sessions", %{
@@ -15,7 +25,6 @@ defmodule FlamingoWeb.UserSessionControllerTest do
     } do
       other = user_fixture()
       other_token = Accounts.generate_user_session_token(other)
-      {magic_link, _} = generate_user_magic_link_token(user)
       session_token = Accounts.generate_user_session_token(user)
       topic = "users_sessions:#{Base.url_encode64(session_token)}"
       FlamingoWeb.Endpoint.subscribe(topic)
@@ -27,9 +36,8 @@ defmodule FlamingoWeb.UserSessionControllerTest do
 
       assert redirected_to(conn) == ~p"/"
       refute get_session(conn, :user_token)
-      refute Accounts.get_user_by_email(user.email)
+      refute Flamingo.Repo.get(Accounts.User, user.id)
       refute Accounts.get_user_by_session_token(session_token)
-      refute Accounts.get_user_by_magic_link_token(magic_link)
       refute Flamingo.Repo.get_by(Accounts.UserToken, user_id: user.id)
       assert Accounts.get_user_by_session_token(other_token)
       assert_receive %Phoenix.Socket.Broadcast{topic: ^topic, event: "disconnect"}
@@ -40,7 +48,7 @@ defmodule FlamingoWeb.UserSessionControllerTest do
         conn |> log_in_user(user) |> delete(~p"/users/account", %{confirm: "false"})
 
       assert redirected_to(missing_confirmation) == ~p"/users/settings"
-      assert Accounts.get_user_by_email(user.email)
+      assert Flamingo.Repo.get(Accounts.User, user.id)
 
       stale =
         conn
@@ -50,7 +58,7 @@ defmodule FlamingoWeb.UserSessionControllerTest do
         |> delete(~p"/users/account", %{confirm: "true"})
 
       assert redirected_to(stale) == ~p"/users/log-in"
-      assert Accounts.get_user_by_email(user.email)
+      assert Flamingo.Repo.get(Accounts.User, user.id)
     end
 
     test "rejects guests", %{conn: conn} do
@@ -59,104 +67,49 @@ defmodule FlamingoWeb.UserSessionControllerTest do
     end
   end
 
-  describe "POST /users/log-in without a magic token" do
-    test "rejects email and password credentials", %{conn: conn, user: user} do
-      conn =
-        post(conn, ~p"/users/log-in", %{
-          "user" => %{"email" => user.email, "password" => "password"}
-        })
+  describe "Google sign-in" do
+    test "creates the account on first sign-in and logs the player in", %{conn: conn} do
+      {conn, state} = start_google_sign_in(conn)
+      assert redirected_to(conn) =~ "https://accounts.google.test/"
 
-      assert redirected_to(conn) == ~p"/users/log-in"
-      assert Phoenix.Flash.get(conn.assigns.flash, :error) == "Use an email link to log in."
-      refute get_session(conn, :user_token)
-    end
-  end
-
-  describe "POST /users/log-in - magic link" do
-    test "logs the user in", %{conn: conn, user: user} do
-      {token, _hashed_token} = generate_user_magic_link_token(user)
-
-      conn =
-        post(conn, ~p"/users/log-in", %{
-          "user" => %{"token" => token}
-        })
-
-      assert get_session(conn, :user_token)
-      assert conn.resp_cookies["_flamingo_web_user_remember_me"]
-      assert redirected_to(conn) == ~p"/"
-
-      # The next request resolves the authenticated account from the session.
-      conn = get(conn, ~p"/")
-      assert conn.status == 200
-      assert conn.assigns.current_scope.user.id == user.id
-    end
-
-    test "cannot opt out of remembered login with an old parameter", %{conn: conn, user: user} do
-      {token, _hashed_token} = generate_user_magic_link_token(user)
-
-      conn =
-        post(conn, ~p"/users/log-in", %{
-          "user" => %{"token" => token, "remember_me" => "false"}
-        })
-
-      assert conn.resp_cookies["_flamingo_web_user_remember_me"]
-      assert redirected_to(conn) == ~p"/"
-    end
-
-    test "returns home even if an old return path is stored", %{conn: conn, user: user} do
-      {token, _hashed_token} = generate_user_magic_link_token(user)
-
-      conn =
-        conn
-        |> init_test_session(user_return_to: "/foo/bar")
-        |> post(~p"/users/log-in", %{"user" => %{"token" => token}})
+      claims = google_claims()
+      conn = google_callback(conn, state, claims)
 
       assert redirected_to(conn) == ~p"/"
-      assert Phoenix.Flash.get(conn.assigns.flash, :success) == "Logged in."
+      assert {user, _} = Accounts.get_user_by_session_token(get_session(conn, :user_token))
+      assert user.google_sub == claims["sub"]
+      assert user.email == claims["email"]
+      refute get_session(conn, :google_session_params)
     end
 
-    test "confirms unconfirmed user", %{conn: conn, unconfirmed_user: user} do
-      {token, _hashed_token} = generate_user_magic_link_token(user)
-      refute user.confirmed_at
+    test "returns to the same account and picks up a changed email", %{conn: conn, user: user} do
+      {:ok, user} = Accounts.update_avatar(Flamingo.Accounts.Scope.for_user(user), %{})
+      {conn, state} = start_google_sign_in(conn)
+      conn = google_callback(conn, state, google_claims(%{"sub" => user.google_sub}))
 
-      conn =
-        post(conn, ~p"/users/log-in", %{
-          "user" => %{"token" => token}
-        })
-
-      assert get_session(conn, :user_token)
-      assert conn.resp_cookies["_flamingo_web_user_remember_me"]
-      assert redirected_to(conn) == ~p"/"
-      assert Phoenix.Flash.get(conn.assigns.flash, :success) == "Logged in."
-
-      assert Accounts.get_user!(user.id).confirmed_at
-
-      # The next request resolves the authenticated account from the session.
-      conn = get(conn, ~p"/")
-      assert conn.status == 200
-      assert conn.assigns.current_scope.user.id == user.id
+      assert {signed_in, _} = Accounts.get_user_by_session_token(get_session(conn, :user_token))
+      assert signed_in.id == user.id
+      assert signed_in.email != user.email
+      assert signed_in.avatar == user.avatar
     end
 
-    test "redirects to login page when magic link is invalid", %{conn: conn} do
-      conn =
-        post(conn, ~p"/users/log-in", %{
-          "user" => %{"token" => "invalid"}
-        })
+    test "refuses forged, cancelled, unverified and unstarted sign-ins", %{conn: conn} do
+      count = Flamingo.Repo.aggregate(Accounts.User, :count)
 
-      assert Phoenix.Flash.get(conn.assigns.flash, :error) ==
-               "The link is invalid or it has expired."
+      {started, state} = start_google_sign_in(conn)
 
-      assert redirected_to(conn) == ~p"/users/log-in"
-    end
+      for conn <- [
+            google_callback(started, "forged-state", google_claims()),
+            get(started, ~p"/auth/google/callback", %{state: state, error: "access_denied"}),
+            google_callback(started, state, google_claims(%{"email_verified" => false})),
+            google_callback(conn, state, google_claims())
+          ] do
+        assert redirected_to(conn) == ~p"/users/log-in"
+        refute get_session(conn, :user_token)
+        assert Phoenix.Flash.get(conn.assigns.flash, :error) =~ "didn't complete"
+      end
 
-    test "rejects malformed token encoding without creating a session", %{conn: conn} do
-      conn = post(conn, ~p"/users/log-in", %{"user" => %{"token" => "not+base64!"}})
-
-      assert redirected_to(conn) == ~p"/users/log-in"
-      refute get_session(conn, :user_token)
-
-      assert Phoenix.Flash.get(conn.assigns.flash, :error) ==
-               "The link is invalid or it has expired."
+      assert Flamingo.Repo.aggregate(Accounts.User, :count) == count
     end
   end
 

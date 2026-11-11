@@ -8,8 +8,9 @@ config :flamingo, Flamingo.Repo,
   pool: Ecto.Adapters.SQL.Sandbox,
   pool_size: System.schedulers_online() * 2
 
-config :flamingo, Flamingo.Mailer, adapter: Swoosh.Adapters.Test
-config :swoosh, :api_client, false
+# Google is replaced by a stand-in that signs in whoever the test names.
+config :flamingo, :google_strategy, Flamingo.FakeGoogleStrategy
+config :flamingo, :google_oauth, client_id: "test-client", client_secret: "test-secret"
 
 # We don't run a server during test. If one is required,
 # you can enable the server option below.

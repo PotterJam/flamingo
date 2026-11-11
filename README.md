@@ -30,14 +30,16 @@ development defaults, not production credentials.
 
 ## Accounts
 
-Playing and joining rooms still require no account. Register at `/users/register`
-and use the emailed magic link to confirm and sign in. Authentication is magic-link
-only; there are no account passwords. Choosing to stay logged in
-sets a remember-me cookie backed by a revocable database session token.
+Playing and joining rooms require no account. Signing in is optional and uses
+Sign in with Google only: there are no passwords and the app sends no email. An
+account saves the player's avatar and lets a host save a lobby under a permanent
+link. Sessions are revocable database tokens behind a 14-day remember-me cookie.
 
-Development email stays in the local Swoosh mailbox at `/dev/mailbox`; it is not
-sent externally. The mailbox route is not compiled into production. Tests use
-Swoosh's test adapter and an isolated SQL sandbox.
+In development, the sign-in page has a "Sign in as test user" button that skips
+Google; it is not compiled into production. To try real Google sign-in locally,
+create a separate Google OAuth client with the redirect
+`http://localhost:4000/auth/google/callback` and set `GOOGLE_CLIENT_ID` and
+`GOOGLE_CLIENT_SECRET`. Tests replace Google with `Flamingo.FakeGoogleStrategy`.
 
 Run `mix precommit` for compilation, formatting, and the full test suite. The test
 alias creates and migrates `flamingo_test` (with `MIX_TEST_PARTITION` suffix when
@@ -49,8 +51,10 @@ Before deploying this version, provision a PostgreSQL database (for example, Neo
 and configure these secrets on the application host:
 
 * `DATABASE_URL`: database connection URL from your PostgreSQL provider
-* `RESEND_API_KEY`: API key for the Swoosh Resend adapter
-* `MAIL_FROM`: sender address on a verified sending domain
+* `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET`: a Google OAuth "Web application"
+  client whose redirect URI is `https://<PHX_HOST>/auth/google/callback`. In Google
+  Auth Platform, set the audience to External and publish the app; requesting only
+  `openid email profile` needs no Google review.
 * `SECRET_KEY_BASE` and `PHX_HOST`: existing Phoenix deployment configuration
 
 Database TLS is enabled by default. `DATABASE_SSL=false` is only for a deliberately
@@ -60,15 +64,14 @@ TLS uses the operating system's trusted CA certificates. For Neon, start with a
 direct (non-pooled) connection URL for both the app and migrations; Ecto already
 maintains an application-side connection pool.
 Verify connectivity and certificate trust against the chosen database before
-shipping. The mail adapter is configured in `config/runtime.exs` and can be changed
-if we select another provider.
+shipping.
 
 Fly's release command runs `/app/bin/migrate` before starting the new app release.
 Fly hosts the app, not necessarily the database: this command also works with Neon
 through `DATABASE_URL`. It uses the generated `Flamingo.Release` module because
 production releases do not include Mix; it does not create the database.
-Applying those migrations changes the configured database. Provisioning, production
-mail delivery, and deployment must be completed separately before auth is live.
+Applying those migrations changes the configured database. Provisioning, the Google
+OAuth client, and deployment must be completed separately before sign-in is live.
 The app still requires one machine for in-memory games; adding Postgres does not
 make active games durable or enable multi-machine room routing.
 

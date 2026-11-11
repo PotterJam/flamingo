@@ -13,8 +13,8 @@ defmodule FlamingoWeb.HomeLiveTest do
 
     render_hook(view, "save_avatar", %{avatar: %{"head" => 3, "body" => 1}})
     render_hook(view, "save_avatar", %{avatar: %{"head" => 0, "body" => 2}})
-    assert Accounts.get_user!(user.id).avatar["head"] == 0
-    assert Accounts.get_user!(user.id).avatar["body"] == 2
+    assert Flamingo.Repo.get!(Accounts.User, user.id).avatar["head"] == 0
+    assert Flamingo.Repo.get!(Accounts.User, user.id).avatar["body"] == 2
 
     {:ok, restored, _} = live(conn, ~p"/")
     assert has_element?(restored, "#avatar-body-input[value='2']")
@@ -25,7 +25,7 @@ defmodule FlamingoWeb.HomeLiveTest do
     user = user_fixture()
     {:ok, view, _} = live(conn, ~p"/")
     render_hook(view, "save_avatar", %{avatar: %{"head" => 3}, user_id: user.id})
-    assert Accounts.get_user!(user.id).avatar == nil
+    assert Flamingo.Repo.get!(Accounts.User, user.id).avatar == nil
   end
 
   test "submitting the lobby form joins when a room name is present", %{conn: conn} do

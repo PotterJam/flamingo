@@ -46,7 +46,7 @@ defmodule FlamingoWeb.Layouts do
       class="mt-2 flex w-full max-w-[41rem] flex-col gap-4 bg-white px-3 py-2 sm:flex-row sm:items-center sm:justify-between"
     >
       <p class="text-sm font-bold">
-        You are currently playing as a guest. Sign in to save your history
+        You are currently playing as a guest. Sign in to save your avatar and lobbies
       </p>
       <.button
         id="account-log-in"

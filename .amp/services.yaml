@@ -11,4 +11,4 @@ services:
     health: /users/log-in
     portal:
       title: Flamingo
-      description: Guest play and optional email login. Development emails are available at /dev/mailbox.
+      description: Guest play and optional Google sign-in. In development, "Sign in as test user" skips Google.

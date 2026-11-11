@@ -1,119 +1,73 @@
 defmodule FlamingoWeb.UserLive.Login do
   use FlamingoWeb, :live_view
 
-  alias Flamingo.Accounts
-  alias Flamingo.Accounts.User
+  @dev_routes Application.compile_env(:flamingo, :dev_routes, false)
 
   @impl true
   def render(assigns) do
     ~H"""
     <Layouts.app flash={@flash} current_scope={@current_scope} show_sound_controls={false}>
       <Layouts.account_panel current_scope={@current_scope}>
-        <div
-          :if={@sent_email}
-          id="login-email-sent"
-          role="status"
-          tabindex="-1"
-          phx-mounted={JS.focus()}
-          class="space-y-3 focus:outline-none"
-        >
-          <h1 class="text-3xl font-bold text-foreground">Check your email</h1>
-          <p class="text-sm text-neutral-600">
-            We've sent a login link to <strong class="break-all text-foreground">{@sent_email}</strong>.
-          </p>
-          <p class="text-sm text-neutral-600">If you don't see it, check your spam folder.</p>
-        </div>
-
-        <header :if={!@sent_email} class="space-y-2">
-          <h1 id="login-heading" class="text-3xl font-bold text-foreground">Log in</h1>
+        <header class="space-y-2">
+          <h1 id="login-heading" class="text-3xl font-bold text-foreground">Sign in</h1>
           <p class="text-sm text-neutral-600">
             <%= if @current_scope do %>
-              Log in again to make changes to your account.
+              Sign in again to make changes to your account.
             <% else %>
-              If you don't already have an email registered this will create your account.
+              Save your avatar and keep a permanent link for your group's lobby.
+              You can always play as a guest without signing in.
             <% end %>
           </p>
         </header>
 
-        <div
-          :if={local_mail_adapter?()}
-          class="flex gap-3 rounded-base border-2 border-border bg-secondary p-3 text-sm"
+        <.button
+          id="google-sign-in"
+          href={~p"/auth/google"}
+          variant="neutral"
+          class="flex w-full items-center justify-center gap-3 font-bold"
         >
-          <.icon name={:info} class="size-5 shrink-0" />
-          <div>
-            <p>You are running the local mail adapter.</p>
-            <p>
-              To see sent emails, visit <.link href="/dev/mailbox" class="underline">the mailbox page</.link>.
-            </p>
-          </div>
-        </div>
+          <svg class="size-5" viewBox="0 0 48 48" aria-hidden="true">
+            <path
+              fill="#EA4335"
+              d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"
+            />
+            <path
+              fill="#4285F4"
+              d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"
+            />
+            <path
+              fill="#FBBC05"
+              d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"
+            />
+            <path
+              fill="#34A853"
+              d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"
+            />
+          </svg>
+          Sign in with Google
+        </.button>
 
-        <.form
-          :if={!@sent_email}
-          for={@form}
-          id="login_form_magic"
-          class="space-y-4"
-          action={~p"/users/log-in"}
-          phx-submit="submit_magic"
+        <div
+          :if={@dev_routes}
+          id="dev-sign-in"
+          class="space-y-3 rounded-base border-2 border-dashed border-border bg-secondary p-3 text-sm"
         >
-          <.input
-            readonly={!!@current_scope}
-            field={@form[:email]}
-            type="email"
-            label="Email"
-            autocomplete="username"
-            spellcheck="false"
-            required
-            phx-mounted={JS.focus()}
-          />
-          <.button id="magic-login-submit" phx-disable-with="Sending link..." class="w-full">
-            Log in
-          </.button>
-        </.form>
+          <p>
+            Development only: sign in without Google as a shared test user.
+          </p>
+          <.form for={%{}} action="/dev/log-in" method="post">
+            <.button id="dev-sign-in-button" variant="outline" class="w-full font-bold">
+              Sign in as test user
+            </.button>
+          </.form>
+        </div>
       </Layouts.account_panel>
     </Layouts.app>
     """
   end
 
   @impl true
-  def mount(_params, _session, %{assigns: %{live_action: :register}} = socket) do
-    destination = if socket.assigns.current_scope, do: ~p"/", else: ~p"/users/log-in"
-    {:ok, redirect(socket, to: destination)}
-  end
-
   def mount(_params, _session, socket) do
-    email =
-      Phoenix.Flash.get(socket.assigns.flash, :email) ||
-        get_in(socket.assigns, [:current_scope, Access.key(:user), Access.key(:email)])
-
-    form =
-      %User{}
-      |> Accounts.change_user_email(%{email: email}, validate_unique: false)
-      |> to_form(as: "user")
-
-    {:ok, assign(socket, form: form, sent_email: nil)}
-  end
-
-  @impl true
-  def handle_event("submit_magic", %{"user" => %{"email" => email}}, socket) do
-    with {:ok, user} <- Accounts.get_or_register_user(email),
-         {:ok, _email} <-
-           Accounts.deliver_login_instructions(user, &url(~p"/users/log-in/#{&1}")) do
-      {:noreply,
-       socket
-       |> clear_flash()
-       |> assign(sent_email: user.email)}
-    else
-      {:error, %Ecto.Changeset{} = changeset} ->
-        {:noreply, assign(socket, form: to_form(changeset, as: "user"))}
-
-      {:error, _reason} ->
-        {:noreply,
-         put_flash(socket, :error, "We couldn't send your login link. Please try again.")}
-    end
-  end
-
-  defp local_mail_adapter? do
-    Application.get_env(:flamingo, Flamingo.Mailer)[:adapter] == Swoosh.Adapters.Local
+    {:ok, assign(socket, dev_routes: @dev_routes)}
   end
 end
