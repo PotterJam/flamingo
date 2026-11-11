@@ -13,49 +13,8 @@ defmodule FlamingoWeb.UserLive.Settings do
         </p>
 
         <section class="space-y-5 pt-2" aria-label="Account actions">
-          <%= if @confirm_delete do %>
-            <div id="delete-account-confirmation" class="space-y-4">
-              <h2 class="font-bold">Delete your account?</h2>
-              <p class="text-sm">
-                This permanently deletes your account, saved avatar, and sign-ins.
-                You can still play as a guest. This cannot be undone.
-              </p>
-              <.form
-                for={@delete_form}
-                id="delete-account-form"
-                action={~p"/users/account"}
-                method="delete"
-                class="space-y-4"
-              >
-                <.input
-                  field={@delete_form[:confirm]}
-                  type="checkbox"
-                  label="I understand this permanently deletes my account."
-                  required
-                />
-                <div class="flex flex-wrap gap-3">
-                  <.button
-                    id="confirm-delete-account"
-                    variant="neutral"
-                    class="font-bold text-red-700"
-                  >
-                    Delete my account
-                  </.button>
-                  <.button
-                    id="cancel-delete-account"
-                    type="button"
-                    phx-click="cancel_delete"
-                    variant="neutral"
-                  >
-                    Keep my account
-                  </.button>
-                </div>
-              </.form>
-            </div>
-          <% end %>
-          <div class="flex flex-wrap items-center justify-between gap-3">
+          <div class="flex flex-wrap items-center justify-end gap-3">
             <.button
-              :if={!@confirm_delete}
               id="delete-account"
               type="button"
               phx-click="confirm_delete"
@@ -68,13 +27,53 @@ defmodule FlamingoWeb.UserLive.Settings do
               href={~p"/users/log-out"}
               method="delete"
               variant="outline"
-              class="ml-auto font-bold"
+              class="font-bold"
             >
               Log out
             </.button>
           </div>
         </section>
       </Layouts.account_panel>
+
+      <.modal
+        :if={@confirm_delete}
+        id="delete-account-confirmation"
+        title="Delete your account?"
+        on_cancel="cancel_delete"
+        class="border-4 border-dashed border-red-600"
+      >
+        <p class="text-sm">
+          This permanently deletes your account, saved avatar and sign-ins.
+          You can still play as a guest. <strong>This cannot be undone.</strong>
+        </p>
+        <.form
+          for={@delete_form}
+          id="delete-account-form"
+          action={~p"/users/account"}
+          method="delete"
+          class="space-y-5"
+        >
+          <.input
+            field={@delete_form[:confirm]}
+            type="checkbox"
+            label="I understand this permanently deletes my account."
+            required
+          />
+          <div class="flex flex-wrap justify-end gap-3">
+            <.button
+              id="cancel-delete-account"
+              type="button"
+              phx-click="cancel_delete"
+              variant="neutral"
+            >
+              Keep my account
+            </.button>
+            <.button id="confirm-delete-account" variant="danger" class="font-bold">
+              Delete my account
+            </.button>
+          </div>
+        </.form>
+      </.modal>
     </Layouts.app>
     """
   end

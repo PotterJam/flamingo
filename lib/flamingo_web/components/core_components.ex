@@ -143,7 +143,7 @@ defmodule FlamingoWeb.CoreComponents do
 
   attr :variant, :string,
     default: "default",
-    values: ~w(default neutral ghost danger-ghost outline)
+    values: ~w(default neutral danger ghost danger-ghost outline)
 
   attr :size, :string, default: "default", values: ~w(default sm icon)
   attr :rounded, :boolean, default: false
@@ -218,12 +218,65 @@ defmodule FlamingoWeb.CoreComponents do
     do:
       "bg-white text-foreground shadow-destructive active:translate-x-box-shadow-x active:translate-y-box-shadow-y active:shadow-none disabled:active:translate-x-0 disabled:active:translate-y-0"
 
+  defp button_variant_classes("danger"),
+    do:
+      "bg-red-600 text-white shadow-shadow hover:bg-red-700 active:translate-x-box-shadow-x active:translate-y-box-shadow-y active:shadow-none disabled:active:translate-x-0 disabled:active:translate-y-0"
+
   defp button_variant_classes("ghost"), do: "border-transparent shadow-none hover:bg-primary/20"
 
   defp button_variant_classes("danger-ghost"),
     do: "border-transparent text-red-700 shadow-none hover:bg-red-50 hover:text-red-900"
 
   defp button_variant_classes("outline"), do: "bg-transparent text-foreground shadow-none"
+
+  @doc """
+  Renders a modal dialog over a dimmed page. Render it conditionally from the
+  LiveView; `on_cancel` runs on Escape and on clicks outside the dialog.
+
+      <.modal :if={@confirming} id="confirm-modal" title="Are you sure?" on_cancel="cancel">
+        ...
+      </.modal>
+  """
+  attr :id, :string, required: true
+  attr :title, :string, required: true
+  attr :on_cancel, :any, required: true, doc: "event name or JS command that closes the modal"
+  attr :class, :any, default: nil, doc: "extra classes for the dialog panel"
+  slot :inner_block, required: true
+
+  def modal(assigns) do
+    ~H"""
+    <div
+      id={@id}
+      class="fixed inset-0 z-50 flex items-center justify-center p-4"
+      phx-window-keydown={@on_cancel}
+      phx-key="Escape"
+    >
+      <div
+        class="absolute inset-0 bg-black/40"
+        aria-hidden="true"
+        phx-mounted={JS.transition({"ease-out duration-150", "opacity-0", "opacity-100"})}
+      >
+      </div>
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby={"#{@id}-title"}
+        phx-click-away={@on_cancel}
+        phx-mounted={
+          JS.transition({"ease-out duration-150", "opacity-0 scale-95", "opacity-100 scale-100"})
+          |> JS.focus_first()
+        }
+        class={[
+          "relative w-full max-w-md space-y-4 rounded-base border-2 border-border bg-white p-6 shadow-shadow",
+          @class
+        ]}
+      >
+        <h2 id={"#{@id}-title"} class="text-xl font-bold">{@title}</h2>
+        {render_slot(@inner_block)}
+      </div>
+    </div>
+    """
+  end
 
   attr :class, :any, default: nil
   slot :inner_block, required: true
