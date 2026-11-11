@@ -1,8 +1,14 @@
 defmodule Flamingo.GameModes.Coop do
-  @moduledoc "Simultaneous team races, using Scribble for each private canvas and guessing turn."
+  @moduledoc """
+  Simultaneous team races on one word, using Scribble for each private canvas
+  and guessing turn. One team's drawer picks the word each round, rotating
+  through the teams; chat and correct guesses are shared like Classic.
+  """
 
-  alias Flamingo.{GameSettings, Scoring}
+  alias Flamingo.{Feed, GameSettings, Scoring}
   alias Flamingo.GameModes.Scribble
+
+  @shared_events [:guess, :close_guess, :correct_guess, :drawing_vote]
 
   def new do
     Map.merge(GameSettings.defaults(), %{
@@ -12,16 +18,22 @@ defmodule Flamingo.GameModes.Coop do
       teams: %{},
       team_scores: %{},
       games: %{},
+      picking_team: nil,
+      word_choices: [],
       completed: %{},
       gains: %{},
       used_words: MapSet.new(),
       hint_times: %{},
       final_drawings: [],
-      final_result: nil
+      final_result: nil,
+      feed: Feed.new()
     })
   end
 
-  def admit_member(state, _candidate, _context), do: ok(state)
+  def admit_member(state, candidate, _context) do
+    {feed, _} = Feed.player_joined(state.feed, candidate.id, candidate.name)
+    ok(%{state | feed: feed})
+  end
 
   def start(state, settings, context) do
     rounds = Map.get(settings, :round_count, state.round_count)
@@ -54,17 +66,23 @@ defmodule Flamingo.GameModes.Coop do
   def command(state, actor, {:select_word, _} = command, context) do
     team = state.teams[actor]
 
-    if state.phase == :word_choice and state.games[team] do
-      case Scribble.command(state.games[team], actor, command, team_context(state, team, context)) do
-        {:ok, result} ->
-          state = put_in(state.games[team], result.state)
-          if choices_complete?(state), do: begin_playing(state, context), else: ok(state)
+    cond do
+      state.phase != :word_choice or is_nil(state.games[team]) ->
+        {:error, :not_word_choice}
 
-        other ->
-          other
-      end
-    else
-      {:error, :not_word_choice}
+      team != state.picking_team ->
+        {:error, :not_drawer}
+
+      true ->
+        case Scribble.command(
+               state.games[team],
+               actor,
+               command,
+               team_context(state, team, context)
+             ) do
+          {:ok, result} -> choose_word(state, result.state.word, context)
+          other -> other
+        end
     end
   end
 
@@ -85,7 +103,7 @@ defmodule Flamingo.GameModes.Coop do
       true ->
         case Scribble.command(game, actor, command, team_context(state, team, context)) do
           {:ok, result} ->
-            state = put_in(state.games[team], result.state)
+            state = put_in(state.games[team], result.state) |> relay_feed(game, result.state)
 
             if result.reply == :correct do
               state = %{state | completed: Map.put(state.completed, team, context.now)}
@@ -109,19 +127,8 @@ defmodule Flamingo.GameModes.Coop do
     end
   end
 
-  def timeout(%{phase: :word_choice} = state, :word_choice, context) do
-    games =
-      Map.new(state.games, fn {team, game} ->
-        if game.phase == :word_choice do
-          {:ok, result} = Scribble.timeout(game, :word_choice, team_context(state, team, context))
-          {team, result.state}
-        else
-          {team, game}
-        end
-      end)
-
-    begin_playing(%{state | games: games}, context)
-  end
+  def timeout(%{phase: :word_choice} = state, :word_choice, context),
+    do: choose_word(state, context.select_candidate.(state.word_choices), context)
 
   def timeout(%{phase: :playing} = state, :playing, context), do: reveal(state, context)
 
@@ -163,29 +170,29 @@ defmodule Flamingo.GameModes.Coop do
   # only removal after the grace period ends a team's turn.
   def connection_changed(state, _, _, _), do: ok(state)
 
-  def remove_member(state, id, _removed, context) do
+  def remove_member(state, id, removed, context) do
+    {feed, _} = Feed.player_left(state.feed, id, removed.name)
+    state = %{state | feed: feed}
     team = state.teams[id]
     game = state.games[team]
 
-    if (state.phase in [:word_choice, :playing] and game) &&
-         (id == game.drawer_id or team_ids(state, team, context.roster) == [game.drawer_id]) do
-      state =
-        if game.phase == :word_choice do
-          {:ok, result} = Scribble.timeout(game, :word_choice, team_context(state, team, context))
-          put_in(state.games[team], result.state)
-        else
-          state
-        end
+    cond do
+      not ((state.phase in [:word_choice, :playing] and game) &&
+               (id == game.drawer_id or team_ids(state, team, context.roster) == [game.drawer_id])) ->
+        ok(state)
 
-      state = finish_team(state, team, context)
+      # Before drawing starts, a team that can no longer play sits the round out;
+      # if it was choosing, the word is picked for everyone.
+      state.phase == :word_choice ->
+        state = %{state | games: Map.delete(state.games, team)}
 
-      cond do
-        state.phase == :word_choice and choices_complete?(state) -> begin_playing(state, context)
-        state.phase == :playing and all_finished?(state) -> reveal(state, context)
-        true -> ok(state)
-      end
-    else
-      ok(state)
+        if team == state.picking_team,
+          do: choose_word(state, context.select_candidate.(state.word_choices), context),
+          else: ok(state)
+
+      true ->
+        state = finish_team(state, team, context)
+        if all_finished?(state), do: reveal(state, context), else: ok(state)
     end
   end
 
@@ -202,6 +209,31 @@ defmodule Flamingo.GameModes.Coop do
     view = Scribble.view(child, viewer, local_roster)
     result = state.final_result
     players = Map.new(roster.players, fn {id, player} -> {id, Map.put(player, :score, 0)} end)
+    picker = state.games[state.picking_team]
+
+    # Everyone sees every vote; a vote on another team's drawing names that team
+    # and does not flash this viewer's canvas.
+    feed =
+      state.feed.events
+      |> Enum.map(fn
+        %{event: {:drawing_vote, id, name, vote}} = entry ->
+          if state.teams[id] == team do
+            Feed.format(entry, viewer)
+          else
+            verb = if vote == :up, do: "liked", else: "disliked"
+
+            entry
+            |> Feed.format(viewer)
+            |> Map.merge(%{
+              text: "#{name} #{verb} Team #{state.teams[id]}'s drawing",
+              own_drawing?: false
+            })
+          end
+
+        entry ->
+          Feed.format(entry, viewer)
+      end)
+      |> Enum.reject(&is_nil/1)
 
     Map.merge(view, %{
       mode: :coop,
@@ -215,6 +247,14 @@ defmodule Flamingo.GameModes.Coop do
       team_scores: state.team_scores,
       team_gains: state.gains,
       team_drawers: Enum.map(state.games, fn {_, game} -> game.drawer_id end),
+      word_picker_id: picker && picker.drawer_id,
+      word_choices: if(team == state.picking_team, do: view.word_choices, else: []),
+      correct_guesses:
+        state.games
+        |> Map.values()
+        |> Enum.flat_map(&Map.keys(&1.correct_guesses))
+        |> MapSet.new(),
+      feed: feed,
       team_finished?: game != nil and game.phase == :turn_reveal,
       can_guess?:
         game != nil and game.phase == :playing and state.phase == :playing and
@@ -284,9 +324,14 @@ defmodule Flamingo.GameModes.Coop do
       end)
       |> Map.new()
 
+    teams = games |> Map.keys() |> Enum.sort()
+
     state = %{
       state
       | games: games,
+        picking_team:
+          if(teams != [], do: Enum.at(teams, rem(state.current_round, length(teams)))),
+        word_choices: choices,
         completed: %{},
         gains: %{},
         hint_times: %{},
@@ -299,15 +344,32 @@ defmodule Flamingo.GameModes.Coop do
         ok(state, :ok, [:cancel_hint_timeout, {:schedule_phase_timeout, :word_choice, 10_000}])
   end
 
-  defp choices_complete?(state),
-    do: Enum.all?(state.games, fn {_, game} -> game.phase != :word_choice end)
+  # Every team draws the word the picking team chose.
+  defp choose_word(state, word, context) do
+    games =
+      Map.new(state.games, fn {team, game} ->
+        if game.phase == :word_choice do
+          {:ok, result} =
+            Scribble.command(
+              game,
+              game.drawer_id,
+              {:select_word, word},
+              team_context(state, team, context)
+            )
+
+          {team, result.state}
+        else
+          {team, game}
+        end
+      end)
+
+    begin_playing(%{state | games: games, word_choices: []}, context)
+  end
 
   defp all_finished?(state),
     do: Enum.all?(state.games, fn {_, game} -> game.phase == :turn_reveal end)
 
   defp begin_playing(state, context) do
-    words = Enum.map(state.games, fn {_, game} -> game.word end)
-
     hints =
       Map.new(state.games, fn {team, game} ->
         {team,
@@ -325,7 +387,10 @@ defmodule Flamingo.GameModes.Coop do
       state
       | phase: :playing,
         hint_times: hints,
-        used_words: Enum.reduce(words, state.used_words, &MapSet.put(&2, &1))
+        used_words:
+          Enum.reduce(state.games, state.used_words, fn {_, game}, used ->
+            MapSet.put(used, game.word)
+          end)
     }
 
     if all_finished?(state),
@@ -361,6 +426,12 @@ defmodule Flamingo.GameModes.Coop do
 
   defp reveal(state, context, reply \\ :ok) do
     state = Enum.reduce(Map.keys(state.games), state, &finish_team(&2, &1, context))
+
+    state =
+      case Enum.find_value(state.games, fn {_, game} -> game.word end) do
+        nil -> state
+        word -> %{state | feed: elem(Feed.word_revealed(state.feed, word), 0)}
+      end
 
     ok(%{state | phase: :turn_reveal, hint_times: %{}}, reply, [
       :cancel_hint_timeout,
@@ -410,6 +481,16 @@ defmodule Flamingo.GameModes.Coop do
       time ->
         [{:schedule_hint_timeout, :reveal_hint, max(1, DateTime.diff(time, now, :millisecond))}]
     end
+  end
+
+  # Chat is shared across teams; a team's private word reveal is not.
+  defp relay_feed(state, old_game, new_game) do
+    feed =
+      new_game.feed.events
+      |> Enum.filter(&(&1.id >= old_game.feed.next_id and elem(&1.event, 0) in @shared_events))
+      |> Enum.reduce(state.feed, &elem(Feed.add(&2, &1.event), 0))
+
+    %{state | feed: feed}
   end
 
   defp team_ids(state, team, roster),

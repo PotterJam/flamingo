@@ -22,7 +22,7 @@ defmodule Flamingo.Feed do
 
   def spin_used(feed, name, drawer), do: add(feed, {:spin_used, name, drawer})
 
-  defp add(feed, event) do
+  def add(feed, event) do
     entry = %{id: feed.next_id, event: event}
     {%{feed | events: feed.events ++ [entry], next_id: feed.next_id + 1}, entry}
   end

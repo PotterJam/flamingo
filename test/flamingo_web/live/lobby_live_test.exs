@@ -43,7 +43,7 @@ defmodule FlamingoWeb.LobbyLiveTest do
     assert snapshot.custom_words == ["orbital llama", "velvet cactus", "disco teapot"]
   end
 
-  test "co-op selection starts simultaneous teams with private guesses and shared scores",
+  test "co-op selection has one team pick the word every team draws, with shared chat",
        context do
     %{conn: conn, host: host, room_id: room_id, token: token} = context
 
@@ -68,18 +68,9 @@ defmodule FlamingoWeb.LobbyLiveTest do
         view
       end
 
+    refute has_element?(other_drawer, "#scribble-word-choices")
+    assert has_element?(other_drawer, "#word-picker", "Alice is picking a word")
     game |> element("#scribble-word-choice-0") |> render_click()
-    refute has_element?(teammate, "#guess-form")
-
-    other_word =
-      other_drawer
-      |> element("#scribble-word-choice-1")
-      |> render()
-      |> LazyHTML.from_fragment()
-      |> LazyHTML.text()
-      |> String.trim()
-
-    other_drawer |> element("#scribble-word-choice-1") |> render_click()
     assert has_element?(teammate, "#guess-form")
     assert has_element?(other_guesser, "#guess-form")
     assert has_element?(trio_guesser, "#guess-form")
@@ -94,17 +85,19 @@ defmodule FlamingoWeb.LobbyLiveTest do
       refute has_element?(game, "#team-players-1 li", name)
     end
 
-    other_guesser |> form("#guess-form", guess_form: %{guess: "private guess"}) |> render_submit()
-    refute has_element?(game, "#game-feed", "private guess")
+    other_guesser |> form("#guess-form", guess_form: %{guess: "shared guess"}) |> render_submit()
+    assert has_element?(game, "#game-feed", "Drew: shared guess")
 
     {:ok, snapshot} = Rooms.connect(room_id, token)
     teammate |> form("#guess-form", guess_form: %{guess: snapshot.word}) |> render_submit()
+    assert has_element?(other_guesser, "#game-feed", "Bob guessed the word")
+    refute has_element?(other_guesser, "#game-feed", snapshot.word)
     assert has_element?(game, "#coop-score-gains", "Team 1 +400")
     assert has_element?(game, "#team-title-1", "400 pts")
     assert has_element?(other_guesser, "#guess-form")
 
     trio_guesser
-    |> form("#guess-form", guess_form: %{guess: other_word})
+    |> form("#guess-form", guess_form: %{guess: snapshot.word})
     |> render_submit()
 
     refute has_element?(other_guesser, "#guess-form")

@@ -525,9 +525,11 @@ defmodule Flamingo.RoomServerTest do
 
     {:ok, host} = snapshot_as(room_id, host_token)
     {:ok, opponent} = snapshot_as(room_id, opponent_token)
-    assert host.word_choices == opponent.word_choices
+    assert host.word_choices != []
+    assert opponent.word_choices == []
+    assert opponent.word_picker_id == host.viewer_id
+    assert {:error, :not_drawer} = select_word_as(room_id, opponent_token, "dog")
     :ok = select_word_as(room_id, host_token, "cat")
-    :ok = select_word_as(room_id, opponent_token, "dog")
     {:ok, late_token, _} = join_connected(room_id, "Late")
     flush_room_snapshots()
 
@@ -556,7 +558,7 @@ defmodule Flamingo.RoomServerTest do
   end
 
   test "a co-op team survives a member refreshing mid-race", %{room_id: room_id} do
-    [{host_token, _}, {teammate_token, _}, {opponent_token, _}, _] =
+    [{host_token, _}, {teammate_token, _}, _, _] =
       for name <- ["Alice", "Bob", "Cara", "Drew"] do
         {:ok, token, snapshot} = join_connected(room_id, name)
         {token, snapshot.viewer_id}
@@ -566,7 +568,6 @@ defmodule Flamingo.RoomServerTest do
       start_game_as(room_id, host_token, %{game_mode: :coop, custom_words: ["cat", "dog", "bird"]})
 
     :ok = select_word_as(room_id, host_token, "cat")
-    :ok = select_word_as(room_id, opponent_token, "dog")
 
     stop_supervised!(Process.get({:player_child, teammate_token}))
     {_child_id, _pid, resumed} = start_connection(room_id, teammate_token)

@@ -70,7 +70,7 @@ defmodule FlamingoWeb.LobbyLive do
 
   defp game_mode_description("coop"),
     do:
-      "Race in pairs, with one trio for odd numbers. Each team draws and guesses together for a shared score."
+      "Race in pairs, with one trio for odd numbers. Teams take turns picking a word that every team draws."
 
   defp game_mode_description(_mode),
     do: "Take turns drawing a word while everyone guesses"

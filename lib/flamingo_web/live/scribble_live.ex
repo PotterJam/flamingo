@@ -40,6 +40,7 @@ defmodule FlamingoWeb.ScribbleLive do
        team_scores: %{},
        team_gains: %{},
        team_drawers: [],
+       word_picker_id: nil,
        team_finished?: false,
        can_guess?: false,
        word_choices: nil,
@@ -695,12 +696,8 @@ defmodule FlamingoWeb.ScribbleLive do
                             timer_id="word-choice-timer"
                             end_time={@turn_end_time && DateTime.to_iso8601(@turn_end_time)}
                           />
-                          <p class="text-3xl font-black">
-                            <%= if @game_variant == :coop do %>
-                              Waiting for team drawers to choose
-                            <% else %>
-                              <span class="font-hero text-[2.5rem] leading-none text-pink-400">{Map.get(@players, @drawer_id).name}</span>{" "}is picking a word
-                            <% end %>
+                          <p id="word-picker" class="text-3xl font-black">
+                            <span class="font-hero text-[2.5rem] leading-none text-pink-400">{Map.get(@players, @word_picker_id || @drawer_id).name}</span>{" "}is picking a word
                           </p>
                         </div>
                       <% end %>
@@ -1134,6 +1131,7 @@ defmodule FlamingoWeb.ScribbleLive do
         team_scores: Map.get(snapshot, :team_scores, %{}),
         team_gains: Map.get(snapshot, :team_gains, %{}),
         team_drawers: Map.get(snapshot, :team_drawers, []),
+        word_picker_id: Map.get(snapshot, :word_picker_id),
         team_finished?: Map.get(snapshot, :team_finished?, false),
         can_guess?: snapshot.can_guess?,
         constraint: snapshot.constraint,
@@ -1175,7 +1173,7 @@ defmodule FlamingoWeb.ScribbleLive do
     socket =
       if not initial? and drawing_visible? do
         Enum.reduce(new_feed, socket, fn entry, socket ->
-          if entry.kind in [:like, :dislike] do
+          if entry.kind in [:like, :dislike] and Map.get(entry, :own_drawing?, true) do
             push_event(socket, "drawing_vote", %{
               vote: if(entry.kind == :like, do: "up", else: "down")
             })
