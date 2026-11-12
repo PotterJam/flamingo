@@ -8,7 +8,7 @@ readonly ELIXIR_DIR="$HOME/.elixir-install/installs/elixir/$ELIXIR_VERSION-otp-2
 readonly FLY_DIR="$HOME/.fly"
 
 echo "==> Installing system prerequisites"
-packages=(build-essential ca-certificates curl git libncurses6 libssl3 libstdc++6 unzip postgresql-15)
+packages=(build-essential ca-certificates curl git libncurses6 libssl3 libstdc++6 unzip postgresql-17)
 missing_packages=()
 
 for package in "${packages[@]}"; do
