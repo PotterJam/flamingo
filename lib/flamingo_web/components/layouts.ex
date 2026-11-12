@@ -7,6 +7,16 @@ defmodule FlamingoWeb.Layouts do
 
   def account_menu(assigns) do
     ~H"""
+    <.button
+      :if={!@current_scope}
+      id="account-log-in"
+      navigate={~p"/users/log-in"}
+      variant="default"
+      rounded
+      class="absolute right-4 top-4 z-40 font-bold"
+    >
+      Sign in
+    </.button>
     <.box
       :if={@current_scope}
       id="account-menu"
@@ -27,35 +37,6 @@ defmodule FlamingoWeb.Layouts do
         title="Account settings"
       >
         <.icon name={:settings} class="size-5" />
-      </.button>
-    </.box>
-    """
-  end
-
-  attr :current_scope, :map, default: nil
-
-  def account_status(assigns) do
-    ~H"""
-    <%!-- Guest radius: 20px button radius + 8px vertical padding + 2px border. --%>
-    <.box
-      :if={!@current_scope}
-      id="account-status"
-      role="region"
-      aria-label="Your account"
-      radius="30px"
-      class="mt-2 flex w-full max-w-[41rem] flex-col gap-4 bg-white px-3 py-2 sm:flex-row sm:items-center sm:justify-between"
-    >
-      <p class="text-sm font-bold">
-        You are currently playing as a guest. Sign in to save your avatar and lobbies
-      </p>
-      <.button
-        id="account-log-in"
-        navigate={~p"/users/log-in"}
-        variant="default"
-        rounded
-        class="shrink-0 text-center font-bold"
-      >
-        Sign in
       </.button>
     </.box>
     """

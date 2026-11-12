@@ -35,408 +35,426 @@ defmodule FlamingoWeb.HomeLive do
     ~H"""
     <Layouts.app flash={@flash} current_scope={@current_scope} changelog>
       <Layouts.account_menu current_scope={@current_scope} />
-      <p
-        :if={@current_scope}
-        id="avatar-save-status"
-        role="status"
-        phx-update="ignore"
-        class="sr-only"
+      <%!-- On phones the account menu takes the top row, so the logo drops below it. --%>
+      <.card class={[
+        "absolute top-4 left-4 z-30 bg-white px-5 py-2",
+        @current_scope && "max-sm:top-20"
+      ]}>
+        <.logo />
+      </.card>
+      <.form
+        for={%{}}
+        as={:lobby}
+        phx-submit="submit_lobby"
+        id="lobby-form"
+        class="grid min-h-screen lg:grid-cols-[minmax(0,40rem)_minmax(0,1fr)]"
       >
-      </p>
-      <div class="flex min-h-screen w-full flex-col items-center justify-center gap-4 px-4 pt-24 pb-32 max-[359px]:px-1">
-        <.card class="w-full max-w-xs bg-white px-6 py-4">
-          <div class="flex justify-center">
-            <.logo />
-          </div>
-        </.card>
+        <button
+          type="submit"
+          name="lobby[action]"
+          value="auto"
+          class="sr-only"
+          aria-hidden="true"
+          tabindex="-1"
+        >
+          Submit
+        </button>
 
-        <.card class="w-full max-w-[44rem] overflow-visible bg-white p-0">
-          <.form
-            for={%{}}
-            as={:lobby}
-            phx-submit="submit_lobby"
-            id="lobby-form"
+        <section
+          id="avatar-customizer"
+          phx-hook="AvatarCustomizer"
+          phx-update="ignore"
+          data-account-id={@current_scope && @current_scope.user.id}
+          data-saved-avatar={to_string(!!(@current_scope && @current_scope.user.avatar))}
+          aria-label="Your avatar"
+          class={[
+            "relative isolate flex flex-col items-center justify-center gap-8 overflow-hidden border-b-2 border-border bg-pink-200 px-3 pt-28 pb-10 lg:border-r-2 lg:border-b-0 lg:pb-32",
+            @current_scope && "max-sm:pt-40"
+          ]}
+        >
+          <div
+            aria-hidden="true"
+            class="absolute inset-0 -z-10 bg-[url(/images/home/doodles.png)] bg-[length:560px] opacity-25"
           >
+          </div>
+          <input
+            :for={part <- Avatar.parts()}
+            type="hidden"
+            id={"avatar-#{part}-input"}
+            name={"lobby[#{part}]"}
+            value={@avatar[part]}
+          />
+          <input
+            :for={part <- Avatar.parts()}
+            type="hidden"
+            id={"avatar-#{part}-color-input"}
+            name={"lobby[#{part}_color]"}
+            value={@avatar["#{part}_color"]}
+          />
+          <input
+            :for={part <- Avatar.parts()}
+            type="hidden"
+            id={"avatar-#{part}-drawing-input"}
+            name={"lobby[#{part}_drawing]"}
+            value={@avatar["#{part}_drawing"]}
+          />
+
+          <div class="grid grid-cols-[auto_auto_auto] grid-rows-4 items-center gap-x-3 sm:gap-x-6">
+            <%!-- The hook treats the first SVG in this section as the live avatar, so the card
+                 comes first in the markup and the grid places the controls around it. --%>
+            <div class="col-start-2 row-span-4 row-start-1 w-44 -rotate-2 rounded-2xl border-2 border-border bg-white p-2.5 shadow-[8px_8px_0_0_#000] sm:w-72 xl:w-80">
+              <div class="relative flex items-end justify-center overflow-hidden rounded-xl border-2 border-border bg-sky-200">
+                <div aria-hidden="true" class="absolute inset-x-0 bottom-0 h-[18%] bg-green-300">
+                </div>
+                <.flamingo_avatar
+                  avatar={@avatar}
+                  class="pointer-events-none relative mt-[10%] mb-[6%] aspect-[130/145] h-auto w-[82%] overflow-visible drop-shadow-md"
+                  label="Your customized creature"
+                />
+              </div>
+            </div>
+
+            <template
+              :for={{_animal, index} <- Avatar.animals()}
+              data-avatar-template={index}
+            >
+              <.flamingo_avatar avatar={
+                Map.merge(@avatar, %{
+                  "head" => index,
+                  "body" => index,
+                  "legs" => index,
+                  "feet" => index
+                })
+              } />
+            </template>
+
+            <div id="avatar-selector-rows" class="contents">
+              <div
+                :for={
+                  {part, row} <-
+                    Enum.zip(Avatar.parts(), ~w(row-start-1 row-start-2 row-start-3 row-start-4))
+                }
+                class="contents"
+              >
+                <div class={["col-start-1 flex items-center gap-1.5 justify-self-end sm:gap-2", row]}>
+                  <div class="relative flex shrink-0">
+                    <button
+                      type="button"
+                      phx-click={JS.show(to: "#avatar-#{part}-color-picker", display: "grid")}
+                      id={"avatar-#{part}-color-button"}
+                      aria-label={"Choose #{part} colour"}
+                      class="group flex size-10 shrink-0 cursor-pointer items-center justify-center rounded-full border-2 border-border bg-white focus-visible:outline-2 focus-visible:outline-offset-2 sm:size-12 transition-transform hover:scale-105 hover:bg-pink-50 active:scale-95"
+                    >
+                      <span
+                        class="size-6 rounded-full border-2 border-border sm:size-7"
+                        style={"background-color: #{Avatar.color(@avatar["#{part}_color"])}"}
+                      >
+                      </span>
+                    </button>
+
+                    <div
+                      id={"avatar-#{part}-color-picker"}
+                      role="group"
+                      aria-label={"Choose #{part} colour"}
+                      phx-click-away={JS.hide(to: "#avatar-#{part}-color-picker")}
+                      phx-window-keydown={JS.hide(to: "#avatar-#{part}-color-picker")}
+                      phx-key="escape"
+                      style="display: none"
+                      class="absolute top-1/2 left-full z-50 ml-1 grid -translate-y-1/2 grid-cols-[repeat(4,1.75rem)] gap-1.5 rounded-base border-2 border-border bg-white p-2 shadow-shadow"
+                    >
+                      <button
+                        :for={{color, index} <- Avatar.colors()}
+                        type="button"
+                        phx-click={JS.hide(to: "#avatar-#{part}-color-picker")}
+                        data-avatar-color-option
+                        data-avatar-part={part}
+                        data-avatar-value={index}
+                        data-avatar-color={color}
+                        id={"avatar-#{part}-color-option-#{index}"}
+                        aria-label={"Select colour #{index + 1}"}
+                        aria-pressed={to_string(@avatar["#{part}_color"] == index)}
+                        class={[
+                          "size-7 cursor-pointer rounded-full border-2 border-border transition-transform hover:scale-110 focus-visible:outline-2 focus-visible:outline-offset-2 aria-pressed:ring-2 aria-pressed:ring-black aria-pressed:ring-offset-1",
+                          @avatar["#{part}_color"] == index && "scale-110"
+                        ]}
+                        style={"background-color: #{color}"}
+                      >
+                      </button>
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    data-avatar-cycle
+                    data-avatar-part={part}
+                    data-avatar-direction="previous"
+                    id={"avatar-#{part}-previous"}
+                    aria-label={"Previous #{part} animal"}
+                    class="flex size-10 shrink-0 cursor-pointer items-center justify-center rounded-full border-2 border-border bg-white focus-visible:outline-2 focus-visible:outline-offset-2 sm:size-12 transition-transform hover:scale-105 hover:bg-pink-50 active:scale-95"
+                  >
+                    <.icon name={:arrow_left} class="size-5 sm:size-6" />
+                  </button>
+                </div>
+                <div class={["col-start-3 flex items-center gap-1.5 sm:gap-2", row]}>
+                  <button
+                    type="button"
+                    data-avatar-cycle
+                    data-avatar-part={part}
+                    data-avatar-direction="next"
+                    id={"avatar-#{part}-next"}
+                    aria-label={"Next #{part} animal"}
+                    class="flex size-10 shrink-0 cursor-pointer items-center justify-center rounded-full border-2 border-border bg-white focus-visible:outline-2 focus-visible:outline-offset-2 sm:size-12 transition-transform hover:scale-105 hover:bg-pink-50 active:scale-95"
+                  >
+                    <.icon name={:arrow_right} class="size-5 sm:size-6" />
+                  </button>
+                  <button
+                    type="button"
+                    data-avatar-draw
+                    data-avatar-part={part}
+                    id={"avatar-#{part}-draw"}
+                    aria-label={"Draw your own #{part}"}
+                    title={"Draw your own #{part}"}
+                    class="flex size-10 shrink-0 cursor-pointer items-center justify-center rounded-full border-2 border-border bg-white focus-visible:outline-2 focus-visible:outline-offset-2 sm:size-12 transition-transform hover:scale-105 hover:bg-pink-50 active:scale-95"
+                  >
+                    <.icon
+                      name={:pencil}
+                      class="size-5 sm:size-6"
+                    />
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <button
+            type="button"
+            data-avatar-random
+            id="randomize-avatar-button"
+            class="group relative flex cursor-pointer items-center gap-1.5 rounded-full border-2 border-border bg-yellow-200 px-7 py-3 text-lg font-black transition-all hover:scale-105 hover:bg-yellow-300 focus-visible:outline-2 focus-visible:outline-offset-2 active:scale-95"
+          >
+            <.icon name={:dice_5} class="size-6 transition-transform group-hover:rotate-12" /> Random
+          </button>
+
+          <p
+            :if={@current_scope}
+            id="avatar-save-status"
+            role="status"
+            phx-update="ignore"
+            class="min-h-4 text-xs font-bold text-pink-900"
+          >
+          </p>
+
+          <dialog
+            id="avatar-drawing-editor"
+            data-avatar-drawing-editor
+            aria-labelledby="avatar-drawing-heading"
+            class="m-auto max-h-[calc(100dvh-2rem)] w-[calc(100%-2rem)] max-w-xl overflow-y-auto rounded-base border-2 border-border bg-pink-50 p-4 shadow-shadow backdrop:bg-gray-950/40 sm:p-6"
+          >
+            <div class="mb-4 flex items-center justify-between gap-2">
+              <div>
+                <p class="text-[0.65rem] font-black tracking-[0.16em] text-pink-500 uppercase">
+                  Make it yours
+                </p>
+                <h2 id="avatar-drawing-heading" class="text-lg font-black capitalize">
+                  Draw your own <span data-avatar-drawing-title>part</span>
+                </h2>
+              </div>
+              <div
+                class="h-16 w-14 shrink-0"
+                data-avatar-drawing-preview
+                aria-label="Character preview"
+              >
+              </div>
+            </div>
+
+            <div class="mb-3 flex gap-2" role="group" aria-label="Brush size">
+              <button
+                :for={
+                  {label, width, size} <- [
+                    {"Fine", 2, "size-1"},
+                    {"Regular", 6, "size-2"},
+                    {"Bold", 10, "size-3"}
+                  ]
+                }
+                type="button"
+                id={"avatar-brush-#{width}"}
+                data-avatar-brush={width}
+                aria-pressed={to_string(width == 6)}
+                class="flex flex-1 items-center justify-center gap-2 rounded-full border-2 border-border bg-white px-3 py-2 text-xs font-bold transition-colors hover:bg-pink-100 aria-pressed:bg-pink-200 focus-visible:outline-2 focus-visible:outline-offset-2"
+              >
+                <span aria-hidden="true" class={["rounded-full bg-gray-900", size]}></span>
+                {label}
+              </button>
+            </div>
+
+            <svg
+              data-avatar-drawing-surface
+              viewBox="0 0 130 145"
+              class="h-[min(45dvh,20rem)] w-full touch-none cursor-crosshair rounded-lg border-2 border-dashed border-pink-300 bg-white"
+              aria-label="Drawing surface"
+            >
+              <rect
+                data-avatar-drawing-guide
+                x="12"
+                y="2"
+                width="106"
+                height="66"
+                rx="10"
+                fill="#fce7f3"
+              />
+              <g
+                data-avatar-drawing-strokes
+                fill="none"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+              >
+              </g>
+            </svg>
+
+            <p class="mt-2 text-xs text-gray-600">
+              Zoomed in for drawing. The pink area keeps this part inside your character.
+            </p>
+            <p
+              data-avatar-drawing-status
+              role="status"
+              class="text-xs font-bold text-pink-700"
+            >
+            </p>
+
+            <div class="mt-4 flex items-center justify-between gap-2">
+              <div class="flex gap-1">
+                <button
+                  type="button"
+                  data-avatar-drawing-undo
+                  class="flex size-10 items-center justify-center rounded-full transition-colors hover:bg-white"
+                  aria-label="Undo last stroke"
+                >
+                  <.icon name={:undo_2} class="size-4" />
+                </button>
+                <button
+                  type="button"
+                  data-avatar-drawing-clear
+                  class="flex size-10 items-center justify-center rounded-full transition-colors hover:bg-white"
+                  aria-label="Clear drawing"
+                >
+                  <.icon name={:trash_2} class="size-4" />
+                </button>
+              </div>
+              <div class="flex gap-2">
+                <button
+                  type="button"
+                  data-avatar-drawing-cancel
+                  class="rounded-full px-3 py-1.5 text-xs font-bold transition-colors hover:bg-white"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  data-avatar-drawing-save
+                  class="rounded-full border-2 border-border bg-pink-400 px-4 py-1 text-xs font-black text-white transition-all hover:-translate-y-0.5 hover:bg-pink-500 active:translate-y-0"
+                >
+                  Use drawing
+                </button>
+              </div>
+            </div>
+          </dialog>
+        </section>
+
+        <div
+          id="lobby-fields-panel"
+          class="flex flex-col items-center justify-center gap-6 px-4 pt-10 pb-36 *:w-full *:max-w-2xl sm:px-10 lg:pt-28"
+        >
+          <label for="name-input" class="block">
+            <span class="mb-1 block text-sm font-bold">Your name</span>
+            <input
+              type="text"
+              value={@name}
+              name="lobby[name]"
+              placeholder="Enter your name"
+              maxlength="20"
+              class="w-full rounded-base border-2 border-border bg-white px-4 py-3 text-lg shadow-shadow placeholder:text-gray-400 focus:ring-2 focus:ring-ring focus:ring-offset-2 focus:outline-none"
+              id="name-input"
+              phx-update="ignore"
+            />
+          </label>
+
+          <p :if={@error} id="lobby-error" class="text-sm font-bold text-red-600">{@error}</p>
+
+          <.box :if={@saved_lobby} class="bg-white p-5">
+            <p class="text-xs text-gray-500">Saved lobby</p>
+            <p id="saved-lobby-name" class="mb-4 truncate text-2xl font-black">
+              {@saved_lobby.name}
+            </p>
+            <.button
+              type="submit"
+              name="lobby[action]"
+              value="join_saved_lobby"
+              variant="default"
+              class="w-full py-3 text-lg font-black"
+              disabled={String.trim(@name) == ""}
+              id="join-saved-lobby-button"
+              phx-update="ignore"
+            >
+              Join lobby
+            </.button>
+          </.box>
+
+          <div :if={!@saved_lobby} class="grid gap-5 sm:grid-cols-2">
             <button
               type="submit"
               name="lobby[action]"
-              value="auto"
-              class="sr-only"
-              aria-hidden="true"
-              tabindex="-1"
+              value="create"
+              disabled={String.trim(@name) == "" || String.trim(@room_code) != ""}
+              id="create-room-button"
+              phx-update="ignore"
+              class="group relative flex min-h-64 cursor-pointer flex-col justify-end overflow-hidden rounded-base border-2 border-border bg-pink-300 p-5 text-left shadow-shadow transition-colors enabled:hover:bg-pink-400 focus-visible:outline-2 focus-visible:outline-offset-2 disabled:cursor-not-allowed"
             >
-              Submit
+              <img
+                src={~p"/images/home/mode-classic.png"}
+                alt=""
+                class="absolute -top-2 right-0 w-40 group-disabled:opacity-60"
+              />
+              <span class="relative text-3xl font-black group-disabled:opacity-50">
+                Create room
+              </span>
+              <span class="relative text-sm group-disabled:opacity-50">
+                Start a game and share the code
+              </span>
             </button>
-
-            <div class="grid lg:grid-cols-[minmax(400px,4fr)_minmax(300px,3fr)]">
-              <section
-                id="avatar-customizer"
-                phx-hook="AvatarCustomizer"
-                phx-update="ignore"
-                data-account-id={@current_scope && @current_scope.user.id}
-                data-saved-avatar={to_string(!!(@current_scope && @current_scope.user.avatar))}
-                class="relative flex flex-col items-center justify-center bg-white px-3 py-5 max-[359px]:px-1 sm:p-4"
-              >
+            <.box class="relative flex min-h-64 flex-col justify-end gap-3 overflow-hidden bg-white p-5">
+              <img
+                src={~p"/images/home/mode-teams.png"}
+                alt=""
+                class="absolute -top-3 -right-3 w-44"
+              />
+              <h2 class="relative text-3xl font-black">Join a friend</h2>
+              <div class="relative flex gap-2">
                 <input
-                  :for={part <- Avatar.parts()}
-                  type="hidden"
-                  id={"avatar-#{part}-input"}
-                  name={"lobby[#{part}]"}
-                  value={@avatar[part]}
+                  type="text"
+                  value={@room_code}
+                  name="lobby[room_code]"
+                  placeholder="Room name"
+                  aria-label="Room name"
+                  class="min-w-0 flex-1 rounded-base border-2 border-border bg-white px-3 py-2 text-sm placeholder:text-gray-400 focus:ring-2 focus:ring-ring focus:ring-offset-2 focus:outline-none"
+                  id="room-code-input"
+                  phx-update="ignore"
                 />
-                <input
-                  :for={part <- Avatar.parts()}
-                  type="hidden"
-                  id={"avatar-#{part}-color-input"}
-                  name={"lobby[#{part}_color]"}
-                  value={@avatar["#{part}_color"]}
-                />
-                <input
-                  :for={part <- Avatar.parts()}
-                  type="hidden"
-                  id={"avatar-#{part}-drawing-input"}
-                  name={"lobby[#{part}_drawing]"}
-                  value={@avatar["#{part}_drawing"]}
-                />
-
-                <div class="relative h-56 w-full max-w-xl sm:h-64">
-                  <.flamingo_avatar
-                    avatar={@avatar}
-                    class="pointer-events-none absolute top-[43%] left-1/2 z-10 h-30 w-24 -translate-x-1/2 -translate-y-1/2 drop-shadow-sm sm:h-40 sm:w-32"
-                    label="Your customized creature"
-                  />
-
-                  <template
-                    :for={{_animal, index} <- Avatar.animals()}
-                    data-avatar-template={index}
-                  >
-                    <.flamingo_avatar avatar={
-                      Map.merge(@avatar, %{
-                        "head" => index,
-                        "body" => index,
-                        "legs" => index,
-                        "feet" => index
-                      })
-                    } />
-                  </template>
-
-                  <div
-                    id="avatar-selector-rows"
-                    class="absolute inset-x-0 top-1/2 z-20 flex -translate-y-1/2 flex-col gap-3"
-                  >
-                    <div
-                      :for={part <- Avatar.parts()}
-                      class="grid grid-cols-[minmax(4rem,1fr)_6rem_minmax(4.5rem,1fr)] items-center min-[360px]:grid-cols-[minmax(4rem,1fr)_8rem_minmax(4.5rem,1fr)] sm:grid-cols-[minmax(6rem,1fr)_10rem_minmax(7rem,1fr)]"
-                    >
-                      <div class="flex items-center justify-end gap-1 sm:gap-2">
-                        <div class="relative flex shrink-0">
-                          <button
-                            type="button"
-                            phx-click={
-                              JS.show(
-                                to: "#avatar-#{part}-color-picker",
-                                display: "grid"
-                              )
-                            }
-                            id={"avatar-#{part}-color-button"}
-                            aria-label={"Choose #{part} colour"}
-                            class="group flex size-8 shrink-0 items-center justify-center transition-transform hover:scale-110 focus-visible:outline-2 focus-visible:outline-offset-2 active:scale-95 sm:size-9"
-                          >
-                            <span
-                              class="size-6 rounded-full border-2 border-border transition-transform group-hover:scale-110 max-[359px]:size-5 sm:size-[1.6rem]"
-                              style={"background-color: #{Avatar.color(@avatar["#{part}_color"])}"}
-                            >
-                            </span>
-                          </button>
-
-                          <div
-                            id={"avatar-#{part}-color-picker"}
-                            role="group"
-                            aria-label={"Choose #{part} colour"}
-                            phx-click-away={JS.hide(to: "#avatar-#{part}-color-picker")}
-                            phx-window-keydown={JS.hide(to: "#avatar-#{part}-color-picker")}
-                            phx-key="escape"
-                            style="display: none"
-                            class="absolute top-1/2 right-[calc(100%-0.25rem)] z-50 grid -translate-y-1/2 grid-cols-[repeat(2,1.25rem)] gap-1 rounded-md border-2 border-border bg-white p-0.5 max-[359px]:right-[calc(100%-0.375rem)]"
-                          >
-                            <button
-                              :for={{color, index} <- Avatar.colors()}
-                              type="button"
-                              phx-click={JS.hide(to: "#avatar-#{part}-color-picker")}
-                              data-avatar-color-option
-                              data-avatar-part={part}
-                              data-avatar-value={index}
-                              data-avatar-color={color}
-                              id={"avatar-#{part}-color-option-#{index}"}
-                              aria-label={"Select colour #{index + 1}"}
-                              aria-pressed={to_string(@avatar["#{part}_color"] == index)}
-                              class={[
-                                "size-5 rounded-full transition-transform hover:scale-110 focus-visible:outline-2 focus-visible:outline-offset-2",
-                                @avatar["#{part}_color"] == index && "scale-110"
-                              ]}
-                              style={"background-color: #{color}"}
-                            >
-                            </button>
-                          </div>
-                        </div>
-                        <button
-                          type="button"
-                          data-avatar-cycle
-                          data-avatar-part={part}
-                          data-avatar-direction="previous"
-                          id={"avatar-#{part}-previous"}
-                          aria-label={"Previous #{part} animal"}
-                          class="flex size-8 shrink-0 items-center justify-center transition-transform hover:-translate-x-0.5 hover:scale-110 focus-visible:outline-2 focus-visible:outline-offset-2 active:scale-95 sm:size-9"
-                        >
-                          <.icon
-                            name={:chevron_left}
-                            class="size-5 stroke-[3] max-[359px]:size-4 sm:size-5"
-                          />
-                        </button>
-                      </div>
-
-                      <span aria-hidden="true"></span>
-
-                      <div class="flex min-w-0 items-center gap-1 sm:gap-2">
-                        <button
-                          type="button"
-                          data-avatar-cycle
-                          data-avatar-part={part}
-                          data-avatar-direction="next"
-                          id={"avatar-#{part}-next"}
-                          aria-label={"Next #{part} animal"}
-                          class="flex size-8 shrink-0 items-center justify-center transition-transform hover:translate-x-0.5 hover:scale-110 focus-visible:outline-2 focus-visible:outline-offset-2 active:scale-95 sm:size-9"
-                        >
-                          <.icon
-                            name={:chevron_right}
-                            class="size-5 stroke-[3] max-[359px]:size-4 sm:size-5"
-                          />
-                        </button>
-                        <button
-                          type="button"
-                          data-avatar-draw
-                          data-avatar-part={part}
-                          id={"avatar-#{part}-draw"}
-                          aria-label={"Draw your own #{part}"}
-                          title={"Draw your own #{part}"}
-                          class="group flex size-7 shrink-0 items-center justify-center text-gray-500 transition-all hover:-translate-y-0.5 hover:text-pink-500 focus-visible:outline-2 focus-visible:outline-offset-2 active:translate-y-0 sm:size-8"
-                        >
-                          <.icon
-                            name={:pencil}
-                            class="size-4 transition-transform group-hover:-rotate-6"
-                          />
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-
-                  <dialog
-                    id="avatar-drawing-editor"
-                    data-avatar-drawing-editor
-                    aria-labelledby="avatar-drawing-heading"
-                    class="m-auto max-h-[calc(100dvh-2rem)] w-[calc(100%-2rem)] max-w-xl overflow-y-auto rounded-base border-2 border-border bg-pink-50 p-4 shadow-shadow backdrop:bg-gray-950/40 sm:p-6"
-                  >
-                    <div class="mb-4 flex items-center justify-between gap-2">
-                      <div>
-                        <p class="text-[0.65rem] font-black tracking-[0.16em] text-pink-500 uppercase">
-                          Make it yours
-                        </p>
-                        <h2 id="avatar-drawing-heading" class="text-lg font-black capitalize">
-                          Draw your own <span data-avatar-drawing-title>part</span>
-                        </h2>
-                      </div>
-                      <div
-                        class="h-16 w-14 shrink-0"
-                        data-avatar-drawing-preview
-                        aria-label="Character preview"
-                      >
-                      </div>
-                    </div>
-
-                    <div class="mb-3 flex gap-2" role="group" aria-label="Brush size">
-                      <button
-                        :for={
-                          {label, width, size} <- [
-                            {"Fine", 2, "size-1"},
-                            {"Regular", 6, "size-2"},
-                            {"Bold", 10, "size-3"}
-                          ]
-                        }
-                        type="button"
-                        id={"avatar-brush-#{width}"}
-                        data-avatar-brush={width}
-                        aria-pressed={to_string(width == 6)}
-                        class="flex flex-1 items-center justify-center gap-2 rounded-full border-2 border-border bg-white px-3 py-2 text-xs font-bold transition-colors hover:bg-pink-100 aria-pressed:bg-pink-200 focus-visible:outline-2 focus-visible:outline-offset-2"
-                      >
-                        <span aria-hidden="true" class={["rounded-full bg-gray-900", size]}></span>
-                        {label}
-                      </button>
-                    </div>
-
-                    <svg
-                      data-avatar-drawing-surface
-                      viewBox="0 0 130 145"
-                      class="h-[min(45dvh,20rem)] w-full touch-none cursor-crosshair rounded-lg border-2 border-dashed border-pink-300 bg-white"
-                      aria-label="Drawing surface"
-                    >
-                      <rect
-                        data-avatar-drawing-guide
-                        x="12"
-                        y="2"
-                        width="106"
-                        height="66"
-                        rx="10"
-                        fill="#fce7f3"
-                      />
-                      <g
-                        data-avatar-drawing-strokes
-                        fill="none"
-                        stroke-linecap="round"
-                        stroke-linejoin="round"
-                      >
-                      </g>
-                    </svg>
-
-                    <p class="mt-2 text-xs text-gray-600">
-                      Zoomed in for drawing. The pink area keeps this part inside your character.
-                    </p>
-                    <p
-                      data-avatar-drawing-status
-                      role="status"
-                      class="text-xs font-bold text-pink-700"
-                    >
-                    </p>
-
-                    <div class="mt-4 flex items-center justify-between gap-2">
-                      <div class="flex gap-1">
-                        <button
-                          type="button"
-                          data-avatar-drawing-undo
-                          class="flex size-10 items-center justify-center rounded-full transition-colors hover:bg-white"
-                          aria-label="Undo last stroke"
-                        >
-                          <.icon name={:undo_2} class="size-4" />
-                        </button>
-                        <button
-                          type="button"
-                          data-avatar-drawing-clear
-                          class="flex size-10 items-center justify-center rounded-full transition-colors hover:bg-white"
-                          aria-label="Clear drawing"
-                        >
-                          <.icon name={:trash_2} class="size-4" />
-                        </button>
-                      </div>
-                      <div class="flex gap-2">
-                        <button
-                          type="button"
-                          data-avatar-drawing-cancel
-                          class="rounded-full px-3 py-1.5 text-xs font-bold transition-colors hover:bg-white"
-                        >
-                          Cancel
-                        </button>
-                        <button
-                          type="button"
-                          data-avatar-drawing-save
-                          class="rounded-full border-2 border-border bg-pink-400 px-4 py-1 text-xs font-black text-white transition-all hover:-translate-y-0.5 hover:bg-pink-500 active:translate-y-0"
-                        >
-                          Use drawing
-                        </button>
-                      </div>
-                    </div>
-                  </dialog>
-
-                  <button
-                    type="button"
-                    data-avatar-random
-                    id="randomize-avatar-button"
-                    class="group absolute top-[85%] left-1/2 flex -translate-x-1/2 items-center gap-1.5 rounded-full border-2 border-border bg-yellow-200 px-3 py-1 text-xs font-black transition-all hover:-translate-y-0.5 hover:bg-yellow-300 focus-visible:outline-2 focus-visible:outline-offset-2 active:scale-95"
-                  >
-                    <.icon
-                      name={:dice_5}
-                      class="size-3.5 transition-transform group-hover:rotate-12"
-                    /> Random
-                  </button>
-                </div>
-              </section>
-
-              <div id="lobby-fields-panel" class="flex items-center bg-white">
-                <section class="grid w-full gap-4 p-5 sm:grid-cols-2 sm:p-6 lg:grid-cols-1 lg:p-6">
-                  <input
-                    type="text"
-                    value={@name}
-                    name="lobby[name]"
-                    placeholder="Enter your name"
-                    maxlength="20"
-                    class="rounded-base border-2 border-border bg-white px-3 py-2 text-sm placeholder:text-gray-400 focus:ring-2 focus:ring-ring focus:ring-offset-2 focus:outline-none"
-                    id="name-input"
-                    phx-update="ignore"
-                  />
-
-                  <div :if={@saved_lobby} class="sm:col-span-2 lg:col-span-1">
-                    <p :if={@error} class="mb-2 text-sm text-red-400">{@error}</p>
-                    <p class="text-xs text-gray-500">Saved lobby</p>
-                    <p id="saved-lobby-name" class="mb-3 truncate text-lg font-bold">
-                      {@saved_lobby.name}
-                    </p>
-                    <.button
-                      type="submit"
-                      name="lobby[action]"
-                      value="join_saved_lobby"
-                      variant="default"
-                      class="w-full"
-                      disabled={String.trim(@name) == ""}
-                      id="join-saved-lobby-button"
-                      phx-update="ignore"
-                    >
-                      Join lobby
-                    </.button>
-                  </div>
-
-                  <div :if={!@saved_lobby} class="sm:col-span-2 lg:col-span-1">
-                    <p :if={@error} class="mb-2 text-sm text-red-400">{@error}</p>
-                    <div class="flex flex-row items-start gap-2">
-                      <input
-                        type="text"
-                        value={@room_code}
-                        name="lobby[room_code]"
-                        placeholder="Room name"
-                        class="min-w-0 flex-1 rounded-base border-2 border-border bg-white px-3 py-2 text-sm placeholder:text-gray-400 focus:ring-2 focus:ring-ring focus:ring-offset-2 focus:outline-none"
-                        id="room-code-input"
-                        phx-update="ignore"
-                      />
-                      <.button
-                        type="submit"
-                        name="lobby[action]"
-                        value="join"
-                        variant="neutral"
-                        disabled={String.trim(@name) == "" || String.trim(@room_code) == ""}
-                        id="join-button"
-                        phx-update="ignore"
-                      >
-                        Join
-                      </.button>
-                    </div>
-                    <p id="lobby-or-divider" class="p-2 text-center text-gray-700">or</p>
-                    <.button
-                      type="submit"
-                      name="lobby[action]"
-                      value="create"
-                      variant="default"
-                      class="w-full"
-                      disabled={String.trim(@name) == "" || String.trim(@room_code) != ""}
-                      id="create-room-button"
-                      phx-update="ignore"
-                    >
-                      Create room
-                    </.button>
-                  </div>
-                </section>
+                <.button
+                  type="submit"
+                  name="lobby[action]"
+                  value="join"
+                  variant="neutral"
+                  disabled={String.trim(@name) == "" || String.trim(@room_code) == ""}
+                  id="join-button"
+                  phx-update="ignore"
+                  class="font-black"
+                >
+                  Join
+                </.button>
               </div>
-            </div>
-          </.form>
-        </.card>
-        <Layouts.account_status current_scope={@current_scope} />
-      </div>
+            </.box>
+          </div>
+        </div>
+      </.form>
     </Layouts.app>
     """
   end
