@@ -33,15 +33,8 @@ defmodule FlamingoWeb.HomeLive do
 
   def render(assigns) do
     ~H"""
-    <Layouts.app flash={@flash} current_scope={@current_scope} changelog>
+    <Layouts.app flash={@flash} current_scope={@current_scope} show_logo={false} changelog>
       <Layouts.account_menu current_scope={@current_scope} />
-      <%!-- On phones the account menu takes the top row, so the logo drops below it. --%>
-      <.card class={[
-        "absolute top-4 left-4 z-30 bg-white px-5 py-2",
-        @current_scope && "max-sm:top-20"
-      ]}>
-        <.logo />
-      </.card>
       <.form
         for={%{}}
         as={:lobby}
@@ -354,6 +347,10 @@ defmodule FlamingoWeb.HomeLive do
           id="lobby-fields-panel"
           class="flex flex-col items-center justify-center gap-6 px-4 pt-10 pb-36 *:w-full *:max-w-2xl sm:px-10 lg:pt-28"
         >
+          <div id="home-logo" class="flex justify-center py-2">
+            <.logo size={:hero} />
+          </div>
+
           <label for="name-input" class="block">
             <span class="mb-1 block text-sm font-bold">Your name</span>
             <input

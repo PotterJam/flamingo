@@ -112,11 +112,44 @@ defmodule FlamingoWeb.GameComponents do
   defp flamingo_background_classes(:coop), do: {"bg-green-100", "text-green-300"}
   defp flamingo_background_classes(_game_mode), do: {"bg-pink-200", "text-pink-300"}
 
+  attr :size, :atom, default: :compact, values: [:compact, :hero]
+  attr :class, :any, default: nil
+  attr :rest, :global
+
   def logo(assigns) do
     ~H"""
-    <h1 class="font-retro-display text-2xl font-bold text-pink-400">
-      flamin<span class="text-purple-500">go</span>
-    </h1>
+    <span
+      id="flamingo-logo"
+      role="img"
+      aria-label="Flamingo"
+      phx-hook=".RandomLogo"
+      phx-update="ignore"
+      data-logo-variant="pixel"
+      class={[
+        "flamingo-logo relative block aspect-[16/5] shrink-0",
+        if(@size == :hero, do: "w-full max-w-lg", else: "w-32 sm:w-40"),
+        @class
+      ]}
+      {@rest}
+    >
+      <img
+        src="/images/brand/logo-pixel.png"
+        alt=""
+        class="flamingo-logo-image flamingo-logo-pixel absolute inset-0 size-full object-contain"
+      />
+      <img
+        src="/images/brand/logo-sketchbook.png"
+        alt=""
+        class="flamingo-logo-image flamingo-logo-sketchbook absolute inset-0 size-full object-contain"
+      />
+    </span>
+    <script :type={Phoenix.LiveView.ColocatedHook} name=".RandomLogo">
+      export default {
+        mounted() {
+          this.el.dataset.logoVariant = Math.random() < 0.5 ? "pixel" : "sketchbook";
+        }
+      }
+    </script>
     """
   end
 

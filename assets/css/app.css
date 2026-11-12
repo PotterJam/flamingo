@@ -121,6 +121,18 @@
   background-size: 70px 70px;
 }
 
+.flamingo-logo-image {
+  opacity: 0;
+}
+
+.flamingo-logo[data-logo-variant="pixel"] .flamingo-logo-pixel {
+  opacity: 1;
+}
+
+.flamingo-logo[data-logo-variant="sketchbook"] .flamingo-logo-sketchbook {
+  opacity: 1;
+}
+
 .lobby-background-classic {
   background-color: var(--color-pink-100);
 }

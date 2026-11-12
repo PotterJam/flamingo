@@ -74,11 +74,20 @@ defmodule FlamingoWeb.Layouts do
   attr :current_scope, :map, default: nil
   attr :background, :string, default: "grid-background"
   attr :show_sound_controls, :boolean, default: true
+  attr :show_logo, :boolean, default: true
   attr :changelog, :boolean, default: false
   slot :inner_block, required: true
 
   def app(assigns) do
     ~H"""
+    <.link
+      :if={@show_logo}
+      navigate={~p"/"}
+      aria-label="Flamingo home"
+      class="fixed top-4 left-4 z-30 transition-transform hover:-rotate-1 hover:scale-[1.03] focus-visible:outline-2 focus-visible:outline-offset-4"
+    >
+      <.logo />
+    </.link>
     <main class={[@background, "min-h-screen"]}>
       {render_slot(@inner_block)}
     </main>

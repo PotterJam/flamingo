@@ -20,7 +20,7 @@ defmodule FlamingoWeb.DrawingLive do
           class="hidden w-full max-w-3xl flex-col gap-4"
           data-shared-drawing-content
         >
-          <div class="flex items-center justify-between gap-4">
+          <div>
             <div class="min-w-0">
               <h1
                 id="shared-drawing-drawer"
@@ -32,13 +32,6 @@ defmodule FlamingoWeb.DrawingLive do
                 <span id="shared-drawing-word" class="font-black text-pink-700"></span>
               </p>
             </div>
-            <.link
-              navigate={~p"/"}
-              class="shrink-0"
-              aria-label="Play Flamingo"
-            >
-              <.logo />
-            </.link>
           </div>
 
           <div class="border-2 border-border bg-white p-3 shadow-shadow">
