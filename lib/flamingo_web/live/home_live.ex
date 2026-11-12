@@ -234,15 +234,6 @@ defmodule FlamingoWeb.HomeLive do
             <.icon name={:dice_5} class="size-6 transition-transform group-hover:rotate-12" /> Random
           </button>
 
-          <p
-            :if={@current_scope}
-            id="avatar-save-status"
-            role="status"
-            phx-update="ignore"
-            class="min-h-4 text-xs font-bold text-pink-900"
-          >
-          </p>
-
           <dialog
             id="avatar-drawing-editor"
             data-avatar-drawing-editor
