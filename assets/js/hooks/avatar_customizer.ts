@@ -136,12 +136,7 @@ const selectColor = (root: HTMLElement, part: AvatarPart, value: number) => {
   }
 };
 
-const restoreAvatar = (root: HTMLElement) => {
-  // Once an account has an avatar, the server is authoritative, not this browser's guest data.
-  const avatar = (root.dataset.savedAvatar === "true"
-    ? {}
-    : JSON.parse(localStorage.getItem(STORAGE_KEY) ?? "{}")) as StoredAvatar;
-
+const restoreAvatar = (root: HTMLElement, avatar: StoredAvatar) => {
   const inputs = root.querySelectorAll<HTMLInputElement>('input[type="hidden"][id^="avatar-"]');
   for (const input of inputs) {
     input.value = avatar[input.id] ?? avatar[input.name] ?? input.value;
@@ -155,13 +150,15 @@ const restoreAvatar = (root: HTMLElement) => {
   }
 };
 
-const persistAvatar = (root: HTMLElement) => {
-  const avatar = Object.fromEntries(
+// `account` marks a guest avatar that has already been copied to that account.
+const persistAvatar = (root: HTMLElement, account?: string) => {
+  const avatar: StoredAvatar = Object.fromEntries(
     Array.from(
       root.querySelectorAll<HTMLInputElement>('input[type="hidden"][id^="avatar-"]'),
       (input) => [input.id, input.value],
     ),
   );
+  if (account) avatar.account = account;
 
   localStorage.setItem(STORAGE_KEY, JSON.stringify(avatar));
 };
@@ -231,8 +228,9 @@ const AvatarCustomizer = {
       activePointer = null;
     };
 
+    const accountId = this.el.dataset.accountId;
     this.saveAvatar = () => {
-      if (!this.el.dataset.accountId) {
+      if (!accountId) {
         persistAvatar(this.el);
         return;
       }
@@ -244,8 +242,21 @@ const AvatarCustomizer = {
       this.pushEvent("save_avatar", { avatar });
     };
 
-    restoreAvatar(this.el);
-    if (this.el.dataset.savedAvatar !== "true") this.saveAvatar();
+    const stored = JSON.parse(localStorage.getItem(STORAGE_KEY) ?? "null") as StoredAvatar | null;
+    // An account takes this browser's guest avatar when it has none of its own, and also when
+    // another device first saved it without a drawing while this browser's guest avatar has one.
+    const adoptStored = !!accountId && !!stored && (this.el.dataset.savedAvatar !== "true" ||
+      (!stored.account &&
+        PARTS.some((part) => stored[`avatar-${part}-drawing-input`]) &&
+        !PARTS.some((part) => drawingValue(this.el, part))));
+
+    restoreAvatar(this.el, (!accountId || adoptStored) && stored || {});
+    if (adoptStored) {
+      persistAvatar(this.el, accountId);
+      this.saveAvatar();
+    } else if (!accountId && !stored) {
+      this.saveAvatar();
+    }
     restoreName(this.form);
 
     const closeEditor = () => {
@@ -441,7 +452,9 @@ const AvatarCustomizer = {
   },
 
   reconnected(this: AvatarCustomizerHook) {
-    this.saveAvatar();
+    // Resend an account's avatar in case an edit was lost while disconnected; never send one
+    // the player hasn't chosen yet.
+    if (this.el.dataset.savedAvatar === "true") this.saveAvatar();
   },
 
   destroyed(this: AvatarCustomizerHook) {

@@ -113,3 +113,58 @@ test("avatar strokes follow SVG coordinates and keep taps and pointer lifetimes 
     globalThis.sessionStorage = originalSessionStorage;
   }
 });
+
+test("an account recovers this browser's guest drawing once when it has none", () => {
+  const originalLocalStorage = globalThis.localStorage;
+  const originalSessionStorage = globalThis.sessionStorage;
+  const values = new Map<string, string>();
+  globalThis.localStorage = {
+    getItem: (key: string) => values.get(key) ?? null,
+    setItem: (key: string, value: string) => values.set(key, value),
+  } as unknown as Storage;
+  globalThis.sessionStorage = { getItem: () => null, setItem: () => {} } as unknown as Storage;
+
+  // The account was first saved from another device: a frog head and no drawings.
+  const mount = () => {
+    const inputs = ["head", "body", "legs", "feet"].flatMap((part) => [
+      { id: `avatar-${part}-input`, name: `lobby[${part}]`, value: "2" },
+      { id: `avatar-${part}-color-input`, name: `lobby[${part}_color]`, value: "0" },
+      { id: `avatar-${part}-drawing-input`, name: `lobby[${part}_drawing]`, value: "" },
+    ]);
+    const pushed: Record<string, string>[] = [];
+    const element = { querySelector: () => null, addEventListener: () => {} };
+    const editor = { querySelector: () => element, addEventListener: () => {} };
+    const form = { elements: { namedItem: () => null }, querySelector: () => null, addEventListener: () => {} };
+    const hook = {
+      el: {
+        dataset: { accountId: "account-1", savedAvatar: "true" },
+        closest: () => form,
+        querySelector: (selector: string) => selector === "[data-avatar-drawing-editor]"
+          ? editor
+          : inputs.find((input) => selector === `#${input.id}`) ?? null,
+        querySelectorAll: (selector: string) => selector.startsWith("input") ? inputs : [],
+        addEventListener: () => {},
+      },
+      pushEvent: (_event: string, { avatar }: { avatar: Record<string, string> }) => pushed.push(avatar),
+    } as unknown as ThisParameterType<typeof AvatarCustomizer.mounted>;
+    AvatarCustomizer.mounted.call(hook);
+    return pushed;
+  };
+
+  try {
+    const guest = { "avatar-head-input": "4", "avatar-head-drawing-input": "M 30 20 L 60 40" };
+    values.set("flamingo_avatar", JSON.stringify(guest));
+    expect(mount()).toMatchObject([{ head: "4", head_drawing: "M 30 20 L 60 40", body: "2" }]);
+    expect(JSON.parse(values.get("flamingo_avatar")!)).toMatchObject({ ...guest, account: "account-1" });
+
+    // Once copied, a later change on another device that drops the drawing must stick.
+    expect(mount()).toEqual([]);
+
+    // A guest avatar without a drawing never replaces an account's saved avatar.
+    values.set("flamingo_avatar", JSON.stringify({ "avatar-head-input": "4" }));
+    expect(mount()).toEqual([]);
+  } finally {
+    globalThis.localStorage = originalLocalStorage;
+    globalThis.sessionStorage = originalSessionStorage;
+  }
+});
