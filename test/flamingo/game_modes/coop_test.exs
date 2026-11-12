@@ -110,6 +110,66 @@ defmodule Flamingo.GameModes.CoopTest do
     end
   end
 
+  test "the reveal shows everyone, including teamless watchers, every team's drawing best first" do
+    {state, context} = game(5)
+    watcher = %{id: "6", name: "Late", connected: true}
+
+    context = %{
+      context
+      | roster: %{
+          context.roster
+          | players: Map.put(context.roster.players, "6", watcher),
+            player_order: context.roster.player_order ++ ["6"]
+        }
+    }
+
+    {:ok, %{state: state}} = Coop.admit_member(state, watcher, context)
+    state = command(state, "1", {:select_word, "dog"}, context)
+
+    state =
+      command(state, "1", {:draw, %{"event_type" => "start", "x" => 10, "y" => 20}}, context)
+
+    state =
+      command(
+        state,
+        "1",
+        {:draw,
+         %{"event_type" => "draw", "start_x" => 10, "start_y" => 20, "end_x" => 90, "end_y" => 60}},
+        context
+      )
+
+    state = command(state, "4", {:guess, "dog"}, context)
+    assert Coop.view(state, "6", context.roster).team_reveals == []
+    {:ok, %{state: state, timers: timers}} = Coop.timeout(state, :playing, context)
+    assert {:schedule_phase_timeout, :turn_reveal, 15_000} in timers
+
+    assert [
+             %{team: 2, drawer_id: "3", word: "dog", gain: 400},
+             %{team: 1, drawer_id: "1", word: "dog", gain: 0, ops: [_ | _]}
+           ] = Coop.view(state, "6", context.roster).team_reveals
+
+    assert Coop.view(state, "2", context.roster).team_reveals ==
+             Coop.view(state, "6", context.roster).team_reveals
+
+    # Anyone but the drawer rates any team's drawing; votes reach the final results.
+    assert {:error, :drawer_cannot_vote} =
+             Coop.command(state, "1", {:vote_drawing, 1, :up}, context)
+
+    state = command(state, "4", {:vote_drawing, 1, :up}, context)
+    state = command(state, "6", {:vote_drawing, 1, :down}, context)
+    state = command(state, "6", {:vote_drawing, 1, :up}, context)
+
+    assert [_, %{team: 1, vote: :up}] =
+             Coop.view(state, "6", context.roster).team_reveals
+
+    assert "Player 4 liked Team 1's drawing" in texts(state, "5", context)
+    assert "Player 4 liked your team's drawing" in texts(state, "2", context)
+    assert "Late disliked Team 1's drawing" in texts(state, "6", context)
+
+    {:ok, %{status: {:finished, result}}} = Coop.timeout(state, :turn_reveal, context)
+    assert result.players["1"].thumbs_up == 2
+  end
+
   test "timeouts pick the word for everyone, hints reveal for every team and the picking team rotates" do
     {state, context} = game(5, 3)
     {:ok, %{state: state}} = Coop.timeout(state, :word_choice, context)

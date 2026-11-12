@@ -10,6 +10,9 @@ defmodule Flamingo.GameModes.Coop do
 
   @shared_events [:guess, :close_guess, :correct_guess, :drawing_vote]
 
+  # Long enough to look over every team's drawing before the next turn.
+  @reveal_ms 15_000
+
   def new do
     Map.merge(GameSettings.defaults(), %{
       phase: :lobby,
@@ -83,6 +86,39 @@ defmodule Flamingo.GameModes.Coop do
           {:ok, result} -> choose_word(state, result.state.word, context)
           other -> other
         end
+    end
+  end
+
+  # During the reveal anyone can rate any team's drawing except their own.
+  def command(state, actor, {:vote_drawing, team, vote}, context) when vote in [:up, :down] do
+    game = state.games[team]
+
+    cond do
+      state.phase != :turn_reveal or is_nil(game) ->
+        {:error, :not_turn_reveal}
+
+      actor == game.drawer_id ->
+        {:error, :drawer_cannot_vote}
+
+      Map.get(game.drawing_votes, actor) == vote ->
+        ok(state)
+
+      true ->
+        name = context.roster.players[actor].name
+        {feed, _} = Feed.add(state.feed, {:drawing_vote, actor, name, vote, team})
+        state = %{state | feed: feed}
+        votes = Map.put(game.drawing_votes, actor, vote)
+
+        drawings =
+          List.update_at(game.final_drawings, -1, fn drawing ->
+            %{
+              drawing
+              | thumbs_up: Enum.count(votes, fn {_, vote} -> vote == :up end),
+                thumbs_down: Enum.count(votes, fn {_, vote} -> vote == :down end)
+            }
+          end)
+
+        ok(put_in(state.games[team], %{game | drawing_votes: votes, final_drawings: drawings}))
     end
   end
 
@@ -216,6 +252,20 @@ defmodule Flamingo.GameModes.Coop do
     feed =
       state.feed.events
       |> Enum.map(fn
+        # A reveal vote names the team whose drawing it rates.
+        %{event: {:drawing_vote, _id, name, vote, voted_team}} = entry ->
+          verb = if vote == :up, do: "liked", else: "disliked"
+
+          whose =
+            if voted_team == team, do: "your team's", else: "Team #{voted_team}'s"
+
+          %{
+            id: entry.id,
+            kind: if(vote == :up, do: :like, else: :dislike),
+            text: "#{name} #{verb} #{whose} drawing",
+            own_drawing?: false
+          }
+
         %{event: {:drawing_vote, id, name, vote}} = entry ->
           if state.teams[id] == team do
             Feed.format(entry, viewer)
@@ -256,6 +306,7 @@ defmodule Flamingo.GameModes.Coop do
         |> MapSet.new(),
       feed: feed,
       team_finished?: game != nil and game.phase == :turn_reveal,
+      team_reveals: if(state.phase == :turn_reveal, do: team_reveals(state, viewer), else: []),
       can_guess?:
         game != nil and game.phase == :playing and state.phase == :playing and
           viewer != game.drawer_id,
@@ -268,6 +319,23 @@ defmodule Flamingo.GameModes.Coop do
       final_player_order: if(result, do: result.player_order, else: []),
       final_drawings: if(result, do: result.drawings, else: [])
     })
+  end
+
+  defp team_reveals(state, viewer) do
+    state.games
+    |> Enum.map(fn {team, game} ->
+      drawing = List.last(game.final_drawings, %{ops: []})
+
+      %{
+        team: team,
+        drawer_id: game.drawer_id,
+        word: game.word,
+        ops: drawing.ops,
+        vote: Map.get(game.drawing_votes, viewer),
+        gain: Map.get(state.gains, team, 0)
+      }
+    end)
+    |> Enum.sort_by(&{-&1.gain, &1.team})
   end
 
   defp begin_round(state, context) do
@@ -435,7 +503,7 @@ defmodule Flamingo.GameModes.Coop do
 
     ok(%{state | phase: :turn_reveal, hint_times: %{}}, reply, [
       :cancel_hint_timeout,
-      {:schedule_phase_timeout, :turn_reveal, 5_000}
+      {:schedule_phase_timeout, :turn_reveal, @reveal_ms}
     ])
   end
 

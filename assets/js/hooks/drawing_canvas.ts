@@ -293,7 +293,11 @@ const DrawingCanvas = {
       this.setupToolbar();
     }
 
+    // Pushes describe the live canvas; static drawings keep their own events.
+    const isStatic = this.el.dataset.finalDrawingEvents !== undefined;
+
     this.handleEvent("draw_event", (event: DrawEvent) => {
+      if (isStatic) return;
       this.redoStack = [];
 
       if (event.event_type === "undo") {
@@ -312,6 +316,7 @@ const DrawingCanvas = {
     });
 
     this.handleEvent("drawing_state", (data: { events: DrawEvent[]; server_now?: number }) => {
+      if (isStatic) return;
       if (data.server_now !== undefined) this.clockOffset = data.server_now - Date.now();
       this.eventStack = [...data.events];
       this.redoStack = [];

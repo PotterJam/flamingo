@@ -516,7 +516,7 @@ defmodule FlamingoWeb.GameComponents do
             id={"team-title-#{team || "spectators"}"}
             data-own-team={to_string(own?)}
             class={[
-              "flex items-center gap-2 border-b-2 border-border px-3 py-2 text-sm font-bold whitespace-nowrap",
+              "flex items-center gap-2 border-b-2 border-border px-3 py-1 text-xs font-bold whitespace-nowrap",
               if(own?, do: "bg-pink-300", else: "bg-pink-100")
             ]}
           >

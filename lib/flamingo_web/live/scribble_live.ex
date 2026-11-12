@@ -42,6 +42,7 @@ defmodule FlamingoWeb.ScribbleLive do
        team_drawers: [],
        word_picker_id: nil,
        team_finished?: false,
+       team_reveals: [],
        can_guess?: false,
        word_choices: nil,
        word_list_label: nil,
@@ -472,6 +473,93 @@ defmodule FlamingoWeb.ScribbleLive do
     """
   end
 
+  attr :team_reveals, :list, required: true
+  attr :players, :map, required: true
+  attr :player_id, :string, default: nil
+  attr :current_round, :integer, required: true
+
+  defp team_turn_results(assigns) do
+    words = assigns.team_reveals |> Enum.map(& &1.word) |> Enum.uniq()
+    assigns = assign(assigns, :shared_word, match?([_], words) && hd(words))
+
+    ~H"""
+    <div id="team-turn-results" class="h-full min-h-0 w-full">
+      <.box class="h-full overflow-hidden bg-white p-0">
+        <ol id="team-turn-drawings" class="flex h-full flex-col gap-3 overflow-y-auto p-3">
+          <li
+            :for={reveal <- @team_reveals}
+            id={"team-turn-card-#{reveal.team}"}
+            class="flex min-h-40 flex-1 basis-0 items-center gap-4"
+          >
+            <div class="aspect-[7/5] h-full max-w-1/2 shrink-0 bg-white">
+              <div
+                class="h-full"
+                id={"team-turn-drawing-#{reveal.team}-round-#{@current_round}"}
+                phx-hook="DrawingCanvas"
+                phx-update="ignore"
+                data-is-drawer="false"
+                data-final-drawing-events={Jason.encode!(reveal.ops)}
+              >
+                <canvas width="700" height="500" class="block h-full w-full bg-white object-contain">
+                </canvas>
+              </div>
+            </div>
+            <div class="flex min-w-0 flex-1 flex-col gap-1">
+              <span class="truncate text-lg font-black">Team {reveal.team}</span>
+              <span
+                :if={!@shared_word}
+                class="truncate font-hero text-xl leading-none font-black text-pink-400"
+              >
+                {reveal.word}
+              </span>
+              <% drawer = @players[reveal.drawer_id] %>
+              <div :if={drawer} class="flex items-center gap-2">
+                <.flamingo_avatar
+                  avatar={Map.get(drawer, :avatar, %{})}
+                  class="h-8 w-8 shrink-0"
+                  label={"Drawn by #{drawer.name}"}
+                />
+                <span class="min-w-0 truncate font-semibold">{drawer.name}</span>
+                <div id={"team-turn-votes-#{reveal.team}"} class="flex shrink-0 items-center">
+                  <.button
+                    :for={{vote, icon} <- [{:down, :thumbs_down}, {:up, :thumbs_up}]}
+                    id={"team-turn-vote-#{reveal.team}-#{vote}"}
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    class="drawing-vote flex h-8 w-8 items-center justify-center"
+                    phx-click={
+                      JS.push("vote_team_drawing")
+                      |> JS.transition("drawing-vote-pop",
+                        to: "#team-turn-vote-#{reveal.team}-#{vote} svg",
+                        time: 280,
+                        blocking: false
+                      )
+                    }
+                    phx-value-team={reveal.team}
+                    phx-value-vote={vote}
+                    disabled={@player_id == reveal.drawer_id}
+                    aria-label={"Thumbs #{vote} for Team #{reveal.team}"}
+                    aria-pressed={to_string(reveal.vote == vote)}
+                  >
+                    <.icon name={icon} class="h-5 w-5" />
+                  </.button>
+                </div>
+              </div>
+              <span class={[
+                "text-xl font-black",
+                if(reveal.gain > 0, do: "text-green-700", else: "text-gray-500")
+              ]}>
+                {if reveal.gain > 0, do: "+#{reveal.gain}", else: "Missed"}
+              </span>
+            </div>
+          </li>
+        </ol>
+      </.box>
+    </div>
+    """
+  end
+
   slot :inner_block, required: true
 
   defp podium(assigns) do
@@ -713,7 +801,15 @@ defmodule FlamingoWeb.ScribbleLive do
                           {constraint_label(@constraint)}
                         </span>
                       </div>
-                      <%= if @phase == :turn_reveal or @team_finished? do %>
+                      <%= if @game_variant == :coop and @phase == :turn_reveal do %>
+                        <.team_turn_results
+                          team_reveals={@team_reveals}
+                          players={@players}
+                          player_id={@player_id}
+                          current_round={@current_round}
+                        />
+                      <% end %>
+                      <%= if (@phase == :turn_reveal and @game_variant != :coop) or (@team_finished? and @phase == :playing) do %>
                         <div
                           id="turn-reveal-overlay"
                           class={[
@@ -787,6 +883,7 @@ defmodule FlamingoWeb.ScribbleLive do
                       <% end %>
 
                       <.drawing_canvas
+                        :if={@game_variant != :coop or @phase != :turn_reveal}
                         id="drawing-canvas"
                         is_drawer={
                           @player_id == @drawer_id and @participation == :active and
@@ -821,7 +918,7 @@ defmodule FlamingoWeb.ScribbleLive do
                         </.button>
                       </div>
 
-                      <%= if @phase in [:playing, :turn_reveal] and (@can_guess? or (@game_variant == :coop and @participation == :active and @player_id != @drawer_id)) do %>
+                      <%= if (@phase == :playing or (@phase == :turn_reveal and @game_variant != :coop)) and (@can_guess? or (@game_variant == :coop and @participation == :active and @player_id != @drawer_id)) do %>
                         <div
                           id="guess-row"
                           class={[
@@ -1037,6 +1134,18 @@ defmodule FlamingoWeb.ScribbleLive do
     {:noreply, socket}
   end
 
+  def handle_event("vote_team_drawing", %{"team" => team, "vote" => vote}, socket)
+      when vote in ["up", "down"] do
+    with {team, ""} <- Integer.parse(team) do
+      Rooms.command(
+        socket.assigns.room_id,
+        {:vote_drawing, team, if(vote == "up", do: :up, else: :down)}
+      )
+    end
+
+    {:noreply, socket}
+  end
+
   def handle_event("guess", %{"guess_form" => %{"guess" => text}}, socket) do
     socket =
       case Rooms.guess(socket.assigns.room_id, text) do
@@ -1133,6 +1242,7 @@ defmodule FlamingoWeb.ScribbleLive do
         team_drawers: Map.get(snapshot, :team_drawers, []),
         word_picker_id: Map.get(snapshot, :word_picker_id),
         team_finished?: Map.get(snapshot, :team_finished?, false),
+        team_reveals: Map.get(snapshot, :team_reveals, []),
         can_guess?: snapshot.can_guess?,
         constraint: snapshot.constraint,
         spin_holder: snapshot.spin_holder,
