@@ -20,6 +20,8 @@ interface AvatarCustomizerHook {
   form: HTMLFormElement;
   drawingPart: AvatarPart | null;
   drawingStrokes: Stroke[];
+  pushEvent: (event: string, payload: object, callback: (reply: { saved: boolean }) => void) => void;
+  saveAvatar: () => void;
   handleClick: (event: MouseEvent) => void;
   handleInput: () => void;
   handlePointerDown: (event: PointerEvent) => void;
@@ -135,7 +137,10 @@ const selectColor = (root: HTMLElement, part: AvatarPart, value: number) => {
 };
 
 const restoreAvatar = (root: HTMLElement) => {
-  const avatar = JSON.parse(localStorage.getItem(STORAGE_KEY) ?? "{}") as StoredAvatar;
+  // Once an account has an avatar, the server is authoritative, not this browser's guest data.
+  const avatar = (root.dataset.savedAvatar === "true"
+    ? {}
+    : JSON.parse(localStorage.getItem(STORAGE_KEY) ?? "{}")) as StoredAvatar;
 
   const inputs = root.querySelectorAll<HTMLInputElement>('input[type="hidden"][id^="avatar-"]');
   for (const input of inputs) {
@@ -182,11 +187,13 @@ const updateLobbyActions = (form: HTMLFormElement) => {
   const room = form.elements.namedItem("lobby[room_code]") as HTMLInputElement | null;
   const join = form.querySelector<HTMLButtonElement>("#join-button");
   const create = form.querySelector<HTMLButtonElement>("#create-room-button");
+  const joinSaved = form.querySelector<HTMLButtonElement>("#join-saved-lobby-button");
   const nameEmpty = !name?.value.trim();
   const roomEmpty = !room?.value.trim();
 
   if (join) join.disabled = nameEmpty || roomEmpty;
   if (create) create.disabled = nameEmpty || !roomEmpty;
+  if (joinSaved) joinSaved.disabled = nameEmpty;
 };
 
 const AvatarCustomizer = {
@@ -224,8 +231,33 @@ const AvatarCustomizer = {
       activePointer = null;
     };
 
+    const saveStatus = (message: string) => {
+      const status = document.getElementById("avatar-save-status");
+      if (status) status.textContent = message;
+    };
+    let saveVersion = 0;
+    this.saveAvatar = () => {
+      if (!this.el.dataset.accountId) {
+        persistAvatar(this.el);
+        return;
+      }
+
+      const version = ++saveVersion;
+      const avatar = Object.fromEntries(
+        Array.from(this.el.querySelectorAll<HTMLInputElement>('input[type="hidden"]'),
+          (input) => [input.name.slice(6, -1), input.value]),
+      );
+      saveStatus("Saving avatar…");
+      this.pushEvent("save_avatar", { avatar }, (reply) => {
+        if (version === saveVersion) {
+          saveStatus(reply.saved ? "Avatar saved" : "Couldn't save avatar. Please try again.");
+        }
+      });
+    };
+
     restoreAvatar(this.el);
-    persistAvatar(this.el);
+    if (this.el.dataset.savedAvatar === "true") saveStatus("Avatar saved");
+    else this.saveAvatar();
     restoreName(this.form);
 
     const closeEditor = () => {
@@ -297,7 +329,7 @@ const AvatarCustomizer = {
 
       if (event.target.closest("[data-avatar-drawing-save]") && this.drawingPart) {
         showCustomDrawing(this.el, this.drawingPart, serializeStrokes(this.drawingStrokes));
-        persistAvatar(this.el);
+        this.saveAvatar();
         closeEditor();
         return;
       }
@@ -316,7 +348,7 @@ const AvatarCustomizer = {
         const part = cycle.dataset.avatarPart as AvatarPart;
         const direction = cycle.dataset.avatarDirection === "previous" ? -1 : 1;
         selectPart(this.el, part, inputValue(this.el, `avatar-${part}-input`) + direction);
-        persistAvatar(this.el);
+        this.saveAvatar();
         return;
       }
 
@@ -327,7 +359,7 @@ const AvatarCustomizer = {
           color.dataset.avatarPart as AvatarPart,
           Number.parseInt(color.dataset.avatarValue ?? "0", 10),
         );
-        persistAvatar(this.el);
+        this.saveAvatar();
         return;
       }
 
@@ -340,7 +372,7 @@ const AvatarCustomizer = {
           );
           selectColor(this.el, part, Math.floor(Math.random() * colors.length));
         }
-        persistAvatar(this.el);
+        this.saveAvatar();
       }
     };
 
@@ -417,8 +449,16 @@ const AvatarCustomizer = {
   },
 
   updated(this: AvatarCustomizerHook) {
-    restoreAvatar(this.el);
     updateLobbyActions(this.form);
+  },
+
+  disconnected() {
+    const status = document.getElementById("avatar-save-status");
+    if (status) status.textContent = "Offline — avatar changes will save when reconnected.";
+  },
+
+  reconnected(this: AvatarCustomizerHook) {
+    this.saveAvatar();
   },
 
   destroyed(this: AvatarCustomizerHook) {

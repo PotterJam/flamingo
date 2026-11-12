@@ -7,8 +7,24 @@
 # General application configuration
 import Config
 
+config :flamingo, :scopes,
+  user: [
+    default: true,
+    module: Flamingo.Accounts.Scope,
+    assign_key: :current_scope,
+    access_path: [:user, :id],
+    schema_key: :user_id,
+    schema_type: :binary_id,
+    schema_table: :users,
+    test_data_fixture: Flamingo.AccountsFixtures,
+    test_setup_helper: :register_and_log_in_user
+  ]
+
 config :flamingo,
-  generators: [timestamp_type: :utc_datetime]
+  ecto_repos: [Flamingo.Repo],
+  generators: [timestamp_type: :utc_datetime, binary_id: true]
+
+config :assent, http_adapter: Assent.HTTPAdapter.Req
 
 # Configure the endpoint
 config :flamingo, FlamingoWeb.Endpoint,

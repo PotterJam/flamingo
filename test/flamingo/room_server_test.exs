@@ -303,6 +303,24 @@ defmodule Flamingo.RoomServerTest do
     refute Map.has_key?(state.players, p1)
   end
 
+  test "an empty room stops after the idle timeout unless someone joins first", %{
+    room_id: room_id
+  } do
+    {:ok, token, _} = join_connected(room_id, "Alice")
+    :ok = leave_as(room_id, token)
+    stale = runtime_state(room_id).idle_timer
+
+    join_connected(room_id, "Bob")
+    send(room_pid(room_id), {:idle_shutdown, stale})
+    assert %{idle_timer: nil} = runtime_state(room_id)
+
+    pid = room_pid(room_id)
+    ref = Process.monitor(pid)
+    :ok = leave_as(room_id, resume_token_for(nil, runtime_state(room_id).members.host_id))
+    send(pid, {:idle_shutdown, runtime_state(room_id).idle_timer})
+    assert_receive {:DOWN, ^ref, :process, ^pid, :normal}
+  end
+
   test "leave does not change host when non-host leaves", %{room_id: room_id} do
     {:ok, p1_token, %{viewer_id: p1}} = join_connected(room_id, "Alice")
     {:ok, p2_token, %{viewer_id: p2}} = join_connected(room_id, "Bob")

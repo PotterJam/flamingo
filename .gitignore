@@ -51,3 +51,6 @@ npm-debug.log
 .DS_Store
 
 /notes/
+
+/.amp/portals/
+/.amp/in/

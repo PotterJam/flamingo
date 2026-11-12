@@ -52,6 +52,10 @@ _Avoid_: Picture, sketch
 The shareable identifier players enter to join a room.
 _Avoid_: Room name, invite code
 
+**Saved lobby**:
+A permanently named link that always leads its players to the same room, starting a new room when none is running.
+_Avoid_: Group, team, permanent room
+
 **Player**:
 A person participating in a room.
 _Avoid_: User, client, connection
@@ -88,6 +92,9 @@ _Avoid_: Match, game
 
 - A **Room** contains multiple **Players**
 - A **Room** has exactly one **Room code**
+- A **Room** belongs to at most one **Saved lobby**, and a **Saved lobby** has at most one running **Room**
+- A signed-in **Host** may save their **Room** as a **Saved lobby**; anyone with its link may join, signed in or not
+- The first **Player** to join a **Saved lobby**'s new **Room** becomes its **Host**
 - A **Room** has exactly one **Host** at a time when at least one **Player** is connected
 - A **Room** keeps **Players** in stable join order across disconnections and reconnections
 - A **Room** may be in the **Lobby** when no **Game** is active

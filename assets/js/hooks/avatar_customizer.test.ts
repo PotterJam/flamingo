@@ -55,6 +55,7 @@ test("avatar strokes follow SVG coordinates and keep taps and pointer lifetimes 
   };
   const hook = {
     el: {
+      dataset: {},
       closest: () => form,
       querySelector: (selector: string) => selector === "[data-avatar-drawing-editor]" ? editor : null,
       querySelectorAll: () => [],

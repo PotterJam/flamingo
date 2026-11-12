@@ -1,24 +1,49 @@
 defmodule FlamingoWeb.HomeLive do
   use FlamingoWeb, :live_view
 
-  alias Flamingo.{Avatar, Rooms}
+  alias Flamingo.{Accounts, Avatar, Rooms, SavedLobbies}
+
+  def mount(%{"saved_lobby_name" => name} = params, session, socket) do
+    case SavedLobbies.get_saved_lobby_by_name(name) do
+      nil ->
+        {:ok,
+         socket
+         |> put_flash(:error, "That saved lobby doesn't exist.")
+         |> push_navigate(to: ~p"/")}
+
+      saved_lobby ->
+        {:ok, socket} = mount(Map.delete(params, "saved_lobby_name"), session, socket)
+        {:ok, assign(socket, saved_lobby: saved_lobby)}
+    end
+  end
 
   def mount(params, _session, socket) do
     room_code = Map.get(params, "room_code", "")
+    saved_avatar = socket.assigns.current_scope && socket.assigns.current_scope.user.avatar
 
     {:ok,
      assign(socket,
        name: "",
        room_code: room_code,
-       avatar: Avatar.random(),
+       saved_lobby: nil,
+       avatar: saved_avatar || Avatar.random(),
        error: nil
      )}
   end
 
   def render(assigns) do
     ~H"""
-    <Layouts.app flash={@flash} changelog>
-      <div class="flex min-h-screen w-full flex-col items-center justify-center gap-4 px-4 py-8 max-[359px]:px-1">
+    <Layouts.app flash={@flash} current_scope={@current_scope} changelog>
+      <Layouts.account_menu current_scope={@current_scope} />
+      <p
+        :if={@current_scope}
+        id="avatar-save-status"
+        role="status"
+        phx-update="ignore"
+        class="sr-only"
+      >
+      </p>
+      <div class="flex min-h-screen w-full flex-col items-center justify-center gap-4 px-4 pt-24 pb-32 max-[359px]:px-1">
         <.card class="w-full max-w-xs bg-white px-6 py-4">
           <div class="flex justify-center">
             <.logo />
@@ -48,6 +73,8 @@ defmodule FlamingoWeb.HomeLive do
                 id="avatar-customizer"
                 phx-hook="AvatarCustomizer"
                 phx-update="ignore"
+                data-account-id={@current_scope && @current_scope.user.id}
+                data-saved-avatar={to_string(!!(@current_scope && @current_scope.user.avatar))}
                 class="relative flex flex-col items-center justify-center bg-white px-3 py-5 max-[359px]:px-1 sm:p-4"
               >
                 <input
@@ -342,9 +369,30 @@ defmodule FlamingoWeb.HomeLive do
                     maxlength="20"
                     class="rounded-base border-2 border-border bg-white px-3 py-2 text-sm placeholder:text-gray-400 focus:ring-2 focus:ring-ring focus:ring-offset-2 focus:outline-none"
                     id="name-input"
+                    phx-update="ignore"
                   />
 
-                  <div class="sm:col-span-2 lg:col-span-1">
+                  <div :if={@saved_lobby} class="sm:col-span-2 lg:col-span-1">
+                    <p :if={@error} class="mb-2 text-sm text-red-400">{@error}</p>
+                    <p class="text-xs text-gray-500">Saved lobby</p>
+                    <p id="saved-lobby-name" class="mb-3 truncate text-lg font-bold">
+                      {@saved_lobby.name}
+                    </p>
+                    <.button
+                      type="submit"
+                      name="lobby[action]"
+                      value="join_saved_lobby"
+                      variant="default"
+                      class="w-full"
+                      disabled={String.trim(@name) == ""}
+                      id="join-saved-lobby-button"
+                      phx-update="ignore"
+                    >
+                      Join lobby
+                    </.button>
+                  </div>
+
+                  <div :if={!@saved_lobby} class="sm:col-span-2 lg:col-span-1">
                     <p :if={@error} class="mb-2 text-sm text-red-400">{@error}</p>
                     <div class="flex flex-row items-start gap-2">
                       <input
@@ -354,6 +402,7 @@ defmodule FlamingoWeb.HomeLive do
                         placeholder="Room name"
                         class="min-w-0 flex-1 rounded-base border-2 border-border bg-white px-3 py-2 text-sm placeholder:text-gray-400 focus:ring-2 focus:ring-ring focus:ring-offset-2 focus:outline-none"
                         id="room-code-input"
+                        phx-update="ignore"
                       />
                       <.button
                         type="submit"
@@ -362,6 +411,7 @@ defmodule FlamingoWeb.HomeLive do
                         variant="neutral"
                         disabled={String.trim(@name) == "" || String.trim(@room_code) == ""}
                         id="join-button"
+                        phx-update="ignore"
                       >
                         Join
                       </.button>
@@ -375,6 +425,7 @@ defmodule FlamingoWeb.HomeLive do
                       class="w-full"
                       disabled={String.trim(@name) == "" || String.trim(@room_code) != ""}
                       id="create-room-button"
+                      phx-update="ignore"
                     >
                       Create room
                     </.button>
@@ -384,9 +435,25 @@ defmodule FlamingoWeb.HomeLive do
             </div>
           </.form>
         </.card>
+        <Layouts.account_status current_scope={@current_scope} />
       </div>
     </Layouts.app>
     """
+  end
+
+  def handle_event("save_avatar", %{"avatar" => avatar}, socket) do
+    if scope = socket.assigns.current_scope do
+      case Accounts.update_avatar(scope, avatar) do
+        {:ok, user} ->
+          {:reply, %{saved: true},
+           assign(socket, current_scope: %{scope | user: user}, avatar: user.avatar)}
+
+        {:error, _changeset} ->
+          {:reply, %{saved: false}, socket}
+      end
+    else
+      {:reply, %{saved: false}, socket}
+    end
   end
 
   def handle_event("create_room", _params, socket) do
@@ -408,6 +475,9 @@ defmodule FlamingoWeb.HomeLive do
 
     submit_lobby(socket, params["action"])
   end
+
+  defp submit_lobby(%{assigns: %{saved_lobby: %{}}} = socket, _action),
+    do: join_saved_lobby(socket)
 
   defp submit_lobby(socket, "create"), do: create_room(socket)
   defp submit_lobby(socket, "join"), do: join_room(socket)
@@ -454,6 +524,19 @@ defmodule FlamingoWeb.HomeLive do
           {:error, :not_found} ->
             {:noreply, assign(socket, error: "Room not found")}
         end
+    end
+  end
+
+  defp join_saved_lobby(socket) do
+    name = String.trim(socket.assigns.name)
+
+    with {:name, true} <- {:name, name != ""},
+         {:ok, room_id} <- Rooms.open_saved_lobby(socket.assigns.saved_lobby.name),
+         {:ok, resume_token, _snapshot} <- Rooms.join(room_id, name, socket.assigns.avatar) do
+      {:noreply, push_navigate(socket, to: ~p"/game/#{room_id}?resume_token=#{resume_token}")}
+    else
+      {:name, false} -> {:noreply, assign(socket, error: "Name cannot be empty")}
+      _ -> {:noreply, assign(socket, error: "Couldn't open the saved lobby. Try again.")}
     end
   end
 end

@@ -1,16 +1,20 @@
 defmodule Flamingo.RoomServer do
-  use GenServer
+  # Rooms stop themselves once empty, so only restart one that crashed.
+  use GenServer, restart: :transient
 
   alias Flamingo.GameModes.{Scribble, Telephone}
   alias Flamingo.Room.Members
 
   @disconnect_grace_ms 60_000
+  @idle_shutdown_ms 5 * 60_000
 
   defstruct [
     :room_id,
+    :saved_lobby,
     :phase_timer,
     :hint_timer,
     :turn_end_time,
+    :idle_timer,
     game_module: nil,
     lifecycle: :lobby,
     members: Members.new(),
@@ -19,7 +23,8 @@ defmodule Flamingo.RoomServer do
     connections: %{}
   ]
 
-  def start_link(id), do: GenServer.start_link(__MODULE__, id, name: via(id))
+  def start_link({id, opts}), do: GenServer.start_link(__MODULE__, {id, opts}, name: via(id))
+  def start_link(id), do: start_link({id, []})
   def join(id, name, avatar), do: call(id, {:join, name, avatar}, {:error, :not_found})
   def connect(id, token), do: call(id, {:connect, token}, {:error, :not_found})
   def prepare_handoff(id), do: call(id, :prepare_handoff, {:error, :not_found})
@@ -31,6 +36,15 @@ defmodule Flamingo.RoomServer do
   def guess(id, text), do: GenServer.call(via(id), {:guess, self(), text})
   def command(id, command), do: GenServer.call(via(id), {:command, self(), command})
   def snapshot(id), do: call(id, {:snapshot, self()}, {:error, :not_found})
+  def save_lobby(id, name), do: call(id, {:save_lobby, self(), name}, {:error, :not_found})
+
+  @doc "Returns the id of the running room for a saved lobby, if any."
+  def saved_lobby_room(name) do
+    case Registry.lookup(Flamingo.SavedLobbyRegistry, name) do
+      [{_pid, room_id}] -> {:ok, room_id}
+      [] -> :error
+    end
+  end
 
   defp call(id, message, fallback) do
     GenServer.call(via(id), message)
@@ -39,8 +53,25 @@ defmodule Flamingo.RoomServer do
   end
 
   defp via(id), do: {:via, :global, {:flamingo_room, id}}
+
+  # Rooms live on one node, so saved lobby names only need local registration.
+  defp register_saved_lobby(name, room_id),
+    do: Registry.register(Flamingo.SavedLobbyRegistry, name, room_id)
+
   @impl true
-  def init(id), do: {:ok, %__MODULE__{room_id: id}}
+  def init({id, opts}) do
+    case Keyword.get(opts, :saved_lobby) do
+      nil ->
+        {:ok, schedule_idle_shutdown(%__MODULE__{room_id: id})}
+
+      name ->
+        # Another arrival may have opened this saved lobby's room first.
+        case register_saved_lobby(name, id) do
+          {:ok, _} -> {:ok, schedule_idle_shutdown(%__MODULE__{room_id: id, saved_lobby: name})}
+          {:error, {:already_registered, _}} -> :ignore
+        end
+    end
+  end
 
   @impl true
   def handle_call({:join, name, avatar}, _from, state) do
@@ -49,7 +80,7 @@ defmodule Flamingo.RoomServer do
 
     with {:ok, members} <- Members.add(state.members, id, token, name, avatar),
          {:ok, state} <- admit_member(%{state | members: members}, %{id: id, name: name}) do
-      state = commit(state)
+      state = commit(%{state | idle_timer: nil})
 
       {:reply, {:ok, token, snapshot_for(state, id)}, state}
     else
@@ -86,6 +117,27 @@ defmodule Flamingo.RoomServer do
 
       :error ->
         {:reply, {:error, :not_found}, state}
+    end
+  end
+
+  def handle_call({:save_lobby, pid, name}, _, state) do
+    actor = player_id(state, pid)
+
+    cond do
+      is_nil(actor) ->
+        {:reply, {:error, :not_found}, state}
+
+      actor != state.members.host_id ->
+        {:reply, {:error, :not_host}, state}
+
+      state.saved_lobby ->
+        {:reply, {:error, :already_saved}, state}
+
+      match?({:error, _}, register_saved_lobby(name, state.room_id)) ->
+        {:reply, {:error, :already_open}, state}
+
+      true ->
+        {:reply, :ok, commit(%{state | saved_lobby: name})}
     end
   end
 
@@ -189,6 +241,12 @@ defmodule Flamingo.RoomServer do
        do: {:noreply, remove_member(state, id) |> commit()},
        else: {:noreply, state}
   end
+
+  # An empty room is never resumed: its link or code starts a fresh room instead.
+  def handle_info({:idle_shutdown, ref}, %{idle_timer: ref} = state),
+    do: {:stop, :normal, state}
+
+  def handle_info({:idle_shutdown, _}, state), do: {:noreply, state}
 
   def handle_info({:handoff_timeout, pid, ref}, state) do
     case state.connections do
@@ -329,16 +387,31 @@ defmodule Flamingo.RoomServer do
         disconnect_timers: Map.delete(state.disconnect_timers, id)
     }
 
-    if state.lifecycle == :lobby do
-      state
+    state =
+      if state.lifecycle == :lobby do
+        state
+      else
+        context = context(state)
+
+        {:ok, result} =
+          state.game_module.remove_member(state.game, id, %{id: id, name: seat.name}, context)
+
+        accept(state, result, context.now)
+      end
+
+    if Members.ordered_ids(state.members) == [] do
+      # Nobody is left to see the game, so the next arrival starts in a fresh lobby.
+      state = state |> cancel_slot(:phase_timer) |> cancel_slot(:hint_timer)
+      schedule_idle_shutdown(%{state | game: nil, game_module: nil, lifecycle: :lobby})
     else
-      context = context(state)
-
-      {:ok, result} =
-        state.game_module.remove_member(state.game, id, %{id: id, name: seat.name}, context)
-
-      accept(state, result, context.now)
+      state
     end
+  end
+
+  defp schedule_idle_shutdown(state) do
+    ref = make_ref()
+    Process.send_after(self(), {:idle_shutdown, ref}, @idle_shutdown_ms)
+    %{state | idle_timer: ref}
   end
 
   defp connect_pid(state, id, pid) do
@@ -428,6 +501,7 @@ defmodule Flamingo.RoomServer do
     |> Map.merge(%{
       phase: :lobby,
       mode: :scribble,
+      saved_lobby: state.saved_lobby,
       viewer_id: id,
       round_count: 3,
       game_variant: :classic,

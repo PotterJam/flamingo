@@ -1,0 +1,14 @@
+services:
+  postgres:
+    port: 5432
+    command: sudo -u postgres /usr/lib/postgresql/15/bin/postgres -D /var/lib/postgresql/15/main -c config_file=/etc/postgresql/15/main/postgresql.conf
+  web:
+    port: 4000
+    command: >-
+      until pg_isready -q; do sleep 1; done;
+      sudo -u postgres psql -v ON_ERROR_STOP=1 -c "ALTER USER postgres PASSWORD 'postgres'" &&
+      mix ecto.setup && exec mix phx.server
+    health: /users/log-in
+    portal:
+      title: Flamingo
+      description: Guest play and optional Google sign-in. In development, "Sign in as test user" skips Google.

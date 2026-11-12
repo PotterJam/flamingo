@@ -3,9 +3,96 @@ defmodule FlamingoWeb.Layouts do
 
   embed_templates "layouts/*"
 
+  attr :current_scope, :map, required: true
+
+  def account_menu(assigns) do
+    ~H"""
+    <.box
+      :if={@current_scope}
+      id="account-menu"
+      role="navigation"
+      aria-label="Account"
+      class="absolute right-4 top-4 z-40 flex max-w-[calc(100%-2rem)] items-center gap-1 bg-white p-1 pl-2 text-sm"
+    >
+      <span class="min-w-0 truncate font-semibold" title={@current_scope.user.email}>
+        {@current_scope.user.email}
+      </span>
+      <.button
+        id="account-settings"
+        navigate={~p"/users/settings"}
+        variant="ghost"
+        size="sm"
+        class="inline-flex shrink-0 items-center justify-center"
+        aria-label="Account settings"
+        title="Account settings"
+      >
+        <.icon name={:settings} class="size-5" />
+      </.button>
+    </.box>
+    """
+  end
+
+  attr :current_scope, :map, default: nil
+
+  def account_status(assigns) do
+    ~H"""
+    <%!-- Guest radius: 20px button radius + 8px vertical padding + 2px border. --%>
+    <.box
+      :if={!@current_scope}
+      id="account-status"
+      role="region"
+      aria-label="Your account"
+      radius="30px"
+      class="mt-2 flex w-full max-w-[41rem] flex-col gap-4 bg-white px-3 py-2 sm:flex-row sm:items-center sm:justify-between"
+    >
+      <p class="text-sm font-bold">
+        You are currently playing as a guest. Sign in to save your avatar and lobbies
+      </p>
+      <.button
+        id="account-log-in"
+        navigate={~p"/users/log-in"}
+        variant="default"
+        rounded
+        class="shrink-0 text-center font-bold"
+      >
+        Sign in
+      </.button>
+    </.box>
+    """
+  end
+
+  attr :current_scope, :map, default: nil
+  attr :settings, :boolean, default: false
+  slot :inner_block, required: true
+
+  def account_panel(assigns) do
+    ~H"""
+    <div class={[
+      "mx-auto flex min-h-screen flex-col justify-center gap-5 px-4 pt-28 pb-12",
+      if(@settings, do: "max-w-3xl", else: "max-w-lg")
+    ]}>
+      <.button
+        id="account-back"
+        navigate={~p"/"}
+        variant="neutral"
+        class="inline-flex items-center gap-2 self-start font-bold"
+      >
+        <.icon name={:arrow_left} class="size-4" /> Home
+      </.button>
+      <.card class={[
+        "space-y-6 bg-white",
+        if(@settings, do: "p-4 sm:p-5", else: "p-6 sm:p-8")
+      ]}>
+        {render_slot(@inner_block)}
+      </.card>
+    </div>
+    """
+  end
+
   attr :flash, :map, required: true
   attr :current_scope, :map, default: nil
   attr :background, :string, default: "grid-background"
+  attr :show_sound_controls, :boolean, default: true
   attr :changelog, :boolean, default: false
   slot :inner_block, required: true
 
@@ -18,6 +105,7 @@ defmodule FlamingoWeb.Layouts do
     <.flash_group flash={@flash} />
     <div id="sound-manager" phx-hook="SoundManager" phx-update="ignore"></div>
     <div
+      :if={@show_sound_controls}
       id="sound-volume-control"
       phx-hook=".SoundVolume"
       phx-update="ignore"
@@ -134,8 +222,13 @@ defmodule FlamingoWeb.Layouts do
 
   def flash_group(assigns) do
     ~H"""
-    <div id={@id} aria-live="polite">
+    <div
+      id={@id}
+      aria-live="polite"
+      class="pointer-events-none fixed left-1/2 top-4 z-50 flex w-[calc(100%-2rem)] max-w-sm -translate-x-1/2 flex-col gap-3"
+    >
       <.flash kind={:info} flash={@flash} />
+      <.flash kind={:success} flash={@flash} />
       <.flash kind={:error} flash={@flash} />
 
       <.flash

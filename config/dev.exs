@@ -1,5 +1,13 @@
 import Config
 
+config :flamingo, Flamingo.Repo,
+  username: "postgres",
+  password: "postgres",
+  hostname: "localhost",
+  database: "flamingo_dev",
+  show_sensitive_data_on_connection_error: true,
+  pool_size: 10
+
 # For development, we disable any cache and enable
 # debugging and code reloading.
 #
@@ -57,7 +65,7 @@ config :flamingo, FlamingoWeb.Endpoint,
     ]
   ]
 
-# Enable dev routes for dashboard and mailbox
+# Enable dev routes, including signing in as a test user without Google
 config :flamingo, dev_routes: true
 
 # Do not include metadata nor timestamps in development logs

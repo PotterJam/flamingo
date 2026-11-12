@@ -63,7 +63,7 @@ defmodule FlamingoWeb.CoreComponents do
   attr :id, :string, doc: "the optional id of flash container"
   attr :flash, :map, default: %{}, doc: "the map of flash messages to display"
   attr :title, :string, default: nil
-  attr :kind, :atom, values: [:info, :error], doc: "used for styling and flash lookup"
+  attr :kind, :atom, values: [:info, :success, :error], doc: "used for styling and flash lookup"
   attr :rest, :global, doc: "the arbitrary HTML attributes to add to the flash container"
 
   slot :inner_block, doc: "the optional inner block that renders the flash message"
@@ -76,27 +76,54 @@ defmodule FlamingoWeb.CoreComponents do
       :if={msg = render_slot(@inner_block) || Phoenix.Flash.get(@flash, @kind)}
       id={@id}
       phx-click={JS.push("lv:clear-flash", value: %{key: @kind}) |> hide("##{@id}")}
+      phx-hook={@kind == :success && "FlamingoWeb.CoreComponents.AutoDismissFlash"}
       role="alert"
-      class="toast toast-top toast-end z-50"
+      class="pointer-events-auto w-full"
       {@rest}
     >
       <div class={[
-        "alert w-80 sm:w-96 max-w-80 sm:max-w-96 text-wrap",
-        @kind == :info && "alert-info",
-        @kind == :error && "alert-error"
+        "flex items-start gap-3 rounded-base border-2 p-4 text-sm shadow-[4px_4px_0_0]",
+        @kind == :info &&
+          "border-sky-600 bg-[color-mix(in_oklab,var(--color-sky-50)_25%,white)] text-sky-900 shadow-sky-950",
+        @kind == :success &&
+          "border-green-600 bg-[color-mix(in_oklab,var(--color-green-50)_25%,white)] text-green-900 shadow-green-950",
+        @kind == :error &&
+          "border-red-600 bg-[color-mix(in_oklab,var(--color-red-50)_25%,white)] text-red-900 shadow-red-950"
       ]}>
         <.icon :if={@kind == :info} name={:info} class="size-5 shrink-0" />
+        <.icon :if={@kind == :success} name={:check_circle} class="size-5 shrink-0" />
         <.icon :if={@kind == :error} name={:circle_alert} class="size-5 shrink-0" />
-        <div>
+        <div class="min-w-0 flex-1 break-words">
           <p :if={@title} class="font-semibold">{@title}</p>
           <p>{msg}</p>
         </div>
-        <div class="flex-1" />
-        <button type="button" class="group self-start cursor-pointer" aria-label={gettext("close")}>
-          <.icon name={:x} class="size-5 opacity-40 group-hover:opacity-70" />
+        <button
+          type="button"
+          class="shrink-0 cursor-pointer opacity-60 transition-opacity hover:opacity-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-current"
+          aria-label={gettext("close")}
+        >
+          <.icon name={:x} class="size-5" />
         </button>
       </div>
     </div>
+    <script :type={Phoenix.LiveView.ColocatedHook} name=".AutoDismissFlash">
+      export default {
+        mounted() {
+          this.startTimer();
+        },
+        updated() {
+          if (this.message !== this.el.textContent) this.startTimer();
+        },
+        startTimer() {
+          clearTimeout(this.timer);
+          this.message = this.el.textContent;
+          this.timer = setTimeout(() => this.el.click(), 5000);
+        },
+        destroyed() {
+          clearTimeout(this.timer);
+        }
+      }
+    </script>
     """
   end
 
@@ -113,8 +140,13 @@ defmodule FlamingoWeb.CoreComponents do
     include: ~w(href navigate patch method download name value disabled type form)
 
   attr :class, :any, default: nil
-  attr :variant, :string, default: "default", values: ~w(default neutral ghost outline)
+
+  attr :variant, :string,
+    default: "default",
+    values: ~w(default neutral danger ghost danger-ghost outline)
+
   attr :size, :string, default: "default", values: ~w(default sm icon)
+  attr :rounded, :boolean, default: false
   attr :on_confirm_click, :any, default: nil
   slot :inner_block, required: true
 
@@ -124,7 +156,8 @@ defmodule FlamingoWeb.CoreComponents do
       assigns
       |> assign(:confirm_click, JS.transition(on_confirm_click, "confirmed", time: 1000))
       |> assign(:computed_class, [
-        "rounded-base border-2 border-border transition-all cursor-pointer",
+        "border-2 border-border transition-all cursor-pointer",
+        if(assigns.rounded, do: "rounded-full", else: "rounded-base"),
         "disabled:opacity-50 disabled:cursor-not-allowed",
         "group/confirm",
         button_size_classes(assigns.size),
@@ -150,7 +183,8 @@ defmodule FlamingoWeb.CoreComponents do
   def button(%{rest: rest} = assigns) do
     assigns =
       assign(assigns, :computed_class, [
-        "rounded-base border-2 border-border transition-all cursor-pointer",
+        "border-2 border-border transition-all cursor-pointer",
+        if(assigns.rounded, do: "rounded-full", else: "rounded-base"),
         "disabled:opacity-50 disabled:cursor-not-allowed",
         button_size_classes(assigns.size),
         button_variant_classes(assigns.variant),
@@ -184,8 +218,65 @@ defmodule FlamingoWeb.CoreComponents do
     do:
       "bg-white text-foreground shadow-destructive active:translate-x-box-shadow-x active:translate-y-box-shadow-y active:shadow-none disabled:active:translate-x-0 disabled:active:translate-y-0"
 
+  defp button_variant_classes("danger"),
+    do:
+      "bg-red-600 text-white shadow-shadow hover:bg-red-700 active:translate-x-box-shadow-x active:translate-y-box-shadow-y active:shadow-none disabled:active:translate-x-0 disabled:active:translate-y-0"
+
   defp button_variant_classes("ghost"), do: "border-transparent shadow-none hover:bg-primary/20"
+
+  defp button_variant_classes("danger-ghost"),
+    do: "border-transparent text-red-700 shadow-none hover:bg-red-50 hover:text-red-900"
+
   defp button_variant_classes("outline"), do: "bg-transparent text-foreground shadow-none"
+
+  @doc """
+  Renders a modal dialog over a dimmed page. Render it conditionally from the
+  LiveView; `on_cancel` runs on Escape and on clicks outside the dialog.
+
+      <.modal :if={@confirming} id="confirm-modal" title="Are you sure?" on_cancel="cancel">
+        ...
+      </.modal>
+  """
+  attr :id, :string, required: true
+  attr :title, :string, required: true
+  attr :on_cancel, :any, required: true, doc: "event name or JS command that closes the modal"
+  attr :class, :any, default: nil, doc: "extra classes for the dialog panel"
+  slot :inner_block, required: true
+
+  def modal(assigns) do
+    ~H"""
+    <div
+      id={@id}
+      class="fixed inset-0 z-50 flex items-center justify-center p-4"
+      phx-window-keydown={@on_cancel}
+      phx-key="Escape"
+    >
+      <div
+        class="absolute inset-0 bg-black/40"
+        aria-hidden="true"
+        phx-mounted={JS.transition({"ease-out duration-150", "opacity-0", "opacity-100"})}
+      >
+      </div>
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby={"#{@id}-title"}
+        phx-click-away={@on_cancel}
+        phx-mounted={
+          JS.transition({"ease-out duration-150", "opacity-0 scale-95", "opacity-100 scale-100"})
+          |> JS.focus_first()
+        }
+        class={[
+          "relative w-full max-w-md space-y-4 rounded-base border-2 border-border bg-white p-6 shadow-shadow",
+          @class
+        ]}
+      >
+        <h2 id={"#{@id}-title"} class="text-xl font-bold">{@title}</h2>
+        {render_slot(@inner_block)}
+      </div>
+    </div>
+    """
+  end
 
   attr :class, :any, default: nil
   slot :inner_block, required: true

@@ -9,8 +9,10 @@ defmodule Flamingo.Application do
   def start(_type, _args) do
     children = [
       FlamingoWeb.Telemetry,
+      Flamingo.Repo,
       {DNSCluster, query: Application.get_env(:flamingo, :dns_cluster_query) || :ignore},
       {Phoenix.PubSub, name: Flamingo.PubSub},
+      {Registry, keys: :unique, name: Flamingo.SavedLobbyRegistry},
       {Flamingo.RoomSupervisor, []},
       FlamingoWeb.Endpoint
     ]

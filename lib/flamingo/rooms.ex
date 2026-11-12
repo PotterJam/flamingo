@@ -5,6 +5,20 @@ defmodule Flamingo.Rooms do
     RoomSupervisor.start_room()
   end
 
+  @doc """
+  Returns the saved lobby's running room, starting one if none is running.
+  """
+  def open_saved_lobby(name) do
+    with :error <- RoomServer.saved_lobby_room(name) do
+      case RoomSupervisor.start_room(nil, saved_lobby: name) do
+        {:error, :saved_lobby_already_open} -> open_saved_lobby(name)
+        result -> result
+      end
+    end
+  end
+
+  def save_lobby(room_id, name), do: RoomServer.save_lobby(room_id, name)
+
   def join(room_id, player_name, avatar \\ Flamingo.Avatar.default()) do
     RoomServer.join(room_id, player_name, avatar)
   end

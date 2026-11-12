@@ -8,7 +8,7 @@ readonly ELIXIR_DIR="$HOME/.elixir-install/installs/elixir/$ELIXIR_VERSION-otp-2
 readonly FLY_DIR="$HOME/.fly"
 
 echo "==> Installing system prerequisites"
-packages=(build-essential ca-certificates curl git libncurses6 libssl3 libstdc++6 unzip)
+packages=(build-essential ca-certificates curl git libncurses6 libssl3 libstdc++6 unzip postgresql-15)
 missing_packages=()
 
 for package in "${packages[@]}"; do
@@ -89,7 +89,10 @@ mix local.hex --force
 mix local.rebar --force
 
 echo "==> Installing project dependencies and asset tools"
-mix setup
+# Database initialization happens when the declared services start, not in the snapshot.
+mix deps.get
+mix assets.setup
+mix assets.build
 
 echo "==> Orb setup complete"
 elixir --version

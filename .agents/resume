@@ -11,4 +11,4 @@ if [[ ! -x "$OTP_DIR/bin/erl" || ! -x "$ELIXIR_DIR/bin/mix" ]]; then
   exit 1
 fi
 
-echo "Flamingo orb ready (no external services required)"
+echo "Flamingo orb ready; run 'amp orb services ensure' for Postgres and Phoenix"
