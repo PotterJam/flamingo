@@ -17,12 +17,12 @@ defmodule FlamingoWeb.Layouts do
     >
       Sign in
     </.button>
-    <.box
+    <div
       :if={@current_scope}
       id="account-menu"
       role="navigation"
       aria-label="Account"
-      class="absolute right-4 top-4 z-40 flex max-w-[calc(100%-2rem)] items-center gap-1 bg-white p-1 pl-2 text-sm"
+      class="absolute right-4 top-4 z-40 flex max-w-[calc(100%-2rem)] items-center gap-1 rounded-full border-2 border-border bg-white p-1 pl-4 text-sm shadow-shadow"
     >
       <span class="min-w-0 truncate font-semibold" title={@current_scope.user.email}>
         {@current_scope.user.email}
@@ -32,13 +32,14 @@ defmodule FlamingoWeb.Layouts do
         navigate={~p"/users/settings"}
         variant="ghost"
         size="sm"
+        rounded
         class="inline-flex shrink-0 items-center justify-center"
         aria-label="Account settings"
         title="Account settings"
       >
         <.icon name={:settings} class="size-5" />
       </.button>
-    </.box>
+    </div>
     """
   end
 
@@ -99,7 +100,7 @@ defmodule FlamingoWeb.Layouts do
       id="sound-volume-control"
       phx-hook=".SoundVolume"
       phx-update="ignore"
-      class="fixed bottom-4 left-4 z-50 rounded-base border-2 border-border bg-white px-3 py-2 shadow-shadow"
+      class="fixed bottom-4 left-4 z-50 rounded-full border-2 border-border bg-white px-4 py-2 shadow-shadow"
     >
       <div class="flex items-center gap-2">
         <button
