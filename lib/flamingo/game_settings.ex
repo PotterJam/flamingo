@@ -5,7 +5,7 @@ defmodule Flamingo.GameSettings do
 
   @turn_length_range 15..120
   @defaults %{
-    turn_length: 30,
+    turn_length: 40,
     custom_words: [],
     include_default_words: false,
     word_list: :default

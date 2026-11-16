@@ -7,7 +7,7 @@ defmodule Flamingo.GameSettingsTest do
   test "defaults and both ends of the turn length range are valid" do
     assert {:ok, defaults} = GameSettings.validate(%{})
     assert defaults == GameSettings.defaults()
-    assert defaults.turn_length == 30
+    assert defaults.turn_length == 40
 
     for seconds <- [15, 120] do
       assert {:ok, %{turn_length: ^seconds}} = GameSettings.validate(%{turn_length: seconds})
