@@ -33,7 +33,7 @@ defmodule FlamingoWeb.LobbySaveTest do
 
     host |> element("#save-lobby-button") |> render_click()
     host |> form("#save-lobby-form", saved_lobby: %{name: String.upcase(name)}) |> render_change()
-    assert has_element?(host, "#saved-lobby-link-preview", name)
+    refute has_element?(host, "#confirm-save-lobby-button[disabled]")
 
     host |> form("#save-lobby-form", saved_lobby: %{name: name}) |> render_submit()
 

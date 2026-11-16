@@ -27,8 +27,7 @@ defmodule FlamingoWeb.LobbyLive do
        custom_words_error: nil,
        settings_form: to_form(%{}, as: :settings),
        saved_lobby: nil,
-       saved_lobby_form: nil,
-       saved_lobby_preview: nil
+       saved_lobby_form: nil
      )}
   end
 
@@ -289,8 +288,8 @@ defmodule FlamingoWeb.LobbyLive do
                     phx-submit="save_lobby"
                   >
                     <label for="saved-lobby-name-input" class="text-sm">Lobby name</label>
-                    <div class="mt-1 flex flex-row flex-wrap items-start gap-1">
-                      <div class="min-w-40 flex-1">
+                    <div class="mt-1 flex flex-row flex-wrap items-start gap-x-1 gap-y-2">
+                      <div class="min-w-0 flex-[1_1_10rem] [&>.fieldset]:py-0">
                         <.input
                           field={@saved_lobby_form[:name]}
                           id="saved-lobby-name-input"
@@ -301,32 +300,27 @@ defmodule FlamingoWeb.LobbyLive do
                           phx-mounted={JS.focus()}
                         />
                       </div>
-                      <.button
-                        type="button"
-                        variant="ghost"
-                        class="ml-auto h-10 shrink-0 text-xs"
-                        phx-click="cancel_saving_lobby"
-                        id="cancel-save-lobby-button"
-                      >
-                        Cancel
-                      </.button>
-                      <.button
-                        type="submit"
-                        variant="outline"
-                        class="h-10 shrink-0 text-xs"
-                        disabled={!@saved_lobby_preview}
-                        id="confirm-save-lobby-button"
-                      >
-                        Save
-                      </.button>
+                      <div class="ml-auto flex flex-wrap justify-end gap-1">
+                        <.button
+                          type="button"
+                          variant="ghost"
+                          class="h-10 text-xs"
+                          phx-click="cancel_saving_lobby"
+                          id="cancel-save-lobby-button"
+                        >
+                          Cancel
+                        </.button>
+                        <.button
+                          type="submit"
+                          variant="outline"
+                          class="h-10 text-xs"
+                          disabled={!@saved_lobby_form.source.valid?}
+                          id="confirm-save-lobby-button"
+                        >
+                          Save
+                        </.button>
+                      </div>
                     </div>
-                    <p
-                      :if={@saved_lobby_preview}
-                      id="saved-lobby-link-preview"
-                      class="mt-1 truncate text-xs text-gray-500"
-                    >
-                      /saved-lobby/<span class="font-bold text-black">{@saved_lobby_preview}</span>
-                    </p>
                   </.form>
                   <div :if={!@saved_lobby && !@saved_lobby_form} id="room-share">
                     <label class="text-sm">Room name</label>
@@ -463,14 +457,14 @@ defmodule FlamingoWeb.LobbyLive do
   end
 
   def handle_event("start_saving_lobby", _params, socket),
-    do: {:noreply, assign_saved_lobby_form(socket, SavedLobbies.change_saved_lobby())}
+    do: {:noreply, assign(socket, :saved_lobby_form, to_form(SavedLobbies.change_saved_lobby()))}
 
   def handle_event("cancel_saving_lobby", _params, socket),
-    do: {:noreply, assign(socket, saved_lobby_form: nil, saved_lobby_preview: nil)}
+    do: {:noreply, assign(socket, :saved_lobby_form, nil)}
 
   def handle_event("validate_saved_lobby", %{"saved_lobby" => params}, socket) do
     changeset = SavedLobbies.change_saved_lobby(params) |> Map.put(:action, :validate)
-    {:noreply, assign_saved_lobby_form(socket, changeset)}
+    {:noreply, assign(socket, :saved_lobby_form, to_form(changeset))}
   end
 
   def handle_event("save_lobby", %{"saved_lobby" => params}, socket) do
@@ -478,19 +472,19 @@ defmodule FlamingoWeb.LobbyLive do
          {:ok, saved_lobby} <- SavedLobbies.save_room(scope, socket.assigns.room_id, params) do
       {:noreply,
        socket
-       |> assign(saved_lobby: saved_lobby.name, saved_lobby_form: nil, saved_lobby_preview: nil)
+       |> assign(saved_lobby: saved_lobby.name, saved_lobby_form: nil)
        |> put_flash(:success, "Lobby saved. Its link will always bring everyone back here.")}
     else
       nil ->
         {:noreply, socket}
 
       {:error, %Ecto.Changeset{} = changeset} ->
-        {:noreply, assign_saved_lobby_form(socket, changeset)}
+        {:noreply, assign(socket, :saved_lobby_form, to_form(changeset))}
 
       {:error, reason} ->
         {:noreply,
          socket
-         |> assign(saved_lobby_form: nil, saved_lobby_preview: nil)
+         |> assign(:saved_lobby_form, nil)
          |> put_flash(:error, save_lobby_error(reason))}
     end
   end
@@ -583,11 +577,6 @@ defmodule FlamingoWeb.LobbyLive do
 
   defp custom_word_line_count(custom_words) do
     custom_words |> String.split(~r/\R/) |> Enum.count(&(String.trim(&1) != ""))
-  end
-
-  defp assign_saved_lobby_form(socket, changeset) do
-    preview = if changeset.valid?, do: Ecto.Changeset.get_field(changeset, :name)
-    assign(socket, saved_lobby_form: to_form(changeset), saved_lobby_preview: preview)
   end
 
   defp save_lobby_error(:not_host), do: "Only the host can save this lobby."
