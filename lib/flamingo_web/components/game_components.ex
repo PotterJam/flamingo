@@ -142,11 +142,17 @@ defmodule FlamingoWeb.GameComponents do
         alt=""
         class="flamingo-logo-image flamingo-logo-sketchbook absolute inset-0 size-full object-contain"
       />
+      <img
+        src="/images/brand/logo-classic.png"
+        alt=""
+        class="flamingo-logo-image flamingo-logo-classic absolute inset-0 size-full object-contain"
+      />
     </span>
     <script :type={Phoenix.LiveView.ColocatedHook} name=".RandomLogo">
       export default {
         mounted() {
-          this.el.dataset.logoVariant = Math.random() < 0.5 ? "pixel" : "sketchbook";
+          const variants = ["pixel", "sketchbook", "classic"];
+          this.el.dataset.logoVariant = variants[Math.floor(Math.random() * variants.length)];
         }
       }
     </script>

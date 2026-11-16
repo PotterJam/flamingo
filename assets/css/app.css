@@ -133,6 +133,10 @@
   opacity: 1;
 }
 
+.flamingo-logo[data-logo-variant="classic"] .flamingo-logo-classic {
+  opacity: 1;
+}
+
 .lobby-background-classic {
   background-color: var(--color-pink-100);
 }
