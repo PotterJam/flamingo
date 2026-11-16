@@ -19,13 +19,17 @@ defmodule FlamingoWeb.HomeLive do
 
   def mount(params, _session, socket) do
     room_code = Map.get(params, "room_code", "")
-    saved_avatar = socket.assigns.current_scope && socket.assigns.current_scope.user.avatar
+    scope = socket.assigns.current_scope
+    saved_avatar = scope && scope.user.avatar
+    my_saved_lobbies = if scope, do: SavedLobbies.list_saved_lobbies_for_user(scope), else: []
 
     {:ok,
      assign(socket,
        name: "",
        room_code: room_code,
        saved_lobby: nil,
+       my_saved_lobbies: my_saved_lobbies,
+       lobby_presence: if(connected?(socket), do: watch_presence(my_saved_lobbies), else: %{}),
        avatar: saved_avatar || Avatar.random(),
        error: nil
      )}
@@ -441,11 +445,76 @@ defmodule FlamingoWeb.HomeLive do
               </div>
             </.box>
           </div>
+
+          <section
+            :if={!@saved_lobby && @my_saved_lobbies != []}
+            id="my-saved-lobbies"
+            aria-labelledby="my-saved-lobbies-heading"
+          >
+            <h2 id="my-saved-lobbies-heading" class="mb-3 flex items-center gap-2 text-xl font-black">
+              <.icon name={:bookmark} class="size-5" /> Saved lobbies
+            </h2>
+            <ul class="grid gap-3">
+              <li :for={lobby <- @my_saved_lobbies}>
+                <.link
+                  navigate={~p"/saved-lobby/#{lobby.name}"}
+                  id={"my-saved-lobby-#{lobby.name}"}
+                  class="group flex h-full items-center gap-3 rounded-base border-2 border-border bg-white px-4 py-3 shadow-shadow transition-all hover:-translate-y-0.5 hover:bg-yellow-100 focus-visible:outline-2 focus-visible:outline-offset-2 active:translate-y-0"
+                >
+                  <span class="@container min-w-0 flex-1">
+                    <span class="block truncate text-lg font-black">{lobby.name}</span>
+                    <span :if={lobby.created?} class="block text-xs text-gray-500">
+                      You are the owner
+                    </span>
+                    <span
+                      :if={presence = online_presence(@lobby_presence, lobby.name)}
+                      id={"my-saved-lobby-#{lobby.name}-presence"}
+                      class="mt-1.5 flex items-center gap-2"
+                    >
+                      <span class="flex">
+                        <.flamingo_avatar
+                          :for={{player, index} <- Enum.with_index(Enum.take(presence.players, 19))}
+                          avatar={player.avatar}
+                          label={player.name}
+                          class={[
+                            "size-7 shrink-0 rounded-full border border-border not-first:-ml-2",
+                            avatar_background(player.name),
+                            avatar_visibility(index)
+                          ]}
+                        />
+                        <span
+                          :for={
+                            {hidden_count, visibility} <- overflow_chips(length(presence.players))
+                          }
+                          class={[
+                            "-ml-2 size-7 shrink-0 items-center justify-center rounded-full bg-gray-900 text-[0.65rem] font-black text-white border border-border",
+                            visibility
+                          ]}
+                        >
+                          +{hidden_count}
+                        </span>
+                      </span>
+                      <span class="text-xs font-bold text-green-700">
+                        {presence_label(presence)}
+                      </span>
+                    </span>
+                  </span>
+                  <.icon
+                    name={:arrow_right}
+                    class="size-5 shrink-0 transition-transform group-hover:translate-x-1"
+                  />
+                </.link>
+              </li>
+            </ul>
+          </section>
         </div>
       </.form>
     </Layouts.app>
     """
   end
+
+  def handle_info({:saved_lobby_presence, name, presence}, socket),
+    do: {:noreply, update(socket, :lobby_presence, &Map.put(&1, name, presence))}
 
   def handle_event("save_avatar", %{"avatar" => avatar}, socket) do
     if scope = socket.assigns.current_scope do
@@ -544,5 +613,49 @@ defmodule FlamingoWeb.HomeLive do
       {:name, false} -> {:noreply, assign(socket, error: "Name cannot be empty")}
       _ -> {:noreply, assign(socket, error: "Couldn't open the saved lobby. Try again.")}
     end
+  end
+
+  # Subscribes before reading so a change in between still arrives as a message.
+  defp watch_presence(lobbies) do
+    for %{name: name} <- lobbies,
+        :ok = Rooms.subscribe_saved_lobby_presence(name),
+        {:ok, presence} <- [Rooms.saved_lobby_presence(name)],
+        into: %{},
+        do: {name, presence}
+  end
+
+  defp online_presence(lobby_presence, name) do
+    case lobby_presence[name] do
+      %{players: [_ | _]} = presence -> presence
+      _ -> nil
+    end
+  end
+
+  @avatar_tiers [
+    {3, nil, "flex @2xs:hidden"},
+    {5, "hidden @2xs:block", "hidden @2xs:flex @xs:hidden"},
+    {7, "hidden @xs:block", "hidden @xs:flex @md:hidden"},
+    {13, "hidden @md:block", "hidden @md:flex @xl:hidden"},
+    {19, "hidden @xl:block", "hidden @xl:flex"}
+  ]
+
+  defp avatar_visibility(index) do
+    {_fits, visibility, _chip} = Enum.find(@avatar_tiers, fn {fits, _, _} -> index < fits end)
+    visibility
+  end
+
+  defp overflow_chips(count) do
+    for {fits, _visibility, chip} <- @avatar_tiers, count > fits, do: {count - fits, chip}
+  end
+
+  @avatar_backgrounds ~w(bg-red-200 bg-orange-200 bg-yellow-200 bg-lime-200 bg-green-200 bg-teal-200 bg-sky-200 bg-blue-200 bg-purple-200 bg-pink-200)
+
+  # Stable per name, so a player's colour doesn't change on every update.
+  defp avatar_background(name),
+    do: Enum.at(@avatar_backgrounds, :erlang.phash2(name, length(@avatar_backgrounds)))
+
+  defp presence_label(%{players: players, playing?: playing?}) do
+    count = length(players)
+    "#{count} #{if playing?, do: "playing", else: "in the lobby"}"
   end
 end

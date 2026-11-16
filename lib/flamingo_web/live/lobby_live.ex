@@ -590,6 +590,11 @@ defmodule FlamingoWeb.LobbyLive do
     initial? = is_nil(socket.assigns.player_id)
     old_count = map_size(socket.assigns.players)
 
+    if snapshot.saved_lobby && snapshot.saved_lobby != socket.assigns.saved_lobby &&
+         socket.assigns.current_scope do
+      SavedLobbies.record_member(socket.assigns.current_scope, snapshot.saved_lobby)
+    end
+
     socket =
       if initial? do
         custom_words = Enum.join(snapshot.custom_words, "\n")

@@ -20,7 +20,8 @@ defmodule Flamingo.RoomServer do
     members: Members.new(),
     game: nil,
     disconnect_timers: %{},
-    connections: %{}
+    connections: %{},
+    presence: nil
   ]
 
   def start_link({id, opts}), do: GenServer.start_link(__MODULE__, {id, opts}, name: via(id))
@@ -37,6 +38,7 @@ defmodule Flamingo.RoomServer do
   def command(id, command), do: GenServer.call(via(id), {:command, self(), command})
   def snapshot(id), do: call(id, {:snapshot, self()}, {:error, :not_found})
   def save_lobby(id, name), do: call(id, {:save_lobby, self(), name}, {:error, :not_found})
+  def presence(id), do: call(id, :presence, :error)
 
   @doc "Returns the id of the running room for a saved lobby, if any."
   def saved_lobby_room(name) do
@@ -147,6 +149,8 @@ defmodule Flamingo.RoomServer do
       id -> {:reply, {:ok, snapshot_for(state, id)}, state}
     end
   end
+
+  def handle_call(:presence, _, state), do: {:reply, {:ok, presence_summary(state)}, state}
 
   def handle_call({:start_game, pid, settings}, _, state),
     do: start_game_call(state, player_id(state, pid), settings)
@@ -539,7 +543,37 @@ defmodule Flamingo.RoomServer do
       Enum.each(cs, fn {pid, _} -> if pid != excluded, do: send(pid, {:room_snapshot, snap}) end)
     end)
 
-    state
+    broadcast_presence(state)
+  end
+
+  # Lets screens outside the room, like the home page, show who is in a saved lobby.
+  defp broadcast_presence(%{saved_lobby: nil} = state), do: state
+
+  defp broadcast_presence(state) do
+    case presence_summary(state) do
+      summary when summary == state.presence ->
+        state
+
+      summary ->
+        Phoenix.PubSub.broadcast(
+          Flamingo.PubSub,
+          "saved_lobby_presence:" <> state.saved_lobby,
+          {:saved_lobby_presence, state.saved_lobby, summary}
+        )
+
+        %{state | presence: summary}
+    end
+  end
+
+  defp presence_summary(state) do
+    %{players: players, player_order: order} = Members.snapshot(state.members)
+
+    online =
+      for id <- order, %{connected: true} = player <- [players[id]] do
+        Map.take(player, [:name, :avatar])
+      end
+
+    %{playing?: state.lifecycle != :lobby, players: online}
   end
 
   defp random(n), do: :crypto.strong_rand_bytes(n) |> Base.url_encode64(padding: false)

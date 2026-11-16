@@ -44,6 +44,32 @@ defmodule FlamingoWeb.LobbySaveTest do
     assert render(guest) =~ "The host is configuring the game"
   end
 
+  test "signed-in players already in the room find the lobby on their home screen", context do
+    %{signed_in_conn: signed_in_conn, conn: conn} = context
+    name = unique_name()
+    other_conn = log_in_user(conn, user_fixture())
+    {:ok, host, _} = live(signed_in_conn, context.host_path)
+    {:ok, guest, _} = live(other_conn, context.guest_path)
+
+    {:ok, home, _} = live(other_conn, ~p"/")
+    refute has_element?(home, "#my-saved-lobbies")
+
+    host |> element("#save-lobby-button") |> render_click()
+    host |> form("#save-lobby-form", saved_lobby: %{name: name}) |> render_submit()
+    # Lets the guest's view handle the snapshot that says the room is saved.
+    _ = render(guest)
+
+    {:ok, home, _} = live(other_conn, ~p"/")
+    assert has_element?(home, "#my-saved-lobby-#{name}[href='/saved-lobby/#{name}']")
+    refute has_element?(home, "#my-saved-lobby-#{name}", "You are the owner")
+
+    {:ok, home, _} = live(signed_in_conn, ~p"/")
+    assert has_element?(home, "#my-saved-lobby-#{name}", "You are the owner")
+
+    {:ok, home, _} = live(log_in_user(conn, user_fixture()), ~p"/")
+    refute has_element?(home, "#my-saved-lobbies")
+  end
+
   test "a taken name is explained without saving the lobby", context do
     taken = unique_name()
     other_room = "lobby-save-other-#{System.unique_integer([:positive])}"

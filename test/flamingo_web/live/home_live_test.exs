@@ -101,6 +101,23 @@ defmodule FlamingoWeb.HomeLiveTest do
       assert path =~ "/game/#{room_id}?resume_token="
     end
 
+    test "show members who is online in the lobby as it changes", %{
+      conn: conn,
+      room_id: room_id,
+      name: name
+    } do
+      user = user_fixture()
+      :ok = SavedLobbies.record_member(user_scope_fixture(user), name)
+      {:ok, view, _html} = live(log_in_user(conn, user), ~p"/")
+
+      presence = "#my-saved-lobby-#{name}-presence"
+      assert has_element?(view, presence, "1 in the lobby")
+      assert has_element?(view, "#{presence} [aria-label='Alice']")
+
+      :ok = Rooms.leave(room_id)
+      refute has_element?(view, presence)
+    end
+
     test "send unknown names home with an explanation", %{conn: conn} do
       assert {:error, {:live_redirect, %{to: "/", flash: flash}}} =
                live(conn, ~p"/saved-lobby/nobody-saved-this")

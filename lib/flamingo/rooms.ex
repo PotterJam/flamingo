@@ -17,6 +17,18 @@ defmodule Flamingo.Rooms do
     end
   end
 
+  @doc """
+  Subscribes the caller to `{:saved_lobby_presence, name, summary}` messages,
+  sent whenever the players online in the saved lobby's room change.
+  """
+  def subscribe_saved_lobby_presence(name),
+    do: Phoenix.PubSub.subscribe(Flamingo.PubSub, "saved_lobby_presence:" <> name)
+
+  @doc "Returns who is online in the saved lobby's room, or `:error` if it isn't running."
+  def saved_lobby_presence(name) do
+    with {:ok, room_id} <- RoomServer.saved_lobby_room(name), do: RoomServer.presence(room_id)
+  end
+
   def save_lobby(room_id, name), do: RoomServer.save_lobby(room_id, name)
 
   def join(room_id, player_name, avatar \\ Flamingo.Avatar.default()) do

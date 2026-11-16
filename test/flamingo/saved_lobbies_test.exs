@@ -129,6 +129,54 @@ defmodule Flamingo.SavedLobbiesTest do
     end
   end
 
+  describe "listing a user's saved lobbies" do
+    defp save_lobby(scope) do
+      room_id = start_room()
+      join_connected(room_id, "Host")
+      {:ok, saved} = SavedLobbies.save_room(scope, room_id, %{name: unique_name()})
+      saved
+    end
+
+    defp set_last_joined(saved, scope, at) do
+      Flamingo.Repo.update_all(
+        from(m in Flamingo.SavedLobbies.SavedLobbyMember,
+          where: m.saved_lobby_id == ^saved.id and m.user_id == ^scope.user.id
+        ),
+        set: [last_joined_at: at]
+      )
+    end
+
+    test "includes lobbies the user created or sat in, most recently joined first" do
+      me = user_scope_fixture()
+      other = user_scope_fixture()
+      created = save_lobby(me)
+      joined_long_ago = save_lobby(other)
+      joined_recently = save_lobby(other)
+      _not_mine = save_lobby(other)
+
+      :ok = SavedLobbies.record_member(me, joined_recently.name)
+      :ok = SavedLobbies.record_member(me, joined_long_ago.name)
+      set_last_joined(joined_long_ago, me, ~U[2026-01-01 00:00:00Z])
+      set_last_joined(joined_recently, me, ~U[2026-06-01 00:00:00Z])
+
+      Flamingo.Repo.update_all(from(l in SavedLobby, where: l.id == ^created.id),
+        set: [inserted_at: ~U[2026-03-01 00:00:00Z]]
+      )
+
+      # Joining again moves the lobby to the top rather than adding a second row.
+      :ok = SavedLobbies.record_member(me, joined_long_ago.name)
+
+      assert [
+               %{name: n1, created?: false},
+               %{name: n2, created?: false},
+               %{name: n3, created?: true}
+             ] = SavedLobbies.list_saved_lobbies_for_user(me)
+
+      assert [n1, n2, n3] == [joined_long_ago.name, joined_recently.name, created.name]
+      assert [%{name: _}, _, _] = SavedLobbies.list_saved_lobbies_for_user(other)
+    end
+  end
+
   describe "opening a saved lobby" do
     test "starts one room and reuses it for everyone who arrives" do
       name = unique_name()
