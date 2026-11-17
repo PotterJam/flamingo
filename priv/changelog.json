@@ -1,5 +1,35 @@
 [
   {
+    "date": "2026-11-16",
+    "entries": [
+      {"type": "feature", "text": "New lobbies now start with 40-second turns."}
+    ]
+  },
+  {
+    "date": "2026-11-12",
+    "entries": [
+      {"type": "feature", "text": "Sign in with Google to keep your avatar across devices, or keep playing as a guest."},
+      {"type": "feature", "text": "Signed-in hosts can save a lobby with a permanent named link for their group."},
+      {"type": "feature", "text": "Teams now reveals every team's drawing after each turn, with time to browse and vote."},
+      {"type": "feature", "text": "The redesigned home screen puts avatar customisation beside illustrated create and join cards."},
+      {"type": "fix", "text": "Signing in on another device no longer hides your browser's saved avatar drawing."}
+    ]
+  },
+  {
+    "date": "2026-11-11",
+    "entries": [
+      {"type": "feature", "text": "Teams now uses the same word for every team, with shared chat and teams taking turns to choose."}
+    ]
+  },
+  {
+    "date": "2026-11-10",
+    "entries": [
+      {"type": "feature", "text": "Roulette now includes Kaleidoscope, reflecting every stroke eight ways."},
+      {"type": "feature", "text": "Select a team on the results screen to browse all of its drawings."},
+      {"type": "fix", "text": "Game chat no longer jumps to the top between turns."}
+    ]
+  },
+  {
     "date": "2026-11-09",
     "entries": [
       {"type": "new_mode", "text": "Teams: race to draw and guess in pairs, with one trio for odd numbers, and earn a shared team score."}
