@@ -92,7 +92,7 @@ defmodule FlamingoWeb.LobbyLiveTest do
     teammate |> form("#guess-form", guess_form: %{guess: snapshot.word}) |> render_submit()
     assert has_element?(other_guesser, "#game-feed", "Bob guessed the word")
     refute has_element?(other_guesser, "#game-feed", snapshot.word)
-    assert has_element?(game, "#coop-score-gains", "Team 1 +400")
+    assert has_element?(game, "#team-score-gain-row-1", "+400")
     assert has_element?(game, "#team-title-1", "400 pts")
     assert has_element?(other_guesser, "#guess-form")
 

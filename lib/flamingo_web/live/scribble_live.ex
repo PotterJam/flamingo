@@ -413,7 +413,7 @@ defmodule FlamingoWeb.ScribbleLive do
             aria-label={"Rank #{idx + 1}: Team #{team.id}, #{team.score} points"}
           >
             <span class={podium_label_class(idx)}>
-              <.team_avatars team={team} final_players={@final_players} />
+              <.team_avatars team={team} players={@final_players} />
               <.podium_details
                 rank={idx}
                 name={"Team #{team.id}"}
@@ -446,7 +446,7 @@ defmodule FlamingoWeb.ScribbleLive do
             aria-pressed={to_string(team.selected?)}
           >
             <span class="text-lg">{idx + 1}</span>
-            <.team_avatars team={team} final_players={@final_players} />
+            <.team_avatars team={team} players={@final_players} />
             <span class="min-w-0 flex-1 truncate font-bold">Team {team.id}</span>
             <.final_votes player={team.votes} id={"team-#{team.id}"} />
             <span class="shrink-0 font-semibold text-pink-500">{team.score}</span>
@@ -458,17 +458,32 @@ defmodule FlamingoWeb.ScribbleLive do
   end
 
   attr :team, :map, required: true
-  attr :final_players, :map, required: true
+  attr :players, :map, required: true
 
   defp team_avatars(assigns) do
     ~H"""
     <span class="flex shrink-0 items-end gap-0.5">
       <.flamingo_avatar
         :for={id <- @team.members}
-        avatar={Map.get(@final_players[id], :avatar, %{})}
+        avatar={Map.get(@players[id], :avatar, %{})}
         class="h-8 w-8"
-        label={@final_players[id].name}
+        label={@players[id].name}
       />
+    </span>
+    """
+  end
+
+  attr :gain, :integer, required: true
+
+  defp score_gain(assigns) do
+    ~H"""
+    <span class={[
+      "shrink-0 font-semibold",
+      if(@gain > 0, do: "text-green-700"),
+      if(@gain < 0, do: "text-red-600"),
+      if(@gain == 0, do: "text-gray-700")
+    ]}>
+      {if(@gain > 0, do: "+#{@gain}", else: "#{@gain}")}
     </span>
     """
   end
@@ -826,7 +841,7 @@ defmodule FlamingoWeb.ScribbleLive do
                             <div>
                               <p class="text-xl font-black">
                                 {if @team_finished? and @phase == :playing,
-                                  do: "Team finished — others are still guessing",
+                                  do: "Waiting for all teams to finish",
                                   else: "The word was"}
                               </p>
                               <p class="font-hero text-5xl leading-none font-black text-pink-400">
@@ -850,25 +865,22 @@ defmodule FlamingoWeb.ScribbleLive do
                                   <span class="min-w-0 flex-1 truncate">
                                     {Map.get(@players, pid).name}
                                   </span>
-                                  <span class={[
-                                    "shrink-0",
-                                    "font-semibold",
-                                    if(gain > 0, do: "text-green-700"),
-                                    if(gain < 0, do: "text-red-600"),
-                                    if(gain == 0, do: "text-gray-700")
-                                  ]}>
-                                    {if(gain > 0, do: "+#{gain}", else: "#{gain}")}
-                                  </span>
+                                  <.score_gain gain={gain} />
                                 </li>
                               <% end %>
-                            </ul>
-                            <ul
-                              :if={@game_variant == :coop}
-                              id="coop-score-gains"
-                              class="space-y-1 font-bold"
-                            >
-                              <li :for={{team, gain} <- Enum.sort(@team_gains)}>
-                                Team {team} +{gain}
+                              <li
+                                :for={
+                                  {team, gain} <- Enum.sort_by(@team_gains, fn {t, g} -> {-g, t} end)
+                                }
+                                id={"team-score-gain-row-#{team}"}
+                                class="flex min-w-0 items-center gap-2 px-3 py-1"
+                              >
+                                <.team_avatars
+                                  team={%{members: Enum.filter(@player_order, &(@teams[&1] == team))}}
+                                  players={@players}
+                                />
+                                <span class="min-w-0 flex-1 truncate">Team {team}</span>
+                                <.score_gain gain={gain} />
                               </li>
                             </ul>
                             <.starburst_timer
