@@ -142,7 +142,9 @@ test("an account recovers this browser's guest drawing once when it has none", (
         querySelector: (selector: string) => selector === "[data-avatar-drawing-editor]"
           ? editor
           : inputs.find((input) => selector === `#${input.id}`) ?? null,
-        querySelectorAll: (selector: string) => selector.startsWith("input") ? inputs : [],
+        querySelectorAll: (selector: string) => selector.startsWith("input")
+          ? inputs
+          : selector.startsWith("template[data-avatar-template]") ? Array(10).fill({}) : [],
         addEventListener: () => {},
       },
       pushEvent: (_event: string, { avatar }: { avatar: Record<string, string> }) => pushed.push(avatar),

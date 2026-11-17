@@ -4,7 +4,7 @@ defmodule Flamingo.Avatar do
   """
 
   @parts ~w(head body legs feet)
-  @animals ~w(flamingo cat frog bunny duck)
+  @animals ~w(flamingo cat frog bunny duck penguin dog bear pig axolotl)
   @colors ~w(#f472b6 #fb7185 #c084fc #fb923c #2dd4bf #facc15 #60a5fa #a3e635)
 
   @traits Map.new(@parts, &{&1, 0..(length(@animals) - 1)})

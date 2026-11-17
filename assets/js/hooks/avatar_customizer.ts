@@ -1,5 +1,4 @@
 const PARTS = ["head", "body", "legs", "feet"] as const;
-const ANIMAL_COUNT = 5;
 const STORAGE_KEY = "flamingo_avatar";
 const NAME_STORAGE_KEY = "flamingo_player_name";
 
@@ -36,8 +35,13 @@ const inputValue = (root: HTMLElement, id: string) => {
   return Number.parseInt(input?.value ?? "0", 10);
 };
 
+// The server renders one template per animal, so this follows Avatar.animals().
+const animalCount = (root: HTMLElement) =>
+  root.querySelectorAll("template[data-avatar-template]").length;
+
 const selectPart = (root: HTMLElement, part: AvatarPart, value: number) => {
-  const normalized = ((value % ANIMAL_COUNT) + ANIMAL_COUNT) % ANIMAL_COUNT;
+  const count = animalCount(root);
+  const normalized = ((value % count) + count) % count;
   const template = root.querySelector<HTMLTemplateElement>(
     `template[data-avatar-template="${normalized}"]`,
   );
@@ -364,7 +368,7 @@ const AvatarCustomizer = {
 
       if (event.target.closest("[data-avatar-random]")) {
         for (const part of PARTS) {
-          selectPart(this.el, part, Math.floor(Math.random() * ANIMAL_COUNT));
+          selectPart(this.el, part, Math.floor(Math.random() * animalCount(this.el)));
 
           const colors = this.el.querySelectorAll(
             `[data-avatar-color-option][data-avatar-part="${part}"]`,
