@@ -623,6 +623,19 @@ defmodule Flamingo.GameModes.ScribbleTest do
     assert drawer.word_visible?
   end
 
+  test "empty and whitespace-only guesses are rejected without touching the feed" do
+    state = %{admitted() | phase: :playing, drawer_id: "a", word: "cat"}
+
+    for guess <- ["", " ", "\t\n  "] do
+      assert {:error, :invalid_guess} = Scribble.command(state, "b", {:guess, guess}, context())
+    end
+
+    {:ok, %{state: guessed, reply: :incorrect}} =
+      Scribble.command(state, "b", {:guess, "  horse  "}, context())
+
+    assert [%{event: {:guess, "b", _name, "horse"}}] = guessed.feed.events -- state.feed.events
+  end
+
   test "punctuation stays visible for everyone without revealing letters or numbers" do
     word = "O'Neil’s well-being (é2/猫)! +?"
     masked = "_'____’_ ____-_____ (__/_)! +?"

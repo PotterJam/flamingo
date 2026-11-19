@@ -65,6 +65,7 @@ defmodule Flamingo.GameModes.CoopTest do
     assert Coop.view(state, "2", context.roster).current_drawing == [event]
     assert Coop.view(state, "4", context.roster).current_drawing == []
 
+    assert {:error, :invalid_guess} = Coop.command(state, "4", {:guess, "  "}, context)
     state = command(state, "4", {:guess, "cow"}, context)
     state = command(state, "4", {:guess, "dot"}, context)
     assert "Player 4: cow" in texts(state, "2", context)

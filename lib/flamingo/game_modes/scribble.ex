@@ -225,7 +225,12 @@ defmodule Flamingo.GameModes.Scribble do
   end
 
   def command(state, actor, {:guess, text}, context) when is_binary(text) do
+    text = String.trim(text)
+
     cond do
+      text == "" ->
+        {:error, :invalid_guess}
+
       state.phase != :playing ->
         {:error, :not_playing}
 
