@@ -165,6 +165,8 @@ defmodule FlamingoWeb.TelephoneComponents do
                 type="text"
                 maxlength="100"
                 autocomplete="off"
+                required
+                pattern=".*\S.*"
                 placeholder="It looks like…"
                 class="w-full rounded-base border-2 border-border bg-white px-4 py-3 text-base focus:ring-2 focus:ring-ring focus:outline-none"
               />

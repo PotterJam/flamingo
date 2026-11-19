@@ -481,6 +481,8 @@ defmodule FlamingoWeb.GameComponents do
           type="text"
           placeholder={@placeholder}
           autocomplete="off"
+          required
+          pattern=".*\S.*"
           maxlength={@maxlength}
           phx-mounted={@mounted}
           class="w-full rounded-base border-2 border-border bg-white px-3 py-2 text-sm placeholder:text-gray-400 focus:ring-2 focus:ring-ring focus:ring-offset-2 focus:outline-none"
