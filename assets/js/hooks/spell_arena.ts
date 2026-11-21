@@ -1399,6 +1399,8 @@ const SpellArena = {
       const px = ((event.clientX - rect.left) / rect.width) * W;
       const py = ((event.clientY - rect.top) / rect.height) * H;
       if (minimapJump(px, py)) return;
+      // Touch and pen taps arrive without a hover first.
+      pointer = { x: px, y: py };
       updateAim(event);
       trigger();
     };
