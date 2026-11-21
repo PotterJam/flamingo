@@ -23,8 +23,9 @@ const MUSIC_VOLUME = 0.08;
 const COUNTDOWN_VOLUME = 0.7;
 const EFFECT_VOLUME = 1;
 
-// Each game screen says what its current phase should sound like.
-type RoundAudioPayload = { music: boolean; countdown_end?: string | null };
+// Each game screen says what its current phase should sound like. A screen with
+// its own theme passes its URL as `track`; the rest get the shared game music.
+type RoundAudioPayload = { music: boolean; track?: string; countdown_end?: string | null };
 
 const SoundManager = {
   mounted(this: SoundManagerHook) {
@@ -136,8 +137,18 @@ const SoundManager = {
       }, countdownStartDelay);
     };
 
-    const applyRoundAudio = ({ music, countdown_end }: RoundAudioPayload) => {
+    // The game music element plays whichever track the screen asked for.
+    const useTrack = (track: string) => {
+      const audio = this.sounds.gameMusic;
+      if (!audio || audio.src.endsWith(track)) return;
+      clearFade("gameMusic");
+      audio.pause();
+      audio.src = track;
+    };
+
+    const applyRoundAudio = ({ music, track = SOUND_FILES.gameMusic, countdown_end }: RoundAudioPayload) => {
       if (music) {
+        useTrack(track);
         fadeInMusic();
       } else {
         fadeOutMusic();

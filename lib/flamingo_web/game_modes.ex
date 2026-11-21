@@ -1,9 +1,9 @@
 defmodule FlamingoWeb.GameModes do
   @moduledoc "The game modes offered in the lobby, in picker order. See `FlamingoWeb.GameMode`."
 
-  alias FlamingoWeb.GameModes.{Classic, Roulette, Teams, Telephone}
+  alias FlamingoWeb.GameModes.{Classic, Roulette, Spellslingers, Teams, Telephone}
 
-  @modes [Classic, Roulette, Telephone, Teams]
+  @modes [Classic, Roulette, Telephone, Teams, Spellslingers]
 
   def all, do: @modes
 

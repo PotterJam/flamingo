@@ -22,6 +22,7 @@ defmodule FlamingoWeb.Router do
     scope "/dev", FlamingoWeb do
       pipe_through :browser
       get "/log-in/:email", UserSessionController, :dev_log_in
+      live "/spellslingers", SpellslingersDevLive
     end
 
     scope "/preview", FlamingoWeb do
@@ -60,6 +61,7 @@ defmodule FlamingoWeb.Router do
       live "/game/:room_id", LobbyLive
       live "/game/:room_id/scribble", ScribbleLive
       live "/game/:room_id/telephone", TelephoneLive
+      live "/game/:room_id/spellslingers", SpellslingersLive
       live "/drawing", DrawingLive
       live "/users/log-in", UserLive.Login, :new
     end
