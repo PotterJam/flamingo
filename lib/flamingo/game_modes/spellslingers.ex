@@ -4,15 +4,15 @@ defmodule Flamingo.GameModes.Spellslingers do
   terrain.
 
   Each player is a wizard. A duel opens with every wizard choosing a spellbook,
-  which adds four spells to the two every wizard knows. On their turn a wizard may
+  which adds four spells to the core spells every wizard knows. On their turn a wizard may
   walk a little, then casts one spell: bolts that blast craters and knock wizards
   flying, spells that raise or tunnel through land, summoned minions that fight
   for their owner, and wilder magic. Crates drop between turns, wild-magic surges
   strike at random, and the sea rises late in the duel. The last wizard standing
   wins.
 
-  The terrain is a `@width` by `@height` grid stored as one byte per cell. All
-  physics runs here; clients receive the flight paths of each cast and animate them.
+  The terrain is a grid of one byte per cell, sized in `Rules`. All physics runs
+  on the server; clients receive the flight paths of each cast and animate them.
   """
 
   use Flamingo.GameModes.Spellslingers.Rules
@@ -47,11 +47,9 @@ defmodule Flamingo.GameModes.Spellslingers do
     %{
       phase: :lobby,
       turn_length: 40,
-      arena_map: "random",
       map_id: nil,
       participants: %{},
       players: %{},
-      player_order: [],
       host_id: nil,
       terrain: <<>>,
       water_level: @initial_water,
@@ -170,13 +168,11 @@ defmodule Flamingo.GameModes.Spellslingers do
         new()
         | phase: :arena_books,
           turn_length: turn_length,
-          arena_map: arena_map,
           map_id: map_id,
           participants:
             Map.new(roster.player_order, &{&1, if(&1 in order, do: :active, else: :spectator)})
             |> Map.merge(Map.new(bot_ids, &{&1, :active})),
           players: players,
-          player_order: turn_order,
           host_id: roster.host_id,
           terrain: terrain,
           turn_order: turn_order,
@@ -194,7 +190,7 @@ defmodule Flamingo.GameModes.Spellslingers do
         |> Units.place_wizards()
         |> Units.log("The arena is #{map_name(map_id)}. Choose your spellbooks!")
 
-      ok(state, :ok, [{:schedule_phase_timeout, :arena_books, @book_ms}])
+      ok(state, [{:schedule_phase_timeout, :arena_books, @book_ms}])
     end
   end
 
@@ -338,7 +334,7 @@ defmodule Flamingo.GameModes.Spellslingers do
       viewer_id: viewer,
       participation: Map.get(state.participants, viewer, :spectator),
       players: state.players,
-      player_order: state.player_order,
+      player_order: state.turn_order,
       host_id: state.host_id || roster.host_id,
       online:
         Map.new(roster.players, fn {id, player} -> {id, player.connected} end)
@@ -424,7 +420,7 @@ defmodule Flamingo.GameModes.Spellslingers do
       }
       |> Units.log("The duel begins! #{Units.player_name(state, first)} casts first.")
 
-    ok(state, :ok, aim_timers(state))
+    ok(state, aim_timers(state))
   end
 
   defp fill_books(mine, rng) when length(mine) >= 2, do: {mine, rng}
@@ -466,7 +462,7 @@ defmodule Flamingo.GameModes.Spellslingers do
 
   # Ends the current wizard's turn. Each hazard stage can settle the duel, and a
   # settled duel ends before any later hazard runs, so a winning shot stays a win.
-  def end_turn(state, context) do
+  defp end_turn(state, context) do
     owner = state.current_id
 
     with {:cont, state} <- unless_won(state),
@@ -485,7 +481,7 @@ defmodule Flamingo.GameModes.Spellslingers do
       # Meteors play out like a cast before the next wizard's clock starts.
       if surge == :meteors,
         do:
-          ok(%{state | phase: :arena_resolve}, :ok, [
+          ok(%{state | phase: :arena_resolve}, [
             :cancel_hint_timeout,
             {:schedule_phase_timeout, :arena_surge, state.last_cast.duration_ms + 1200}
           ]),
@@ -521,7 +517,7 @@ defmodule Flamingo.GameModes.Spellslingers do
         |> Surges.surge_after(surge)
         |> Crates.maybe_drop_crate()
 
-      ok(state, :ok, aim_timers(state))
+      ok(state, aim_timers(state))
     end
   end
 
@@ -601,7 +597,7 @@ defmodule Flamingo.GameModes.Spellslingers do
         _ -> state
       end
 
-    ok(state, :ok, [{:schedule_hint_timeout, :arena_bot, delay}])
+    ok(state, [{:schedule_hint_timeout, :arena_bot, delay}])
   end
 
   defp apply_bot_move({{:walk, dir}, state}, bot, context) do
@@ -613,7 +609,7 @@ defmodule Flamingo.GameModes.Spellslingers do
         {:ok, result}
 
       {:error, _blocked} ->
-        ok(%{state | bot_plan: %{steps: []}}, :ok, [{:schedule_hint_timeout, :arena_bot, 200}])
+        ok(%{state | bot_plan: %{steps: []}}, [{:schedule_hint_timeout, :arena_bot, 200}])
     end
   end
 
@@ -629,12 +625,12 @@ defmodule Flamingo.GameModes.Spellslingers do
 
   defp apply_bot_move({:pass, state}, _bot, context), do: end_turn(state, context)
 
-  def spell_ready?(state, actor, spell_id),
+  defp spell_ready?(state, actor, spell_id),
     do: Map.get(Map.get(state.cooldowns, actor, %{}), spell_id, 0) == 0
 
-  def winner_decided?(state), do: Enum.count(state.turn_order, &Units.alive?(state, &1)) <= 1
+  defp winner_decided?(state), do: Enum.count(state.turn_order, &Units.alive?(state, &1)) <= 1
 
-  def finish(state) do
+  defp finish(state) do
     survivors = Enum.filter(state.turn_order, &Units.alive?(state, &1))
     winner = List.first(survivors)
 
@@ -654,14 +650,12 @@ defmodule Flamingo.GameModes.Spellslingers do
         else: "Nobody survived!"
 
     state = %{state | phase: :game_ended, final_result: result} |> Units.log(message)
-    ok(state, :ok, [:cancel_phase_timeout, :cancel_hint_timeout])
+    ok(state, [:cancel_phase_timeout, :cancel_hint_timeout])
   end
-
-  ## Wild magic and crates
 
   ## Casting
 
-  def cast(state, actor, spell, angle, power, target \\ nil) do
+  defp cast(state, actor, spell, angle, power, target \\ nil) do
     state = %{
       state
       | cast_this_turn: [spell.id | state.cast_this_turn],
@@ -689,17 +683,13 @@ defmodule Flamingo.GameModes.Spellslingers do
       # Quick spells leave the turn open for walking and one more cast.
       ok(%{state | quick_used: true})
     else
-      ok(%{state | phase: :arena_resolve}, :ok, [
+      ok(%{state | phase: :arena_resolve}, [
         {:schedule_phase_timeout, :arena_resolve, cast.duration_ms + 1200}
       ])
     end
   end
 
-  ## Knockback
-
-  ## Minions
-
-  ## Units and movement
+  ## Helpers
 
   defp forfeit(state, id) do
     case state.units[id] do
@@ -717,19 +707,8 @@ defmodule Flamingo.GameModes.Spellslingers do
   defp map_name(id),
     do: Enum.find_value(Catalog.maps(), "a mystery", fn {map, name} -> if map == id, do: name end)
 
-  ## Terrain
-
-  def ok(state, reply \\ :ok, timers \\ []) do
+  defp ok(state, timers \\ []) do
     status = if state.phase == :game_ended, do: {:finished, state.final_result}, else: :continue
-
-    {:ok,
-     %{
-       state: state,
-       reply: reply,
-       timers: timers,
-       status: status,
-       drawing_delta: nil,
-       drawing_scope: nil
-     }}
+    {:ok, %{state: state, reply: :ok, timers: timers, status: status}}
   end
 end
