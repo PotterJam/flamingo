@@ -3,8 +3,6 @@ defmodule Flamingo.GameModes.Spellslingers.Terrain do
 
   use Flamingo.GameModes.Spellslingers.Rules
 
-  alias Flamingo.GameModes.Spellslingers.Units
-
   def clamp(value, low, high), do: value |> max(low) |> min(high)
 
   # A target inside rock moves up to the open air above it.
@@ -20,22 +18,12 @@ defmodule Flamingo.GameModes.Spellslingers.Terrain do
 
   def solid?(_terrain, _x, _y), do: false
 
-  def carve(state, circles), do: paint(state, circles, 0)
-  def fill(state, circles), do: paint(state, circles, 1)
+  def carve(state, circles), do: paint(state, circles, 0, MapSet.new())
 
-  defp paint(state, circles, value) do
-    occupied =
-      if value == 1,
-        do:
-          for(
-            {_, u} <- state.units,
-            Units.alive_unit?(u),
-            dy <- 0..(Units.unit_height(u) - 1),
-            into: MapSet.new(),
-            do: {u.x, u.y - dy}
-          ),
-        else: MapSet.new()
+  @doc "Fills the circles with rock, leaving the `keep_clear` cells open."
+  def fill(state, circles, keep_clear), do: paint(state, circles, 1, keep_clear)
 
+  defp paint(state, circles, value, keep_clear) do
     {x0, x1, y0, y1} =
       Enum.reduce(circles, {@width, 0, @height, 0}, fn {cx, cy, r}, {a, b, c, d} ->
         {min(a, floor(cx - r)), max(b, ceil(cx + r)), min(c, floor(cy - r)), max(d, ceil(cy + r))}
@@ -51,7 +39,9 @@ defmodule Flamingo.GameModes.Spellslingers.Terrain do
               (x + 0.5 - cx) ** 2 + (y + 0.5 - cy) ** 2 <= r * r
             end)
 
-        if inside? and not MapSet.member?(occupied, {x, y}), do: <<value>>, else: <<current>>
+        if inside? and not MapSet.member?(keep_clear, {x, y}),
+          do: <<value>>,
+          else: <<current>>
       end
 
     %{state | terrain: terrain}

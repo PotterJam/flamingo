@@ -139,6 +139,21 @@ defmodule Flamingo.GameModes.Spellslingers.Units do
 
   def put_unit(state, unit), do: %{state | units: Map.put(state.units, unit.id, unit)}
 
+  @doc """
+  Fills the circles with rock without burying any living unit, then lifts
+  anything left inside rock back onto the surface.
+  """
+  def raise_ground(state, circles) do
+    occupied =
+      for {_, u} <- state.units,
+          alive_unit?(u),
+          dy <- 0..(unit_height(u) - 1),
+          into: MapSet.new(),
+          do: {u.x, u.y - dy}
+
+    state |> Terrain.fill(circles, occupied) |> unbury_all()
+  end
+
   def unit_height(%{kind: kind}) when kind in [:wizard, :golem], do: 3
   def unit_height(%{kind: :crate}), do: 1
   def unit_height(_), do: 2

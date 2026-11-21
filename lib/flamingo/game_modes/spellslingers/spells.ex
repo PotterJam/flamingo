@@ -235,9 +235,7 @@ defmodule Flamingo.GameModes.Spellslingers.Spells do
     case throw_spell(fx, actor, spell, angle, power) do
       {fx, {kind, {x, y}}, _} when kind in [:terrain, :unit, :lost] ->
         state =
-          fx.state
-          |> Terrain.fill([{x, y - spell.radius * 0.4, spell.radius}])
-          |> Units.unbury_all()
+          Units.raise_ground(fx.state, [{x, y - spell.radius * 0.4, spell.radius}])
 
         %{fx | state: state}
 
@@ -391,8 +389,7 @@ defmodule Flamingo.GameModes.Spellslingers.Spells do
           |> Enum.reduce(fx.state, fn unit, state ->
             Units.put_unit(state, %{unit | hp: min(unit.max_hp, unit.hp + spell.damage)})
           end)
-          |> Terrain.fill([{x, y, 2.5}])
-          |> Units.unbury_all()
+          |> Units.raise_ground([{x, y, 2.5}])
 
         message =
           if healed == [],
@@ -741,7 +738,7 @@ defmodule Flamingo.GameModes.Spellslingers.Spells do
     y = Terrain.clamp(y, 4, fx.state.water_level - 1)
 
     state =
-      fx.state |> Terrain.fill(for(dx <- -7..7, do: {x + dx, y + 0.5, 1.2})) |> Units.unbury_all()
+      Units.raise_ground(fx.state, for(dx <- -7..7, do: {x + dx, y + 0.5, 1.2}))
 
     %{fx | state: Units.log(state, "A stone ledge rises from the air!")}
   end
