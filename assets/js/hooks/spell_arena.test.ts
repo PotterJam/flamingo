@@ -132,6 +132,20 @@ test("a charged cast names the spell that was selected when the charge began", (
   expect(casts(a.sent).map((e) => e.spell)).toEqual(["boulder"]);
 });
 
+test("a selection made while a cast plays survives the cast's older snapshot", () => {
+  const a = mount();
+  a.server("arena_state", state());
+  a.server("arena_state", state({ last_cast: cast(1) }));
+  a.server("arena_select", { spell: "boulder" });
+  a.tick(1);
+  a.tick(5000);
+  a.tick(10000);
+  a.down();
+  now = 10400;
+  a.up();
+  expect(casts(a.sent).map((e) => e.spell)).toEqual(["boulder"]);
+});
+
 test("the server can still move the selection, e.g. off a spell on cooldown", () => {
   const a = mount();
   a.server("arena_state", state({ selected_spell: "boulder" }));

@@ -267,6 +267,7 @@ const SpellArena = {
     let particles: Particle[] = [];
     let floaters: Floater[] = [];
     let selected = "ember";
+    let serverSelected: string | null = null;
     let aim: { angle: number; power: number } | null = null;
     let castLocked = false;
     let lastWalk = 0;
@@ -327,7 +328,12 @@ const SpellArena = {
       if (shown && shown.units !== state.units) announceChanges(shown, state);
       const key = state.terrain + state.map_id;
       shown = state;
-      selected = state.selected_spell || selected;
+      // The client owns the selection; it follows the server only when the
+      // server moves it, so an older queued snapshot can't undo a newer pick.
+      if (state.selected_spell !== serverSelected) {
+        serverSelected = state.selected_spell;
+        selected = state.selected_spell || selected;
+      }
       if (key !== terrainKey) {
         terrainKey = key;
         cells = decodeTerrain(state.terrain, state.width, state.height);
