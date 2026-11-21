@@ -36,6 +36,7 @@ defmodule FlamingoWeb.ScribbleLive do
        spin_started_at: nil,
        round_count: 3,
        game_variant: :classic,
+       mode: FlamingoWeb.GameModes.default(),
        teams: %{},
        team_scores: %{},
        team_gains: %{},
@@ -675,10 +676,6 @@ defmodule FlamingoWeb.ScribbleLive do
   defp constraint_mode(:kaleidoscope), do: "kaleidoscope"
   defp constraint_mode(_constraint), do: nil
 
-  defp mode_label(:coop), do: "TEAMS"
-  defp mode_label(:constraint_roulette), do: "ROULETTE"
-  defp mode_label(_variant), do: "SCRIBBLE"
-
   defp winning_player_id(players, player_order) do
     Enum.max_by(player_order, fn pid -> Map.get(players, pid).score end, fn -> nil end)
   end
@@ -711,14 +708,13 @@ defmodule FlamingoWeb.ScribbleLive do
     url(~p"/drawing") <> "##{encoded}"
   end
 
+  # Music and the closing countdown play while a timed drawing turn is on.
   defp sync_round_audio(socket) do
+    end_time = if socket.assigns.phase == :playing, do: socket.assigns.turn_end_time
+
     push_event(socket, "sync_round_audio", %{
-      phase: Atom.to_string(socket.assigns.phase),
-      end_time:
-        if(socket.assigns.turn_end_time,
-          do: DateTime.to_iso8601(socket.assigns.turn_end_time),
-          else: nil
-        )
+      music: not is_nil(end_time),
+      countdown_end: end_time && DateTime.to_iso8601(end_time)
     })
   end
 
@@ -726,10 +722,7 @@ defmodule FlamingoWeb.ScribbleLive do
     ~H"""
     <Layouts.app flash={@flash} background="">
       <%= if @phase in [:word_choice, :playing, :turn_reveal] do %>
-        <.flamingo_background
-          game_mode={@game_variant}
-          label={mode_label(@game_variant)}
-        />
+        <.flamingo_background mode={@mode} />
         <div class="flex min-h-screen w-full items-center justify-center p-6">
           <div class="flex h-[675px] w-full max-w-[1200px] flex-col gap-10">
             <div
@@ -1040,10 +1033,7 @@ defmodule FlamingoWeb.ScribbleLive do
         </div>
       <% end %>
       <%= if @phase == :game_ended do %>
-        <.flamingo_background
-          game_mode={@game_variant}
-          label={mode_label(@game_variant)}
-        />
+        <.flamingo_background mode={@mode} />
         <% selected_player_id =
           selected_or_winning_player_id(
             @final_players,
@@ -1200,7 +1190,7 @@ defmodule FlamingoWeb.ScribbleLive do
   end
 
   defp route_snapshot(socket, snapshot) do
-    if RoomRoute.screen(snapshot) == :scribble do
+    if RoomRoute.screen(snapshot) == __MODULE__ do
       apply_snapshot(socket, snapshot)
     else
       RoomRoute.navigate(socket, snapshot)
@@ -1248,6 +1238,7 @@ defmodule FlamingoWeb.ScribbleLive do
           ),
         round_count: snapshot.round_count,
         game_variant: snapshot.game_variant,
+        mode: FlamingoWeb.GameModes.get(snapshot.game_mode),
         teams: snapshot.teams,
         team_scores: Map.get(snapshot, :team_scores, %{}),
         team_gains: Map.get(snapshot, :team_gains, %{}),

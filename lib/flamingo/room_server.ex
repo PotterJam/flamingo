@@ -2,7 +2,6 @@ defmodule Flamingo.RoomServer do
   # Rooms stop themselves once empty, so only restart one that crashed.
   use GenServer, restart: :transient
 
-  alias Flamingo.GameModes.{Scribble, Telephone}
   alias Flamingo.Room.Members
 
   @disconnect_grace_ms 60_000
@@ -16,6 +15,10 @@ defmodule Flamingo.RoomServer do
     :turn_end_time,
     :idle_timer,
     game_module: nil,
+    # The mode picked in the lobby, or playing. Ids and drafts belong to the web
+    # layer's mode list; the room only keeps them for every viewer to see.
+    game_mode: nil,
+    settings_draft: %{},
     lifecycle: :lobby,
     members: Members.new(),
     game: nil,
@@ -30,7 +33,13 @@ defmodule Flamingo.RoomServer do
   def connect(id, token), do: call(id, {:connect, token}, {:error, :not_found})
   def prepare_handoff(id), do: call(id, :prepare_handoff, {:error, :not_found})
   def leave(id), do: call(id, {:leave, self()}, :ok)
-  def start_game(id, settings), do: GenServer.call(via(id), {:start_game, self(), settings})
+
+  def start_game(id, mode, engine, settings),
+    do: GenServer.call(via(id), {:start_game, self(), mode, engine, settings})
+
+  def update_lobby(id, mode, draft),
+    do: call(id, {:update_lobby, self(), mode, draft}, {:error, :not_found})
+
   def return_to_lobby(id), do: call(id, {:return_to_lobby, self()}, {:error, :not_found})
   def select_word(id, word), do: GenServer.call(via(id), {:select_word, self(), word})
   def draw_event(id, event), do: GenServer.cast(via(id), {:draw_event, self(), event})
@@ -152,8 +161,19 @@ defmodule Flamingo.RoomServer do
 
   def handle_call(:presence, _, state), do: {:reply, {:ok, presence_summary(state)}, state}
 
-  def handle_call({:start_game, pid, settings}, _, state),
-    do: start_game_call(state, player_id(state, pid), settings)
+  def handle_call({:start_game, pid, mode, engine, settings}, _, state),
+    do: start_game_call(state, player_id(state, pid), mode, engine, settings)
+
+  def handle_call({:update_lobby, pid, mode, draft}, _, state) do
+    actor = player_id(state, pid)
+
+    cond do
+      is_nil(actor) -> {:reply, {:error, :not_found}, state}
+      actor != state.members.host_id -> {:reply, {:error, :not_host}, state}
+      state.lifecycle != :lobby -> {:reply, {:error, :game_in_progress}, state}
+      true -> {:reply, :ok, commit(%{state | game_mode: mode, settings_draft: draft}, pid)}
+    end
+  end
 
   def handle_call({:return_to_lobby, pid}, _, state) do
     actor = player_id(state, pid)
@@ -296,17 +316,17 @@ defmodule Flamingo.RoomServer do
     run_call(state, state.game_module.command(state.game, id, command, context), context.now)
   end
 
-  defp start_game_call(state, nil, _settings), do: {:reply, {:error, :not_found}, state}
+  defp start_game_call(state, nil, _mode, _engine, _settings),
+    do: {:reply, {:error, :not_found}, state}
 
-  defp start_game_call(state, actor, settings) do
+  defp start_game_call(state, actor, mode, module, settings) do
     context = context(state, state.members, actor)
 
-    with {:ok, module} <- mode_module(Map.get(settings, :game_mode, :scribble)),
-         true <- actor == state.members.host_id || {:error, :not_host},
+    with true <- actor == state.members.host_id || {:error, :not_host},
          true <- state.lifecycle == :lobby || {:error, :game_in_progress},
          {:ok, game} <- game_for_start(module, context),
          {:ok, result} <- module.start(game, settings, context) do
-      state = %{state | game_module: module}
+      state = %{state | game_module: module, game_mode: mode}
       run_call(state, {:ok, result}, context.now)
     else
       {:error, reason} -> {:reply, {:error, reason}, state}
@@ -500,15 +520,15 @@ defmodule Flamingo.RoomServer do
   end
 
   defp snapshot_for(%{lifecycle: :lobby} = state, id) do
-    Flamingo.GameSettings.defaults()
-    |> Map.merge(Members.snapshot(state.members))
+    state.members
+    |> Members.snapshot()
     |> Map.merge(%{
       phase: :lobby,
-      mode: :scribble,
+      game_mode: state.game_mode,
+      # The draft may hold custom words, which only the host may see.
+      settings_draft: if(id == state.members.host_id, do: state.settings_draft, else: %{}),
       saved_lobby: state.saved_lobby,
       viewer_id: id,
-      round_count: 3,
-      game_variant: :classic,
       turn_end_time: nil
     })
   end
@@ -516,12 +536,7 @@ defmodule Flamingo.RoomServer do
   defp snapshot_for(state, id),
     do:
       state.game_module.view(state.game, id, Members.snapshot(state.members))
-      |> Map.put(:turn_end_time, state.turn_end_time)
-
-  defp mode_module(:telephone), do: {:ok, Telephone}
-  defp mode_module(:coop), do: {:ok, Flamingo.GameModes.Coop}
-  defp mode_module(:scribble), do: {:ok, Scribble}
-  defp mode_module(_mode), do: {:error, :invalid_game_mode}
+      |> Map.merge(%{game_mode: state.game_mode, turn_end_time: state.turn_end_time})
 
   defp game_for_start(module, context) do
     context.roster.player_order

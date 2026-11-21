@@ -2,6 +2,7 @@ defmodule FlamingoWeb.RoomRoute do
   use FlamingoWeb, :verified_routes
 
   alias Flamingo.Rooms
+  alias FlamingoWeb.GameModes
 
   def navigate(socket, snapshot) do
     room_id = socket.assigns.room_id
@@ -15,17 +16,13 @@ defmodule FlamingoWeb.RoomRoute do
     )
   end
 
-  # The room snapshot determines which page to show, not the URL or settings draft.
-  def screen(%{phase: :lobby}), do: :lobby
-  def screen(%{mode: :telephone}), do: :telephone
-  def screen(%{mode: :coop}), do: :scribble
-  def screen(%{mode: :scribble}), do: :scribble
+  @doc """
+  The LiveView that shows this snapshot. The room snapshot decides the page,
+  not the URL or settings draft.
+  """
+  def screen(%{phase: :lobby}), do: FlamingoWeb.LobbyLive
+  def screen(snapshot), do: GameModes.get(snapshot.game_mode).live_view()
 
-  def path(snapshot, room_id, token) do
-    case screen(snapshot) do
-      :lobby -> ~p"/game/#{room_id}?resume_token=#{token}"
-      :scribble -> ~p"/game/#{room_id}/scribble?resume_token=#{token}"
-      :telephone -> ~p"/game/#{room_id}/telephone?resume_token=#{token}"
-    end
-  end
+  def path(%{phase: :lobby}, room_id, token), do: ~p"/game/#{room_id}?resume_token=#{token}"
+  def path(snapshot, room_id, token), do: GameModes.get(snapshot.game_mode).path(room_id, token)
 end

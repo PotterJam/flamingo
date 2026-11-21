@@ -69,7 +69,7 @@ defmodule FlamingoWeb.TelephoneLiveTest do
   defp start_telephone(room_id, host_token, other_token) do
     :ok =
       as_player(host_token, fn ->
-        Rooms.start_game(room_id, %{
+        Flamingo.TestGames.start_game(room_id, %{
           game_mode: :telephone,
           turn_length: 30,
           custom_words: ["orbital llama", "velvet cactus"],
@@ -119,7 +119,6 @@ defmodule FlamingoWeb.TelephoneLiveTest do
     |> element("#settings-form")
     |> render_change(%{
       "settings" => %{
-        "round_count" => "1",
         "turn_length" => "30",
         "word_list" => "custom",
         "custom_words" => "orbital llama\nvelvet cactus"
@@ -129,7 +128,6 @@ defmodule FlamingoWeb.TelephoneLiveTest do
     lobby
     |> form("#settings-form", %{
       "settings" => %{
-        "round_count" => "1",
         "turn_length" => "30",
         "word_list" => "custom",
         "custom_words" => "orbital llama\nvelvet cactus"
@@ -145,12 +143,7 @@ defmodule FlamingoWeb.TelephoneLiveTest do
     assert has_element?(telephone, "#telephone-prompt-choices button")
     assert has_element?(telephone, "#telephone-custom-prompt-form")
 
-    assert_push_event(telephone, "sync_round_audio", %{
-      phase: "telephone_prompt",
-      end_time: prompt_end_time
-    })
-
-    assert is_binary(prompt_end_time)
+    assert_push_event(telephone, "sync_round_audio", %{music: false, countdown_end: nil})
 
     telephone
     |> form("#telephone-custom-prompt-form", %{"prompt" => "moon trampoline"})
@@ -171,10 +164,7 @@ defmodule FlamingoWeb.TelephoneLiveTest do
 
     assert has_element?(telephone, "#telephone-draw-phase")
 
-    assert_push_event(telephone, "sync_round_audio", %{
-      phase: "telephone_draw",
-      end_time: draw_end_time
-    })
+    assert_push_event(telephone, "sync_round_audio", %{music: true, countdown_end: draw_end_time})
 
     assert is_binary(draw_end_time)
 

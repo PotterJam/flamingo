@@ -197,7 +197,10 @@ defmodule FlamingoWeb.LobbyLiveTest do
       guest_path = "/game/#{room_id}/#{mode}?resume_token=#{guest_token}"
       mode_id = if mode == :scribble, do: "classic", else: "telephone"
       host_lobby |> element("#game-mode-#{mode_id}") |> render_click()
-      host_lobby |> form("#settings-form", settings: %{round_count: "1"}) |> render_change()
+
+      if mode == :scribble,
+        do: host_lobby |> form("#settings-form", settings: %{round_count: "1"}) |> render_change()
+
       host_lobby |> form("#settings-form") |> render_submit()
       assert_redirect(host_lobby, host_path)
       {:ok, host, _} = live(conn, host_path)
@@ -260,7 +263,9 @@ defmodule FlamingoWeb.LobbyLiveTest do
                  live(conn, "/game/#{room_id}/#{suffix}?resume_token=#{guest_token}")
       end
 
+      # The lobby reopens on the mode just played rather than Classic.
       {:ok, returned_host, _} = live(conn, lobby_path)
+      assert has_element?(returned_host, "#game-mode-#{mode_id}[aria-checked='true']")
       returned_host
     end)
   end
@@ -280,13 +285,13 @@ defmodule FlamingoWeb.LobbyLiveTest do
     socket = %Phoenix.LiveView.Socket{assigns: %{room_id: room_id, resume_token: token}}
 
     for {view, snapshot, expected_path} <- [
-          {FlamingoWeb.ScribbleLive, %{mode: :telephone, phase: :telephone_prompt},
+          {FlamingoWeb.ScribbleLive, %{game_mode: :telephone, phase: :telephone_prompt},
            ~p"/game/#{room_id}/telephone?resume_token=#{token}"},
-          {FlamingoWeb.TelephoneLive, %{mode: :scribble, phase: :playing},
+          {FlamingoWeb.TelephoneLive, %{game_mode: :classic, phase: :playing},
            ~p"/game/#{room_id}/scribble?resume_token=#{token}"},
-          {FlamingoWeb.LobbyLive, %{mode: :scribble, phase: :game_ended},
+          {FlamingoWeb.LobbyLive, %{game_mode: :classic, phase: :game_ended},
            ~p"/game/#{room_id}/scribble?resume_token=#{token}"},
-          {FlamingoWeb.LobbyLive, %{mode: :telephone, phase: :game_ended},
+          {FlamingoWeb.LobbyLive, %{game_mode: :telephone, phase: :game_ended},
            ~p"/game/#{room_id}/telephone?resume_token=#{token}"}
         ] do
       assert {:noreply, redirected} = view.handle_info({:room_snapshot, snapshot}, socket)

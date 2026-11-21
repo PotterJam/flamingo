@@ -205,7 +205,7 @@ defmodule Flamingo.SavedLobbiesTest do
       name = unique_name()
       {:ok, _} = SavedLobbies.save_room(user_scope_fixture(), room_id, %{name: name})
       join_elsewhere(room_id, "Bob")
-      assert :ok = Rooms.start_game(room_id, %{game_mode: :scribble})
+      assert :ok = Flamingo.TestGames.start_game(room_id, %{game_mode: :classic})
 
       :ok = Rooms.leave(room_id)
       leave_elsewhere("Bob")
@@ -223,7 +223,7 @@ defmodule Flamingo.SavedLobbiesTest do
       name = unique_name()
       {:ok, _} = SavedLobbies.save_room(user_scope_fixture(), room_id, %{name: name})
       join_elsewhere(room_id, "Bob")
-      assert :ok = Rooms.start_game(room_id, %{game_mode: :scribble})
+      assert :ok = Flamingo.TestGames.start_game(room_id, %{game_mode: :classic})
 
       assert {:ok, ^room_id} = Rooms.open_saved_lobby(name)
       assert {:ok, _token, snapshot} = Rooms.join(room_id, "Carol")

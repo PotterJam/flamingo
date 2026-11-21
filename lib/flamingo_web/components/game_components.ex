@@ -62,55 +62,43 @@ defmodule FlamingoWeb.GameComponents do
                     }
                   end)
 
-  attr :game_mode, :atom,
-    default: :classic,
-    values: [:classic, :constraint_roulette, :telephone, :coop]
-
-  attr :label, :string, default: "SCRIBBLE"
+  attr :mode, :atom,
+    default: FlamingoWeb.GameModes.Classic,
+    doc: "the `FlamingoWeb.GameMode` whose colours and banner to show"
 
   def flamingo_background(assigns) do
-    {background_class, word_class} = flamingo_background_classes(assigns.game_mode)
-
     assigns =
       assign(assigns,
         rows: @flamingo_rows,
         repetitions: @num_cols,
-        background_class: background_class,
-        word_class: word_class
+        theme: assigns.mode.theme()
       )
 
     ~H"""
     <div
       id="flamingo-background"
-      data-game-mode={@game_mode}
-      class={["fixed inset-0 -z-10 overflow-hidden", @background_class]}
+      data-game-mode={@mode.id()}
+      class={["fixed inset-0 -z-10 overflow-hidden", @theme.game]}
     >
       <div class="relative h-full w-full">
         <div
           :for={row <- @rows}
           class={[
             "font-retro-display absolute flex w-max gap-4 text-lg font-extrabold whitespace-nowrap opacity-30 select-none",
-            @word_class,
+            @theme.game_text,
             row.row_class
           ]}
           style={"top: #{row.top}rem; left: #{row.left}rem"}
           aria-hidden="true"
         >
           <span :for={_ <- 1..@repetitions}>
-            {if row.mode_row?, do: @label, else: "FLAMINGO"}
+            {if row.mode_row?, do: @theme.banner, else: "FLAMINGO"}
           </span>
         </div>
       </div>
     </div>
     """
   end
-
-  defp flamingo_background_classes(:constraint_roulette),
-    do: {"bg-purple-100", "text-purple-300"}
-
-  defp flamingo_background_classes(:telephone), do: {"bg-sky-100", "text-sky-300"}
-  defp flamingo_background_classes(:coop), do: {"bg-green-100", "text-green-300"}
-  defp flamingo_background_classes(_game_mode), do: {"bg-pink-200", "text-pink-300"}
 
   attr :size, :atom, default: :compact, values: [:compact, :hero]
   attr :class, :any, default: nil

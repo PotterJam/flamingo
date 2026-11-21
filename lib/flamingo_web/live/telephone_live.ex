@@ -58,7 +58,7 @@ defmodule FlamingoWeb.TelephoneLive do
   def render(assigns) do
     ~H"""
     <Layouts.app flash={@flash} background="">
-      <.flamingo_background game_mode={:telephone} label="TELEPHONE" />
+      <.flamingo_background mode={FlamingoWeb.GameModes.Telephone} />
       <main
         id="telephone-game"
         class={[
@@ -215,7 +215,7 @@ defmodule FlamingoWeb.TelephoneLive do
   defp result(socket, _), do: {:noreply, socket}
 
   defp route_snapshot(socket, snapshot) do
-    if RoomRoute.screen(snapshot) == :telephone do
+    if RoomRoute.screen(snapshot) == __MODULE__ do
       apply_snapshot(socket, snapshot)
     else
       RoomRoute.navigate(socket, snapshot)
@@ -277,10 +277,13 @@ defmodule FlamingoWeb.TelephoneLive do
 
   defp submitted?(assigns), do: MapSet.member?(assigns.submitted_ids, assigns.viewer_id)
 
+  # Music plays while players draw or guess; the countdown only closes drawing.
   defp sync_round_audio(socket) do
+    %{phase: phase, turn_end_time: end_time} = socket.assigns
+
     push_event(socket, "sync_round_audio", %{
-      phase: Atom.to_string(socket.assigns.phase),
-      end_time: iso_time(socket.assigns.turn_end_time)
+      music: phase in [:telephone_draw, :telephone_guess],
+      countdown_end: if(phase == :telephone_draw, do: iso_time(end_time))
     })
   end
 

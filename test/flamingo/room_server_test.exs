@@ -91,7 +91,7 @@ defmodule Flamingo.RoomServerTest do
   defp snapshot_as(room_id, token), do: as_player(token, fn -> Rooms.snapshot(room_id) end)
 
   defp start_game_as(room_id, token, settings),
-    do: as_player(token, fn -> Rooms.start_game(room_id, settings) end)
+    do: as_player(token, fn -> Flamingo.TestGames.start_game(room_id, settings) end)
 
   defp select_word_as(room_id, token, word),
     do: as_player(token, fn -> Rooms.select_word(room_id, word) end)
@@ -276,7 +276,7 @@ defmodule Flamingo.RoomServerTest do
 
   test "first player becomes host", %{room_id: room_id} do
     {:ok, _resume_token, %{viewer_id: player_id} = state} = join_connected(room_id, "Alice")
-    assert state.mode == :scribble
+    assert state.phase == :lobby
     assert state.host_id == player_id
     assert map_size(state.players) == 1
     assert state.player_order == [player_id]
@@ -636,13 +636,10 @@ defmodule Flamingo.RoomServerTest do
     timer_generation = runtime_state(room_id).phase_timer.generation
 
     assert {:error, :game_in_progress} =
-             start_game_as(room_id, alice_token, %{game_mode: :scribble})
+             start_game_as(room_id, alice_token, %{game_mode: :classic})
 
     assert runtime_state(room_id).game_module == Flamingo.GameModes.Telephone
     assert runtime_state(room_id).phase_timer.generation == timer_generation
-
-    assert {:error, :invalid_game_mode} =
-             start_game_as(room_id, alice_token, %{game_mode: :unknown})
 
     flush_room_snapshots()
     event = %{"event_type" => "clear"}
@@ -770,7 +767,7 @@ defmodule Flamingo.RoomServerTest do
     {:ok, _bob_token, _bob_snapshot} = join_connected(room_id, "Bob")
 
     assert {:error, :not_found} = Rooms.snapshot(room_id)
-    assert {:error, :not_found} = Rooms.start_game(room_id, %{})
+    assert {:error, :not_found} = Flamingo.TestGames.start_game(room_id, %{})
     assert {:error, :not_found} = Rooms.select_word(room_id, "cat")
     assert {:error, :not_found} = Rooms.guess(room_id, "cat")
 

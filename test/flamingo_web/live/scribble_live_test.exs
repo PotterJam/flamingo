@@ -55,7 +55,7 @@ defmodule FlamingoWeb.ScribbleLiveTest do
   end
 
   defp start_game_as(room_id, token, settings),
-    do: as_player(token, fn -> Rooms.start_game(room_id, settings) end)
+    do: as_player(token, fn -> Flamingo.TestGames.start_game(room_id, settings) end)
 
   defp select_word_as(room_id, token, word),
     do: as_player(token, fn -> Rooms.select_word(room_id, word) end)
@@ -912,13 +912,9 @@ defmodule FlamingoWeb.ScribbleLiveTest do
 
     view = enter_scribble(conn, view, room_id, p1_token)
 
-    assert_push_event(view, "sync_round_audio", %{
-      phase: "word_choice",
-      end_time: word_choice_end_time
-    })
-
+    assert_push_event(view, "sync_round_audio", %{music: false, countdown_end: nil})
+    assert_push_event(view, "set_timer", %{end_time: word_choice_end_time})
     assert is_binary(word_choice_end_time)
-    assert_push_event(view, "set_timer", %{end_time: ^word_choice_end_time})
 
     {:ok, state} = room_snapshot(room_id)
     word = List.first(state.word_choices)
@@ -930,10 +926,7 @@ defmodule FlamingoWeb.ScribbleLiveTest do
         word
       )
 
-    assert_push_event(view, "sync_round_audio", %{
-      phase: "playing",
-      end_time: playing_end_time
-    })
+    assert_push_event(view, "sync_round_audio", %{music: true, countdown_end: playing_end_time})
 
     assert is_binary(playing_end_time)
     assert_push_event(view, "set_timer", %{end_time: ^playing_end_time})
@@ -947,12 +940,7 @@ defmodule FlamingoWeb.ScribbleLiveTest do
     guesser = if(p1 == state.drawer_id, do: p2, else: p1)
     :correct = guess_as(room_id, if(guesser == p1, do: p1_token, else: p2_token), word)
 
-    assert_push_event(view, "sync_round_audio", %{
-      phase: "turn_reveal",
-      end_time: reveal_end_time
-    })
-
-    assert is_binary(reveal_end_time)
+    assert_push_event(view, "sync_round_audio", %{music: false, countdown_end: nil})
   end
 
   defp play_turn(room_id, p1, p1_token, p2, p2_token, drawing_events \\ []) do

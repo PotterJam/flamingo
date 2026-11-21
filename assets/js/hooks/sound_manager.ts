@@ -1,7 +1,5 @@
 type SoundKey = "join" | "correct" | "gameMusic" | "wrongGuess" | "correctGuess" | "otherPlayerCorrect" | "countdown";
 
-import type { GamePhase } from "../game_model";
-
 interface SoundManagerHook {
   sounds: Record<SoundKey, HTMLAudioElement>;
   fadeTimers: Partial<Record<SoundKey, number>>;
@@ -25,7 +23,8 @@ const MUSIC_VOLUME = 0.08;
 const COUNTDOWN_VOLUME = 0.7;
 const EFFECT_VOLUME = 1;
 
-type RoundAudioPayload = { phase: GamePhase; end_time?: string | null };
+// Each game screen says what its current phase should sound like.
+type RoundAudioPayload = { music: boolean; countdown_end?: string | null };
 
 const SoundManager = {
   mounted(this: SoundManagerHook) {
@@ -137,15 +136,15 @@ const SoundManager = {
       }, countdownStartDelay);
     };
 
-    const applyRoundAudio = ({ phase, end_time }: RoundAudioPayload) => {
-      if ((phase === "playing" && end_time) || phase === "telephone_draw" || phase === "telephone_guess") {
+    const applyRoundAudio = ({ music, countdown_end }: RoundAudioPayload) => {
+      if (music) {
         fadeInMusic();
       } else {
         fadeOutMusic();
       }
 
-      if ((phase === "playing" || phase === "telephone_draw") && end_time) {
-        scheduleCountdown(end_time);
+      if (countdown_end) {
+        scheduleCountdown(countdown_end);
         return;
       }
 
@@ -251,7 +250,7 @@ const SoundManager = {
     this.handleEvent("sync_round_audio", syncRoundAudio);
 
     this.stopAllAudio = () => {
-      syncRoundAudio({ phase: "lobby" });
+      syncRoundAudio({ music: false });
     };
   },
 

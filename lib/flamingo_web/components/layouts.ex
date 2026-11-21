@@ -73,7 +73,7 @@ defmodule FlamingoWeb.Layouts do
 
   attr :flash, :map, required: true
   attr :current_scope, :map, default: nil
-  attr :background, :string, default: "grid-background"
+  attr :background, :any, default: "grid-background"
   attr :show_sound_controls, :boolean, default: true
   attr :show_logo, :boolean, default: true
   attr :changelog, :boolean, default: false
