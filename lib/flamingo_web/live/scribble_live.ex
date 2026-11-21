@@ -71,7 +71,7 @@ defmodule FlamingoWeb.ScribbleLive do
           socket =
             socket
             |> assign(:resume_token, resume_token)
-            |> route_snapshot(snapshot)
+            |> RoomRoute.route(snapshot, &apply_snapshot/2)
 
           {:noreply, push_event(socket, "play_sound", %{sound: "join"})}
 
@@ -1182,19 +1182,11 @@ defmodule FlamingoWeb.ScribbleLive do
   end
 
   def handle_info({:room_snapshot, snapshot}, socket) do
-    {:noreply, route_snapshot(socket, snapshot)}
+    {:noreply, RoomRoute.route(socket, snapshot, &apply_snapshot/2)}
   end
 
   def handle_info({:draw_event, event}, socket) do
     {:noreply, push_event(socket, "draw_event", event)}
-  end
-
-  defp route_snapshot(socket, snapshot) do
-    if RoomRoute.screen(snapshot) == __MODULE__ do
-      apply_snapshot(socket, snapshot)
-    else
-      RoomRoute.navigate(socket, snapshot)
-    end
   end
 
   defp apply_snapshot(socket, snapshot) do

@@ -42,7 +42,8 @@ defmodule FlamingoWeb.TelephoneLive do
     if connected?(socket) do
       case Rooms.connect(socket.assigns.room_id, token) do
         {:ok, snapshot} ->
-          {:noreply, socket |> assign(:resume_token, token) |> route_snapshot(snapshot)}
+          {:noreply,
+           socket |> assign(:resume_token, token) |> RoomRoute.route(snapshot, &apply_snapshot/2)}
 
         {:error, _reason} ->
           {:noreply, push_navigate(socket, to: ~p"/")}
@@ -179,7 +180,7 @@ defmodule FlamingoWeb.TelephoneLive do
   end
 
   def handle_info({:room_snapshot, snapshot}, socket),
-    do: {:noreply, route_snapshot(socket, snapshot)}
+    do: {:noreply, RoomRoute.route(socket, snapshot, &apply_snapshot/2)}
 
   def handle_info({:draw_event, %{actor_id: actor_id, event: event}}, socket) do
     if actor_id == socket.assigns.viewer_id,
@@ -213,14 +214,6 @@ defmodule FlamingoWeb.TelephoneLive do
     do: {:noreply, put_flash(socket, :error, command_error(reason))}
 
   defp result(socket, _), do: {:noreply, socket}
-
-  defp route_snapshot(socket, snapshot) do
-    if RoomRoute.screen(snapshot) == __MODULE__ do
-      apply_snapshot(socket, snapshot)
-    else
-      RoomRoute.navigate(socket, snapshot)
-    end
-  end
 
   defp apply_snapshot(socket, snapshot) do
     initial? = is_nil(socket.assigns.viewer_id)

@@ -25,7 +25,7 @@ defmodule FlamingoWeb.LobbyLive do
 
     if connected?(socket) do
       case Rooms.connect(socket.assigns.room_id, token) do
-        {:ok, snapshot} -> {:noreply, apply_snapshot(socket, snapshot)}
+        {:ok, snapshot} -> {:noreply, RoomRoute.route(socket, snapshot, &apply_snapshot/2)}
         {:error, _reason} -> {:noreply, push_navigate(socket, to: ~p"/")}
       end
     else
@@ -307,9 +307,9 @@ defmodule FlamingoWeb.LobbyLive do
   defp save_lobby_error(_reason), do: "Couldn't save this lobby. Try again."
 
   def handle_info({:room_snapshot, snapshot}, socket),
-    do: {:noreply, apply_snapshot(socket, snapshot)}
+    do: {:noreply, RoomRoute.route(socket, snapshot, &apply_snapshot/2)}
 
-  defp apply_snapshot(socket, %{phase: :lobby} = snapshot) do
+  defp apply_snapshot(socket, snapshot) do
     initial? = is_nil(socket.assigns.player_id)
     old_count = map_size(socket.assigns.players)
 
@@ -344,9 +344,5 @@ defmodule FlamingoWeb.LobbyLive do
     if initial? or map_size(snapshot.players) > old_count,
       do: push_event(socket, "play_sound", %{sound: "join"}),
       else: socket
-  end
-
-  defp apply_snapshot(socket, snapshot) do
-    RoomRoute.navigate(socket, snapshot)
   end
 end

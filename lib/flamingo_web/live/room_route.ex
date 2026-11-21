@@ -4,6 +4,16 @@ defmodule FlamingoWeb.RoomRoute do
   alias Flamingo.Rooms
   alias FlamingoWeb.GameModes
 
+  @doc """
+  Applies the snapshot with `apply` when it belongs to the calling LiveView,
+  otherwise navigates to the screen that owns it.
+  """
+  def route(socket, snapshot, apply) do
+    if screen(snapshot) == socket.view,
+      do: apply.(socket, snapshot),
+      else: navigate(socket, snapshot)
+  end
+
   def navigate(socket, snapshot) do
     room_id = socket.assigns.room_id
     token = socket.assigns.resume_token
