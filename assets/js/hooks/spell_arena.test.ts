@@ -82,7 +82,7 @@ function mount() {
 }
 
 const spell = (id: string, extra = {}) => ({
-  id, name: id, effect: "blast", gravity: 1, wind: 1, speed: 1, radius: 5, quick: false, place: false, ...extra,
+  id, name: id, effect: "blast", gravity: 1, wind: 1, speed: 1, radius: 5, input: "charge", color: "#f97316", ...extra,
 });
 
 // Solid ground from row 61 down, under the wizard standing at y = 60.
@@ -107,7 +107,7 @@ const state = (extra: Record<string, unknown> = {}) => ({
   crates: [],
   last_cast: null,
   players: { me: { name: "Me", color: "#fff" } },
-  spells: [spell("ember"), spell("boulder"), spell("golem", { place: true, gravity: 0 })],
+  spells: [spell("ember"), spell("boulder"), spell("golem", { input: "place", gravity: 0 })],
   my_spells: ["ember", "boulder", "golem"],
   selected_spell: "ember",
   physics: { dt: 0.04, gravity: 30, max_speed: 80, wind_accel: 1, playback_speed: 2, place_range: 70 },

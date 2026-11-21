@@ -28,8 +28,9 @@ type Spell = {
   wind: number;
   speed: number;
   radius: number;
-  quick: boolean;
-  place: boolean;
+  // How the player aims it, and the colour it is drawn in; both come from the server catalog.
+  input: "charge" | "beam" | "place" | "instant";
+  color: string;
 };
 
 type Segment = { path: [number, number][]; start: number; spell: string; radius: number; hit: boolean };
@@ -91,34 +92,8 @@ interface SpellArenaHook {
   cleanup?: () => void;
 }
 
-const SPELL_COLORS: Record<string, string> = {
-  ember: "#f97316",
-  blink: "#c084fc",
-  cluster: "#ef4444",
-  inferno: "#facc15",
-  firerain: "#fb923c",
-  imp: "#dc2626",
-  boulder: "#78716c",
-  rampart: "#a16207",
-  golem: "#57534e",
-  quake: "#92400e",
-  lance: "#fde047",
-  gust: "#e0f2fe",
-  chain: "#93c5fd",
-  wisp: "#a5f3fc",
-  thornling: "#22c55e",
-  bloom: "#f472b6",
-  burrow: "#d97706",
-  chaos: "#d946ef",
-  ward: "#60a5fa",
-  levitate: "#c4b5fd",
-  ledge: "#a8a29e",
-  updraft: "#7dd3fc",
-  swap: "#f0abfc",
-  surge: "#f43f5e",
-};
-
-const BEAM_SPELLS = new Set(["lance", "chain", "burrow", "gust"]);
+// Wild-magic meteors are not a spell, so they have no catalog colour.
+const SURGE_COLOR = "#f43f5e";
 
 type Palette = {
   sky: [string, string, string];
@@ -384,11 +359,14 @@ const SpellArena = {
       source.start();
     };
 
-    const playWhoosh = (spell: string) => noise(0.5, BEAM_SPELLS.has(spell) ? 6000 : 2500, 300, 0.22);
+    const playWhoosh = (spell: string) => noise(0.5, isBeam(spell) ? 6000 : 2500, 300, 0.22);
     const playBoom = (radius: number) => noise(0.35 + radius * 0.05, 900, 60, 0.5);
 
     // ---- Physics mirror, used only for the aiming preview ----
-    const spellDef = () => shown?.spells.find((s) => s.id === selected);
+    const spellById = (id: string) => shown?.spells.find((s) => s.id === id);
+    const spellDef = () => spellById(selected);
+    const colorOf = (id: string, fallback: string) => (id === "surge" ? SURGE_COLOR : spellById(id)?.color ?? fallback);
+    const isBeam = (id: string) => spellById(id)?.input === "beam";
 
     const myWizard = () => shown?.units.find((u) => u.kind === "wizard" && u.id === shown?.viewer_id && !u.dead);
 
@@ -398,7 +376,7 @@ const SpellArena = {
     const previewPath = (power: number) => {
       const wizard = myWizard();
       const spell = spellDef();
-      if (!shown || !wizard || !spell || !aim || spell.quick) return [];
+      if (!shown || !wizard || !spell || !aim || spell.input === "instant") return [];
       const p = shown.physics;
       const speed = (p.max_speed * spell.speed * Math.max(power, 5)) / 100;
       const rad = (aim.angle * Math.PI) / 180;
@@ -775,13 +753,13 @@ const SpellArena = {
     const drawAim = (t: number) => {
       const wizard = myWizard();
       const spell = spellDef();
-      if (!shown || !wizard || !aim || !canAct() || !spell || spell.quick) return;
+      if (!shown || !wizard || !aim || !canAct() || !spell || spell.input === "instant") return;
       const s = scale();
-      const color = SPELL_COLORS[selected] ?? "#111827";
+      const color = spell.color;
       const ox = (wizard.x + 0.5) * s;
       const oy = (wizard.y - 2) * s;
 
-      if (spell.place) {
+      if (spell.input === "place") {
         const target = placeTarget();
         if (!target) return;
         const ok = target.inRange && !target.sinks;
@@ -840,7 +818,7 @@ const SpellArena = {
       const rad = (aim.angle * Math.PI) / 180;
       const dir = [Math.cos(rad), -Math.sin(rad)];
 
-      if (spell.gravity === 0) {
+      if (spell.input === "beam") {
         // Beams fly straight, so a straight dashed sight line is honest.
         ctx.save();
         ctx.setLineDash([8, 6]);
@@ -898,7 +876,7 @@ const SpellArena = {
           ctx.fill();
         }
         if (power >= 100) release();
-      } else if (spell.gravity !== 0) {
+      } else if (spell.input === "charge") {
         ctx.font = "bold 11px ui-sans-serif, system-ui";
         ctx.textAlign = "center";
         ctx.lineWidth = 3;
@@ -985,13 +963,13 @@ const SpellArena = {
       cast.segments.forEach((segment, n) => {
         const local = step - segment.start;
         const last = segment.path.length - 1;
-        const color = SPELL_COLORS[segment.spell] ?? "#f97316";
+        const color = colorOf(segment.spell, "#f97316");
         if (local < 0) return;
 
         if (local < last) {
           const [x, y] = pointAt(segment.path, local);
 
-          if (BEAM_SPELLS.has(segment.spell)) {
+          if (isBeam(segment.spell)) {
             const [tx, ty] = pointAt(segment.path, Math.max(0, local - 4));
             ctx.strokeStyle = color;
             ctx.lineWidth = segment.spell === "gust" ? 7 : 4;
@@ -1037,7 +1015,7 @@ const SpellArena = {
           const unit = (pending ?? shown)?.units.find((u) => u.id === aura.id);
           if (unit) {
             const s = scale();
-            burst((unit.x + 0.5) * s, (unit.y - 1) * s, SPELL_COLORS[aura.kind] ?? "#fff", 26, 70);
+            burst((unit.x + 0.5) * s, (unit.y - 1) * s, colorOf(aura.kind, "#fff"), 26, 70);
           }
         }
         if (pending) {
@@ -1156,7 +1134,7 @@ const SpellArena = {
         return { x: unit.x, y: unit.y };
       }
       if (Math.hypot(unit.x - prev[0], unit.y - prev[1]) > 6) {
-        const color = SPELL_COLORS.blink;
+        const color = colorOf("blink", "#c084fc");
         burst((prev[0] + 0.5) * s, (prev[1] - 1) * s, color, 30, 90);
         burst((unit.x + 0.5) * s, (unit.y - 1) * s, color, 40, 120);
         burst((unit.x + 0.5) * s, (unit.y - 1) * s, "#fff", 16, 60);
@@ -1370,13 +1348,13 @@ const SpellArena = {
     const trigger = () => {
       const spell = spellDef();
       const wizard = myWizard();
-      if (!canAct() || !aim || !spell || !wizard || spell.quick || charge) return;
-      if (spell.place) {
+      if (!canAct() || !aim || !spell || !wizard || spell.input === "instant" || charge) return;
+      if (spell.input === "place") {
         const target = placeTarget();
         if (!target || !target.inRange || target.sinks) return;
         castLocked = true;
         this.pushEvent("place", { spell: spell.id, x: Math.round(target.x * 10) / 10, y: Math.round(target.y * 10) / 10 });
-      } else if (spell.gravity === 0) {
+      } else if (spell.input === "beam") {
         castLocked = true;
         this.pushEvent("cast", { spell: spell.id, angle: Math.round(aim.angle * 10) / 10, power: 100 });
       } else {

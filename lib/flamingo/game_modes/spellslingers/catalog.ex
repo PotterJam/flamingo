@@ -14,6 +14,33 @@ defmodule Flamingo.GameModes.Spellslingers.Catalog do
     place: false
   }
 
+  # The colour clients draw each spell's flight, aim line and effects in.
+  @colors %{
+    "ember" => "#f97316",
+    "blink" => "#c084fc",
+    "cluster" => "#ef4444",
+    "inferno" => "#facc15",
+    "firerain" => "#fb923c",
+    "imp" => "#dc2626",
+    "boulder" => "#78716c",
+    "rampart" => "#a16207",
+    "golem" => "#57534e",
+    "quake" => "#92400e",
+    "lance" => "#fde047",
+    "gust" => "#e0f2fe",
+    "chain" => "#93c5fd",
+    "wisp" => "#a5f3fc",
+    "thornling" => "#22c55e",
+    "bloom" => "#f472b6",
+    "burrow" => "#d97706",
+    "chaos" => "#d946ef",
+    "ward" => "#60a5fa",
+    "levitate" => "#c4b5fd",
+    "ledge" => "#a8a29e",
+    "updraft" => "#7dd3fc",
+    "swap" => "#f0abfc"
+  }
+
   @spells [
             %{
               id: "ember",
@@ -263,6 +290,19 @@ defmodule Flamingo.GameModes.Spellslingers.Catalog do
             }
           ]
           |> Enum.map(&Map.merge(@spell_defaults, &1))
+          |> Enum.map(fn spell ->
+            # How a player aims it: hold to charge a lob, click to fire a straight
+            # beam, click to place it, or cast at once on picking it.
+            input =
+              cond do
+                spell.quick -> "instant"
+                spell.place -> "place"
+                spell.gravity == 0 -> "beam"
+                true -> "charge"
+              end
+
+            Map.merge(spell, %{input: input, color: Map.fetch!(@colors, spell.id)})
+          end)
 
   @spell_index Map.new(@spells, &{&1.id, &1})
 
