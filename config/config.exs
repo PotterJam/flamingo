@@ -24,6 +24,9 @@ config :flamingo,
   ecto_repos: [Flamingo.Repo],
   generators: [timestamp_type: :utc_datetime, binary_id: true]
 
+# Signed-in players who get in-game developer tools (see Flamingo.DevTools).
+config :flamingo, :dev_tool_emails, ["jamesrpotter1@gmail.com", "james@gearset.com"]
+
 config :assent, http_adapter: Assent.HTTPAdapter.Req
 
 # Configure the endpoint
