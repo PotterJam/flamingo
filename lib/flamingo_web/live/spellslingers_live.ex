@@ -905,7 +905,8 @@ defmodule FlamingoWeb.SpellslingersLive do
   # The hook keeps what it already has, so the spell catalog goes out once per
   # mount, and terrain and physics (which dev tuning changes) only on change.
   defp client_state(snapshot, selected, sent) do
-    static = if sent == %{}, do: [:spells], else: []
+    full? = sent == %{}
+    static = if full?, do: [:spells], else: []
     changed = for key <- [:terrain, :physics], snapshot[key] != sent[key], do: key
 
     snapshot
@@ -930,6 +931,7 @@ defmodule FlamingoWeb.SpellslingersLive do
         ]
     )
     |> Map.put(:selected_spell, selected)
+    |> Map.put(:full, full?)
     |> Map.put(
       :players,
       Map.new(snapshot.players, fn {id, p} -> {id, %{name: p.name, color: p.color}} end)

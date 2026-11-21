@@ -1453,9 +1453,20 @@ const SpellArena = {
 
     // Unchanged terrain and the static catalog are left out of later updates.
     let latest: ArenaState | null = null;
-    this.handleEvent<Partial<ArenaState>>("arena_state", (update) => {
+    // The first snapshot after a (re)mount is the whole board. A cast it carries
+    // already resolved while we were away, so the board is shown as it is rather
+    // than replayed over what may now be our turn.
+    this.handleEvent<Partial<ArenaState> & { full?: boolean }>("arena_state", ({ full, ...update }) => {
       latest = { ...latest, ...update } as ArenaState;
-      receive(latest);
+      if (full) {
+        animation = null;
+        pending = null;
+        backlog.length = 0;
+        charge = null;
+        show(latest);
+      } else {
+        receive(latest);
+      }
     });
     this.handleEvent("arena_unlock", () => {
       castLocked = false;

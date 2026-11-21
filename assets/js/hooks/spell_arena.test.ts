@@ -222,3 +222,17 @@ test("a first tap places a placed spell without any hover", () => {
   a.down();
   expect(casts(a.sent).map((e) => [e.name, e.spell])).toEqual([["place", "golem"]]);
 });
+
+test("a rejoin shows the board as it is instead of replaying a cast it missed", () => {
+  const a = mount();
+  a.server("arena_state", state({ current_id: "other" }));
+  a.tick(1);
+  // After a reconnect the LiveView remounts and sends a full snapshot, catalog
+  // included, whose last cast already resolved and whose turn is now ours.
+  a.server("arena_state", { ...state({ last_cast: { ...cast(7), flight_steps: 451, duration_ms: 12000 } }), full: true });
+  a.tick(100);
+  a.down();
+  now = 500;
+  a.up();
+  expect(casts(a.sent)).toHaveLength(1);
+});
