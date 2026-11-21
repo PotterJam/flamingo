@@ -205,7 +205,10 @@ defmodule Flamingo.GameModes.Spellslingers.Units do
   end
 
   def unbury_all(state) do
-    Enum.reduce(Map.values(state.units), state, fn unit, state ->
+    state.units
+    |> Map.values()
+    |> Enum.filter(&alive_unit?/1)
+    |> Enum.reduce(state, fn unit, state ->
       lifted =
         Enum.find_value(0..30, fn dy ->
           if not blocked?(state, unit, unit.x, unit.y - dy), do: %{unit | y: unit.y - dy}

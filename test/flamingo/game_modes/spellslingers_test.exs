@@ -2,7 +2,7 @@ defmodule Flamingo.GameModes.SpellslingersTest do
   use ExUnit.Case, async: true
 
   alias Flamingo.GameModes.Spellslingers
-  alias Flamingo.GameModes.Spellslingers.{Physics, Terrain}
+  alias Flamingo.GameModes.Spellslingers.{Physics, Spells, Terrain}
 
   defp roster(order, offline \\ []) do
     %{
@@ -447,6 +447,40 @@ defmodule Flamingo.GameModes.SpellslingersTest do
 
     {:ok, %{state: next}} = Spellslingers.timeout(state, :arena_surge, context(r))
     assert next.phase in [:arena_aim, :game_ended]
+  end
+
+  test "a wizard knocked into the sea beside a cliff is out, not lifted onto the cliff" do
+    {state, _r} = started()
+    [_first, second] = state.turn_order
+    {width, height} = Spellslingers.dimensions()
+    x = width - 1
+    sea = state.water_level
+
+    # Knockback leaves a unit that left the map at the waterline; here that spot
+    # is inside a cliff, which is what used to lift it back up with full health.
+    terrain =
+      for y <- 0..(height - 1), cx <- 0..(width - 1), into: <<>> do
+        if cx >= x - 2 and y >= sea - 8,
+          do: <<1>>,
+          else: <<:binary.at(state.terrain, y * width + cx)>>
+      end
+
+    unit = %{state.units[second] | x: x, y: sea}
+    state = %{state | terrain: terrain, units: %{state.units | second => unit}}
+
+    fx = %{
+      state: state,
+      target: nil,
+      segments: [],
+      beams: [],
+      auras: [],
+      impulses: %{},
+      shake: false
+    }
+
+    {after_knock, _knocks} = Spells.resolve_fx(state, fx)
+
+    assert after_knock.units[second].dead
   end
 
   defp pass(state, r) do

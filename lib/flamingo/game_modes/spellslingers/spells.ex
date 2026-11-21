@@ -74,7 +74,15 @@ defmodule Flamingo.GameModes.Spellslingers.Spells do
 
   def resolve_fx(state, fx) do
     {state, knocks} = Physics.apply_knocks(state, fx.impulses)
-    state = state |> Units.settle_all() |> Units.collect_crates() |> Units.resolve_deaths()
+    # Anything knocked off the map or into the sea is gone before settling could
+    # lift it back onto nearby ground.
+    state =
+      state
+      |> Units.resolve_deaths()
+      |> Units.settle_all()
+      |> Units.collect_crates()
+      |> Units.resolve_deaths()
+
     {state, knocks}
   end
 
