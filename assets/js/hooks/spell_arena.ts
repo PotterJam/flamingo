@@ -256,7 +256,10 @@ const SpellArena = {
     document.addEventListener("fullscreenchange", onFullscreenChange);
 
     let shown: ArenaState | null = null;
+    // The state the current animation leads to, and states carrying later casts
+    // that arrived while it played; each of those plays in turn.
     let pending: ArenaState | null = null;
+    const backlog: ArenaState[] = [];
     let terrainCanvas: HTMLCanvasElement | null = null;
     let terrainKey = "";
     let seenCastId = -1;
@@ -338,7 +341,8 @@ const SpellArena = {
       const cast = state.last_cast;
 
       if (animation) {
-        pending = state;
+        if (cast?.id === animation.cast.id) pending = state;
+        else backlog.push(state);
       } else if (shown && cast && cast.id !== seenCastId) {
         seenCastId = cast.id;
         animation = { cast, start: performance.now(), landed: new Set(), aftermathAt: null };
@@ -1071,6 +1075,7 @@ const SpellArena = {
           pending = null;
           receive(next);
         }
+        while (!animation && backlog.length) receive(backlog.shift()!);
       }
     };
 
