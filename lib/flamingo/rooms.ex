@@ -47,14 +47,9 @@ defmodule Flamingo.Rooms do
     RoomServer.snapshot(room_id)
   end
 
-  @doc """
-  Starts a game of `mode` in the room's lobby, run by the `engine` game module.
-  The room reports `mode` as the snapshot's `game_mode`.
-  """
   def start_game(room_id, mode, engine, settings),
     do: RoomServer.start_game(room_id, mode, engine, settings)
 
-  @doc "Records the host's mode choice and settings draft so every viewer and later lobby sees it."
   def update_lobby(room_id, mode, draft), do: RoomServer.update_lobby(room_id, mode, draft)
 
   def select_word(room_id, word) do
