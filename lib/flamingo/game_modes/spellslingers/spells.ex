@@ -328,8 +328,10 @@ defmodule Flamingo.GameModes.Spellslingers.Spells do
   def effect(:chain, fx, actor, spell, angle, power) do
     case throw_spell(fx, actor, spell, angle, power) do
       {fx, {kind, {x, y}}, _} when kind in [:terrain, :unit] ->
+        # The unit struck directly already took the bolt, so the arcs skip it.
+        struck = if kind == :unit, do: Physics.unit_hit(fx.state, x, y, &(&1 != actor))
         fx = Physics.explode(fx, actor, {x, y}, spell.radius, spell.damage, spell.knock)
-        chain(fx, actor, {x, y}, MapSet.new([actor]), 2)
+        chain(fx, actor, {x, y}, MapSet.new(Enum.reject([actor, struck], &is_nil/1)), 2)
 
       {fx, _, _} ->
         fizzle(fx)

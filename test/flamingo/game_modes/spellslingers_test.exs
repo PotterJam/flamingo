@@ -483,6 +483,19 @@ defmodule Flamingo.GameModes.SpellslingersTest do
     assert after_knock.units[second].dead
   end
 
+  test "chain lightning does not arc back into the wizard it struck" do
+    {state, r} = started()
+    [first, second] = state.turn_order
+    state = clear_line(%{state | wind: 0, books: %{first => ["storm"]}}, first, second)
+    {:cast, _, angle, _} = lance_at(state, first, second)
+
+    {:ok, %{state: cast}} =
+      Spellslingers.command(state, first, {:cast, "chain", angle, 100}, context(r, first))
+
+    assert cast.units[second].hp < 100
+    assert cast.last_cast.beams == []
+  end
+
   defp pass(state, r) do
     {:ok, %{state: state}} = Spellslingers.command(state, "a", :pass, context(r, "a"))
     state
