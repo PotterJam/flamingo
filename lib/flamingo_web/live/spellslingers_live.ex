@@ -33,7 +33,8 @@ defmodule FlamingoWeb.SpellslingersLive do
        selected_spell: "ember",
        quick_used: false,
        last_cast_id: nil,
-       pending_board: nil
+       pending_board: nil,
+       sent_terrain: nil
      )}
   end
 
@@ -685,7 +686,8 @@ defmodule FlamingoWeb.SpellslingersLive do
 
     socket =
       socket
-      |> push_event("arena_state", client_state(snapshot, selected))
+      |> push_event("arena_state", client_state(snapshot, selected, socket.assigns.sent_terrain))
+      |> assign(:sent_terrain, snapshot.terrain)
       |> push_event("set_timer", %{
         end_time: timer_end(snapshot.phase, Map.get(snapshot, :turn_end_time))
       })
@@ -700,27 +702,33 @@ defmodule FlamingoWeb.SpellslingersLive do
       else: socket
   end
 
-  defp client_state(snapshot, selected) do
+  # The hook keeps what it already has, so the spell catalog and physics go
+  # out once per mount and terrain only when it changes.
+  defp client_state(snapshot, selected, sent_terrain) do
+    static = if sent_terrain, do: [], else: [:physics, :spells]
+    terrain = if snapshot.terrain == sent_terrain, do: [], else: [:terrain]
+
     snapshot
-    |> Map.take([
-      :phase,
-      :viewer_id,
-      :current_id,
-      :wind,
-      :width,
-      :height,
-      :water_level,
-      :terrain,
-      :units,
-      :last_cast,
-      :physics,
-      :spells,
-      :participation,
-      :crates,
-      :my_spells,
-      :map_id,
-      :quick_used
-    ])
+    |> Map.take(
+      static ++
+        terrain ++
+        [
+          :phase,
+          :viewer_id,
+          :current_id,
+          :wind,
+          :width,
+          :height,
+          :water_level,
+          :units,
+          :last_cast,
+          :participation,
+          :crates,
+          :my_spells,
+          :map_id,
+          :quick_used
+        ]
+    )
     |> Map.put(:selected_spell, selected)
     |> Map.put(
       :players,

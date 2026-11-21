@@ -1457,7 +1457,12 @@ const SpellArena = {
     window.addEventListener("keydown", onKeyDown);
     window.addEventListener("keyup", onKeyUp);
 
-    this.handleEvent<ArenaState>("arena_state", receive);
+    // Unchanged terrain and the static catalog are left out of later updates.
+    let latest: ArenaState | null = null;
+    this.handleEvent<Partial<ArenaState>>("arena_state", (update) => {
+      latest = { ...latest, ...update } as ArenaState;
+      receive(latest);
+    });
     this.handleEvent("arena_unlock", () => {
       castLocked = false;
     });
