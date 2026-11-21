@@ -205,8 +205,8 @@ defmodule Flamingo.GameModes.Spellslingers do
 
   def command(_state, _actor, {:choose_book, _}, _context), do: {:error, :invalid_book}
 
-  def command(%{phase: :arena_aim} = state, actor, {:walk, dir}, _context) when dir in [-1, 1] do
-    with :ok <- check_turn(state, actor), do: walk(state, actor, dir)
+  def command(%{phase: :arena_aim} = state, actor, {:walk, dir}, context) when dir in [-1, 1] do
+    with :ok <- check_turn(state, actor), do: walk(state, actor, dir, context)
   end
 
   def command(%{phase: :arena_aim} = state, actor, {:rise, dir}, _context) when dir in [-1, 1] do
@@ -266,7 +266,8 @@ defmodule Flamingo.GameModes.Spellslingers do
 
   def command(_state, _actor, _command, _context), do: {:error, :invalid_command}
 
-  def timeout(%{phase: :arena_books} = state, :arena_books, _context), do: begin_duel(state)
+  def timeout(%{phase: :arena_books} = state, :arena_books, context),
+    do: begin_duel(state, context)
 
   def timeout(%{phase: :arena_aim} = state, :arena_turn, context) do
     state
@@ -351,17 +352,18 @@ defmodule Flamingo.GameModes.Spellslingers do
           match?(%{connected: true}, context.roster.players[id])
       end)
 
-    if waiting == [], do: begin_duel(state), else: ok(state)
+    if waiting == [], do: begin_duel(state, context), else: ok(state)
   end
 
-  defp begin_duel(state) do
+  defp begin_duel(state, context) do
     {books, rng} =
       Enum.reduce(state.turn_order, {state.books, state.rng}, fn id, {books, rng} ->
         {mine, rng} = fill_books(Map.get(books, id, []), rng)
         {Map.put(books, id, mine), rng}
       end)
 
-    first = Enum.find(state.turn_order, &Units.alive?(state, &1))
+    # The same rule as every later turn: the first wizard who is still here.
+    first = next_turn(state, List.last(state.turn_order), context)
 
     state =
       %{
@@ -467,14 +469,12 @@ defmodule Flamingo.GameModes.Spellslingers do
       (Enum.drop(state.turn_order, index + 1) ++ Enum.take(state.turn_order, index + 1))
       |> Enum.filter(&Units.alive?(state, &1))
 
-    online = Enum.filter(candidates, &online?(context, &1))
+    online = Enum.filter(candidates, &online?(state, context, &1))
     List.first(online) || List.first(candidates)
   end
 
-  defp online?(nil, _id), do: true
-
-  defp online?(context, id),
-    do: String.starts_with?(id, "bot-") or match?(%{connected: true}, context.roster.players[id])
+  defp online?(state, context, id),
+    do: Bots.bot?(state, id) or match?(%{connected: true}, context.roster.players[id])
 
   defp tick_cooldowns(state, owner) do
     just_cast = state.cast_this_turn
@@ -508,7 +508,7 @@ defmodule Flamingo.GameModes.Spellslingers do
       else: turn
   end
 
-  defp walk(state, actor, dir) do
+  defp walk(state, actor, dir, context) do
     with true <- state.walk_left > 0 || {:error, :no_steps_left},
          {:ok, wizard} <- Units.step(state, state.units[actor], dir) do
       {wizard, fall} = Units.settle(state, wizard)
@@ -522,7 +522,7 @@ defmodule Flamingo.GameModes.Spellslingers do
 
       cond do
         winner_decided?(state) -> finish(state)
-        not Units.alive?(state, actor) -> end_turn(state, nil)
+        not Units.alive?(state, actor) -> end_turn(state, context)
         true -> ok(state)
       end
     end
@@ -541,8 +541,8 @@ defmodule Flamingo.GameModes.Spellslingers do
     ok(state, :ok, [{:schedule_hint_timeout, :arena_bot, delay}])
   end
 
-  defp apply_bot_move({{:walk, dir}, state}, bot, _context) do
-    case walk(state, bot, dir) do
+  defp apply_bot_move({{:walk, dir}, state}, bot, context) do
+    case walk(state, bot, dir, context) do
       {:ok, %{state: %{phase: :arena_aim, current_id: ^bot}} = result} ->
         {:ok, %{result | timers: result.timers ++ [{:schedule_hint_timeout, :arena_bot, 90}]}}
 

@@ -386,6 +386,24 @@ defmodule Flamingo.GameModes.SpellslingersTest do
     assert cast.damage_dealt[first] > 0
   end
 
+  test "the opening turn skips a wizard who disconnected while choosing books" do
+    r = roster(["a", "b", "c"])
+
+    state =
+      Enum.reduce(["a", "b", "c"], Spellslingers.new(), fn id, state ->
+        {:ok, %{state: state}} = Spellslingers.admit_member(state, r.players[id], context(r))
+        state
+      end)
+
+    {:ok, %{state: state}} = Spellslingers.start(state, %{seed: 42}, context(r))
+    [gone | rest] = state.turn_order
+    away = roster(["a", "b", "c"], [gone])
+
+    {:ok, %{state: state}} = Spellslingers.timeout(state, :arena_books, context(away))
+
+    assert state.current_id == hd(rest)
+  end
+
   defp pass(state, r) do
     {:ok, %{state: state}} = Spellslingers.command(state, "a", :pass, context(r, "a"))
     state
