@@ -58,4 +58,24 @@ defmodule FlamingoWeb.SpellslingersLiveTest do
     render_hook(arena, "place", %{"spell" => "golem", "x" => "a", "y" => 1})
     assert has_element?(arena, "#arena-canvas")
   end
+
+  test "a lone host can start a duel against AI wizards from the lobby", %{conn: conn} do
+    room_id = "spellslingers-bots-#{System.unique_integer([:positive])}"
+    {:ok, ^room_id} = RoomSupervisor.start_room(room_id)
+    host_token = join_connected(room_id, "Alice")
+    {:ok, lobby, _html} = live(conn, ~p"/game/#{room_id}?resume_token=#{host_token}")
+
+    lobby |> element("#game-mode-spellslingers") |> render_click()
+    refute has_element?(lobby, "#start-game-button[disabled]")
+
+    lobby
+    |> form("#settings-form", %{"settings" => %{"bots" => "2"}})
+    |> render_submit()
+
+    assert_redirect(lobby, "/game/#{room_id}/spellslingers?resume_token=#{host_token}")
+
+    %{game: game} = :sys.get_state(:global.whereis_name({:flamingo_room, room_id}))
+    assert length(game.turn_order) == 3
+    assert Enum.count(game.turn_order, &String.starts_with?(&1, "bot-")) == 2
+  end
 end

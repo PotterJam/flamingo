@@ -25,6 +25,9 @@ defmodule Flamingo.GameModes.Spellslingers do
   defdelegate spells, to: Catalog
   defdelegate books, to: Catalog
   defdelegate maps, to: Catalog
+
+  @doc "The most AI wizards a host can add."
+  def max_bots, do: @max_bots
   def dimensions, do: {@width, @height}
 
   def new do
@@ -108,7 +111,6 @@ defmodule Flamingo.GameModes.Spellslingers do
     turn_length = Map.get(settings, :turn_length, state.turn_length)
     arena_map = Map.get(settings, :arena_map, "random")
     bots = Map.get(settings, :bots, 0)
-    bot_ids = if is_integer(bots) and bots > 0, do: Enum.map(1..bots, &"bot-#{&1}"), else: []
 
     with true <- context.actor_id == roster.host_id || {:error, :not_host},
          true <- (is_integer(bots) and bots in 0..@max_bots) || {:error, :invalid_bots},
@@ -116,6 +118,8 @@ defmodule Flamingo.GameModes.Spellslingers do
          true <-
            turn_length in GameSettings.turn_length_range() || {:error, :invalid_turn_length},
          true <- arena_map in ["random" | Catalog.map_ids()] || {:error, :invalid_arena_map} do
+      bot_ids = for n <- 1..bots//1, do: "bot-#{n}"
+
       # Tests pass a fixed seed; real games roll their own.
       rng =
         :rand.seed_s(

@@ -22,7 +22,6 @@ defmodule FlamingoWeb.Router do
     scope "/dev", FlamingoWeb do
       pipe_through :browser
       get "/log-in/:email", UserSessionController, :dev_log_in
-      live "/spellslingers", SpellslingersDevLive
     end
 
     scope "/preview", FlamingoWeb do
