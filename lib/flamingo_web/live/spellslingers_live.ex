@@ -551,6 +551,8 @@ defmodule FlamingoWeb.SpellslingersLive do
     """
   end
 
+  @dirs [-1, 1, "-1", "1"]
+
   def handle_event("choose_book", %{"book" => book}, socket) do
     Rooms.command(socket.assigns.room_id, {:choose_book, book})
     {:noreply, socket}
@@ -578,16 +580,13 @@ defmodule FlamingoWeb.SpellslingersLive do
     end
   end
 
-  def handle_event("rise", %{"dir" => dir}, socket) do
-    dir = if dir in [-1, "-1"], do: -1, else: 1
-    Rooms.command(socket.assigns.room_id, {:rise, dir})
+  def handle_event("rise", %{"dir" => dir}, socket) when dir in @dirs do
+    Rooms.command(socket.assigns.room_id, {:rise, parse_dir(dir)})
     {:noreply, socket}
   end
 
-  def handle_event("walk", %{"dir" => dir}, socket) do
-    dir = if dir in [-1, "-1"], do: -1, else: 1
-
-    case Rooms.command(socket.assigns.room_id, {:walk, dir}) do
+  def handle_event("walk", %{"dir" => dir}, socket) when dir in @dirs do
+    case Rooms.command(socket.assigns.room_id, {:walk, parse_dir(dir)}) do
       {:error, reason} when reason not in [:blocked, :no_steps_left, :not_your_turn] ->
         {:noreply, put_flash(socket, :error, command_error(reason))}
 
@@ -617,6 +616,13 @@ defmodule FlamingoWeb.SpellslingersLive do
       _ -> {:noreply, socket}
     end
   end
+
+  # Malformed payloads issue no command.
+  def handle_event(_event, _params, socket), do: {:noreply, socket}
+
+  # Keys push numbers; the on-screen buttons send phx-value strings.
+  defp parse_dir(dir) when dir in [-1, "-1"], do: -1
+  defp parse_dir(_dir), do: 1
 
   defp send_cast(socket, command) do
     case Rooms.command(socket.assigns.room_id, command) do

@@ -51,5 +51,11 @@ defmodule FlamingoWeb.SpellslingersLiveTest do
 
     {:ok, arena, _html} = live(conn, path)
     assert has_element?(arena, "#arena-canvas")
+
+    # Malformed client payloads are ignored rather than crashing the arena.
+    render_hook(arena, "walk", %{"dir" => "sideways"})
+    render_hook(arena, "cast", %{"angle" => 40})
+    render_hook(arena, "place", %{"spell" => "golem", "x" => "a", "y" => 1})
+    assert has_element?(arena, "#arena-canvas")
   end
 end
