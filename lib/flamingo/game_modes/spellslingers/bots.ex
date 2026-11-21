@@ -36,7 +36,8 @@ defmodule Flamingo.GameModes.Spellslingers.Bots do
   # use. `ready` lists the spell ids the bot may cast right now.
   #
   # Returns {move, state}, where state carries the updated plan and rng, and move is
-  # {:plan, ward?, delay_ms}, {:walk, dir}, {:cast, spell_id, angle, power} or :pass.
+  # {:plan, ward?, delay_ms}, {:walk, dir}, {:cast, spell_id, angle, power},
+  # {:place, spell_id, x, y} or :pass.
   def next_move(%{bot_plan: nil} = state, ready), do: think(state, ready)
 
   def next_move(%{bot_plan: %{steps: [dir | rest]} = plan} = state, _ready),
@@ -153,15 +154,31 @@ defmodule Flamingo.GameModes.Spellslingers.Bots do
 
       spell = Catalog.spell(spell_id)
 
-      {angle, power, _} =
-        bot_aim(state, Spells.caster_origin(state, me.id), me.id, point, spell, near_ok: near_ok)
+      if spell.place do
+        {x, y} = within_place_range(me, point)
+        {{:place, spell_id, x, y}, state}
+      else
+        {angle, power, _} =
+          bot_aim(state, Spells.caster_origin(state, me.id), me.id, point, spell,
+            near_ok: near_ok
+          )
 
-      {jitter_a, rng} = :rand.normal_s(state.rng)
-      {jitter_p, rng} = :rand.normal_s(rng)
-      angle = Terrain.clamp(angle + jitter_a * 1.5, -180, 360)
-      power = Terrain.clamp(power + jitter_p * 2.5, 5, 100)
-      {{:cast, spell_id, angle, power}, %{state | rng: rng}}
+        {jitter_a, rng} = :rand.normal_s(state.rng)
+        {jitter_p, rng} = :rand.normal_s(rng)
+        angle = Terrain.clamp(angle + jitter_a * 1.5, -180, 360)
+        power = Terrain.clamp(power + jitter_p * 2.5, 5, 100)
+        {{:cast, spell_id, angle, power}, %{state | rng: rng}}
+      end
     end
+  end
+
+  # Pulls a point back toward the bot until it is inside the placement range,
+  # measured from the same spot the engine's range check uses.
+  defp within_place_range(me, {x, y}) do
+    {ox, oy} = {me.x + 0.5, me.y - 1.0}
+    distance = :math.sqrt((x - ox) ** 2 + (y - oy) ** 2)
+    k = min(1.0, (@place_range - 2) / max(distance, 0.001))
+    {Float.round(ox + (x - ox) * k, 1), Float.round(oy + (y - oy) * k, 1)}
   end
 
   defp bot_enemies(state, me) do

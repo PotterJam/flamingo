@@ -355,6 +355,9 @@ defmodule Flamingo.GameModes.SpellslingersTest do
     me = state.units[first]
     {x, y} = {me.x + 10, me.y - 12}
 
+    assert {:error, :place_only} =
+             Spellslingers.command(state, first, {:cast, "ledge", 45, 100}, context(r, first))
+
     assert {:error, :out_of_range} =
              Spellslingers.command(
                state,

@@ -231,6 +231,7 @@ defmodule Flamingo.GameModes.Spellslingers do
          {:ok, spell} <- Catalog.fetch_spell(spell_id),
          true <- spell.id in spellbook(state, actor) || {:error, :unknown_spell},
          true <- spell_ready?(state, actor, spell.id) || {:error, :spell_cooling_down},
+         true <- not spell.place || {:error, :place_only},
          true <- not (spell.quick and state.quick_used) || {:error, :quick_used},
          true <- (angle >= -180 and angle <= 360) || {:error, :invalid_aim},
          true <- (power >= 0 and power <= 100) || {:error, :invalid_aim} do
@@ -555,6 +556,11 @@ defmodule Flamingo.GameModes.Spellslingers do
 
   defp apply_bot_move({{:cast, spell, angle, power}, state}, bot, context) do
     with {:error, _} <- command(state, bot, {:cast, spell, angle, power}, context),
+         do: end_turn(state, context)
+  end
+
+  defp apply_bot_move({{:place, spell, x, y}, state}, bot, context) do
+    with {:error, _} <- command(state, bot, {:place, spell, x, y}, context),
          do: end_turn(state, context)
   end
 

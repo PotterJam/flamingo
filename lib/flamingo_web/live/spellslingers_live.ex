@@ -814,5 +814,6 @@ defmodule FlamingoWeb.SpellslingersLive do
   defp command_error(:spectator), do: "You're watching this duel."
   defp command_error(:not_host), do: "Only the host can do that."
   defp command_error(:out_of_range), do: "That's too far away to conjure."
+  defp command_error(:place_only), do: "Point where that spell should appear."
   defp command_error(reason), do: "That didn't work (#{reason})."
 end
