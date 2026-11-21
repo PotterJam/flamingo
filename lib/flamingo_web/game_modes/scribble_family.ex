@@ -24,29 +24,20 @@ defmodule FlamingoWeb.GameModes.ScribbleFamily do
 
       @family_opts opts
 
-      @impl true
       def id, do: Keyword.fetch!(@family_opts, :id)
-      @impl true
       def title, do: Keyword.fetch!(@family_opts, :title)
-      @impl true
       def description, do: Keyword.fetch!(@family_opts, :description)
-      @impl true
       def theme, do: Keyword.fetch!(@family_opts, :theme)
-      @impl true
       def engine, do: Keyword.get(@family_opts, :engine, Flamingo.GameModes.Scribble)
-      @impl true
       def live_view, do: FlamingoWeb.ScribbleLive
-      @impl true
       def path(room_id, token), do: FlamingoWeb.GameModes.ScribbleFamily.path(room_id, token)
 
-      @impl true
       def settings(assigns),
         do:
           FlamingoWeb.GameModes.ScribbleFamily.settings(
             Map.put(assigns, :spin?, Keyword.get(@family_opts, :spin, false))
           )
 
-      @impl true
       def parse_settings(params),
         do:
           FlamingoWeb.GameModes.ScribbleFamily.parse_settings(

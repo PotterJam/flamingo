@@ -66,7 +66,6 @@ defmodule FlamingoWeb.GameMode do
       @behaviour FlamingoWeb.GameMode
       use FlamingoWeb, :html
 
-      @impl FlamingoWeb.GameMode
       def min_players, do: 2
 
       defoverridable min_players: 0
