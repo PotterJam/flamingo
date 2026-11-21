@@ -79,9 +79,6 @@ defmodule Flamingo.GameModes.Spellslingers do
   def connection_changed(%{phase: :arena_books} = state, _id, :offline, context),
     do: maybe_begin_duel(state, context)
 
-  def connection_changed(%{phase: :arena_aim, current_id: id} = state, id, :offline, context),
-    do: end_turn(state, context)
-
   def connection_changed(state, _id, _status, _context), do: ok(state)
 
   def remove_member(state, id, _removed, context) do
