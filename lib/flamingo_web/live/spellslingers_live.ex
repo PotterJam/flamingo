@@ -596,12 +596,15 @@ defmodule FlamingoWeb.SpellslingersLive do
     end
   end
 
-  def handle_event("cast", %{"angle" => angle, "power" => power}, socket)
-      when is_number(angle) and is_number(power),
-      do: send_cast(socket, {:cast, socket.assigns.selected_spell, angle, power})
+  # The client names the spell it aimed, so a selection change still in flight
+  # can't turn a charged throw into a placement or the reverse.
+  def handle_event("cast", %{"spell" => spell, "angle" => angle, "power" => power}, socket)
+      when is_binary(spell) and is_number(angle) and is_number(power),
+      do: send_cast(socket, {:cast, spell, angle, power})
 
-  def handle_event("place", %{"x" => x, "y" => y}, socket) when is_number(x) and is_number(y),
-    do: send_cast(socket, {:place, socket.assigns.selected_spell, x, y})
+  def handle_event("place", %{"spell" => spell, "x" => x, "y" => y}, socket)
+      when is_binary(spell) and is_number(x) and is_number(y),
+      do: send_cast(socket, {:place, spell, x, y})
 
   def handle_event("pass", _params, socket) do
     Rooms.command(socket.assigns.room_id, :pass)

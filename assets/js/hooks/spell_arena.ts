@@ -286,7 +286,7 @@ const SpellArena = {
     let freeLookUntil = 0;
     let pointer: { x: number; y: number } | null = null;
     // Lobbed spells charge while the button is held, like a power bar.
-    let charge: { start: number } | null = null;
+    let charge: { start: number; spell: string } | null = null;
     const CHARGE_MS = 1300;
     // Where each unit is drawn. Steps glide toward the server position; jumps of
     // more than a few cells are teleports and flash at both ends.
@@ -1351,10 +1351,11 @@ const SpellArena = {
     const release = () => {
       if (!charge || !aim) return;
       const power = chargePower(performance.now());
+      const spell = charge.spell;
       charge = null;
       if (!canAct()) return;
       castLocked = true;
-      this.pushEvent("cast", { angle: Math.round(aim.angle * 10) / 10, power: Math.round(power * 10) / 10 });
+      this.pushEvent("cast", { spell, angle: Math.round(aim.angle * 10) / 10, power: Math.round(power * 10) / 10 });
     };
 
     // Lobbed spells charge; beams fire at once; placed spells conjure where you click.
@@ -1366,12 +1367,12 @@ const SpellArena = {
         const target = placeTarget();
         if (!target || !target.inRange || target.sinks) return;
         castLocked = true;
-        this.pushEvent("place", { x: Math.round(target.x * 10) / 10, y: Math.round(target.y * 10) / 10 });
+        this.pushEvent("place", { spell: spell.id, x: Math.round(target.x * 10) / 10, y: Math.round(target.y * 10) / 10 });
       } else if (spell.gravity === 0) {
         castLocked = true;
-        this.pushEvent("cast", { angle: Math.round(aim.angle * 10) / 10, power: 100 });
+        this.pushEvent("cast", { spell: spell.id, angle: Math.round(aim.angle * 10) / 10, power: 100 });
       } else {
-        charge = { start: performance.now() };
+        charge = { start: performance.now(), spell: spell.id };
       }
     };
 
