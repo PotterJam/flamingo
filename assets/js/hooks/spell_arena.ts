@@ -1421,6 +1421,9 @@ const SpellArena = {
       if (!shown || shown.participation !== "active") return;
 
       if (key === " ") {
+        // A keyboard-focused button keeps Space for itself; after a mouse click
+        // the focus is not visible and Space still charges.
+        if (target?.closest("button, a") && target.matches(":focus-visible")) return;
         event.preventDefault();
         if (!event.repeat) trigger();
         return;
