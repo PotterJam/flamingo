@@ -404,6 +404,51 @@ defmodule Flamingo.GameModes.SpellslingersTest do
     assert state.current_id == hd(rest)
   end
 
+  test "a winning shot stays a win even if the tide would drown the winner" do
+    {state, r} = started()
+    [first, second] = state.turn_order
+    me = %{state.units[first] | y: state.water_level - 1}
+
+    state = %{
+      state
+      | phase: :arena_resolve,
+        current_id: first,
+        rise_after: 0,
+        units: %{
+          state.units
+          | first => me,
+            second => %{state.units[second] | hp: 0, dead: true}
+        }
+    }
+
+    {:ok, %{state: over}} = Spellslingers.timeout(state, :arena_resolve, context(r))
+
+    assert over.phase == :game_ended
+    assert over.final_result.winner_id == first
+  end
+
+  test "meteors from a surge land before the next wizard's clock starts" do
+    {state, r} = started()
+    state = %{state | turn_number: 10}
+
+    # Pass until wild magic rolls a meteor shower; the rng is seeded, so this is stable.
+    {state, timers} =
+      Enum.reduce_while(1..300, {state, []}, fn _, {state, _} ->
+        {:ok, %{state: next, timers: timers}} =
+          Spellslingers.command(state, state.current_id, :pass, context(r, state.current_id))
+
+        if match?(%{caster_id: nil}, next.last_cast),
+          do: {:halt, {next, timers}},
+          else: {:cont, {next, timers}}
+      end)
+
+    assert state.phase == :arena_resolve
+    assert Enum.any?(timers, &match?({:schedule_phase_timeout, :arena_surge, _}, &1))
+
+    {:ok, %{state: next}} = Spellslingers.timeout(state, :arena_surge, context(r))
+    assert next.phase in [:arena_aim, :game_ended]
+  end
+
   defp pass(state, r) do
     {:ok, %{state: state}} = Spellslingers.command(state, "a", :pass, context(r, "a"))
     state

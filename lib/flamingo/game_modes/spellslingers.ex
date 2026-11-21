@@ -278,6 +278,9 @@ defmodule Flamingo.GameModes.Spellslingers do
   def timeout(%{phase: :arena_resolve} = state, :arena_resolve, context),
     do: end_turn(state, context)
 
+  def timeout(%{phase: :arena_resolve} = state, :arena_surge, context),
+    do: start_turn(state, state.current_id, nil, context)
+
   def timeout(%{phase: :arena_aim, current_id: bot} = state, :arena_bot, context) do
     if Bots.bot?(state, bot) and Units.alive?(state, bot) do
       ready = Enum.filter(spellbook(state, bot), &spell_ready?(state, bot, &1))
@@ -420,25 +423,44 @@ defmodule Flamingo.GameModes.Spellslingers do
     end
   end
 
+  # Ends the current wizard's turn. Each hazard stage can settle the duel, and a
+  # settled duel ends before any later hazard runs, so a winning shot stays a win.
   def end_turn(state, context) do
     owner = state.current_id
 
-    state =
-      state
-      |> Spells.minions_act(owner)
-      |> Units.resolve_deaths()
-      |> tick_float(owner)
-      |> tick_cooldowns(owner)
-      |> rise_tide()
-      |> Units.resolve_deaths()
+    with {:cont, state} <- unless_won(state),
+         {:cont, state} <-
+           state |> Spells.minions_act(owner) |> Units.resolve_deaths() |> unless_won(),
+         {:cont, state} <-
+           state
+           |> tick_float(owner)
+           |> tick_cooldowns(owner)
+           |> rise_tide()
+           |> Units.resolve_deaths()
+           |> unless_won() do
+      {surge, state} = Spells.roll_surge(state)
+      state = Spells.surge_before(state, surge)
 
-    {surge, state} = Spells.roll_surge(state)
-    state = Spells.surge_before(state, surge)
+      # Meteors play out like a cast before the next wizard's clock starts.
+      if surge == :meteors,
+        do:
+          ok(%{state | phase: :arena_resolve}, :ok, [
+            :cancel_hint_timeout,
+            {:schedule_phase_timeout, :arena_surge, state.last_cast.duration_ms + 1200}
+          ]),
+        else: start_turn(state, owner, surge, context)
+    else
+      {:won, state} -> finish(state)
+    end
+  end
 
+  defp unless_won(state), do: if(winner_decided?(state), do: {:won, state}, else: {:cont, state})
+
+  defp start_turn(state, previous, surge, context) do
     if winner_decided?(state) do
       finish(state)
     else
-      next = next_turn(state, owner, context)
+      next = next_turn(state, previous, context)
       {wind, rng} = Rng.roll_wind(state.rng)
 
       state =

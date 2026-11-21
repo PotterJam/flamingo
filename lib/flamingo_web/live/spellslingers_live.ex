@@ -91,6 +91,8 @@ defmodule FlamingoWeb.SpellslingersLive do
                     {@map_name}: choose two spellbooks
                   <% @my_turn? and @phase == :arena_aim -> %>
                     Your turn! Aim, then hold to charge and release.
+                  <% @phase == :arena_resolve and @surging? -> %>
+                    Wild magic! Meteors are falling…
                   <% @phase == :arena_resolve -> %>
                     {player_name(@players, @current_id)}'s spell is flying…
                   <% true -> %>
@@ -655,6 +657,7 @@ defmodule FlamingoWeb.SpellslingersLive do
         host_id: snapshot.host_id,
         online: snapshot.online,
         current_id: snapshot.current_id,
+        surging?: match?(%{caster_id: nil}, snapshot.last_cast),
         wind: snapshot.wind,
         walk_left: snapshot.walk_left,
         walk_budget: snapshot.walk_budget,
