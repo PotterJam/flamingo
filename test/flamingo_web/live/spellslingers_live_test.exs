@@ -78,4 +78,36 @@ defmodule FlamingoWeb.SpellslingersLiveTest do
     assert length(game.turn_order) == 3
     assert Enum.count(game.turn_order, &String.starts_with?(&1, "bot-")) == 2
   end
+
+  test "only allowlisted players get the dev tuning panel", %{conn: conn} do
+    room_id = "spellslingers-tuning-#{System.unique_integer([:positive])}"
+    {:ok, ^room_id} = RoomSupervisor.start_room(room_id)
+    token = join_connected(room_id, "Alice")
+    {:ok, lobby, _html} = live(conn, ~p"/game/#{room_id}?resume_token=#{token}")
+    lobby |> element("#game-mode-spellslingers") |> render_click()
+    lobby |> form("#settings-form", %{"settings" => %{"bots" => "1"}}) |> render_submit()
+    path = ~p"/game/#{room_id}/spellslingers?resume_token=#{token}"
+    assert_redirect(lobby, path)
+    tuning = fn -> :sys.get_state(:global.whereis_name({:flamingo_room, room_id})).game.tuning end
+
+    {:ok, guest, _html} = live(conn, path)
+    refute has_element?(guest, "#arena-dev-panel")
+
+    render_hook(guest, "tune", %{
+      "_target" => ["tuning", "gravity"],
+      "tuning" => %{"gravity" => "9"}
+    })
+
+    assert tuning.().gravity == 38.0
+
+    user = Flamingo.AccountsFixtures.user_fixture(%{"email" => "James@Gearset.com"})
+    {:ok, dev, _html} = live(log_in_user(conn, user), path)
+
+    dev
+    |> form("#arena-tuning-form", %{"tuning" => %{"gravity" => "9"}})
+    |> render_change(%{"_target" => ["tuning", "gravity"]})
+
+    assert tuning.().gravity == 9.0
+    assert has_element?(dev, "#arena-tuned")
+  end
 end

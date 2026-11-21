@@ -9,7 +9,7 @@ defmodule Flamingo.GameModes.Spellslingers.Spells do
     {chance, rng} = :rand.uniform_s(state.rng)
     state = %{state | rng: rng}
 
-    if state.turn_number >= 4 and chance < 0.22 do
+    if state.turn_number >= 4 and chance < state.tuning.surge_chance do
       {kind, rng} = Rng.pick([:meteors, :gale, :mana, :crates], state.rng)
       {kind, %{state | rng: rng}}
     else
@@ -69,7 +69,7 @@ defmodule Flamingo.GameModes.Spellslingers.Spells do
 
   def in_place_range?(state, actor, x, y) do
     caster = state.units[actor]
-    :math.sqrt((x - caster.x - 0.5) ** 2 + (y - caster.y + 1) ** 2) <= @place_range
+    :math.sqrt((x - caster.x - 0.5) ** 2 + (y - caster.y + 1) ** 2) <= state.tuning.place_range
   end
 
   def resolve_fx(state, fx) do
@@ -664,10 +664,10 @@ defmodule Flamingo.GameModes.Spellslingers.Spells do
     }
 
     cond do
-      owned >= @max_minions ->
+      owned >= state.tuning.max_minions ->
         Units.log(
           state,
-          "…but #{Units.player_name(state, actor)} already commands #{@max_minions} minions."
+          "…but #{Units.player_name(state, actor)} already commands #{state.tuning.max_minions} minions."
         )
 
       true ->

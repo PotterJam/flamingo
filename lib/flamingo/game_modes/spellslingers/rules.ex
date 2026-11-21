@@ -5,6 +5,25 @@ defmodule Flamingo.GameModes.Spellslingers.Rules do
   guards and patterns.
   """
 
+  # Numbers an allowlisted player can change mid-game from the arena's dev
+  # panel. Each game copies the defaults into `state.tuning`.
+  @tuning [
+    %{key: :gravity, label: "Gravity", default: 38.0, min: 5, max: 90, step: 1},
+    %{key: :wind_accel, label: "Wind strength", default: 1.6, min: 0, max: 6, step: 0.1},
+    %{key: :damage_pct, label: "Damage %", default: 100, min: 25, max: 400, step: 5},
+    %{key: :walk_budget, label: "Walk per turn", default: 40, min: 0, max: 200, step: 5},
+    %{key: :fall_safe, label: "Safe fall height", default: 8, min: 0, max: 60, step: 1},
+    # How far from the caster a placed spell (wall, ledge, summon, bloom) may land.
+    %{key: :place_range, label: "Place range", default: 70, min: 10, max: 250, step: 5},
+    %{key: :max_minions, label: "Minions per wizard", default: 2, min: 0, max: 8, step: 1},
+    %{key: :crate_chance, label: "Crate chance", default: 0.35, min: 0, max: 1, step: 0.05},
+    %{key: :max_crates, label: "Max crates", default: 4, min: 0, max: 12, step: 1},
+    %{key: :surge_chance, label: "Wild magic chance", default: 0.22, min: 0, max: 1, step: 0.05}
+  ]
+
+  def tuning, do: @tuning
+  def default_tuning, do: Map.new(@tuning, &{&1.key, &1.default})
+
   defmacro __using__(_opts) do
     quote do
       # The world is wider than one screen; the client's camera pans across it.
@@ -16,19 +35,11 @@ defmodule Flamingo.GameModes.Spellslingers.Rules do
       @margin div(@width - 200, 2)
       @sky @height - 100
       @wizard_hp 100
-      @walk_budget 40
       @max_climb 2
       @dt 0.04
-      @gravity 38.0
       @max_speed 78.0
-      @wind_accel 1.6
       @max_steps 450
       @playback_speed 1.6
-      @fall_safe 8
-      # How far from the caster a placed spell (wall, ledge, summon, bloom) may land.
-      @place_range 70
-      @max_minions 2
-      @max_crates 4
       @book_ms 25_000
       @max_bots 5
       @bot_think_ms 1400

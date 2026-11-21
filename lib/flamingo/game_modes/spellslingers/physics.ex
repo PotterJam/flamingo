@@ -13,8 +13,8 @@ defmodule Flamingo.GameModes.Spellslingers.Physics do
 
   @doc false
   def fly(state, origin, velocity, spell, ignore) do
-    ax = state.wind * @wind_accel * spell.wind
-    ay = @gravity * spell.gravity
+    ax = state.wind * state.tuning.wind_accel * spell.wind
+    ay = state.tuning.gravity * spell.gravity
     fly_step(state, origin, velocity, {ax, ay}, [origin], 0, ignore)
   end
 
@@ -114,7 +114,7 @@ defmodule Flamingo.GameModes.Spellslingers.Physics do
   defp knock_step(state, unit, pos, _v, path, 300), do: land(state, unit, pos, path)
 
   defp knock_step(state, unit, {x, y}, {vx, vy}, path, n) do
-    vy = vy + @gravity * @dt
+    vy = vy + state.tuning.gravity * @dt
     substeps = max(1, ceil(max(abs(vx), abs(vy)) * @dt / 0.6))
 
     result =

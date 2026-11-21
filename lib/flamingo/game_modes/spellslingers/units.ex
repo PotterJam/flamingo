@@ -8,12 +8,12 @@ defmodule Flamingo.GameModes.Spellslingers.Units do
   def maybe_drop_crate(state) do
     {chance, rng} = :rand.uniform_s(state.rng)
     state = %{state | rng: rng}
-    if chance < 0.35, do: drop_crate(state), else: state
+    if chance < state.tuning.crate_chance, do: drop_crate(state), else: state
   end
 
   def drop_crate(state) do
     case standable_spots(state, 1) do
-      spots when spots != [] and length(state.crates) < @max_crates ->
+      spots when spots != [] and length(state.crates) < state.tuning.max_crates ->
         {{x, y}, rng} = Rng.pick(spots, state.rng)
         {kind, rng} = Rng.pick([:health, :health, :mana], rng)
         id = "c#{state.crate_count + 1}"
@@ -74,6 +74,7 @@ defmodule Flamingo.GameModes.Spellslingers.Units do
         state
 
       unit ->
+        amount = round(amount * state.tuning.damage_pct / 100)
         ward = Map.get(unit, :ward, 0)
         absorbed = min(ward, amount)
         dealt = min(amount - absorbed, unit.hp)
@@ -228,10 +229,10 @@ defmodule Flamingo.GameModes.Spellslingers.Units do
     end)
   end
 
-  def fall_damage(state, id, fall) when fall > @fall_safe,
-    do: damage(state, id, (fall - @fall_safe) * 2, nil)
-
-  def fall_damage(state, _id, _fall), do: state
+  def fall_damage(state, id, fall) do
+    safe = state.tuning.fall_safe
+    if fall > safe, do: damage(state, id, (fall - safe) * 2, nil), else: state
+  end
 
   def resolve_deaths(state) do
     Enum.reduce(Enum.sort(Map.keys(state.units)), state, fn id, state ->

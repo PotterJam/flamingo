@@ -34,7 +34,10 @@ defmodule FlamingoWeb.SpellslingersLive do
        quick_used: false,
        last_cast_id: nil,
        pending_board: nil,
-       sent_terrain: nil
+       sent: %{},
+       tuning: %{},
+       tuned?: false,
+       dev_tools?: Flamingo.DevTools.allowed?(socket.assigns[:current_scope])
      )}
   end
 
@@ -102,6 +105,14 @@ defmodule FlamingoWeb.SpellslingersLive do
               </p>
             </div>
             <div class="flex shrink-0 items-center gap-4">
+              <span
+                :if={@tuned?}
+                id="arena-tuned"
+                class="rounded-full border-2 border-border bg-violet-100 px-2 py-0.5 text-xs font-bold"
+                title="Someone changed this game's rules from the dev panel"
+              >
+                Tuned rules
+              </span>
               <div id="arena-wind" class="flex items-center gap-2 text-sm font-bold">
                 <.icon name={:wind} class="size-5" />
                 <div class="relative h-3 w-28 overflow-hidden rounded-full border-2 border-border bg-sky-50">
@@ -343,6 +354,47 @@ defmodule FlamingoWeb.SpellslingersLive do
                   </li>
                 </ul>
               </.card>
+              <.card
+                :if={@dev_tools? and @tuning != %{}}
+                class="min-h-0 overflow-y-auto bg-violet-50 p-3"
+              >
+                <%!-- Keep the panel open across server updates --%>
+                <details id="arena-dev-panel" phx-mounted={JS.ignore_attributes(["open"])}>
+                  <summary class="cursor-pointer text-sm font-black tracking-wide uppercase">
+                    <span class="inline-flex items-center gap-1">
+                      <.icon name={:sliders_horizontal} class="size-4" /> Dev tuning
+                    </span>
+                  </summary>
+                  <form id="arena-tuning-form" phx-change="tune" class="mt-2 space-y-1.5">
+                    <label
+                      :for={rule <- Spellslingers.tuning()}
+                      class="flex items-center justify-between gap-2 text-xs"
+                    >
+                      <span>{rule.label}</span>
+                      <input
+                        type="number"
+                        name={"tuning[#{rule.key}]"}
+                        value={@tuning[rule.key]}
+                        min={rule.min}
+                        max={rule.max}
+                        step={rule.step}
+                        phx-debounce="400"
+                        class="w-20 rounded-base border-2 border-border bg-white px-1.5 py-0.5 text-right tabular-nums"
+                      />
+                    </label>
+                  </form>
+                  <.button
+                    size="sm"
+                    variant="ghost"
+                    class="mt-2"
+                    id="arena-reset-tuning"
+                    phx-click="reset_tuning"
+                    disabled={!@tuned?}
+                  >
+                    Restore normal rules
+                  </.button>
+                </details>
+              </.card>
               <.card class="min-h-24 flex-1 overflow-y-auto bg-white p-3">
                 <h2 class="mb-2 text-sm font-black tracking-wide uppercase">Chronicle</h2>
                 <ul id="arena-events" class="space-y-1 text-xs">
@@ -554,6 +606,21 @@ defmodule FlamingoWeb.SpellslingersLive do
 
   @dirs [-1, 1, "-1", "1"]
 
+  # Dev tuning is only for allowlisted players; everyone else's events are ignored.
+  def handle_event("tune", %{"_target" => ["tuning", key], "tuning" => values}, socket)
+      when socket.assigns.dev_tools? do
+    with {value, ""} <- Float.parse(to_string(values[key])) do
+      Rooms.command(socket.assigns.room_id, {:tune, key, value})
+    end
+
+    {:noreply, socket}
+  end
+
+  def handle_event("reset_tuning", _params, socket) when socket.assigns.dev_tools? do
+    Rooms.command(socket.assigns.room_id, :reset_tuning)
+    {:noreply, socket}
+  end
+
   def handle_event("choose_book", %{"book" => book}, socket) do
     Rooms.command(socket.assigns.room_id, {:choose_book, book})
     {:noreply, socket}
@@ -679,6 +746,8 @@ defmodule FlamingoWeb.SpellslingersLive do
         my_spells: snapshot.my_spells,
         map_name: snapshot.map_name,
         turn_end_time: Map.get(snapshot, :turn_end_time),
+        tuning: snapshot.tuning,
+        tuned?: snapshot.tuned?,
         selected_spell: selected
       )
 
@@ -686,8 +755,8 @@ defmodule FlamingoWeb.SpellslingersLive do
 
     socket =
       socket
-      |> push_event("arena_state", client_state(snapshot, selected, socket.assigns.sent_terrain))
-      |> assign(:sent_terrain, snapshot.terrain)
+      |> push_event("arena_state", client_state(snapshot, selected, socket.assigns.sent))
+      |> assign(:sent, Map.take(snapshot, [:terrain, :physics]))
       |> push_event("set_timer", %{
         end_time: timer_end(snapshot.phase, Map.get(snapshot, :turn_end_time))
       })
@@ -702,16 +771,16 @@ defmodule FlamingoWeb.SpellslingersLive do
       else: socket
   end
 
-  # The hook keeps what it already has, so the spell catalog and physics go
-  # out once per mount and terrain only when it changes.
-  defp client_state(snapshot, selected, sent_terrain) do
-    static = if sent_terrain, do: [], else: [:physics, :spells]
-    terrain = if snapshot.terrain == sent_terrain, do: [], else: [:terrain]
+  # The hook keeps what it already has, so the spell catalog goes out once per
+  # mount, and terrain and physics (which dev tuning changes) only on change.
+  defp client_state(snapshot, selected, sent) do
+    static = if sent == %{}, do: [:spells], else: []
+    changed = for key <- [:terrain, :physics], snapshot[key] != sent[key], do: key
 
     snapshot
     |> Map.take(
       static ++
-        terrain ++
+        changed ++
         [
           :phase,
           :viewer_id,

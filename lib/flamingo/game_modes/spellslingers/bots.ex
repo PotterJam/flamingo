@@ -82,7 +82,7 @@ defmodule Flamingo.GameModes.Spellslingers.Bots do
       Enum.reduce_while(1..budget//1, {me, []}, fn i, {unit, acc} ->
         with {:ok, moved} <- Units.step(state, unit, dir),
              {moved, fall} = Units.settle(state, moved),
-             true <- fall <= @fall_safe and moved.y < state.water_level - 1 do
+             true <- fall <= state.tuning.fall_safe and moved.y < state.water_level - 1 do
           {:cont, {moved, [{List.duplicate(dir, i), moved} | acc]}}
         else
           _ -> {:halt, {unit, acc}}
@@ -139,7 +139,7 @@ defmodule Flamingo.GameModes.Spellslingers.Bots do
           me.hp < 60 and "rampart" in ready and roll < 0.6 ->
             {"rampart", {mx + dir * 6, me.y + 1.0}, true}
 
-          summon && owned < @max_minions && roll < 0.2 ->
+          summon && owned < state.tuning.max_minions && roll < 0.2 ->
             {summon, Units.center(target), false}
 
           "quake" in ready and roll > 0.9 ->
@@ -155,7 +155,7 @@ defmodule Flamingo.GameModes.Spellslingers.Bots do
       spell = Catalog.spell(spell_id)
 
       if spell.place do
-        {x, y} = within_place_range(me, point)
+        {x, y} = within_place_range(me, point, state.tuning.place_range)
         {{:place, spell_id, x, y}, state}
       else
         {angle, power, _} =
@@ -174,10 +174,10 @@ defmodule Flamingo.GameModes.Spellslingers.Bots do
 
   # Pulls a point back toward the bot until it is inside the placement range,
   # measured from the same spot the engine's range check uses.
-  defp within_place_range(me, {x, y}) do
+  defp within_place_range(me, {x, y}, range) do
     {ox, oy} = {me.x + 0.5, me.y - 1.0}
     distance = :math.sqrt((x - ox) ** 2 + (y - oy) ** 2)
-    k = min(1.0, (@place_range - 2) / max(distance, 0.001))
+    k = min(1.0, (range - 2) / max(distance, 0.001))
     {Float.round(ox + (x - ox) * k, 1), Float.round(oy + (y - oy) * k, 1)}
   end
 
@@ -195,8 +195,8 @@ defmodule Flamingo.GameModes.Spellslingers.Bots do
     {angle_step, power_step, keep} =
       if opts[:coarse], do: {8, 10, 3}, else: {4, 5, 6}
 
-    ax = state.wind * @wind_accel * spell.wind
-    ay = @gravity * spell.gravity
+    ax = state.wind * state.tuning.wind_accel * spell.wind
+    ay = state.tuning.gravity * spell.gravity
 
     for(
       angle <- -60..240//angle_step,

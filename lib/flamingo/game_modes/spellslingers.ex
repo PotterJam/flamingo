@@ -17,7 +17,7 @@ defmodule Flamingo.GameModes.Spellslingers do
 
   use Flamingo.GameModes.Spellslingers.Rules
 
-  alias Flamingo.GameModes.Spellslingers.{Bots, Catalog, Rng, Spells, Terrain, Units}
+  alias Flamingo.GameModes.Spellslingers.{Bots, Catalog, Rng, Rules, Spells, Terrain, Units}
   alias Flamingo.GameSettings
 
   @book_ids Catalog.book_ids()
@@ -28,6 +28,7 @@ defmodule Flamingo.GameModes.Spellslingers do
 
   @doc "The most AI wizards a host can add."
   def max_bots, do: @max_bots
+  defdelegate tuning, to: Rules
   def dimensions, do: {@width, @height}
 
   def new do
@@ -51,7 +52,8 @@ defmodule Flamingo.GameModes.Spellslingers do
       turn_number: 0,
       rise_after: 0,
       wind: 0,
-      walk_left: @walk_budget,
+      walk_left: 0,
+      tuning: Rules.default_tuning(),
       cooldowns: %{},
       cast_this_turn: [],
       quick_used: false,
@@ -184,6 +186,30 @@ defmodule Flamingo.GameModes.Spellslingers do
     end
   end
 
+  # Dev tuning: the LiveView only sends these for allowlisted players. Values
+  # are clamped to each number's range and apply from the next use onwards.
+  def command(state, actor, {:tune, key, value}, _context) when is_number(value) do
+    case Enum.find(Rules.tuning(), &(Atom.to_string(&1.key) == key)) do
+      nil ->
+        {:error, :invalid_command}
+
+      %{key: key, label: label, min: low, max: high, step: step} ->
+        value = value |> max(low) |> min(high)
+        value = if is_integer(step), do: round(value), else: value * 1.0
+
+        state
+        |> put_in([:tuning, key], value)
+        |> Units.log("#{Units.player_name(state, actor)} set #{label} to #{value}.")
+        |> ok()
+    end
+  end
+
+  def command(state, actor, :reset_tuning, _context) do
+    %{state | tuning: Rules.default_tuning()}
+    |> Units.log("#{Units.player_name(state, actor)} restored the normal rules.")
+    |> ok()
+  end
+
   def command(%{phase: :arena_books} = state, actor, {:choose_book, book}, context)
       when book in @book_ids do
     if Map.get(state.participants, actor) == :active and Units.alive?(state, actor) do
@@ -312,7 +338,9 @@ defmodule Flamingo.GameModes.Spellslingers do
       map_name: map_name(state.map_id),
       wind: state.wind,
       walk_left: state.walk_left,
-      walk_budget: @walk_budget,
+      walk_budget: state.tuning.walk_budget,
+      tuning: state.tuning,
+      tuned?: state.tuning != Rules.default_tuning(),
       width: @width,
       height: @height,
       water_level: state.water_level,
@@ -329,11 +357,11 @@ defmodule Flamingo.GameModes.Spellslingers do
       events: state.events,
       physics: %{
         dt: @dt,
-        gravity: @gravity,
+        gravity: state.tuning.gravity,
         max_speed: @max_speed,
-        wind_accel: @wind_accel,
+        wind_accel: state.tuning.wind_accel,
         playback_speed: @playback_speed,
-        place_range: @place_range
+        place_range: state.tuning.place_range
       },
       final_result: state.final_result
     }
@@ -377,7 +405,7 @@ defmodule Flamingo.GameModes.Spellslingers do
           phase: :arena_aim,
           current_id: first,
           turn_number: 1,
-          walk_left: @walk_budget,
+          walk_left: state.tuning.walk_budget,
           cast_this_turn: [],
           quick_used: false,
           bot_plan: nil
@@ -472,7 +500,7 @@ defmodule Flamingo.GameModes.Spellslingers do
             turn_number: state.turn_number + 1,
             wind: wind,
             rng: rng,
-            walk_left: @walk_budget,
+            walk_left: state.tuning.walk_budget,
             cast_this_turn: [],
             quick_used: false,
             bot_plan: nil

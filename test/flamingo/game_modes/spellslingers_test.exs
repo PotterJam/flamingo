@@ -126,6 +126,37 @@ defmodule Flamingo.GameModes.SpellslingersTest do
     assert back.cooldowns[first]["lance"] == 0
   end
 
+  test "dev tuning changes the rules mid-game, clamped, until restored" do
+    {state, r} = started()
+    [first, second] = state.turn_order
+    state = clear_line(%{state | wind: 0}, first, second)
+    ctx = context(r, first)
+
+    lose = fn state ->
+      {:ok, %{state: cast}} =
+        Spellslingers.command(state, first, lance_at(state, first, second), ctx)
+
+      100 - cast.units[second].hp
+    end
+
+    {:ok, %{state: tuned}} = Spellslingers.command(state, second, {:tune, "damage_pct", 50}, ctx)
+    assert lose.(tuned) == round(lose.(state) / 2)
+
+    # Out-of-range values clamp; whole-number rules stay whole.
+    {:ok, %{state: tuned}} =
+      Spellslingers.command(tuned, first, {:tune, "walk_budget", 999.4}, ctx)
+
+    assert tuned.tuning.walk_budget == 200
+    assert Spellslingers.view(tuned, first, r).tuned?
+
+    assert {:error, :invalid_command} =
+             Spellslingers.command(tuned, first, {:tune, "wizard_hp", 5}, ctx)
+
+    {:ok, %{state: restored}} = Spellslingers.command(tuned, first, :reset_tuning, ctx)
+    refute Spellslingers.view(restored, first, r).tuned?
+    assert lose.(restored) == lose.(state)
+  end
+
   test "a cooling-down spell or one outside your spellbook is refused" do
     {state, r} = started()
     first = state.current_id
