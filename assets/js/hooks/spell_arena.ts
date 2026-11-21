@@ -341,6 +341,8 @@ const SpellArena = {
       }
       if (state.last_cast) seenCastId = state.last_cast.id;
       castLocked = false;
+      // A charge belongs to the turn it started in.
+      if (state.phase !== "arena_aim" || state.current_id !== state.viewer_id) charge = null;
     };
 
     const receive = (state: ArenaState) => {

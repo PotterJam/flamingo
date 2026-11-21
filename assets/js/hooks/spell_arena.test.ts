@@ -89,7 +89,7 @@ const spell = (id: string, extra = {}) => ({
 const ground = (() => {
   const bytes = new Uint8Array(3750);
   for (let i = 61 * 300; i < 300 * 100; i++) bytes[i >> 3] |= 1 << (7 - (i & 7));
-  return Buffer.from(bytes).toString("base64");
+  return btoa(String.fromCharCode(...bytes));
 })();
 
 const state = (extra: Record<string, unknown> = {}) => ({
@@ -200,6 +200,18 @@ test("losing window focus drops the charge", () => {
   a.down();
   a.blur();
   a.tick(3000);
+  expect(casts(a.sent)).toEqual([]);
+});
+
+test("a charge does not outlive the turn it started in", () => {
+  const a = mount();
+  a.server("arena_state", state());
+  a.tick(1);
+  a.down();
+  a.server("arena_state", state({ current_id: "other" }));
+  a.tick(1500);
+  a.server("arena_state", state());
+  a.tick(10000);
   expect(casts(a.sent)).toEqual([]);
 });
 
