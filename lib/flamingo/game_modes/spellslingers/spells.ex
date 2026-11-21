@@ -271,8 +271,11 @@ defmodule Flamingo.GameModes.Spellslingers.Spells do
     state = Units.log(fx.state, "The ground heaves!")
     spots = Units.standable_spots(state, 1)
 
+    # With no ground left to stand on there is nothing to crack, but it still shakes.
+    pit_count = if spots == [], do: 0, else: 14
+
     {state, pits} =
-      Enum.reduce(1..14, {state, []}, fn _, {state, pits} ->
+      Enum.reduce(1..pit_count//1, {state, []}, fn _, {state, pits} ->
         {{x, y}, rng} = Rng.pick(spots, state.rng)
         {%{state | rng: rng}, [{x + 0.5, y + 1.5, 3} | pits]}
       end)

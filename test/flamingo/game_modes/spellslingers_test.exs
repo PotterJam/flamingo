@@ -370,6 +370,19 @@ defmodule Flamingo.GameModes.SpellslingersTest do
     refute Terrain.solid?(state.terrain, x, y)
   end
 
+  test "an earthquake with no ground left still hurts every other wizard" do
+    {state, r} = started()
+    [first, second] = state.turn_order
+    {width, height} = Spellslingers.dimensions()
+    state = %{state | terrain: :binary.copy(<<0>>, width * height), books: %{first => ["geo"]}}
+
+    {:ok, %{state: cast}} =
+      Spellslingers.command(state, first, {:cast, "quake", 0, 0}, context(r, first))
+
+    assert cast.units[second].hp < 100
+    assert cast.damage_dealt[first] > 0
+  end
+
   defp pass(state, r) do
     {:ok, %{state: state}} = Spellslingers.command(state, "a", :pass, context(r, "a"))
     state
