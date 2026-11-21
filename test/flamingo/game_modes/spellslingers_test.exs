@@ -499,17 +499,7 @@ defmodule Flamingo.GameModes.SpellslingersTest do
     unit = %{state.units[second] | x: x, y: sea}
     state = %{state | terrain: terrain, units: %{state.units | second => unit}}
 
-    fx = %{
-      state: state,
-      target: nil,
-      segments: [],
-      beams: [],
-      auras: [],
-      impulses: %{},
-      shake: false
-    }
-
-    {after_knock, _knocks} = Spells.resolve_fx(state, fx)
+    after_knock = Spells.run(state, nil, "surge", nil, & &1)
 
     assert after_knock.units[second].dead
   end

@@ -3,7 +3,7 @@ defmodule Flamingo.GameModes.Spellslingers.Spells do
 
   use Flamingo.GameModes.Spellslingers.Rules
 
-  alias Flamingo.GameModes.Spellslingers.{Catalog, Physics, Rng, Terrain, Units}
+  alias Flamingo.GameModes.Spellslingers.{Catalog, Fx, Physics, Rng, Terrain, Units}
 
   def roll_surge(state) do
     {chance, rng} = :rand.uniform_s(state.rng)
@@ -18,19 +18,15 @@ defmodule Flamingo.GameModes.Spellslingers.Spells do
   end
 
   def surge_before(state, :meteors) do
-    state = Units.log(state, "Wild magic! Meteors fall from the sky!")
-    before = state
-
-    {fx, rng} =
-      Enum.reduce(0..3, {new_fx(state, nil) |> Map.put(:shake, true), state.rng}, fn i,
-                                                                                     {fx, rng} ->
-        {r, rng} = :rand.uniform_s(rng)
-        {fx_with_meteor(fx, 10 + r * (@width - 20), i * 6, "surge"), rng}
+    state
+    |> Units.log("Wild magic! Meteors fall from the sky!")
+    |> run(nil, "surge", nil, fn fx ->
+      Enum.reduce(0..3, %{fx | shake: true}, fn i, fx ->
+        {r, rng} = :rand.uniform_s(fx.state.rng)
+        fx = %{fx | state: %{fx.state | rng: rng}}
+        fx_with_meteor(fx, 10 + r * (@width - 20), i * 6, "surge")
       end)
-
-    state = %{fx.state | rng: rng}
-    {state, knocks} = resolve_fx(state, fx)
-    record_cast(state, before, nil, "surge", fx, knocks)
+    end)
   end
 
   def surge_before(state, :mana) do
@@ -56,23 +52,23 @@ defmodule Flamingo.GameModes.Spellslingers.Spells do
 
   def surge_after(state, _), do: state
 
-  def new_fx(state, target),
-    do: %{
-      state: state,
-      target: target,
-      segments: [],
-      beams: [],
-      auras: [],
-      impulses: %{},
-      shake: false
-    }
+  @doc """
+  Runs a cast: `effects` gets a fresh `Fx` and returns it with the cast's
+  effects applied. Then knockback, deaths and settling resolve, and the result
+  is recorded as the state's `last_cast` for clients to replay.
+  """
+  def run(state, caster, spell_id, target, effects) do
+    fx = effects.(Fx.new(state, target))
+    {after_fx, knocks} = resolve_fx(fx.state, fx)
+    record_cast(after_fx, state, caster, spell_id, fx, knocks)
+  end
 
   def in_place_range?(state, actor, x, y) do
     caster = state.units[actor]
     :math.sqrt((x - caster.x - 0.5) ** 2 + (y - caster.y + 1) ** 2) <= state.tuning.place_range
   end
 
-  def resolve_fx(state, fx) do
+  defp resolve_fx(state, fx) do
     {state, knocks} = Physics.apply_knocks(state, fx.impulses)
     # Anything knocked off the map or into the sea is gone before settling could
     # lift it back onto nearby ground.
@@ -86,7 +82,7 @@ defmodule Flamingo.GameModes.Spellslingers.Spells do
     {state, knocks}
   end
 
-  def record_cast(state, before, caster, spell_id, fx, knocks) do
+  defp record_cast(state, before, caster, spell_id, fx, knocks) do
     segments = Enum.reverse(fx.segments)
     flight = segments |> Enum.map(&(&1.start + length(&1.path))) |> Enum.max(fn -> 0 end)
     knock = knocks |> Enum.map(&length(&1.path)) |> Enum.max(fn -> 0 end)
@@ -295,7 +291,7 @@ defmodule Flamingo.GameModes.Spellslingers.Spells do
     |> Enum.reduce(fx, fn unit, fx ->
       {r, rng} = :rand.uniform_s(fx.state.rng)
       state = %{fx.state | rng: rng} |> Units.damage(unit.id, spell.damage, actor)
-      Physics.push(%{fx | state: state}, unit.id, {(r - 0.5) * 24, -18.0})
+      Fx.push(%{fx | state: state}, unit.id, {(r - 0.5) * 24, -18.0})
     end)
   end
 
@@ -312,7 +308,7 @@ defmodule Flamingo.GameModes.Spellslingers.Spells do
           if Units.alive_unit?(unit) and distance <= spell.radius do
             falloff = max(0.35, 1 - distance / (spell.radius + 1))
             fx = %{fx | state: Units.damage(fx.state, unit.id, spell.damage, actor)}
-            Physics.add_impulse(fx, unit.id, cx - x, cy - y, distance, spell.knock * falloff)
+            Fx.add_impulse(fx, unit.id, cx - x, cy - y, distance, spell.knock * falloff)
           else
             fx
           end
@@ -470,7 +466,7 @@ defmodule Flamingo.GameModes.Spellslingers.Spells do
 
           if Units.alive_unit?(unit) and distance <= spell.radius do
             falloff = max(0.5, 1 - distance / (spell.radius + 1))
-            Physics.push(fx, unit.id, {(cx - x) * 1.2, -spell.knock * falloff})
+            Fx.push(fx, unit.id, {(cx - x) * 1.2, -spell.knock * falloff})
           else
             fx
           end
@@ -634,7 +630,7 @@ defmodule Flamingo.GameModes.Spellslingers.Spells do
             beams: [[x, y, cx, cy] |> Enum.map(&Float.round(&1 * 1.0, 2)) | fx.beams]
         }
 
-        fx = Physics.add_impulse(fx, unit.id, cx - x, cy - y, d, 14)
+        fx = Fx.add_impulse(fx, unit.id, cx - x, cy - y, d, 14)
         chain(fx, actor, {cx, cy}, MapSet.put(hit, unit.id), jumps - 1)
     end
   end

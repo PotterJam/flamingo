@@ -3,7 +3,7 @@ defmodule Flamingo.GameModes.Spellslingers.Physics do
 
   use Flamingo.GameModes.Spellslingers.Rules
 
-  alias Flamingo.GameModes.Spellslingers.{Terrain, Units}
+  alias Flamingo.GameModes.Spellslingers.{Fx, Terrain, Units}
 
   def launch(spell, angle, power) do
     radians = angle * :math.pi() / 180
@@ -71,20 +71,11 @@ defmodule Flamingo.GameModes.Spellslingers.Physics do
       if Units.alive_unit?(unit) and distance <= reach do
         falloff = max(0.35, 1 - distance / (reach + 1))
         fx = %{fx | state: Units.damage(fx.state, unit.id, round(damage * falloff), actor)}
-        add_impulse(fx, unit.id, cx - x, cy - y, distance, knock * falloff)
+        Fx.add_impulse(fx, unit.id, cx - x, cy - y, distance, knock * falloff)
       else
         fx
       end
     end)
-  end
-
-  def add_impulse(fx, id, dx, dy, distance, magnitude) do
-    {nx, ny} = if distance < 0.5, do: {0.0, -1.0}, else: {dx / distance, dy / distance}
-    push(fx, id, {nx * magnitude, ny * magnitude - magnitude * 0.55})
-  end
-
-  def push(fx, id, {vx, vy}) do
-    %{fx | impulses: Map.update(fx.impulses, id, {vx, vy}, fn {ax, ay} -> {ax + vx, ay + vy} end)}
   end
 
   def apply_knocks(state, impulses) do

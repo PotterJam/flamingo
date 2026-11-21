@@ -661,10 +661,16 @@ defmodule Flamingo.GameModes.Spellslingers do
     }
 
     state = Units.log(state, "#{Units.player_name(state, actor)} casts #{spell.name}.")
-    before = state
-    fx = Spells.effect(spell.effect, Spells.new_fx(state, target), actor, spell, angle, power)
-    {state, knocks} = Spells.resolve_fx(fx.state, fx)
-    state = Spells.record_cast(state, before, actor, spell.id, fx, knocks)
+
+    state =
+      Spells.run(
+        state,
+        actor,
+        spell.id,
+        target,
+        &Spells.effect(spell.effect, &1, actor, spell, angle, power)
+      )
+
     %{last_cast: cast} = state
 
     if spell.quick do
