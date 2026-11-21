@@ -3,70 +3,7 @@ defmodule Flamingo.GameModes.Spellslingers.Units do
 
   use Flamingo.GameModes.Spellslingers.Rules
 
-  alias Flamingo.GameModes.Spellslingers.{Catalog, Rng, Terrain}
-
-  def maybe_drop_crate(state) do
-    {chance, rng} = :rand.uniform_s(state.rng)
-    state = %{state | rng: rng}
-    if chance < state.tuning.crate_chance, do: drop_crate(state), else: state
-  end
-
-  def drop_crate(state) do
-    case standable_spots(state, 1) do
-      spots when spots != [] and length(state.crates) < state.tuning.max_crates ->
-        {{x, y}, rng} = Rng.pick(spots, state.rng)
-        {kind, rng} = Rng.pick([:health, :health, :mana], rng)
-        id = "c#{state.crate_count + 1}"
-        crate = %{id: id, kind: :crate, type: kind, x: x, y: y}
-
-        %{state | crates: [crate | state.crates], crate_count: state.crate_count + 1, rng: rng}
-        |> log(if kind == :health, do: "A health crate drops in!", else: "A mana crate drops in!")
-
-      _ ->
-        state
-    end
-  end
-
-  def collect_crates(state) do
-    Enum.reduce(state.crates, state, fn crate, state ->
-      taker =
-        state.units
-        |> Map.values()
-        |> Enum.find(fn unit ->
-          unit.kind == :wizard and alive_unit?(unit) and abs(unit.x - crate.x) <= 2 and
-            abs(unit.y - crate.y) <= 3
-        end)
-
-      case taker do
-        nil ->
-          state
-
-        wizard ->
-          state = %{state | crates: Enum.reject(state.crates, &(&1.id == crate.id))}
-
-          case crate.type do
-            :health ->
-              state
-              |> put_unit(%{wizard | hp: min(wizard.hp + 30, wizard.max_hp)})
-              |> log("#{player_name(state, wizard.id)} grabs a health crate (+30).")
-
-            :mana ->
-              %{state | cooldowns: Map.put(state.cooldowns, wizard.id, %{})}
-              |> log("#{player_name(state, wizard.id)} grabs a mana crate: spells recharged!")
-          end
-      end
-    end)
-  end
-
-  def destroy_crates(state, x, y, radius) do
-    %{
-      state
-      | crates:
-          Enum.reject(state.crates, fn c ->
-            (c.x + 0.5 - x) ** 2 + (c.y + 0.5 - y) ** 2 <= radius ** 2
-          end)
-    }
-  end
+  alias Flamingo.GameModes.Spellslingers.{Catalog, Terrain}
 
   def damage(state, id, amount, source) do
     case state.units[id] do
@@ -154,6 +91,13 @@ defmodule Flamingo.GameModes.Spellslingers.Units do
     state |> Terrain.fill(circles, occupied) |> unbury_all()
   end
 
+  def caster_origin(state, actor) do
+    caster = state.units[actor]
+    {caster.x + 0.5, caster.y - 2.0}
+  end
+
+  # Flies the spell's main projectile and records it as the first segment.
+
   def unit_height(%{kind: kind}) when kind in [:wizard, :golem], do: 3
   def unit_height(%{kind: :crate}), do: 1
   def unit_height(_), do: 2
@@ -235,8 +179,8 @@ defmodule Flamingo.GameModes.Spellslingers.Units do
   end
 
   def free_spot(state, x, y, unit) do
-    x = Terrain.clamp(x, 0, @width - 1)
-    y = Terrain.clamp(y, unit_height(unit), @height - 1)
+    x = clamp(x, 0, @width - 1)
+    y = clamp(y, unit_height(unit), @height - 1)
 
     Enum.find_value(0..40, :error, fn dy ->
       if not blocked?(state, unit, x, y - dy) and y - dy >= unit_height(unit) - 1,

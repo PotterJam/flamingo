@@ -17,7 +17,19 @@ defmodule Flamingo.GameModes.Spellslingers do
 
   use Flamingo.GameModes.Spellslingers.Rules
 
-  alias Flamingo.GameModes.Spellslingers.{Bots, Catalog, Rng, Rules, Spells, Terrain, Units}
+  alias Flamingo.GameModes.Spellslingers.{
+    Bots,
+    Catalog,
+    Crates,
+    Minions,
+    Rng,
+    Rules,
+    Spells,
+    Surges,
+    Terrain,
+    Units
+  }
+
   alias Flamingo.GameSettings
 
   @book_ids Catalog.book_ids()
@@ -247,7 +259,7 @@ defmodule Flamingo.GameModes.Spellslingers do
              {:error, :blocked} do
       %{state | walk_left: state.walk_left - 1}
       |> Units.put_unit(%{wizard | y: y})
-      |> Units.collect_crates()
+      |> Crates.collect_crates()
       |> ok()
     end
   end
@@ -459,7 +471,7 @@ defmodule Flamingo.GameModes.Spellslingers do
 
     with {:cont, state} <- unless_won(state),
          {:cont, state} <-
-           state |> Spells.minions_act(owner) |> Units.resolve_deaths() |> unless_won(),
+           state |> Minions.minions_act(owner) |> Units.resolve_deaths() |> unless_won(),
          {:cont, state} <-
            state
            |> tick_float(owner)
@@ -467,8 +479,8 @@ defmodule Flamingo.GameModes.Spellslingers do
            |> rise_tide()
            |> Units.resolve_deaths()
            |> unless_won() do
-      {surge, state} = Spells.roll_surge(state)
-      state = Spells.surge_before(state, surge)
+      {surge, state} = Surges.roll_surge(state)
+      state = Surges.surge_before(state, surge)
 
       # Meteors play out like a cast before the next wizard's clock starts.
       if surge == :meteors,
@@ -506,8 +518,8 @@ defmodule Flamingo.GameModes.Spellslingers do
             bot_plan: nil
         }
         |> clear_ward(next)
-        |> Spells.surge_after(surge)
-        |> Units.maybe_drop_crate()
+        |> Surges.surge_after(surge)
+        |> Crates.maybe_drop_crate()
 
       ok(state, :ok, aim_timers(state))
     end
@@ -568,7 +580,7 @@ defmodule Flamingo.GameModes.Spellslingers do
         %{state | walk_left: state.walk_left - 1}
         |> Units.put_unit(wizard)
         |> Units.fall_damage(wizard.id, fall)
-        |> Units.collect_crates()
+        |> Crates.collect_crates()
         |> Units.resolve_deaths()
 
       cond do

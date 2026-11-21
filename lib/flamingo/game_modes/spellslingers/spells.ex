@@ -3,54 +3,7 @@ defmodule Flamingo.GameModes.Spellslingers.Spells do
 
   use Flamingo.GameModes.Spellslingers.Rules
 
-  alias Flamingo.GameModes.Spellslingers.{Catalog, Fx, Physics, Rng, Terrain, Units}
-
-  def roll_surge(state) do
-    {chance, rng} = :rand.uniform_s(state.rng)
-    state = %{state | rng: rng}
-
-    if state.turn_number >= 4 and chance < state.tuning.surge_chance do
-      {kind, rng} = Rng.pick([:meteors, :gale, :mana, :crates], state.rng)
-      {kind, %{state | rng: rng}}
-    else
-      {nil, state}
-    end
-  end
-
-  def surge_before(state, :meteors) do
-    state
-    |> Units.log("Wild magic! Meteors fall from the sky!")
-    |> run(nil, "surge", nil, fn fx ->
-      Enum.reduce(0..3, %{fx | shake: true}, fn i, fx ->
-        {r, rng} = :rand.uniform_s(fx.state.rng)
-        fx = %{fx | state: %{fx.state | rng: rng}}
-        fx_with_meteor(fx, 10 + r * (@width - 20), i * 6, "surge")
-      end)
-    end)
-  end
-
-  def surge_before(state, :mana) do
-    %{state | cooldowns: Map.new(state.cooldowns, fn {id, _} -> {id, %{}} end)}
-    |> Units.log("Wild magic! A mana storm recharges every spell.")
-  end
-
-  def surge_before(state, :crates) do
-    state
-    |> Units.log("Wild magic! Supplies rain from the sky.")
-    |> Units.drop_crate()
-    |> Units.drop_crate()
-  end
-
-  def surge_before(state, _), do: state
-
-  def surge_after(state, :gale) do
-    {sign, rng} = Rng.pick([-1, 1], state.rng)
-
-    %{state | wind: sign * 10, rng: rng}
-    |> Units.log("Wild magic! A howling gale sweeps the arena.")
-  end
-
-  def surge_after(state, _), do: state
+  alias Flamingo.GameModes.Spellslingers.{Crates, Fx, Minions, Physics, Rng, Terrain, Units}
 
   @doc """
   Runs a cast: `effects` gets a fresh `Fx` and returns it with the cast's
@@ -76,7 +29,7 @@ defmodule Flamingo.GameModes.Spellslingers.Spells do
       state
       |> Units.resolve_deaths()
       |> Units.settle_all()
-      |> Units.collect_crates()
+      |> Crates.collect_crates()
       |> Units.resolve_deaths()
 
     {state, knocks}
@@ -125,12 +78,6 @@ defmodule Flamingo.GameModes.Spellslingers.Spells do
 
   defp round_point({x, y}), do: [Float.round(x * 1.0, 2), Float.round(y * 1.0, 2)]
 
-  def caster_origin(state, actor) do
-    caster = state.units[actor]
-    {caster.x + 0.5, caster.y - 2.0}
-  end
-
-  # Flies the spell's main projectile and records it as the first segment.
   defp throw_spell(fx, actor, spell, angle, power) do
     {path, impact} =
       case fx.target do
@@ -147,7 +94,7 @@ defmodule Flamingo.GameModes.Spellslingers.Spells do
         nil ->
           Physics.fly(
             fx.state,
-            caster_origin(fx.state, actor),
+            Units.caster_origin(fx.state, actor),
             Physics.launch(spell, angle, power),
             spell,
             actor
@@ -262,7 +209,7 @@ defmodule Flamingo.GameModes.Spellslingers.Spells do
   def effect(:summon, fx, actor, spell, angle, power) do
     case throw_spell(fx, actor, spell, angle, power) do
       {fx, {kind, {x, y}}, _} when kind in [:terrain, :unit, :lost] ->
-        %{fx | state: summon(fx.state, actor, spell.minion, x, y)}
+        %{fx | state: Minions.summon(fx.state, actor, spell.minion, x, y)}
 
       {fx, _, _} ->
         fizzle(fx)
@@ -333,7 +280,7 @@ defmodule Flamingo.GameModes.Spellslingers.Spells do
   end
 
   def effect(:burrow, fx, actor, spell, angle, _power) do
-    {ox, oy} = caster_origin(fx.state, actor)
+    {ox, oy} = Units.caster_origin(fx.state, actor)
     radians = angle * :math.pi() / 180
     {dx, dy} = {:math.cos(radians), -:math.sin(radians)}
 
@@ -431,7 +378,7 @@ defmodule Flamingo.GameModes.Spellslingers.Spells do
     {path, {kind, impact}} =
       Physics.fly(
         fx.state,
-        caster_origin(fx.state, actor),
+        Units.caster_origin(fx.state, actor),
         Physics.launch(spell, angle, power),
         spell,
         actor
@@ -568,8 +515,8 @@ defmodule Flamingo.GameModes.Spellslingers.Spells do
         state =
           fx.state
           |> Units.log("Chaos! Creatures pour out of the orb!")
-          |> summon(actor, :thornling, x - 3, y)
-          |> summon(actor, :imp, x + 3, y)
+          |> Minions.summon(actor, :thornling, x - 3, y)
+          |> Minions.summon(actor, :imp, x + 3, y)
 
         %{fx | state: state}
 
@@ -582,7 +529,8 @@ defmodule Flamingo.GameModes.Spellslingers.Spells do
     end
   end
 
-  defp fx_with_meteor(fx, x, start, color, actor \\ nil, spell \\ nil) do
+  @doc "Drops one meteor at column `x`, recording its flight from step `start`."
+  def fx_with_meteor(fx, x, start, color, actor \\ nil, spell \\ nil) do
     meteor = spell || %{gravity: 1.0, wind: 1.0, speed: 1.0}
     radius = if(spell, do: spell.radius, else: 5)
     damage = if(spell, do: spell.damage, else: 16)
@@ -635,103 +583,9 @@ defmodule Flamingo.GameModes.Spellslingers.Spells do
     end
   end
 
-  defp summon(state, actor, kind, x, y) do
-    stats = Catalog.minion(kind)
-
-    owned =
-      Enum.count(state.units, fn {_, u} ->
-        u.kind != :wizard and u.owner == actor and Units.alive_unit?(u)
-      end)
-
-    minion = %{
-      id: "m#{state.minion_count + 1}",
-      kind: kind,
-      owner: actor,
-      x: 0,
-      y: 0,
-      hp: stats.hp,
-      max_hp: stats.hp,
-      dead: false,
-      ward: 0,
-      float: 0
-    }
-
-    cond do
-      owned >= state.tuning.max_minions ->
-        Units.log(
-          state,
-          "…but #{Units.player_name(state, actor)} already commands #{state.tuning.max_minions} minions."
-        )
-
-      true ->
-        case Units.free_spot(state, floor(x), floor(y), minion) do
-          {:ok, minion} ->
-            {minion, _} = Units.settle(state, minion)
-
-            %{state | minion_count: state.minion_count + 1}
-            |> Units.put_unit(minion)
-            |> Units.log("A #{stats.name} appears for #{Units.player_name(state, actor)}!")
-
-          :error ->
-            Units.log(state, "…but the #{stats.name} found no room.")
-        end
-    end
-  end
-
-  def minions_act(state, owner) do
-    state.units
-    |> Map.values()
-    |> Enum.filter(&(&1.kind != :wizard and &1.owner == owner and Units.alive_unit?(&1)))
-    |> Enum.sort_by(& &1.id)
-    |> Enum.reduce(state, &minion_act(&2, &1.id))
-  end
-
-  defp minion_act(state, id) do
-    with %{} = minion <- state.units[id],
-         true <- Units.alive_unit?(minion),
-         %{} = target <- nearest_enemy(state, minion) do
-      stats = Catalog.minion(minion.kind)
-      dir = if target.x > minion.x, do: 1, else: -1
-      minion = hop(state, minion, dir, min(stats.hop, max(abs(target.x - minion.x) - 1, 0)))
-      state = Units.put_unit(state, minion)
-
-      if abs(target.x - minion.x) <= stats.reach and abs(target.y - minion.y) <= stats.reach do
-        state
-        |> Units.damage(target.id, stats.bite, minion.owner)
-        |> Units.log(
-          "#{Units.player_name(state, minion.owner)}'s #{stats.name} bites #{Units.unit_name(state, target)} for #{stats.bite}!"
-        )
-      else
-        state
-      end
-    else
-      _ -> state
-    end
-  end
-
-  defp hop(_state, minion, _dir, 0), do: minion
-
-  defp hop(state, minion, dir, steps) do
-    case Units.step(state, minion, dir) do
-      {:ok, moved} ->
-        {moved, _} = Units.settle(state, moved)
-        if moved.y >= state.water_level, do: minion, else: hop(state, moved, dir, steps - 1)
-
-      _ ->
-        minion
-    end
-  end
-
-  defp nearest_enemy(state, minion) do
-    state.units
-    |> Map.values()
-    |> Enum.filter(&(Units.alive_unit?(&1) and &1.owner != minion.owner))
-    |> Enum.min_by(&(abs(&1.x - minion.x) + abs(&1.y - minion.y)), fn -> nil end)
-  end
-
   defp build_ledge(fx, x, y) do
-    x = Terrain.clamp(x, 8, @width - 9)
-    y = Terrain.clamp(y, 4, fx.state.water_level - 1)
+    x = clamp(x, 8, @width - 9)
+    y = clamp(y, 4, fx.state.water_level - 1)
 
     state =
       Units.raise_ground(fx.state, for(dx <- -7..7, do: {x + dx, y + 0.5, 1.2}))

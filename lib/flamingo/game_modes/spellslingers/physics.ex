@@ -3,7 +3,7 @@ defmodule Flamingo.GameModes.Spellslingers.Physics do
 
   use Flamingo.GameModes.Spellslingers.Rules
 
-  alias Flamingo.GameModes.Spellslingers.{Fx, Terrain, Units}
+  alias Flamingo.GameModes.Spellslingers.{Crates, Fx, Terrain, Units}
 
   def launch(spell, angle, power) do
     radians = angle * :math.pi() / 180
@@ -58,7 +58,7 @@ defmodule Flamingo.GameModes.Spellslingers.Physics do
   end
 
   def explode(fx, actor, {x, y}, radius, damage, knock) do
-    state = fx.state |> Terrain.carve([{x, y, radius}]) |> Units.destroy_crates(x, y, radius + 1)
+    state = fx.state |> Terrain.carve([{x, y, radius}]) |> Crates.destroy_crates(x, y, radius + 1)
     reach = radius + 2
 
     state.units
@@ -88,7 +88,7 @@ defmodule Flamingo.GameModes.Spellslingers.Physics do
 
       if (unit && Units.alive_unit?(unit)) and :math.sqrt(vx * vx + vy * vy) >= 6 do
         {unit, path} =
-          knock_flight(state, unit, {Terrain.clamp(vx, -65, 65), Terrain.clamp(vy, -65, 65)})
+          knock_flight(state, unit, {clamp(vx, -65, 65), clamp(vy, -65, 65)})
 
         {Units.put_unit(state, unit), [%{id: id, path: path} | knocks]}
       else
@@ -123,7 +123,7 @@ defmodule Flamingo.GameModes.Spellslingers.Physics do
 
     case result do
       {:gone, {px, py}} ->
-        unit = %{unit | x: px |> floor() |> Terrain.clamp(0, @width - 1), y: state.water_level}
+        unit = %{unit | x: px |> floor() |> clamp(0, @width - 1), y: state.water_level}
         {unit, Enum.reverse([{px - 0.5, py - 0.5} | path])}
 
       {:land, pos} ->
@@ -137,8 +137,8 @@ defmodule Flamingo.GameModes.Spellslingers.Physics do
   defp land(_state, unit, {x, y}, path) do
     unit = %{
       unit
-      | x: floor(x) |> Terrain.clamp(0, @width - 1),
-        y: floor(y) |> Terrain.clamp(0, @height - 1)
+      | x: floor(x) |> clamp(0, @width - 1),
+        y: floor(y) |> clamp(0, @height - 1)
     }
 
     {unit, Enum.reverse([{unit.x * 1.0, unit.y * 1.0} | path])}

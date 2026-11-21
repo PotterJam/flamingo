@@ -21,11 +21,15 @@ defmodule Flamingo.GameModes.Spellslingers.Rules do
     %{key: :surge_chance, label: "Wild magic chance", default: 0.22, min: 0, max: 1, step: 0.05}
   ]
 
+  def clamp(value, low, high), do: value |> max(low) |> min(high)
+
   def tuning, do: @tuning
   def default_tuning, do: Map.new(@tuning, &{&1.key, &1.default})
 
   defmacro __using__(_opts) do
     quote do
+      import Flamingo.GameModes.Spellslingers.Rules, only: [clamp: 3]
+
       # The world is wider than one screen; the client's camera pans across it.
       @width 300
       @height 110

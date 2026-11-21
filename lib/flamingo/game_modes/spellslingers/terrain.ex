@@ -3,8 +3,6 @@ defmodule Flamingo.GameModes.Spellslingers.Terrain do
 
   use Flamingo.GameModes.Spellslingers.Rules
 
-  def clamp(value, low, high), do: value |> max(low) |> min(high)
-
   # A target inside rock moves up to the open air above it.
   def surface_above(state, x, y) do
     if y > 1 and solid?(state.terrain, floor(x), floor(y)),

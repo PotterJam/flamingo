@@ -3,7 +3,7 @@ defmodule Flamingo.GameModes.Spellslingers.Bots do
 
   use Flamingo.GameModes.Spellslingers.Rules
 
-  alias Flamingo.GameModes.Spellslingers.{Catalog, Physics, Spells, Terrain, Units}
+  alias Flamingo.GameModes.Spellslingers.{Catalog, Minions, Physics, Units}
 
   def bot?(state, id), do: match?(%{bot: true}, state.players[id])
 
@@ -126,10 +126,7 @@ defmodule Flamingo.GameModes.Spellslingers.Bots do
       {mx, my} = Units.center(me)
       summon = Enum.find(@bot_summons, &(&1 in ready))
 
-      owned =
-        Enum.count(state.units, fn {_, u} ->
-          u.kind != :wizard and u.owner == me.id and Units.alive_unit?(u)
-        end)
+      owned = Minions.count(state, me.id)
 
       {spell_id, point, near_ok} =
         cond do
@@ -159,14 +156,12 @@ defmodule Flamingo.GameModes.Spellslingers.Bots do
         {{:place, spell_id, x, y}, state}
       else
         {angle, power, _} =
-          bot_aim(state, Spells.caster_origin(state, me.id), me.id, point, spell,
-            near_ok: near_ok
-          )
+          bot_aim(state, Units.caster_origin(state, me.id), me.id, point, spell, near_ok: near_ok)
 
         {jitter_a, rng} = :rand.normal_s(state.rng)
         {jitter_p, rng} = :rand.normal_s(rng)
-        angle = Terrain.clamp(angle + jitter_a * 1.5, -180, 360)
-        power = Terrain.clamp(power + jitter_p * 2.5, 5, 100)
+        angle = clamp(angle + jitter_a * 1.5, -180, 360)
+        power = clamp(power + jitter_p * 2.5, 5, 100)
         {{:cast, spell_id, angle, power}, %{state | rng: rng}}
       end
     end
