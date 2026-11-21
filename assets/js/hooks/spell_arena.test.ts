@@ -182,6 +182,27 @@ test("a cast arriving while another plays is played too, keeping controls locked
   expect(unlockAfter([1, 1])).toBe(one);
 });
 
+test("a cancelled pointer drops the charge instead of firing at full power", () => {
+  const a = mount();
+  a.server("arena_state", state());
+  a.tick(1);
+  a.down();
+  a.cancel();
+  a.tick(1400);
+  a.tick(3000);
+  expect(casts(a.sent)).toEqual([]);
+});
+
+test("losing window focus drops the charge", () => {
+  const a = mount();
+  a.server("arena_state", state());
+  a.tick(1);
+  a.down();
+  a.blur();
+  a.tick(3000);
+  expect(casts(a.sent)).toEqual([]);
+});
+
 test("a first tap places a placed spell without any hover", () => {
   const a = mount();
   a.server("arena_state", state({ selected_spell: "golem" }));

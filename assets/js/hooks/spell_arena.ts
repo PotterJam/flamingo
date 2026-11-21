@@ -1452,6 +1452,12 @@ const SpellArena = {
       }
     };
 
+    // A cancelled gesture or a lost focus never gets its release, so the
+    // charge is dropped rather than left to fire itself at full power.
+    const dropCharge = () => {
+      charge = null;
+    };
+
     const onKeyUp = (event: KeyboardEvent) => {
       if (event.key === " ") release();
     };
@@ -1459,6 +1465,8 @@ const SpellArena = {
     canvas.addEventListener("pointermove", onPointerMove);
     canvas.addEventListener("pointerdown", onPointerDown);
     canvas.addEventListener("pointerleave", onPointerLeave);
+    canvas.addEventListener("pointercancel", dropCharge);
+    window.addEventListener("blur", dropCharge);
     window.addEventListener("pointerup", onPointerUp);
     window.addEventListener("keydown", onKeyDown);
     window.addEventListener("keyup", onKeyUp);
@@ -1484,6 +1492,8 @@ const SpellArena = {
       window.removeEventListener("keyup", onKeyUp);
       window.removeEventListener("pointerup", onPointerUp);
       canvas.removeEventListener("pointerleave", onPointerLeave);
+      canvas.removeEventListener("pointercancel", dropCharge);
+      window.removeEventListener("blur", dropCharge);
       canvas.removeEventListener("arena:fullscreen", toggleFull);
       document.removeEventListener("fullscreenchange", onFullscreenChange);
       resizeObserver.disconnect();
