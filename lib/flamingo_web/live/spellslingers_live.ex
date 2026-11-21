@@ -165,7 +165,7 @@ defmodule FlamingoWeb.SpellslingersLive do
             :if={@participation == :active and @phase != :game_ended}
             class="text-center text-xs text-gray-600 group-[.arena-full]:hidden"
           >
-            Hold the mouse (or Space) to charge thrown spells and release to cast; beams fire on click; walls, ledges and summons appear where you click. A / D walk (W / S while levitating), 1–9, 0 and - pick spells, mouse at the edge or the minimap pans, C recentres, F is full screen.
+            Hold the mouse (or Space) to charge thrown spells and release to cast; beams fire on click; walls, ledges and summons appear where you click. A / D or ← / → walk (W / S or ↑ / ↓ while levitating), 1–9, 0 and - pick spells, mouse at the edge or the minimap pans, C recentres, F is full screen.
           </p>
         </div>
       </main>

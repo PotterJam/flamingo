@@ -78,6 +78,8 @@ function mount() {
     up: () => listeners.get("window:pointerup")!({}),
     cancel: () => listeners.get("pointercancel")?.({ pointerId: 1 }),
     blur: () => listeners.get("window:blur")?.({}),
+    key: (key: string) =>
+      listeners.get("window:keydown")!({ key, repeat: false, target: null, metaKey: false, ctrlKey: false, preventDefault: noop }),
   };
 }
 
@@ -235,4 +237,20 @@ test("a rejoin shows the board as it is instead of replaying a cast it missed", 
   now = 500;
   a.up();
   expect(casts(a.sent)).toHaveLength(1);
+});
+
+test("arrow keys walk and float exactly like WASD", () => {
+  const a = mount();
+  a.server("arena_state", state());
+  a.tick(1);
+  const moves = (keys: string[]) =>
+    keys.map((key) => {
+      now += 100;
+      a.key(key);
+      const last = a.sent.at(-1)!;
+      return [last.name, last.dir];
+    });
+  const expected = [["walk", -1], ["walk", 1], ["rise", 1], ["rise", -1]];
+  expect(moves(["a", "d", "w", "s"])).toEqual(expected);
+  expect(moves(["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown"])).toEqual(expected);
 });
