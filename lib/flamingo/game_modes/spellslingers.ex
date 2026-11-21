@@ -37,6 +37,7 @@ defmodule Flamingo.GameModes.Spellslingers do
   defdelegate spells, to: Catalog
   defdelegate books, to: Catalog
   defdelegate maps, to: Catalog
+  defdelegate spell(id), to: Catalog
 
   @doc "The most AI wizards a host can add."
   def max_bots, do: @max_bots

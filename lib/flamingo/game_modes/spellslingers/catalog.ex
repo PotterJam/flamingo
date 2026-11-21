@@ -311,6 +311,7 @@ defmodule Flamingo.GameModes.Spellslingers.Catalog do
   @books [
     %{
       id: "pyro",
+      icon: :flame,
       name: "Pyromancy",
       blurb: "Cluster hexes, raining meteors, a huge inferno and a cackling imp.",
       color: "#f97316",
@@ -318,6 +319,7 @@ defmodule Flamingo.GameModes.Spellslingers.Catalog do
     },
     %{
       id: "geo",
+      icon: :mountain,
       name: "Geomancy",
       blurb: "Hurl boulders, raise walls, summon a golem and shake the world.",
       color: "#a16207",
@@ -325,6 +327,7 @@ defmodule Flamingo.GameModes.Spellslingers.Catalog do
     },
     %{
       id: "storm",
+      icon: :cloud_lightning,
       name: "Tempest",
       blurb: "Lightning lances, chain strikes, flinging gales and a darting wisp.",
       color: "#0ea5e9",
@@ -332,6 +335,7 @@ defmodule Flamingo.GameModes.Spellslingers.Catalog do
     },
     %{
       id: "wild",
+      icon: :leaf,
       name: "Wildcraft",
       blurb: "Thornlings, tunnels, healing, and the Chaos Orb.",
       color: "#16a34a",
@@ -339,6 +343,7 @@ defmodule Flamingo.GameModes.Spellslingers.Catalog do
     },
     %{
       id: "sky",
+      icon: :feather,
       name: "Skyward",
       blurb: "Levitate over gaps, conjure ledges, fling foes skyward and warp-swap.",
       color: "#8b5cf6",
