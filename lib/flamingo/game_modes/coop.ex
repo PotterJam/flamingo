@@ -339,12 +339,8 @@ defmodule Flamingo.GameModes.Coop do
   end
 
   defp begin_round(state, context) do
-    choices =
-      context.word_choices.(3, state.used_words,
-        custom_words: state.custom_words,
-        include_default_words: state.include_default_words,
-        word_list: state.word_list
-      )
+    {choices, used_words} = Scribble.word_choices(state, context)
+    state = %{state | used_words: used_words}
 
     games =
       state.team_scores

@@ -361,16 +361,29 @@ defmodule Flamingo.GameModes.Scribble do
     for k <- 1..n//1, do: trunc(length * 1000 * (0.35 + 0.55 * (k - 0.5) / n))
   end
 
+  @doc """
+  Offers word choices, refilling the word list once every word has been used
+  so a game only ends by finishing its rounds. Returns the choices and the
+  used words to keep.
+  """
+  def word_choices(state, context) do
+    options = [
+      custom_words: state.custom_words,
+      include_default_words: state.include_default_words,
+      word_list: state.word_list
+    ]
+
+    case context.word_choices.(3, state.used_words, options) do
+      [] -> {context.word_choices.(3, MapSet.new(), options), MapSet.new()}
+      choices -> {choices, state.used_words}
+    end
+  end
+
   defp enter_word_choice(state, context) do
-    choices =
-      context.word_choices.(3, state.used_words,
-        custom_words: state.custom_words,
-        include_default_words: state.include_default_words,
-        word_list: state.word_list
-      )
+    {choices, used_words} = word_choices(state, context)
+    state = choose_constraint(%{state | used_words: used_words}, context)
 
-    state = choose_constraint(state, context)
-
+    # Only an empty word list leaves nothing to offer.
     if choices == [],
       do: game_ended(state, context.roster),
       else: begin_choice(state, choices, context.roster)

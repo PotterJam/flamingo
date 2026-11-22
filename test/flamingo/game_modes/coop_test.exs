@@ -29,6 +29,22 @@ defmodule Flamingo.GameModes.CoopTest do
     next
   end
 
+  test "a word list shorter than the game refills instead of ending it" do
+    {state, context} = game(4, 2)
+
+    context = %{
+      context
+      | word_choices: fn _, used, _ -> Enum.reject(["cat"], &MapSet.member?(used, &1)) end
+    }
+
+    {:ok, %{state: state}} = Coop.timeout(state, :word_choice, context)
+    {:ok, %{state: state}} = Coop.timeout(state, :playing, context)
+    {:ok, %{state: state}} = Coop.timeout(state, :turn_reveal, context)
+
+    assert state.phase == :word_choice
+    assert state.word_choices == ["cat"]
+  end
+
   test "pairs connected players with one trio for odd counts" do
     for count <- 2..9 do
       {state, context} = game(count)

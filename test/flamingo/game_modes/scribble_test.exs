@@ -812,7 +812,25 @@ defmodule Flamingo.GameModes.ScribbleTest do
            ] = result.drawings
   end
 
-  test "word exhaustion finishes without scheduling another phase" do
+  test "a word list shorter than the game refills instead of ending it" do
+    words_context = %{
+      context()
+      | word_choices: fn _count, used, _options ->
+          Enum.reject(["cat", "dog"], &MapSet.member?(used, &1))
+        end
+    }
+
+    {:ok, %{state: state}} = Scribble.start(admitted(), %{round_count: 2}, words_context)
+    {%{state: state}, "cat"} = complete_turn(state, words_context)
+    {%{state: state}, "dog"} = complete_turn(state, words_context)
+    assert state.phase == :word_choice
+    {%{state: state}, "cat"} = complete_turn(state, words_context)
+
+    {%{status: {:finished, result}}, "dog"} = complete_turn(state, words_context)
+    assert length(result.drawings) == 4
+  end
+
+  test "an empty word list finishes without scheduling another phase" do
     exhausted_context = %{
       context()
       | word_choices: fn _count, _used, _options -> [] end
