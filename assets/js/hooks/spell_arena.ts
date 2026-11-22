@@ -1,3 +1,5 @@
+import { createSpellSounds } from "./spell_sounds";
+
 // Renders the Spellslingers arena: destructible terrain, wizards, minions, crates, aiming,
 // and the playback of each cast. The server owns every rule and all physics; this hook
 // only draws its snapshots, animates the flight and knockback paths the server computed,
@@ -261,6 +263,9 @@ const SpellArena = {
       if (!!charge !== chargingShown) {
         chargingShown = !!charge;
         body.classList.toggle("arena-charging", chargingShown);
+        // The hum lasts exactly as long as the charge, however it ends.
+        stopChargeSound?.();
+        stopChargeSound = charge ? sounds.charge(charge.spell, CHARGE_MS) : null;
         if (charge) {
           undim();
           if (meterName) meterName.textContent = spellById(charge.spell)?.name ?? "";
@@ -303,7 +308,8 @@ const SpellArena = {
     let frame = 0;
     let shakeUntil = 0;
     let shakePower = 0;
-    let audio: AudioContext | null = null;
+    const sounds = createSpellSounds(() => (Number.isFinite(window.__soundVolume) ? window.__soundVolume : 100) / 100);
+    let stopChargeSound: (() => void) | null = null;
 
     // The canvas is a 200 x 100 cell window onto a wider world; the camera pans it.
     const CELL = W / 200;
@@ -355,18 +361,35 @@ const SpellArena = {
     };
 
     // Shows how much each unit's health changed between two states, where it stood.
+    // One sound per kind of change, at the size of the biggest hit, so a quake hitting
+    // everyone is one thump rather than a pile of them.
     const announceChanges = (before: ArenaState, after: ArenaState) => {
       const old = new Map(before.units.map((u) => [u.id, u]));
+      let worstHit = 0;
+      let healed = false;
+      let blocked = false;
+      let summoned = false;
       for (const unit of after.units) {
         const prev = old.get(unit.id);
-        if (!prev) continue;
+        if (!prev) {
+          summoned ||= !unit.dead;
+          continue;
+        }
         const delta = unit.hp - prev.hp;
         if (unit.dead && !prev.dead) floatText(prev, "KO!", "#dc2626", 30);
         else if (delta < 0) floatText(prev, `${delta}`, "#ef4444", delta <= -30 ? 24 : 18);
         else if (delta > 0) floatText(prev, `+${delta}`, "#16a34a", 18);
-        if ((prev.ward ?? 0) > 0 && (unit.ward ?? 0) < (prev.ward ?? 0) && delta === 0 && !unit.dead)
+        if (delta < 0) worstHit = Math.max(worstHit, -delta);
+        if (delta > 0) healed = true;
+        if ((prev.ward ?? 0) > 0 && (unit.ward ?? 0) < (prev.ward ?? 0) && delta === 0 && !unit.dead) {
           floatText(prev, "blocked", "#3b82f6", 15);
+          blocked = true;
+        }
       }
+      if (worstHit) sounds.hurt(worstHit);
+      if (healed) sounds.heal();
+      if (blocked) sounds.blocked();
+      if (summoned) sounds.summoned();
     };
 
     const show = (state: ArenaState) => {
@@ -401,36 +424,11 @@ const SpellArena = {
         animation = { cast, start: performance.now(), landed: new Set(), aftermathAt: null };
         pending = state;
         castLocked = true;
-        playWhoosh(cast.spell);
+        sounds.cast(cast, (shown.physics.dt * 1000) / shown.physics.playback_speed);
       } else {
         show(state);
       }
     };
-
-    // ---- Sound: tiny synthesized effects, scaled by the site-wide volume ----
-    const volume = () => (Number.isFinite(window.__soundVolume) ? window.__soundVolume : 100) / 100;
-
-    const noise = (duration: number, filterFrom: number, filterTo: number, gain: number) => {
-      if (volume() === 0) return;
-      audio = audio || new AudioContext();
-      const now = audio.currentTime;
-      const buffer = audio.createBuffer(1, Math.floor(audio.sampleRate * duration), audio.sampleRate);
-      const data = buffer.getChannelData(0);
-      for (let i = 0; i < data.length; i++) data[i] = (Math.random() * 2 - 1) * (1 - i / data.length) ** 2;
-      const source = audio.createBufferSource();
-      source.buffer = buffer;
-      const filter = audio.createBiquadFilter();
-      filter.type = "lowpass";
-      filter.frequency.setValueAtTime(filterFrom, now);
-      filter.frequency.exponentialRampToValueAtTime(filterTo, now + duration);
-      const amp = audio.createGain();
-      amp.gain.value = gain * volume();
-      source.connect(filter).connect(amp).connect(audio.destination);
-      source.start();
-    };
-
-    const playWhoosh = (spell: string) => noise(0.5, isBeam(spell) ? 6000 : 2500, 300, 0.22);
-    const playBoom = (radius: number) => noise(0.35 + radius * 0.05, 900, 60, 0.5);
 
     // ---- Physics mirror, used only for the aiming preview ----
     const spellById = (id: string) => shown?.spells.find((s) => s.id === id);
@@ -1072,11 +1070,11 @@ const SpellArena = {
           }
         } else if (!animation!.landed.has(n)) {
           animation!.landed.add(n);
+          sounds.land(segment);
           const [x, y] = segment.path[last];
           if (segment.hit && segment.radius > 0) {
             burst(x * s, y * s, "#fde047", 20 + segment.radius * 4, 100 + segment.radius * 12);
             burst(x * s, y * s, color, 16 + segment.radius * 3, 80 + segment.radius * 10);
-            playBoom(segment.radius);
             shake(Math.min(8, segment.radius * 0.8), 260);
           } else {
             burst(x * s, y * s, segment.hit ? color : "#bfdbfe", 18, 80);
@@ -1087,10 +1085,8 @@ const SpellArena = {
       if (step >= cast.flight_steps) {
         animation.aftermathAt = now;
         if (cast.shake) shake(6, 700);
-        if (cast.ko?.length) {
-          shake(10, 900);
-          playBoom(14);
-        }
+        if (cast.ko?.length) shake(10, 900);
+        sounds.aftermath(cast);
         for (const aura of cast.auras ?? []) {
           const unit = (pending ?? shown)?.units.find((u) => u.id === aura.id);
           if (unit) {
@@ -1216,6 +1212,7 @@ const SpellArena = {
         return { x: unit.x, y: unit.y };
       }
       if (Math.hypot(unit.x - prev[0], unit.y - prev[1]) > 6) {
+        sounds.teleport();
         const color = colorOf("blink", "#c084fc");
         burst((prev[0] + 0.5) * s, (prev[1] - 1) * s, color, 30, 90);
         burst((unit.x + 0.5) * s, (unit.y - 1) * s, color, 40, 120);
@@ -1710,7 +1707,8 @@ const SpellArena = {
       body.classList.remove("arena-charging", "arena-thrown");
       undim();
       resizeObserver.disconnect();
-      audio?.close();
+      stopChargeSound?.();
+      sounds.close();
     };
   },
 
