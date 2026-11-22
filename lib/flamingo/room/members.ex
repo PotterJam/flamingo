@@ -5,7 +5,14 @@ defmodule Flamingo.Room.Members do
 
   def new, do: %__MODULE__{}
 
-  def add(%__MODULE__{} = members, seat_id, resume_token, name, avatar \\ Avatar.default()) do
+  def add(
+        %__MODULE__{} = members,
+        seat_id,
+        resume_token,
+        name,
+        avatar \\ Avatar.default(),
+        user_id \\ nil
+      ) do
     cond do
       Map.has_key?(members.seats, seat_id) ->
         {:error, :duplicate_seat}
@@ -14,7 +21,13 @@ defmodule Flamingo.Room.Members do
         {:error, :duplicate_resume_token}
 
       true ->
-        seat = %{id: seat_id, name: name, avatar: Avatar.normalize(avatar), connection_count: 0}
+        seat = %{
+          id: seat_id,
+          name: name,
+          avatar: Avatar.normalize(avatar),
+          user_id: user_id,
+          connection_count: 0
+        }
 
         {:ok,
          %{
@@ -29,6 +42,23 @@ defmodule Flamingo.Room.Members do
 
   def resolve(%__MODULE__{} = members, resume_token) do
     Map.fetch(members.resume_tokens, resume_token)
+  end
+
+  @doc "Finds the seat and resume token an account already holds, so it never takes two seats."
+  def find_by_user(%__MODULE__{}, nil), do: :error
+
+  def find_by_user(%__MODULE__{} = members, user_id) do
+    Enum.find_value(members.resume_tokens, :error, fn {token, seat_id} ->
+      if members.seats[seat_id].user_id == user_id, do: {:ok, seat_id, token}
+    end)
+  end
+
+  @doc "Account ids by seat, for seats held by signed-in players. Kept off snapshots."
+  def user_ids(%__MODULE__{} = members) do
+    for {seat_id, %{user_id: user_id}} <- members.seats,
+        user_id,
+        into: %{},
+        do: {seat_id, user_id}
   end
 
   def fetch(%__MODULE__{} = members, seat_id), do: Map.fetch(members.seats, seat_id)

@@ -29,7 +29,10 @@ defmodule Flamingo.RoomServer do
 
   def start_link({id, opts}), do: GenServer.start_link(__MODULE__, {id, opts}, name: via(id))
   def start_link(id), do: start_link({id, []})
-  def join(id, name, avatar), do: call(id, {:join, name, avatar}, {:error, :not_found})
+
+  def join(id, name, avatar, user_id \\ nil),
+    do: call(id, {:join, name, avatar, user_id}, {:error, :not_found})
+
   def connect(id, token), do: call(id, {:connect, token}, {:error, :not_found})
   def prepare_handoff(id), do: call(id, :prepare_handoff, {:error, :not_found})
   def leave(id), do: call(id, {:leave, self()}, :ok)
@@ -85,17 +88,14 @@ defmodule Flamingo.RoomServer do
   end
 
   @impl true
-  def handle_call({:join, name, avatar}, _from, state) do
-    id = random(8)
-    token = random(32)
+  def handle_call({:join, name, avatar, user_id}, _from, state) do
+    case Members.find_by_user(state.members, user_id) do
+      # A signed-in player opening a second tab returns to their own seat.
+      {:ok, id, token} ->
+        {:reply, {:ok, token, snapshot_for(state, id)}, state}
 
-    with {:ok, members} <- Members.add(state.members, id, token, name, avatar),
-         {:ok, state} <- admit_member(%{state | members: members}, %{id: id, name: name}) do
-      state = commit(%{state | idle_timer: nil})
-
-      {:reply, {:ok, token, snapshot_for(state, id)}, state}
-    else
-      {:error, reason} -> {:reply, {:error, reason}, state}
+      :error ->
+        add_member(state, name, avatar, user_id)
     end
   end
 
@@ -303,6 +303,19 @@ defmodule Flamingo.RoomServer do
 
       _ ->
         {:noreply, state}
+    end
+  end
+
+  defp add_member(state, name, avatar, user_id) do
+    id = random(8)
+    token = random(32)
+
+    with {:ok, members} <- Members.add(state.members, id, token, name, avatar, user_id),
+         {:ok, state} <- admit_member(%{state | members: members}, %{id: id, name: name}) do
+      state = commit(%{state | idle_timer: nil})
+      {:reply, {:ok, token, snapshot_for(state, id)}, state}
+    else
+      {:error, reason} -> {:reply, {:error, reason}, state}
     end
   end
 

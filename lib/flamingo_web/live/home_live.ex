@@ -572,7 +572,8 @@ defmodule FlamingoWeb.HomeLive do
       {:noreply, assign(socket, error: "Name cannot be empty")}
     else
       with {:ok, room_id} <- Rooms.create_room(),
-           {:ok, resume_token, _snapshot} <- Rooms.join(room_id, name, socket.assigns.avatar) do
+           {:ok, resume_token, _snapshot} <-
+             Rooms.join(room_id, name, socket.assigns.avatar, user_id(socket)) do
         {:noreply, push_navigate(socket, to: ~p"/game/#{room_id}?resume_token=#{resume_token}")}
       else
         _ -> {:noreply, assign(socket, error: "Failed to create room")}
@@ -592,7 +593,7 @@ defmodule FlamingoWeb.HomeLive do
         {:noreply, assign(socket, error: "Room code cannot be empty")}
 
       true ->
-        case Rooms.join(code, name, socket.assigns.avatar) do
+        case Rooms.join(code, name, socket.assigns.avatar, user_id(socket)) do
           {:ok, resume_token, _snapshot} ->
             {:noreply, push_navigate(socket, to: ~p"/game/#{code}?resume_token=#{resume_token}")}
 
@@ -607,7 +608,8 @@ defmodule FlamingoWeb.HomeLive do
 
     with {:name, true} <- {:name, name != ""},
          {:ok, room_id} <- Rooms.open_saved_lobby(socket.assigns.saved_lobby.name),
-         {:ok, resume_token, _snapshot} <- Rooms.join(room_id, name, socket.assigns.avatar) do
+         {:ok, resume_token, _snapshot} <-
+           Rooms.join(room_id, name, socket.assigns.avatar, user_id(socket)) do
       {:noreply, push_navigate(socket, to: ~p"/game/#{room_id}?resume_token=#{resume_token}")}
     else
       {:name, false} -> {:noreply, assign(socket, error: "Name cannot be empty")}
@@ -657,5 +659,9 @@ defmodule FlamingoWeb.HomeLive do
   defp presence_label(%{players: players, playing?: playing?}) do
     count = length(players)
     "#{count} #{if playing?, do: "playing", else: "in the lobby"}"
+  end
+
+  defp user_id(socket) do
+    if scope = socket.assigns.current_scope, do: scope.user.id
   end
 end

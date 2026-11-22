@@ -31,8 +31,12 @@ defmodule Flamingo.Rooms do
 
   def save_lobby(room_id, name), do: RoomServer.save_lobby(room_id, name)
 
-  def join(room_id, player_name, avatar \\ Flamingo.Avatar.default()) do
-    RoomServer.join(room_id, player_name, avatar)
+  @doc """
+  Seats a player. A signed-in player passes their account id, which keeps them
+  to one seat per room and credits them in saved lobby history.
+  """
+  def join(room_id, player_name, avatar \\ Flamingo.Avatar.default(), user_id \\ nil) do
+    RoomServer.join(room_id, player_name, avatar, user_id)
   end
 
   def connect(room_id, resume_token), do: RoomServer.connect(room_id, resume_token)
