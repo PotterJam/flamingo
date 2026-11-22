@@ -272,7 +272,7 @@ defmodule FlamingoWeb.SpellslingersLive do
               <% @phase == :arena_books -> %>
                 {@map_name}: choose two spellbooks
               <% @can_act? and @selected_def.input == "charge" -> %>
-                Your turn! Aim, then hold to charge and release.
+                Your turn! Hold to charge, aim, and let go to throw.
               <% @can_act? -> %>
                 Your turn! Aim and click to cast.
               <% @phase == :arena_resolve and @surging? -> %>
@@ -412,6 +412,14 @@ defmodule FlamingoWeb.SpellslingersLive do
         </button>
       </div>
       <.help_diagram />
+      <div
+        id="arena-help-cancel"
+        class="flex items-center gap-2 border-t-2 border-border bg-rose-50 px-3 py-2 text-[13px] font-bold"
+      >
+        <span class="font-black">Cancel</span>
+        <.key_cap key="Esc" />
+        or right-click while charging. Nothing is spent and it's still your turn.
+      </div>
       <div class="grid grid-cols-4 border-t-2 border-border">
         <div
           :for={{{icon, how, what}, index} <- Enum.with_index(@types)}
@@ -471,7 +479,7 @@ defmodule FlamingoWeb.SpellslingersLive do
       viewBox="0 0 640 210"
       class="block h-auto w-full"
       role="img"
-      aria-label="Aim with the mouse, hold to charge, release to throw"
+      aria-label="Hold to charge, aim with the mouse, let go to throw"
     >
       <defs>
         <linearGradient id="help-sky" x2="0" y2="1">
@@ -499,9 +507,6 @@ defmodule FlamingoWeb.SpellslingersLive do
         stroke-width="3"
         stroke-dasharray="7 7"
       />
-      <g stroke="#111827" stroke-width="2" fill="none" transform="translate(150 104)">
-        <circle r="7" /><path d="M-12 0 h7 M5 0 h7 M0 -12 v7 M0 5 v7" />
-      </g>
       <circle
         cx="512"
         cy="142"
@@ -538,9 +543,9 @@ defmodule FlamingoWeb.SpellslingersLive do
           fill="#fde047"
         />
       </g>
-      <.help_step n={1} x={30} label="Aim with the mouse" />
-      <.help_step n={2} x={240} label="Hold to charge" />
-      <.help_step n={3} x={440} label="Release to throw" />
+      <.help_step n={1} x={30} label="Hold to charge" />
+      <.help_step n={2} x={240} label="Keep aiming" />
+      <.help_step n={3} x={440} label="Let go to throw" />
     </svg>
     """
   end

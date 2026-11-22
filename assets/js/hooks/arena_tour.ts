@@ -37,7 +37,7 @@ const steps = (walk: string): Step[] => [
   },
   {
     target: WIZARD,
-    text: "Hold the mouse button or Space to charge, and let go to throw. Wind pushes lobbed spells.",
+    text: "Hold the mouse button or Space to charge; you can keep aiming while it fills. Let go to throw. Changed your mind? Right-click or Esc cancels.",
     place: besideWizard,
   },
   {

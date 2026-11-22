@@ -64,8 +64,8 @@ function mount() {
   };
   SpellArena.mounted.call(hook as never);
 
-  const pointer = (name: string, x = 650, y = 200) =>
-    listeners.get(name)!({ button: 0, pointerId: 1, clientX: x, clientY: y, preventDefault: noop });
+  const pointer = (name: string, x = 650, y = 200, button = 0) =>
+    listeners.get(name)!({ button, pointerId: 1, clientX: x, clientY: y, preventDefault: noop });
 
   return {
     sent,
@@ -75,7 +75,8 @@ function mount() {
       frame(t);
     },
     down: () => pointer("pointerdown"),
-    move: () => pointer("pointermove"),
+    move: (x?: number, y?: number) => pointer("pointermove", x, y),
+    rightClick: () => pointer("pointerdown", 650, 200, 2),
     up: () => listeners.get("window:pointerup")!({}),
     cancel: () => listeners.get("pointercancel")?.({ pointerId: 1 }),
     blur: () => listeners.get("window:blur")?.({}),
@@ -267,4 +268,49 @@ test("arrow keys walk and float exactly like WASD", () => {
   const expected = [["walk", -1], ["walk", 1], ["rise", 1], ["rise", -1]];
   expect(moves(["a", "d", "w", "s"])).toEqual(expected);
   expect(moves(["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown"])).toEqual(expected);
+});
+
+test("full power waits for the release instead of firing itself", () => {
+  const a = mount();
+  a.server("arena_state", state());
+  a.tick(1);
+  a.down();
+  a.tick(5000);
+  expect(casts(a.sent)).toEqual([]);
+  now = 5000;
+  a.up();
+  expect(casts(a.sent).map((e) => e.power)).toEqual([100]);
+});
+
+test("the aim follows the mouse while charging", () => {
+  const a = mount();
+  a.server("arena_state", state());
+  a.tick(1);
+  a.down();
+  // From up-and-right of the wizard to up-and-left of it.
+  a.move(350, 200);
+  now = 400;
+  a.up();
+  const [thrown] = casts(a.sent);
+  expect(thrown.angle as number).toBeGreaterThan(90);
+});
+
+test("a right-click or Esc cancels a charge and the release then casts nothing", () => {
+  for (const cancel of ["right", "esc"]) {
+    const a = mount();
+    a.server("arena_state", state());
+    a.tick(1);
+    a.down();
+    if (cancel === "right") a.rightClick();
+    else a.key("Escape");
+    now = 800;
+    a.up();
+    a.tick(3000);
+    expect(casts(a.sent)).toEqual([]);
+    // Still this player's turn: the next charge throws.
+    a.down();
+    now = 1200;
+    a.up();
+    expect(casts(a.sent).length).toBe(1);
+  }
 });

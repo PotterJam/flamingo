@@ -922,46 +922,17 @@ const SpellArena = {
         ctx.globalAlpha = 1;
       }
 
-      // A faint sight line from the wand to the crosshair shows the launch direction.
-      ctx.save();
-      ctx.strokeStyle = "rgba(17,24,39,0.3)";
-      ctx.lineWidth = 1.5;
-      ctx.setLineDash([2, 4]);
-      ctx.beginPath();
-      ctx.moveTo(ox + dir[0] * 3 * s, oy + dir[1] * 3 * s);
-      ctx.lineTo(ox + dir[0] * 14 * s, oy + dir[1] * 14 * s);
-      ctx.stroke();
-      ctx.restore();
-
-      // Crosshair a fixed distance out along the aim.
-      const cx = ox + dir[0] * 16 * s;
-      const cy = oy + dir[1] * 16 * s;
-      ctx.strokeStyle = "#111827";
-      ctx.lineWidth = 2;
-      ctx.beginPath();
-      ctx.arc(cx, cy, 6, 0, Math.PI * 2);
-      ctx.moveTo(cx - 10, cy);
-      ctx.lineTo(cx - 3, cy);
-      ctx.moveTo(cx + 3, cy);
-      ctx.lineTo(cx + 10, cy);
-      ctx.moveTo(cx, cy - 10);
-      ctx.lineTo(cx, cy - 3);
-      ctx.moveTo(cx, cy + 3);
-      ctx.lineTo(cx, cy + 10);
-      ctx.stroke();
-
-      // The banner meter shows power; the arc dots above take its colour.
-      if (charge) {
-        const power = chargePower(t);
-        if (power >= 100) release();
-      } else if (spell.input === "charge") {
+      // The banner meter shows power; the arc dots above take its colour. Full power
+      // waits for the release rather than firing itself.
+      if (spell.input === "charge") {
+        const text = charge ? "let go to throw · right-click cancels" : "hold to charge";
         ctx.font = "bold 11px ui-sans-serif, system-ui";
         ctx.textAlign = "center";
         ctx.lineWidth = 3;
         ctx.strokeStyle = "white";
-        ctx.strokeText("hold to charge", ox, oy + 46 + Math.sin(t / 200));
+        ctx.strokeText(text, ox, oy + 46 + Math.sin(t / 200));
         ctx.fillStyle = "#111827";
-        ctx.fillText("hold to charge", ox, oy + 46 + Math.sin(t / 200));
+        ctx.fillText(text, ox, oy + 46 + Math.sin(t / 200));
       }
     };
 
@@ -1499,6 +1470,16 @@ const SpellArena = {
       this.pushEvent("cast", { spell, angle: Math.round(aim.angle * 10) / 10, power: Math.round(power * 10) / 10 });
     };
 
+    // Drops a charge on purpose, without casting; nothing is spent and the turn goes on.
+    const cancel = () => {
+      if (!charge) return false;
+      const name = spellById(charge.spell)?.name ?? "Spell";
+      charge = null;
+      thrownUntil = performance.now() + 1500;
+      if (thrown) thrown.textContent = `${name} cancelled`;
+      return true;
+    };
+
     // Lobbed spells charge; beams fire at once; placed spells conjure where you click.
     const trigger = () => {
       const spell = spellDef();
@@ -1528,6 +1509,8 @@ const SpellArena = {
 
     let drag: { x: number; y: number; camX: number; camY: number } | null = null;
     const onPointerMove = (event: PointerEvent) => {
+      // A right press while the left is held arrives as a move (a chord), not a pointerdown.
+      if (event.button === 2 && cancel()) return;
       const rect = canvas.getBoundingClientRect();
       if (drag) {
         const perCell = rect.width / VIEW_W;
@@ -1538,7 +1521,8 @@ const SpellArena = {
         return;
       }
       pointer = { x: ((event.clientX - rect.left) / rect.width) * W, y: ((event.clientY - rect.top) / rect.height) * H };
-      if (!charge) updateAim(event);
+      // Aim follows the mouse while charging too.
+      updateAim(event);
       dimNear(event.clientX, event.clientY);
     };
     const onPointerLeave = () => {
@@ -1549,7 +1533,11 @@ const SpellArena = {
       const rect = canvas.getBoundingClientRect();
       const px = ((event.clientX - rect.left) / rect.width) * W;
       const py = ((event.clientY - rect.top) / rect.height) * H;
-      // Right or middle drag pans the view.
+      // Right-click cancels a charge; otherwise right or middle drag pans the view.
+      if (event.button === 2 && cancel()) {
+        event.preventDefault();
+        return;
+      }
       if (event.button === 1 || event.button === 2) {
         drag = { x: event.clientX, y: event.clientY, camX: cam.x, camY: cam.y };
         event.preventDefault();
@@ -1583,7 +1571,10 @@ const SpellArena = {
       clampCam();
       freeLookUntil = performance.now() + 5000;
     };
-    const onContextMenu = (event: Event) => event.preventDefault();
+    const onContextMenu = (event: Event) => {
+      event.preventDefault();
+      cancel();
+    };
 
     const onKeyDown = (event: KeyboardEvent) => {
       const target = event.target as HTMLElement | null;
@@ -1593,6 +1584,7 @@ const SpellArena = {
         toggleFull();
         return;
       }
+      if (key === "escape" && cancel()) return;
       if (key === "escape" && page.classList.contains("arena-full")) {
         setFull(false);
         return;
