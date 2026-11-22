@@ -44,7 +44,7 @@ defmodule Flamingo.GameModes.Spellslingers.Rules do
       @max_speed 78.0
       @max_steps 450
       @playback_speed 1.6
-      @book_ms 25_000
+      @book_ms 45_000
       @max_bots 5
       @bot_think_ms 1400
       @bot_names ~w(Merlina Grimble Zephyra Thornwick Pyrrha)

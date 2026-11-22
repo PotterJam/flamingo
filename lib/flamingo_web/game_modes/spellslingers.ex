@@ -8,7 +8,7 @@ defmodule FlamingoWeb.GameModes.Spellslingers do
   def title, do: "Spells"
 
   def description,
-    do: "Not a drawing game: wizards take turns hurling spells across a crumbling island"
+    do: "Wizards take turns hurling spells across a crumbling island"
 
   def theme,
     do: %{

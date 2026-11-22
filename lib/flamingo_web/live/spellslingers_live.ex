@@ -2,6 +2,7 @@ defmodule FlamingoWeb.SpellslingersLive do
   use FlamingoWeb, :live_view
 
   alias Flamingo.GameModes.Spellslingers
+  alias Flamingo.GameModes.Spellslingers.Catalog
   alias Flamingo.Rooms
   alias FlamingoWeb.RoomRoute
 
@@ -24,9 +25,12 @@ defmodule FlamingoWeb.SpellslingersLive do
        units: [],
        cooldowns: %{},
        events: [],
+       log: [],
+       log_seq: 0,
        final_result: nil,
        books: [],
        chosen_books: %{},
+       books_ready: [],
        my_spells: [],
        map_name: nil,
        turn_end_time: nil,
@@ -65,7 +69,12 @@ defmodule FlamingoWeb.SpellslingersLive do
         spell_groups: spell_groups(assigns.my_spells, assigns.books),
         selected_def: Spellslingers.spell(assigns.selected_spell),
         floating?: floating?(assigns),
-        wizards: wizards(assigns)
+        wizards: wizards(assigns),
+        tuning?: assigns.dev_tools? and assigns.tuning != %{},
+        # The tour teaches while someone else is casting, so it never eats your own turn.
+        watching?:
+          assigns.participation == :active and assigns.phase in [:arena_aim, :arena_resolve] and
+            not my_turn?(assigns)
       )
 
     ~H"""
@@ -78,138 +87,231 @@ defmodule FlamingoWeb.SpellslingersLive do
           "[&.arena-full]:fixed [&.arena-full]:inset-0 [&.arena-full]:z-60 [&.arena-full]:min-h-0 [&.arena-full]:overflow-hidden [&.arena-full]:bg-indigo-950 [&.arena-full]:p-3"
         ]}
       >
-        <div class="mx-auto flex w-full max-w-6xl flex-col gap-3 group-[.arena-full]:h-full group-[.arena-full]:max-w-none">
+        <div class="relative mx-auto flex w-full max-w-6xl flex-col gap-3 group-[.arena-full]:h-full group-[.arena-full]:max-w-none">
           <.turn_header
+            can_act?={@can_act?}
             current_id={@current_id}
             map_name={@map_name}
-            can_act?={@can_act?}
             phase={@phase}
             players={@players}
+            selected_def={@selected_def}
             surging?={@surging?}
             tuned?={@tuned?}
             turn_end_time={@turn_end_time}
             wind={@wind}
           />
 
-          <div class="grid gap-3 lg:grid-cols-[1fr_15rem] group-[.arena-full]:min-h-0 group-[.arena-full]:flex-1 group-[.arena-full]:grid-cols-[minmax(0,1fr)_15rem]">
-            <div class={[
-              "self-start",
-              "group-[.arena-full]:flex group-[.arena-full]:min-h-0 group-[.arena-full]:items-center group-[.arena-full]:justify-center group-[.arena-full]:self-stretch group-[.arena-full]:[container-type:size]"
-            ]}>
-              <div class={[
-                "relative overflow-hidden rounded-base border-2 border-border bg-sky-200 shadow-rounded",
-                "group-[.arena-full]:w-[min(100cqw,calc(200cqh-8px))]"
-              ]}>
-                <canvas
-                  id="arena-canvas"
-                  phx-hook="SpellArena"
-                  phx-update="ignore"
-                  width="1000"
-                  height="500"
-                  tabindex="0"
-                  class="block aspect-[2/1] w-full cursor-crosshair touch-none outline-none"
-                  aria-label="Spellslingers arena"
-                />
-                <.books_picker
-                  books={@books}
-                  chosen_books={@chosen_books}
-                  participation={@participation}
-                  phase={@phase}
-                  players={@players}
-                  viewer_id={@viewer_id}
-                />
-                <.results
-                  final_result={@final_result}
-                  host_id={@host_id}
-                  phase={@phase}
-                  players={@players}
-                  viewer_id={@viewer_id}
-                />
-              </div>
-            </div>
+          <div
+            id="arena-wrap"
+            phx-hook="SpellCards"
+            class="relative group-[.arena-full]:min-h-0 group-[.arena-full]:flex-1"
+          >
+            <div
+              id="arena-stage"
+              class={[
+                "relative overflow-hidden rounded-base border-2 border-border bg-sky-300 shadow-rounded",
+                "group-[.arena-full]:h-full group-[.arena-full]:shadow-none group-[.arena-full]:[container-type:size]"
+              ]}
+            >
+              <div id="arena-sky" phx-update="ignore" class="absolute inset-0" />
+              <canvas
+                id="arena-canvas"
+                phx-hook="SpellArena"
+                phx-update="ignore"
+                width="1000"
+                height="500"
+                tabindex="0"
+                class={[
+                  "relative block aspect-[2/1] w-full cursor-crosshair touch-none outline-none",
+                  "group-[.arena-full]:absolute group-[.arena-full]:bottom-0 group-[.arena-full]:left-1/2 group-[.arena-full]:aspect-auto group-[.arena-full]:h-full group-[.arena-full]:w-[min(100cqw,200cqh)] group-[.arena-full]:-translate-x-1/2"
+                ]}
+                aria-label="Spellslingers arena"
+              />
 
-            <aside class="flex flex-col gap-3 lg:h-0 lg:min-h-full group-[.arena-full]:h-full group-[.arena-full]:min-h-0">
-              <.wizard_list
-                current_id={@current_id}
+              <div
+                id="arena-overlays"
+                class="pointer-events-none absolute inset-0 group-[.arena-full]:top-[70px]"
+              >
+                <.wizard_rail
+                  current_id={@current_id}
+                  online={@online}
+                  phase={@phase}
+                  players={@players}
+                  wizards={@wizards}
+                />
+                <div class="absolute top-2.5 right-2.5 flex w-[16%] min-w-32 flex-col items-end gap-3">
+                  <canvas
+                    id="arena-minimap"
+                    phx-update="ignore"
+                    class="pointer-events-auto block w-full cursor-pointer"
+                    aria-label="Minimap"
+                  />
+                  <.chronicle_ticker log={@log} players={@players} />
+                </div>
+                <button
+                  :if={@tuning?}
+                  type="button"
+                  id="arena-tuning-button"
+                  phx-click={open_drawer("tuning")}
+                  class="arena-ov pointer-events-auto absolute right-2.5 bottom-2.5 grid size-8 cursor-pointer place-items-center rounded-base hover:bg-amber-100"
+                  aria-label="Tuning"
+                  title="Dev tuning"
+                >
+                  <.icon name={:sliders_horizontal} class="size-5" />
+                </button>
+              </div>
+
+              <.books_picker
+                books={@books}
+                chosen_books={@chosen_books}
+                books_ready={@books_ready}
                 online={@online}
+                player_order={@player_order}
+                participation={@participation}
                 phase={@phase}
                 players={@players}
-                wizards={@wizards}
+                viewer_id={@viewer_id}
               />
-              <.dev_panel dev_tools?={@dev_tools?} tuned?={@tuned?} tuning={@tuning} />
-              <.chronicle events={@events} />
-            </aside>
+              <.results
+                final_result={@final_result}
+                host_id={@host_id}
+                phase={@phase}
+                players={@players}
+                viewer_id={@viewer_id}
+              />
+            </div>
+
+            <.controls
+              can_act?={@can_act?}
+              cooldowns={@cooldowns}
+              floating?={@floating?}
+              participation={@participation}
+              phase={@phase}
+              quick_used={@quick_used}
+              selected_spell={@selected_spell}
+              spell_groups={@spell_groups}
+              walk_left={@walk_left}
+            />
+
+            <.drawer
+              log={@log}
+              players={@players}
+              tuned?={@tuned?}
+              tuning={@tuning}
+              tuning?={@tuning?}
+            />
+
+            <%!-- The hook copies spell cards in here and draws the hover wait bar --%>
+            <div
+              id="spell-card-layer"
+              phx-update="ignore"
+              class="pointer-events-none absolute inset-0 z-40"
+            >
+              <div data-card-slot></div>
+              <div data-card-wait hidden class="absolute h-1 bg-gray-900"></div>
+              <style data-card-hot>
+              </style>
+            </div>
           </div>
 
-          <.controls
-            cooldowns={@cooldowns}
-            floating?={@floating?}
-            can_act?={@can_act?}
-            participation={@participation}
-            phase={@phase}
-            quick_used={@quick_used}
-            selected_def={@selected_def}
-            selected_spell={@selected_spell}
-            spell_groups={@spell_groups}
-            walk_budget={@walk_budget}
-            walk_left={@walk_left}
+          <div
+            id="arena-tour-anchor"
+            phx-hook="ArenaTour"
+            data-active={to_string(@watching?)}
+            data-walk={@walk_budget}
+            hidden
           />
+
           <p
             :if={@participation != :active and @phase != :game_ended}
             id="arena-spectating"
-            class="text-center text-sm font-bold"
+            class="text-center text-sm font-bold group-[.arena-full]:hidden"
           >
             You joined mid-duel, so you're watching this one.
           </p>
-          <p
-            :if={@participation == :active and @phase != :game_ended}
-            class="text-center text-xs text-gray-600 group-[.arena-full]:hidden"
-          >
-            Hold the mouse (or Space) to charge thrown spells and release to cast; beams fire on click; walls, ledges and summons appear where you click. A / D or ← / → walk (W / S or ↑ / ↓ while levitating), 1–9, 0 and - pick spells, mouse at the edge or the minimap pans, C recentres, F is full screen.
-          </p>
         </div>
+
+        <.spell_card :for={spell <- Spellslingers.spells()} spell={spell} />
       </main>
     </Layouts.app>
     """
   end
 
+  attr :can_act?, :any, required: true
   attr :current_id, :any, required: true
   attr :map_name, :any, required: true
-  attr :can_act?, :any, required: true
   attr :phase, :any, required: true
   attr :players, :any, required: true
+  attr :selected_def, :any, required: true
   attr :surging?, :any, required: true
   attr :tuned?, :any, required: true
   attr :turn_end_time, :any, required: true
   attr :wind, :any, required: true
 
+  # In the page this is the turn banner; in full view it is a translucent strip over the
+  # top of the arena. While a spell charges, the hook swaps the text for the power meter.
   defp turn_header(assigns) do
     ~H"""
     <header
       id="arena-header"
-      class="flex h-14 items-center justify-between gap-3 rounded-base border-2 border-border bg-white pr-2 pl-4 shadow-rounded"
+      class={[
+        "relative flex h-14 items-center justify-between gap-3 rounded-base border-2 border-border bg-white pr-2 pl-4 shadow-rounded",
+        "group-[.arena-full]:absolute group-[.arena-full]:inset-x-3 group-[.arena-full]:top-3 group-[.arena-full]:z-30 group-[.arena-full]:h-12 group-[.arena-full]:bg-white/90 group-[.arena-full]:shadow-[0_3px_0_#000]"
+      ]}
     >
-      <div class="flex min-w-0 items-center gap-3">
-        <span
-          class="size-4 shrink-0 rounded-full border-2 border-border"
-          style={"background: #{player_color(@players, @current_id)}"}
-        />
-        <p id="arena-turn" class="truncate text-lg font-black">
-          <%= cond do %>
-            <% @phase == :game_ended -> %>
-              The duel is over
-            <% @phase == :arena_books -> %>
-              {@map_name}: choose two spellbooks
-            <% @can_act? -> %>
-              Your turn! Aim, then hold to charge and release.
-            <% @phase == :arena_resolve and @surging? -> %>
-              Wild magic! Meteors are falling…
-            <% @phase == :arena_resolve -> %>
-              {player_name(@players, @current_id)}'s spell is flying…
-            <% true -> %>
-              {player_name(@players, @current_id)} is casting
-          <% end %>
+      <div class="flex min-w-0 items-center">
+        <p id="arena-turn" class="flex min-w-0 items-center gap-3 text-lg font-black">
+          <span
+            class="size-4 shrink-0 rounded-full border-2 border-border"
+            style={"background: #{player_color(@players, @current_id)}"}
+          />
+          <span class="truncate">
+            <%= cond do %>
+              <% @phase == :game_ended -> %>
+                The duel is over
+              <% @phase == :arena_books -> %>
+                {@map_name}: choose two spellbooks
+              <% @can_act? and @selected_def.input == "charge" -> %>
+                Your turn! Aim, then hold to charge and release.
+              <% @can_act? -> %>
+                Your turn! Aim and click to cast.
+              <% @phase == :arena_resolve and @surging? -> %>
+                Wild magic! Meteors are falling…
+              <% @phase == :arena_resolve -> %>
+                {player_name(@players, @current_id)}'s spell is flying…
+              <% true -> %>
+                {player_name(@players, @current_id)} is casting
+            <% end %>
+          </span>
         </p>
+        <div
+          id="arena-meter"
+          phx-update="ignore"
+          class="hidden min-w-0 items-center gap-2.5 text-base font-black"
+        >
+          <.icon name={:gauge} class="size-5 shrink-0" />
+          <span data-meter-name class="whitespace-nowrap"></span>
+          <span class="relative h-6 w-[380px] max-w-[38vw] shrink overflow-hidden border-2 border-border bg-white">
+            <i
+              data-meter-fill
+              class="absolute inset-y-0 left-0 w-0 bg-[linear-gradient(90deg,#22c55e,#facc15_60%,#ef4444)]"
+            >
+            </i>
+            <u class="absolute inset-y-0 left-1/4 w-px bg-black/20"></u>
+            <u class="absolute inset-y-0 left-1/2 w-px bg-black/20"></u>
+            <u class="absolute inset-y-0 left-3/4 w-px bg-black/20"></u>
+            <b
+              data-meter-last
+              hidden
+              class="absolute inset-y-0 w-[3px] bg-gray-900"
+              title="Last throw"
+            >
+            </b>
+            <span data-meter-text class="absolute inset-0 grid place-items-center text-xs font-black">
+            </span>
+          </span>
+        </div>
+        <p id="arena-thrown" phx-update="ignore" class="hidden truncate text-lg font-black"></p>
       </div>
       <div class="flex shrink-0 items-center gap-4">
         <span
@@ -220,6 +322,16 @@ defmodule FlamingoWeb.SpellslingersLive do
         >
           Tuned rules
         </span>
+        <.button
+          size="icon"
+          variant="ghost"
+          id="arena-help-button"
+          phx-click={JS.toggle(to: "#arena-help", display: "block")}
+          aria-label="How to play"
+          title="How to play (H)"
+        >
+          <.icon name={:circle_question_mark} class="size-5" />
+        </.button>
         <div id="arena-wind" class="flex items-center gap-2 text-sm font-bold">
           <.icon name={:wind} class="size-5" />
           <div class="relative h-3 w-28 overflow-hidden rounded-full border-2 border-border bg-sky-50">
@@ -242,11 +354,11 @@ defmodule FlamingoWeb.SpellslingersLive do
         </div>
         <.button
           size="icon"
-          variant="outline"
+          variant="ghost"
           id="arena-fullscreen"
           phx-click={JS.dispatch("arena:fullscreen", to: "#arena-canvas")}
-          aria-label="Toggle full screen"
-          title="Full screen (F)"
+          aria-label="Toggle full view"
+          title="Full view (F)"
         >
           <.icon name={:maximize} class="size-5 group-[.arena-full]:hidden" />
           <.icon name={:minimize} class="hidden size-5 group-[.arena-full]:block" />
@@ -268,102 +380,365 @@ defmodule FlamingoWeb.SpellslingersLive do
           stroke_width="7"
         />
       </div>
+      <.help_panel />
     </header>
+    """
+  end
+
+  @help_types [
+    {:gauge, "hold, release", "Lobbed"},
+    {:mouse_pointer_click, "click", "Beams"},
+    {:crosshair, "click a spot", "Summons"},
+    {:zap, "cast at once", "Quick"}
+  ]
+
+  defp help_panel(assigns) do
+    assigns = assign(assigns, :types, @help_types)
+
+    ~H"""
+    <div
+      id="arena-help"
+      class="absolute top-[calc(100%+4px)] right-16 z-50 hidden w-[644px] max-w-[calc(100vw-2rem)] border-2 border-border bg-white shadow-rounded"
+    >
+      <div class="flex items-center justify-between border-b-2 border-border py-1.5 pr-2 pl-3">
+        <h2 class="text-[13px] font-black tracking-wide uppercase">How to play</h2>
+        <button
+          type="button"
+          phx-click={JS.hide(to: "#arena-help")}
+          class="grid size-7 cursor-pointer place-items-center hover:bg-amber-100"
+          aria-label="Close"
+        >
+          <.icon name={:x} class="size-4" />
+        </button>
+      </div>
+      <.help_diagram />
+      <div class="grid grid-cols-4 border-t-2 border-border">
+        <div
+          :for={{{icon, how, what}, index} <- Enum.with_index(@types)}
+          class={["flex items-center gap-2 px-2.5 py-2", index > 0 && "border-l-2 border-border"]}
+        >
+          <span class="grid size-[30px] shrink-0 place-items-center rounded-full border-2 border-border bg-amber-100">
+            <.icon name={icon} class="size-4" />
+          </span>
+          <div class="text-xs leading-tight font-bold text-gray-600">
+            <span class="block text-sm font-black text-gray-900">{what}</span> {how}
+          </div>
+        </div>
+      </div>
+      <div class="flex flex-wrap items-center gap-x-4 gap-y-1.5 border-t-2 border-border bg-amber-50 px-3 py-2 text-[13px] font-bold">
+        <span>Each spell's key is on its button</span>
+        <span class="inline-flex items-center gap-1.5">
+          <.key_cap key="A" /><.key_cap key="D" /> or <.key_cap key="←" /><.key_cap key="→" />
+          walk
+        </span>
+        <span>Scroll or right-drag to look around</span>
+        <span class="inline-flex items-center gap-1.5"><.key_cap key="F" /> full view</span>
+        <span class="inline-flex items-center gap-1.5"><.key_cap key="H" /> help</span>
+      </div>
+    </div>
+    """
+  end
+
+  attr :key, :string, required: true
+
+  defp key_cap(assigns) do
+    ~H"""
+    <span class="inline-grid h-6 min-w-6 place-items-center border-2 border-b-4 border-border bg-white px-1 text-xs font-black">
+      {@key}
+    </span>
+    """
+  end
+
+  attr :n, :integer, required: true
+  attr :x, :integer, required: true
+  attr :label, :string, required: true
+
+  defp help_step(assigns) do
+    ~H"""
+    <g font-size="15" font-weight="800" font-family="system-ui">
+      <circle cx={@x} cy="30" r="12" fill="#111827" />
+      <text x={@x} y="35" fill="#fff" text-anchor="middle">{@n}</text>
+      <text x={@x + 19} y="35" fill="#111827" paint-order="stroke" stroke="#fff" stroke-width="4">
+        {@label}
+      </text>
+    </g>
+    """
+  end
+
+  defp help_diagram(assigns) do
+    ~H"""
+    <svg
+      viewBox="0 0 640 210"
+      class="block h-auto w-full"
+      role="img"
+      aria-label="Aim with the mouse, hold to charge, release to throw"
+    >
+      <defs>
+        <linearGradient id="help-sky" x2="0" y2="1">
+          <stop stop-color="#7dd3fc" /><stop offset="1" stop-color="#e0f2fe" />
+        </linearGradient>
+      </defs>
+      <rect width="640" height="210" fill="url(#help-sky)" />
+      <path d="M0 160 Q90 120 180 150 T360 140 T520 128 T640 145 V210 H0Z" fill="#c7d2fe" />
+      <rect x="0" y="194" width="640" height="16" fill="#3b82f6" opacity=".85" />
+      <path
+        d="M30 166 h200 v8 h-10 v8 h-170 v-8 h-20 Z"
+        fill="#a16234"
+        stroke="#111827"
+        stroke-width="2"
+      /><rect x="30" y="160" width="200" height="8" fill="#4ade80" stroke="#111827" stroke-width="2" /><path
+        d="M430 156 h180 v8 h-10 v8 h-150 v-8 h-20 Z"
+        fill="#a16234"
+        stroke="#111827"
+        stroke-width="2"
+      /><rect x="430" y="150" width="180" height="8" fill="#4ade80" stroke="#111827" stroke-width="2" />
+      <path
+        d="M112 126 Q 310 10 512 138"
+        fill="none"
+        stroke="#111827"
+        stroke-width="3"
+        stroke-dasharray="7 7"
+      />
+      <g stroke="#111827" stroke-width="2" fill="none" transform="translate(150 104)">
+        <circle r="7" /><path d="M-12 0 h7 M5 0 h7 M0 -12 v7 M0 5 v7" />
+      </g>
+      <circle
+        cx="512"
+        cy="142"
+        r="18"
+        fill="#f97316"
+        fill-opacity=".35"
+        stroke="#111827"
+        stroke-width="2.5"
+      />
+      <g transform="translate(98 160)" stroke="#111827" stroke-width="2" stroke-linejoin="round">
+        <path d="M-9 0 L-5 -14 H5 L9 0Z" fill="#22c55e" /><circle cy="-17" r="5" fill="#fde2c8" /><path
+          d="M-10 -19 L0 -38 L10 -19Z"
+          fill="#22c55e"
+        /><path d="M11 0 L13 -24" stroke="#78350f" stroke-width="3" /><circle
+          cx="13"
+          cy="-26"
+          r="3"
+          fill="#fde047"
+        />
+      </g>
+      <g
+        transform="translate(520 150) scale(-1 1)"
+        stroke="#111827"
+        stroke-width="2"
+        stroke-linejoin="round"
+      >
+        <path d="M-9 0 L-5 -14 H5 L9 0Z" fill="#ef4444" /><circle cy="-17" r="5" fill="#fde2c8" /><path
+          d="M-10 -19 L0 -38 L10 -19Z"
+          fill="#ef4444"
+        /><path d="M11 0 L13 -24" stroke="#78350f" stroke-width="3" /><circle
+          cx="13"
+          cy="-26"
+          r="3"
+          fill="#fde047"
+        />
+      </g>
+      <.help_step n={1} x={30} label="Aim with the mouse" />
+      <.help_step n={2} x={240} label="Hold to charge" />
+      <.help_step n={3} x={440} label="Release to throw" />
+    </svg>
     """
   end
 
   attr :books, :any, required: true
   attr :chosen_books, :any, required: true
+  attr :books_ready, :list, required: true
+  attr :online, :map, required: true
+  attr :player_order, :list, required: true
   attr :participation, :any, required: true
   attr :phase, :any, required: true
   attr :players, :any, required: true
   attr :viewer_id, :any, required: true
 
   defp books_picker(assigns) do
+    assigns =
+      assign(assigns,
+        mine: Map.get(assigns.chosen_books, assigns.viewer_id, []),
+        ready?: assigns.viewer_id in assigns.books_ready
+      )
+
     ~H"""
     <div
       :if={@phase == :arena_books}
       id="arena-books"
-      class="absolute inset-0 flex items-center justify-center bg-black/30 p-3 backdrop-blur-[2px]"
+      class="absolute inset-0 flex items-center justify-center bg-black/30 p-3 backdrop-blur-[2px] group-[.arena-full]:pt-[70px]"
     >
-      <.card class="max-h-full w-full max-w-4xl overflow-y-auto bg-white p-4">
-        <div class="mb-3 flex flex-wrap items-end justify-between gap-2">
-          <div>
-            <h2 class="font-retro-display text-xl">Pick two spellbooks</h2>
-            <p class="text-xs text-gray-600">
-              Everyone knows Ember Bolt, Blink and Arcane Ward. Each book adds four spells.
-            </p>
+      <.card class="max-h-full w-full max-w-5xl overflow-y-auto bg-white p-3">
+        <div class="mb-3 flex flex-wrap items-center justify-between gap-2">
+          <h2 class="font-retro-display text-xl">Pick two spellbooks</h2>
+          <div :if={@participation == :active} class="flex items-center gap-2">
+            <span
+              id="books-chosen-count"
+              class="rounded-full border-2 border-border bg-amber-100 px-3 py-1 text-sm font-black tabular-nums"
+            >
+              {length(@mine)} / 2 chosen
+            </span>
+            <.button
+              id="books-ready"
+              phx-click="toggle_ready"
+              disabled={length(@mine) < 2}
+              variant={if @ready?, do: "neutral", else: "default"}
+              title={if length(@mine) < 2, do: "Choose two books first"}
+            >
+              <%= if @ready? do %>
+                <.icon name={:check} class="size-4" /> Ready! Change books
+              <% else %>
+                Ready
+              <% end %>
+            </.button>
           </div>
-          <span
-            id="books-chosen-count"
-            class="rounded-full border-2 border-border bg-amber-100 px-3 py-1 text-sm font-black tabular-nums"
-          >
-            {length(Map.get(@chosen_books, @viewer_id, []))} / 2 chosen
-          </span>
         </div>
-        <div class="grid grid-cols-2 gap-2.5 sm:grid-cols-3 lg:grid-cols-5">
+        <ul
+          id="books-roster"
+          class="mb-3 flex flex-wrap gap-1.5"
+          aria-label="What everyone has picked"
+        >
+          <li
+            :for={id <- @player_order}
+            :if={Map.get(@online, id, false)}
+            id={"books-roster-#{id}"}
+            class={[
+              "flex items-center gap-1.5 rounded-full border-2 border-border py-0.5 pr-1 pl-0.5 text-xs font-bold",
+              if(id in @books_ready, do: "bg-green-100", else: "bg-white")
+            ]}
+          >
+            <.flamingo_avatar
+              avatar={get_in(@players, [id, :avatar]) || %{}}
+              class="size-6 rounded-full border-2 border-border bg-white"
+              label={player_name(@players, id)}
+            />
+            <span style={"color: #{player_color(@players, id)}"}>{player_name(@players, id)}</span>
+            <span
+              :for={book <- book_defs(@books, Map.get(@chosen_books, id, []))}
+              class="grid size-5 place-items-center rounded-full border-[1.5px] border-border text-white"
+              style={"background: #{book.color}"}
+              title={book.name}
+            >
+              <.icon name={book.icon} class="size-3" />
+            </span>
+            <span
+              :for={_ <- 1..(2 - length(Map.get(@chosen_books, id, [])))//1}
+              class="size-5 rounded-full border-[1.5px] border-dashed border-gray-400"
+            />
+            <%= if id in @books_ready do %>
+              <span class="flex items-center gap-0.5 px-1 text-green-700">
+                <.icon name={:check} class="size-3.5" /> Ready
+              </span>
+            <% else %>
+              <span class="px-1 text-gray-500">choosing…</span>
+            <% end %>
+          </li>
+        </ul>
+        <div class="grid grid-cols-2 gap-3 sm:grid-cols-3">
+          <div
+            id="book-core"
+            data-card-anchor
+            class="relative flex min-w-0 -translate-y-1 flex-col border-2 border-border bg-slate-100 shadow-rounded outline-3 outline-offset-2 outline-slate-500"
+          >
+            <div class="flex items-center gap-2 border-b-2 border-border bg-slate-500 px-2.5 py-1.5 font-black text-white">
+              <.icon name={:lock} class="size-4 shrink-0" />
+              <span class="flex-1">Core</span>
+              <span class="flex items-center gap-1 text-[11px] font-extrabold">
+                <.icon name={:users} class="size-3.5" /> Everyone
+              </span>
+            </div>
+            <.book_scene id="core" />
+            <.book_spells color="#64748b" tint="#e2e8f0" spells={Catalog.core()} />
+          </div>
           <button
             :for={book <- @books}
             type="button"
             id={"book-#{book.id}"}
+            data-card-anchor
             phx-click="choose_book"
             phx-value-book={book.id}
-            aria-pressed={to_string(book.id in Map.get(@chosen_books, @viewer_id, []))}
+            aria-pressed={to_string(book.id in @mine)}
             disabled={@participation != :active}
             class={[
-              "group relative flex cursor-pointer flex-col overflow-hidden rounded-base border-2 border-border bg-white text-left transition-all duration-150",
+              "relative flex min-w-0 cursor-pointer flex-col border-2 border-border bg-white text-left transition-all duration-150",
               "hover:-translate-y-1 hover:shadow-rounded disabled:cursor-default disabled:hover:translate-y-0 disabled:hover:shadow-none",
-              book.id in Map.get(@chosen_books, @viewer_id, []) &&
-                "-translate-y-1 shadow-rounded"
+              "[&.phx-click-loading]:-translate-y-1 [&.phx-click-loading]:scale-[0.98] [&.phx-click-loading]:shadow-rounded",
+              book.id in @mine && "-translate-y-1 shadow-rounded"
             ]}
             style={
-              if book.id in Map.get(@chosen_books, @viewer_id, []),
+              if book.id in @mine,
                 do:
                   "background: #{book.color}1f; outline: 3px solid #{book.color}; outline-offset: 2px"
             }
           >
             <div
-              class="flex items-center gap-2 border-b-2 border-border px-2.5 py-2 text-white"
+              class="flex items-center gap-2 border-b-2 border-border px-2.5 py-1.5 font-black text-white"
               style={"background: #{book.color}"}
             >
-              <%= if book.id in Map.get(@chosen_books, @viewer_id, []) do %>
+              <%= if book.id in @mine do %>
                 <span class="flex size-5 shrink-0 items-center justify-center rounded-full border-2 border-border bg-white text-gray-900">
                   <.icon name={:check} class="size-3" />
                 </span>
               <% else %>
-                <.icon name={book.icon} class="size-5 shrink-0" />
+                <.icon name={book.icon} class="size-4 shrink-0" />
               <% end %>
-              <span class="min-w-0 flex-1 truncate font-black">{book.name}</span>
-            </div>
-            <div class="flex flex-1 flex-col gap-2 p-2.5">
-              <p class="text-[11px] leading-snug text-gray-600">{book.blurb}</p>
-              <ul class="space-y-1">
-                <li
-                  :for={spell <- my_spells(book.spells)}
-                  class="flex items-center gap-1.5 text-xs font-bold"
-                  title={spell.blurb}
-                >
-                  <span
-                    class="flex size-5 shrink-0 items-center justify-center rounded-full border border-border"
-                    style={"background: #{book.color}2e; color: #{book.color}"}
-                  >
-                    <.icon name={spell.icon} class="size-3" />
-                  </span>
-                  <span class="leading-tight">{spell.name}</span>
-                </li>
-              </ul>
-              <div class="mt-auto flex min-h-6 items-center -space-x-1.5 pt-1">
+              <span class="min-w-0 flex-1 truncate">{book.name}</span>
+              <span class="flex h-6 items-center -space-x-1.5">
                 <.flamingo_avatar
                   :for={id <- choosers(@chosen_books, book.id)}
                   avatar={get_in(@players, [id, :avatar]) || %{}}
-                  class="size-6 rounded-full border-2 border-white bg-white"
+                  class="size-6 rounded-full border-2 border-border bg-white"
                   label={player_name(@players, id)}
                 />
-              </div>
+              </span>
             </div>
+            <.book_scene id={book.id} />
+            <.book_spells color={book.color} tint={"#{book.color}55"} spells={book.spells} />
           </button>
         </div>
       </.card>
+    </div>
+    """
+  end
+
+  attr :id, :string, required: true
+
+  defp book_scene(assigns) do
+    ~H"""
+    <div
+      id={"book-scene-#{@id}"}
+      phx-hook="SpellScene"
+      phx-update="ignore"
+      data-scene={@id}
+      class="aspect-[5/2] overflow-hidden border-b-2 border-border bg-sky-200 [&>svg]:block [&>svg]:size-full"
+    />
+    """
+  end
+
+  attr :color, :string, required: true
+  attr :tint, :string, required: true
+  attr :spells, :list, required: true
+
+  # Hovering a spell opens its card beside it, the same card the spell dock shows.
+  defp book_spells(assigns) do
+    ~H"""
+    <div class="grid grid-cols-2 gap-x-1.5 gap-y-0.5 p-1.5">
+      <span
+        :for={spell <- my_spells(@spells)}
+        data-card={spell.id}
+        data-card-place="side"
+        data-card-delay="450"
+        data-card-color={@tint}
+        class="flex min-w-0 items-center gap-1.5 px-1 py-0.5 text-xs font-bold select-none hover:bg-amber-100"
+      >
+        <span
+          class="grid size-[22px] shrink-0 place-items-center rounded-full border-[1.5px] border-border"
+          style={"background: #{@color}2e; color: #{@color}"}
+        >
+          <.icon name={spell.icon} class="size-3" />
+        </span>
+        <span class="truncate">{spell.name}</span>
+      </span>
     </div>
     """
   end
@@ -379,7 +754,7 @@ defmodule FlamingoWeb.SpellslingersLive do
     <div
       :if={@phase == :game_ended && @final_result}
       id="arena-results"
-      class="absolute inset-0 flex items-center justify-center bg-black/30 p-4 backdrop-blur-[2px]"
+      class="absolute inset-0 flex items-center justify-center bg-black/30 p-4 backdrop-blur-[2px] group-[.arena-full]:pt-[70px]"
     >
       <.card class="w-full max-w-md bg-white p-6 text-center">
         <.icon name={:trophy} class="mx-auto size-10 text-amber-500" />
@@ -426,72 +801,156 @@ defmodule FlamingoWeb.SpellslingersLive do
   attr :players, :any, required: true
   attr :wizards, :any, required: true
 
-  defp wizard_list(assigns) do
+  # Faces, names in each wizard's colour and HP, drawn straight onto the map like the
+  # name labels over the wizards; hovering adds the numbers. Fallen wizards fold into one row.
+  defp wizard_rail(assigns) do
+    assigns =
+      assign(assigns,
+        alive: Enum.reject(assigns.wizards, & &1.dead),
+        fallen: Enum.count(assigns.wizards, & &1.dead)
+      )
+
     ~H"""
-    <.card class="max-h-72 min-h-0 shrink-0 overflow-y-auto bg-white p-3 lg:max-h-[60%]">
-      <h2 class="mb-2 text-sm font-black tracking-wide uppercase">Wizards</h2>
-      <ul id="arena-wizards" class="space-y-2">
-        <li
-          :for={wizard <- @wizards}
-          id={"wizard-#{wizard.id}"}
-          class={[
-            "flex items-center gap-2 rounded-base px-1 py-0.5",
-            wizard.id == @current_id && @phase != :game_ended && "bg-amber-100",
-            wizard.dead && "opacity-40"
-          ]}
+    <ul
+      id="arena-rail"
+      class="arena-ov group/rail pointer-events-auto absolute top-2.5 left-2.5 grid gap-[3px] p-0.5"
+    >
+      <li
+        :for={wizard <- @alive}
+        id={"wizard-#{wizard.id}"}
+        phx-click={JS.dispatch("arena:focus", to: "#arena-canvas", detail: %{id: wizard.id})}
+        class={[
+          "flex h-[26px] cursor-pointer items-center gap-1.5",
+          !Map.get(@online, wizard.id, false) && "opacity-60"
+        ]}
+        title={
+          if Map.get(@online, wizard.id, false),
+            do: "Look at #{player_name(@players, wizard.id)}",
+            else: "#{player_name(@players, wizard.id)} is away"
+        }
+      >
+        <span
+          class="size-6 shrink-0 overflow-hidden rounded-full border-2 border-border bg-white"
+          style={
+            if wizard.id == @current_id and @phase != :game_ended,
+              do: "box-shadow: 0 0 0 3px #fcd34d, 0 0 0 5px #000"
+          }
         >
           <.flamingo_avatar
             avatar={get_in(@players, [wizard.id, :avatar]) || %{}}
-            class="size-9 shrink-0"
+            class="size-full"
             label=""
           />
-          <div class="min-w-0 flex-1">
-            <div class="flex items-center gap-1 text-sm font-bold">
-              <span
-                class="size-2.5 shrink-0 rounded-full"
-                style={"background: #{player_color(@players, wizard.id)}"}
-              />
-              <span class="truncate">{player_name(@players, wizard.id)}</span>
-              <.icon :if={wizard.dead} name={:skull} class="size-3.5" />
-              <span
-                :if={!wizard.dead && !Map.get(@online, wizard.id, false)}
-                class="text-xs font-normal text-gray-500"
-              >
-                away
-              </span>
-            </div>
-            <div class="mt-1 h-2 overflow-hidden rounded-full border border-border bg-gray-100">
-              <div
-                class="h-full bg-green-500 transition-all duration-500"
-                style={"width: #{round(wizard.hp * 100 / wizard.max_hp)}%"}
-              />
-            </div>
-          </div>
-          <span class="w-7 text-right text-xs font-bold tabular-nums">{wizard.hp}</span>
-        </li>
-      </ul>
-    </.card>
+        </span>
+        <span
+          class="arena-outline w-[108px] truncate text-xs font-extrabold"
+          style={"color: #{player_color(@players, wizard.id)}"}
+        >
+          {player_name(@players, wizard.id)}
+        </span>
+        <span class="h-1.5 w-11 overflow-hidden rounded-full border-[1.5px] border-black bg-gray-100 transition-[width] duration-150 group-hover/rail:w-[70px]">
+          <span
+            class="block h-full bg-green-500 transition-all duration-500"
+            style={"width: #{round(wizard.hp * 100 / wizard.max_hp)}%"}
+          />
+        </span>
+        <span class="arena-outline hidden w-6 text-right text-xs font-extrabold tabular-nums group-hover/rail:inline">
+          {wizard.hp}
+        </span>
+      </li>
+      <li
+        :if={@fallen > 0}
+        id="wizard-fallen"
+        class="arena-outline flex h-5 items-center gap-1 text-[11px] font-extrabold text-gray-500"
+      >
+        <.icon name={:skull} class="size-3.5" /> {@fallen}
+        <span class="hidden group-hover/rail:inline">fallen</span>
+      </li>
+    </ul>
     """
   end
 
-  attr :dev_tools?, :any, required: true
+  attr :log, :list, required: true
+  attr :players, :any, required: true
+
+  # The newest few chronicle lines, as outlined text under the minimap. Each drifts in and
+  # fades out on its own; hovering holds them and offers the full log.
+  defp chronicle_ticker(assigns) do
+    ~H"""
+    <div
+      id="arena-ticker"
+      class="arena-ov group/ticker pointer-events-auto grid w-[340px] max-w-[45vw] justify-items-end gap-0.5 text-right"
+    >
+      <p
+        :for={entry <- Enum.take(@log, 4)}
+        id={"event-#{entry.seq}"}
+        class="arena-feed-line arena-outline text-[13px] font-extrabold text-gray-900"
+        phx-no-format
+      ><span :for={{text, color} <- paint(entry.text, @players)} style={color && "color: #{color}"}>{text}</span></p>
+      <button
+        type="button"
+        id="arena-full-chronicle"
+        phx-click={open_drawer("chronicle")}
+        class="arena-outline cursor-pointer text-[11px] font-extrabold text-gray-700 underline opacity-0 transition-opacity group-hover/ticker:opacity-100 focus-visible:opacity-100"
+      >
+        Full chronicle
+      </button>
+    </div>
+    """
+  end
+
+  attr :log, :list, required: true
+  attr :players, :any, required: true
   attr :tuned?, :any, required: true
   attr :tuning, :any, required: true
+  attr :tuning?, :any, required: true
 
-  defp dev_panel(assigns) do
+  defp drawer(assigns) do
     ~H"""
-    <.card
-      :if={@dev_tools? and @tuning != %{}}
-      class="min-h-0 overflow-y-auto bg-violet-50 p-3"
+    <div
+      id="arena-drawer"
+      class="absolute top-2.5 right-2.5 bottom-2.5 z-30 hidden w-[280px] group-[.arena-full]:top-[80px] flex-col gap-2 border-2 border-border bg-white p-2.5 shadow-rounded"
     >
-      <%!-- Keep the panel open across server updates --%>
-      <details id="arena-dev-panel" phx-mounted={JS.ignore_attributes(["open"])}>
-        <summary class="cursor-pointer text-sm font-black tracking-wide uppercase">
-          <span class="inline-flex items-center gap-1">
-            <.icon name={:sliders_horizontal} class="size-4" /> Dev tuning
-          </span>
-        </summary>
-        <form id="arena-tuning-form" phx-change="tune" class="mt-2 space-y-1.5">
+      <div class="flex items-center justify-between">
+        <div class="flex gap-1">
+          <button
+            type="button"
+            id="drawer-tab-chronicle"
+            phx-click={drawer_tab("chronicle")}
+            class="flex cursor-pointer items-center gap-1 border-2 border-border bg-amber-300 px-2.5 py-0.5 text-xs font-black"
+          >
+            <.icon name={:scroll_text} class="size-3.5" /> Chronicle
+          </button>
+          <button
+            :if={@tuning?}
+            type="button"
+            id="drawer-tab-tuning"
+            phx-click={drawer_tab("tuning")}
+            class="flex cursor-pointer items-center gap-1 border-2 border-border bg-white px-2.5 py-0.5 text-xs font-black"
+          >
+            <.icon name={:sliders_horizontal} class="size-3.5" /> Tuning
+          </button>
+        </div>
+        <button
+          type="button"
+          phx-click={JS.hide(to: "#arena-drawer")}
+          class="grid size-7 cursor-pointer place-items-center hover:bg-amber-100"
+          aria-label="Close"
+        >
+          <.icon name={:x} class="size-4" />
+        </button>
+      </div>
+      <ol id="arena-events" class="grid min-h-0 content-start gap-1.5 overflow-y-auto text-[13px]">
+        <li
+          :for={{entry, index} <- Enum.with_index(@log)}
+          id={"log-#{entry.seq}"}
+          class={if(index == 0, do: "font-extrabold", else: "text-gray-600")}
+        >
+          {entry.text}
+        </li>
+      </ol>
+      <div :if={@tuning?} id="arena-dev-panel" class="hidden min-h-0 overflow-y-auto">
+        <form id="arena-tuning-form" phx-change="tune" class="space-y-1.5">
           <label
             :for={rule <- Spellslingers.tuning()}
             class="flex items-center justify-between gap-2 text-xs"
@@ -519,220 +978,295 @@ defmodule FlamingoWeb.SpellslingersLive do
         >
           Restore normal rules
         </.button>
-      </details>
-    </.card>
+      </div>
+    </div>
     """
   end
 
-  attr :events, :any, required: true
+  defp open_drawer(tab), do: tab |> drawer_tab() |> JS.show(to: "#arena-drawer", display: "flex")
 
-  defp chronicle(assigns) do
-    ~H"""
-    <.card class="min-h-24 flex-1 overflow-y-auto bg-white p-3">
-      <h2 class="mb-2 text-sm font-black tracking-wide uppercase">Chronicle</h2>
-      <ul id="arena-events" class="space-y-1 text-xs">
-        <li
-          :for={{event, index} <- Enum.with_index(@events)}
-          class={if(index == 0, do: "font-bold", else: "text-gray-600")}
-        >
-          {event}
-        </li>
-      </ul>
-    </.card>
-    """
+  defp drawer_tab(tab) do
+    {shown, hidden} =
+      if tab == "tuning",
+        do: {"#arena-dev-panel", "#arena-events"},
+        else: {"#arena-events", "#arena-dev-panel"}
+
+    JS.show(to: shown, display: "grid")
+    |> JS.hide(to: hidden)
+    |> JS.remove_class("bg-amber-300", to: "#arena-drawer [id^=drawer-tab-]")
+    |> JS.add_class("bg-white", to: "#arena-drawer [id^=drawer-tab-]")
+    |> JS.remove_class("bg-white", to: "#drawer-tab-#{tab}")
+    |> JS.add_class("bg-amber-300", to: "#drawer-tab-#{tab}")
   end
 
+  attr :can_act?, :any, required: true
   attr :cooldowns, :any, required: true
   attr :floating?, :any, required: true
-  attr :can_act?, :any, required: true
   attr :participation, :any, required: true
   attr :phase, :any, required: true
   attr :quick_used, :any, required: true
-  attr :selected_def, :any, required: true
   attr :selected_spell, :any, required: true
   attr :spell_groups, :any, required: true
-  attr :walk_budget, :any, required: true
   attr :walk_left, :any, required: true
 
+  # The spell dock floats over the bottom of the arena: an icon hotbar grouped by book,
+  # with walking and Pass turn on the same line. Spell names live in the cards.
   defp controls(assigns) do
     ~H"""
     <section
       :if={@participation == :active and @phase in [:arena_aim, :arena_resolve]}
       id="arena-controls"
-      class="flex flex-wrap items-end gap-x-4 gap-y-2 rounded-base border-2 border-border bg-white p-3 shadow-rounded"
+      class={[
+        "arena-ov z-20 mt-3 flex flex-wrap items-end justify-center gap-2.5 border-2 border-border bg-white/90 px-2.5 py-2 shadow-rounded",
+        "md:absolute md:bottom-2.5 md:left-1/2 md:mt-0 md:w-max md:max-w-[calc(100%-1.25rem)] md:-translate-x-1/2"
+      ]}
     >
-      <div
-        id="spell-detail"
-        class="flex h-7 w-full min-w-0 items-center gap-2 rounded-base bg-amber-50 px-2.5 text-xs"
-      >
-        <%= if @selected_def do %>
-          <.icon name={@selected_def.icon} class="size-4 shrink-0" />
-          <span class="shrink-0 font-black">{@selected_def.name}</span>
-          <span class="min-w-0 truncate text-gray-700">{@selected_def.blurb}</span>
-          <span class="ml-auto flex shrink-0 gap-1 text-[10px] font-bold">
-            <span
-              :if={@selected_def.damage > 0}
-              class="rounded-full border border-border bg-white px-1.5 py-0.5"
-            >
-              {@selected_def.damage} damage
-            </span>
-            <span
-              :if={@selected_def.cooldown > 0}
-              class="rounded-full border border-border bg-white px-1.5 py-0.5"
-            >
-              {@selected_def.cooldown}-turn cooldown
-            </span>
-            <span
-              :if={@selected_def.quick}
-              class="rounded-full border border-sky-600 bg-sky-100 px-1.5 py-0.5 text-sky-700"
-            >
-              Quick: your turn goes on
-            </span>
-          </span>
-        <% end %>
-      </div>
-      <div id="spellbook" class="flex min-w-0 flex-1 flex-wrap items-end gap-x-4 gap-y-2">
+      <div id="spellbook" class="flex flex-wrap items-end gap-2.5">
         <div
           :for={group <- @spell_groups}
           id={"spell-group-#{group.id}"}
-          class="flex flex-col gap-1.5"
+          class="flex gap-1 border-t-4 pt-[5px]"
+          style={"border-color: #{group.color}"}
+          title={group.name}
         >
-          <p
-            class="flex items-center gap-1.5 text-[10px] font-black tracking-widest uppercase"
-            style={"color: #{group.color}"}
+          <button
+            :for={{spell, index} <- group.spells}
+            type="button"
+            id={"spell-#{spell.id}"}
+            phx-click="select_spell"
+            phx-value-spell={spell.id}
+            data-card={spell.id}
+            aria-label={spell.name}
+            aria-pressed={to_string(@selected_spell == spell.id)}
+            disabled={Map.get(@cooldowns, spell.id, 0) > 0 or (spell.quick and @quick_used)}
+            class={[
+              "relative grid size-[46px] cursor-pointer touch-none place-items-center border-2 border-border p-0 transition-all duration-150 select-none",
+              "disabled:cursor-not-allowed disabled:hover:translate-y-0",
+              if(@selected_spell == spell.id,
+                do: "-translate-y-1 bg-amber-300 shadow-rounded",
+                else: "bg-white hover:-translate-y-0.5 hover:bg-amber-50"
+              ),
+              (spell.quick and @quick_used) && "opacity-40"
+            ]}
           >
-            <span class="h-1 w-3 rounded-full" style={"background: #{group.color}"} />
-            {group.name}
-          </p>
-          <div class="flex gap-1.5">
-            <button
-              :for={{spell, index} <- group.spells}
-              type="button"
-              id={"spell-#{spell.id}"}
-              phx-click="select_spell"
-              phx-value-spell={spell.id}
-              title={spell.blurb}
-              aria-pressed={to_string(@selected_spell == spell.id)}
-              disabled={Map.get(@cooldowns, spell.id, 0) > 0 or (spell.quick and @quick_used)}
-              class={[
-                "relative flex h-[4.75rem] w-16 cursor-pointer flex-col items-center justify-center gap-1 overflow-hidden rounded-base border-2 border-border px-0.5 pt-1 text-center transition-all duration-150",
-                "disabled:cursor-not-allowed disabled:hover:translate-y-0",
-                if(@selected_spell == spell.id,
-                  do: "-translate-y-1 bg-amber-300 shadow-rounded",
-                  else: "bg-white hover:-translate-y-0.5 hover:bg-amber-50"
-                ),
-                (spell.quick and @quick_used) && "opacity-40"
-              ]}
+            <span class="absolute top-0 left-[3px] text-[9px] font-black text-gray-400">
+              {key_label(index)}
+            </span>
+            <.icon
+              :if={spell.input == "charge"}
+              name={:gauge}
+              class="absolute top-px right-0.5 size-2.5 text-amber-700"
+            />
+            <.icon
+              :if={spell.input == "instant"}
+              name={:zap}
+              class="absolute top-px right-0.5 size-2.5 text-sky-600"
+            />
+            <span
+              class="grid size-[30px] place-items-center rounded-full border-2 border-border"
+              style={"background: #{group.color}2e; color: #{group.color}"}
             >
-              <span class="absolute top-0.5 left-1 text-[10px] font-black text-gray-400">
-                {key_label(index)}
+              <.icon name={spell.icon} class="size-4" />
+            </span>
+            <span
+              :if={Map.get(@cooldowns, spell.id, 0) > 0}
+              class="absolute inset-0 flex flex-col items-center justify-center bg-gray-800 text-white"
+            >
+              <.icon name={:hourglass} class="size-3" />
+              <span class="text-base leading-none font-black">
+                {Map.get(@cooldowns, spell.id)}
               </span>
-              <.icon
-                :if={spell.quick}
-                name={:zap}
-                class="absolute top-1 right-1 size-3 fill-sky-400 text-sky-600"
-              />
-              <span
-                class="flex size-8 shrink-0 items-center justify-center rounded-full border-2 border-border"
-                style={"background: #{group.color}2e; color: #{group.color}"}
-              >
-                <.icon name={spell.icon} class="size-4" />
-              </span>
-              <span class="line-clamp-2 text-[10px] leading-tight font-bold">
-                {spell.name}
-              </span>
-              <span
-                :if={Map.get(@cooldowns, spell.id, 0) > 0}
-                class="absolute inset-0 flex flex-col items-center justify-center gap-0.5 bg-gray-800 text-white"
-              >
-                <.icon name={:hourglass} class="size-3.5" />
-                <span class="text-lg leading-none font-black">
-                  {Map.get(@cooldowns, spell.id)}
-                </span>
-              </span>
-            </button>
-          </div>
+            </span>
+          </button>
         </div>
       </div>
 
-      <div
-        id="arena-moves"
-        class="flex w-full flex-row items-center justify-center gap-3 sm:w-auto sm:flex-col sm:gap-2"
-      >
-        <div class="flex items-center gap-1.5">
-          <.button
-            size="icon"
-            variant="outline"
-            id="walk-left"
-            phx-click="walk"
-            phx-value-dir="-1"
-            disabled={!@can_act? or @walk_left == 0}
-            aria-label="Walk left"
-          >
-            <.icon name={:arrow_left} class="size-5" />
-          </.button>
-          <div class="flex w-14 flex-col items-center gap-1 text-xs font-bold">
-            <span class="flex items-center gap-1">
-              <.icon name={:footprints} class="size-3.5" />
-              <span id="walk-left-count" class="tabular-nums">{@walk_left}</span>
-            </span>
-            <span class="h-1.5 w-full overflow-hidden rounded-full border border-border bg-gray-100">
-              <span
-                class="block h-full bg-emerald-500 transition-all duration-200"
-                style={"width: #{steps_percent(@walk_left, @walk_budget)}%"}
-              />
-            </span>
-          </div>
-          <.button
-            size="icon"
-            variant="outline"
-            id="walk-right"
-            phx-click="walk"
-            phx-value-dir="1"
-            disabled={!@can_act? or @walk_left == 0}
-            aria-label="Walk right"
-          >
-            <.icon name={:arrow_right} class="size-5" />
-          </.button>
-        </div>
-        <div :if={@floating?} id="rise-controls" class="flex items-center gap-1">
-          <.button
-            size="sm"
-            variant="outline"
+      <div id="arena-moves" class="ml-1.5 flex items-center gap-1.5">
+        <.button
+          size="icon"
+          variant="outline"
+          id="walk-left"
+          phx-click="walk"
+          phx-value-dir="-1"
+          disabled={!@can_act? or @walk_left == 0}
+          aria-label="Walk left"
+        >
+          <.icon name={:arrow_left} class="size-5" />
+        </.button>
+        <span class="flex w-11 items-center justify-center gap-1 text-xs font-bold" title="Steps left">
+          <.icon name={:footprints} class="size-3.5" />
+          <span id="walk-left-count" class="tabular-nums">{@walk_left}</span>
+        </span>
+        <.button
+          size="icon"
+          variant="outline"
+          id="walk-right"
+          phx-click="walk"
+          phx-value-dir="1"
+          disabled={!@can_act? or @walk_left == 0}
+          aria-label="Walk right"
+        >
+          <.icon name={:arrow_right} class="size-5" />
+        </.button>
+        <div :if={@floating?} id="rise-controls" class="flex flex-col gap-0.5">
+          <button
+            type="button"
             id="rise-up"
             phx-click="rise"
             phx-value-dir="1"
             disabled={!@can_act? or @walk_left == 0}
             aria-label="Float up"
+            class="grid h-[19px] w-8 cursor-pointer place-items-center border-2 border-border bg-white hover:bg-amber-50 disabled:cursor-not-allowed disabled:opacity-50"
           >
-            <.icon name={:arrow_up} class="size-4" />
-          </.button>
-          <.button
-            size="sm"
-            variant="outline"
+            <.icon name={:arrow_up} class="size-3.5" />
+          </button>
+          <button
+            type="button"
             id="rise-down"
             phx-click="rise"
             phx-value-dir="-1"
             disabled={!@can_act? or @walk_left == 0}
             aria-label="Float down"
+            class="grid h-[19px] w-8 cursor-pointer place-items-center border-2 border-border bg-white hover:bg-amber-50 disabled:cursor-not-allowed disabled:opacity-50"
           >
-            <.icon name={:arrow_down} class="size-4" />
-          </.button>
+            <.icon name={:arrow_down} class="size-3.5" />
+          </button>
         </div>
         <.button
-          variant="ghost"
-          size="sm"
+          size="icon"
+          variant="outline"
           id="arena-pass"
           phx-click="pass"
           disabled={!@can_act?}
+          aria-label="Pass turn"
+          title="Pass turn"
         >
-          <span class="inline-flex items-center gap-1">
-            <.icon name={:skip_forward} class="size-3.5" /> Pass turn
-          </span>
+          <.icon name={:skip_forward} class="size-5" />
         </.button>
       </div>
     </section>
     """
+  end
+
+  @how %{
+    "charge" => {:gauge, "Hold to charge"},
+    "beam" => {:mouse_pointer_click, "Click to fire"},
+    "place" => {:crosshair, "Click a spot"},
+    "instant" => {:zap, "Instant, turn goes on"}
+  }
+
+  # The biggest damage, area and knockback of any spell, so pips read out of five.
+  @maxima Map.new([:damage, :radius, :knock], fn key ->
+            {key, Spellslingers.spells() |> Enum.map(&Map.fetch!(&1, key)) |> Enum.max()}
+          end)
+
+  attr :spell, :map, required: true
+
+  # One spell card per spell, copied out by the SpellCards hook: how it casts, a looping
+  # clip of it being cast (drawn by the hook into data-clip), its numbers and its blurb.
+  defp spell_card(assigns) do
+    {how_icon, how_text} = Map.fetch!(@how, assigns.spell.input)
+
+    assigns =
+      assign(assigns, how_icon: how_icon, how_text: how_text, stats: card_stats(assigns.spell))
+
+    ~H"""
+    <template id={"spell-card-#{@spell.id}"} data-name={@spell.name} data-input={@spell.input}>
+      <div class="absolute w-[300px] border-2 border-border bg-white text-left text-gray-900 shadow-rounded">
+        <div
+          data-card-head
+          class="flex items-center gap-2 border-b-2 border-border bg-amber-300 px-2.5 py-2 text-[17px] font-black whitespace-nowrap"
+        >
+          <.icon name={@spell.icon} class="size-5 shrink-0" />
+          {@spell.name}
+          <span class="ml-auto inline-flex items-center gap-1 border-2 border-border bg-white px-1.5 py-px text-[11px] font-black">
+            <.icon name={@how_icon} class="size-3" /> {@how_text}
+          </span>
+        </div>
+        <div class="grid gap-2 px-2.5 py-2">
+          <div data-clip class="border-2 border-border [&>svg]:block [&>svg]:h-auto [&>svg]:w-full">
+          </div>
+          <div class="grid grid-cols-[auto_1fr_auto] items-center gap-x-2 gap-y-1 text-[13px]">
+            <%= for {label, icon, value, pips} <- @stats do %>
+              <span class="inline-flex items-center gap-1 font-bold">
+                <.icon name={icon} class="size-3.5" /> {label}
+              </span>
+              <span class="flex gap-[3px]">
+                <i
+                  :for={i <- if(pips, do: 1..5, else: [])}
+                  class={[
+                    "h-2 w-3 border-[1.5px] border-black",
+                    if(i <= pips, do: "bg-gray-900", else: "bg-white")
+                  ]}
+                >
+                </i>
+              </span>
+              <b class="text-right font-black">{value}</b>
+            <% end %>
+          </div>
+          <p class="text-[13px] text-gray-600">
+            {String.replace_prefix(@spell.blurb, "Quick: ", "")}
+          </p>
+        </div>
+      </div>
+    </template>
+    """
+  end
+
+  defp card_stats(spell) do
+    heal? = spell.effect == :heal
+
+    [
+      {"Damage", :flame,
+       cond do
+         heal? -> "+#{spell.damage}"
+         spell.damage > 0 -> spell.damage
+         true -> "—"
+       end, pips(spell.damage, @maxima.damage)},
+      {"Area", :target, if(spell.radius > 0, do: "", else: "—"),
+       pips(spell.radius, @maxima.radius)},
+      {"Knockback", :arrow_up_right, if(spell.knock > 0, do: "", else: "—"),
+       pips(spell.knock, @maxima.knock)},
+      {"Wind", :wind, wind_text(spell), nil},
+      {"Cooldown", :hourglass,
+       case spell.cooldown do
+         0 -> "None"
+         1 -> "1 turn"
+         n -> "#{n} turns"
+       end, nil}
+    ]
+  end
+
+  defp pips(value, _max) when value in [0, nil], do: nil
+  defp pips(value, max), do: max(1, round(value / max * 5))
+
+  defp wind_text(%{input: input}) when input in ["instant", "place"], do: "—"
+  defp wind_text(%{wind: wind}) when wind == 0, do: "None"
+  defp wind_text(%{wind: wind}) when wind < 1, do: "Light"
+  defp wind_text(_spell), do: "Full"
+
+  # Splits a chronicle line so each wizard's name can take their colour.
+  defp paint(text, players) do
+    names =
+      players
+      |> Map.values()
+      |> Enum.map(& &1.name)
+      |> Enum.reject(&(&1 in [nil, ""]))
+      |> Enum.sort_by(&(-String.length(&1)))
+
+    colors = Map.new(players, fn {_id, p} -> {p.name, p.color} end)
+
+    case names do
+      [] ->
+        [{text, nil}]
+
+      _ ->
+        pattern = names |> Enum.map(&Regex.escape/1) |> Enum.join("|") |> Regex.compile!()
+
+        pattern
+        |> Regex.split(text, include_captures: true, trim: true)
+        |> Enum.map(&{&1, Map.get(colors, &1)})
+    end
   end
 
   @dirs [-1, 1, "-1", "1"]
@@ -757,11 +1291,17 @@ defmodule FlamingoWeb.SpellslingersLive do
     {:noreply, socket}
   end
 
+  def handle_event("toggle_ready", _params, socket) do
+    Rooms.command(socket.assigns.room_id, :toggle_ready)
+    {:noreply, socket}
+  end
+
   def handle_event("select_spell", %{"spell" => spell}, socket) do
     quick? = Enum.any?(Spellslingers.spells(), &(&1.id == spell and &1.quick))
 
     cond do
-      spell not in socket.assigns.my_spells ->
+      # A spell that is still recharging can't be picked, even from the keyboard.
+      spell not in socket.assigns.my_spells or Map.get(socket.assigns.cooldowns, spell, 0) > 0 ->
         {:noreply, socket}
 
       # Quick spells need no aim: picking one casts it.
@@ -839,7 +1379,9 @@ defmodule FlamingoWeb.SpellslingersLive do
 
   # The sidebar catches up once the cast's projectiles have landed on screen.
   def handle_info({:reveal_board, id}, %{assigns: %{pending_board: %{id: id} = board}} = socket),
-    do: {:noreply, assign(socket, units: board.units, events: board.events, pending_board: nil)}
+    do:
+      {:noreply,
+       socket |> assign(units: board.units, pending_board: nil) |> assign_events(board.events)}
 
   def handle_info(_message, socket), do: {:noreply, socket}
 
@@ -874,6 +1416,7 @@ defmodule FlamingoWeb.SpellslingersLive do
         final_result: snapshot.final_result,
         books: snapshot.books,
         chosen_books: snapshot.chosen_books,
+        books_ready: Map.get(snapshot, :books_ready, []),
         my_spells: snapshot.my_spells,
         map_name: snapshot.map_name,
         turn_end_time: Map.get(snapshot, :turn_end_time),
@@ -957,8 +1500,32 @@ defmodule FlamingoWeb.SpellslingersLive do
         assign(socket, pending_board: Map.put(board, :id, cast_id))
 
       true ->
-        assign(socket, units: board.units, events: board.events, last_cast_id: cast_id)
+        socket
+        |> assign(units: board.units, last_cast_id: cast_id)
+        |> assign_events(board.events)
     end
+  end
+
+  # The game keeps its last ten lines; the chronicle keeps a longer log here, numbering
+  # each line so the ticker can animate only the ones that are new.
+  defp assign_events(socket, events) do
+    %{events: old, log: log, log_seq: seq} = socket.assigns
+
+    count =
+      Enum.find(
+        0..length(events),
+        &(Enum.drop(events, &1) == Enum.take(old, length(events) - &1))
+      )
+
+    fresh =
+      events
+      |> Enum.take(count)
+      |> Enum.reverse()
+      |> Enum.with_index(seq + 1)
+      |> Enum.map(fn {text, n} -> %{seq: n, text: text} end)
+      |> Enum.reverse()
+
+    assign(socket, events: events, log: Enum.take(fresh ++ log, 100), log_seq: seq + count)
   end
 
   defp floating?(assigns) do
@@ -986,12 +1553,12 @@ defmodule FlamingoWeb.SpellslingersLive do
 
   defp book_of(books, spell_id), do: Enum.find(books, &(spell_id in &1.spells))
 
-  defp steps_percent(_left, budget) when budget in [nil, 0], do: 0
-  defp steps_percent(left, budget), do: round(left * 100 / budget)
-
   defp my_spells(ids), do: Enum.map(ids, &Spellslingers.spell/1)
 
   defp choosers(chosen, book), do: for({id, books} <- chosen, book in books, do: id)
+
+  defp book_defs(books, ids),
+    do: for(id <- ids, book = Enum.find(books, &(&1.id == id)), do: book)
 
   defp my_turn?(assigns),
     do: assigns.viewer_id != nil and assigns.viewer_id == assigns.current_id

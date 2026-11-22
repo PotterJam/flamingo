@@ -40,7 +40,8 @@ function mount() {
     removeEventListener: noop,
   } as never;
   globalThis.document = {
-    getElementById: () => ({}),
+    getElementById: (id: string) => (id === "spellslingers-game" ? { classList: { contains: () => false } } : null),
+    body: { classList: { add: noop, remove: noop, toggle: noop } },
     addEventListener: noop,
     removeEventListener: noop,
     createElement: () => canvas,
@@ -151,6 +152,19 @@ test("a selection made while a cast plays survives the cast's older snapshot", (
 test("the server can still move the selection, e.g. off a spell on cooldown", () => {
   const a = mount();
   a.server("arena_state", state({ selected_spell: "boulder" }));
+  a.server("arena_state", state({ selected_spell: "ember" }));
+  a.tick(1);
+  a.down();
+  now = 400;
+  a.up();
+  expect(casts(a.sent).map((e) => e.spell)).toEqual(["ember"]);
+});
+
+test("after casting a picked spell that then cools down, the selection falls back to the server's pick", () => {
+  const a = mount();
+  a.server("arena_state", state());
+  a.server("arena_select", { spell: "boulder" });
+  // The cast put Boulder on cooldown, so the server moved the selection back to Ember Bolt.
   a.server("arena_state", state({ selected_spell: "ember" }));
   a.tick(1);
   a.down();

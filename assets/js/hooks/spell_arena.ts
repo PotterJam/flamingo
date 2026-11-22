@@ -195,40 +195,94 @@ const SpellArena = {
     const ctx = canvas.getContext("2d")!;
     // W and H are the arena's drawing units; the backing store follows the
     // canvas's on-screen size so text and sprites stay sharp when it grows.
+    // W stays fixed; H follows the canvas's shape, so a taller full view shows more
+    // of the world (or the sky or rock beyond it) instead of a band of flat colour.
     const W = canvas.width;
-    const H = canvas.height;
+    let H = canvas.height;
     let pixelScale = 1;
     const fitResolution = () => {
       const k = Math.min(4, Math.max(1, (canvas.clientWidth * window.devicePixelRatio) / W));
-      if (Math.abs(k - pixelScale) < 0.05) return;
+      const h = canvas.clientWidth ? Math.round(W * Math.max(0.5, canvas.clientHeight / canvas.clientWidth)) : H;
+      if (Math.abs(k - pixelScale) < 0.05 && h === H) return;
       pixelScale = k;
+      H = h;
+      VIEW_H = H / CELL;
       canvas.width = Math.round(W * k);
       canvas.height = Math.round(H * k);
     };
     const resizeObserver = new ResizeObserver(fitResolution);
     resizeObserver.observe(canvas);
 
-    // Full screen: the class makes the page fill the window even where the
-    // Fullscreen API is missing (iPhone Safari), and the API hides browser chrome.
+    // Full view fills the browser window; tabs and the address bar stay.
     const page = document.getElementById("spellslingers-game")!;
     const setFull = (on: boolean) => {
       if (on) this.js().addClass(page, "arena-full");
       else this.js().removeClass(page, "arena-full");
     };
-    const toggleFull = () => {
-      if (!page.classList.contains("arena-full")) {
-        setFull(true);
-        page.requestFullscreen?.().catch(() => {});
-      } else {
-        setFull(false);
-        if (document.fullscreenElement) document.exitFullscreen().catch(() => {});
+    const toggleFull = () => setFull(!page.classList.contains("arena-full"));
+    canvas.addEventListener("arena:fullscreen", toggleFull);
+
+    // The overlays drawn over the arena (wizard rail, chronicle, spell dock) stay out of
+    // the way: they turn to ghosts while a spell charges and dim when the pointer comes
+    // near without touching them. Body classes, so LiveView patches leave them alone.
+    const body = document.body;
+    const OVERLAYS: [string, string][] = [
+      ["rail", "arena-rail"],
+      ["ticker", "arena-ticker"],
+      ["dock", "arena-controls"],
+      ["tuning", "arena-tuning-button"],
+    ];
+    const NEAR_PX = 36;
+    const dimNear = (x: number, y: number) => {
+      const area = canvas.getBoundingClientRect();
+      for (const [key, id] of OVERLAYS) {
+        const r = document.getElementById(id)?.getBoundingClientRect();
+        const over = !!r && r.width > 0 && r.top < area.bottom && r.bottom > area.top;
+        const inside = over && x >= r.left && x <= r.right && y >= r.top && y <= r.bottom;
+        const near =
+          over && !inside && !charge &&
+          x > r.left - NEAR_PX && x < r.right + NEAR_PX && y > r.top - NEAR_PX && y < r.bottom + NEAR_PX;
+        body.classList.toggle(`arena-near-${key}`, near);
       }
     };
-    const onFullscreenChange = () => {
-      if (!document.fullscreenElement && page.classList.contains("arena-full")) setFull(false);
+    const undim = () => OVERLAYS.forEach(([key]) => body.classList.remove(`arena-near-${key}`));
+
+    // While charging, the turn banner (the top strip in full view) becomes the power meter.
+    const meter = document.getElementById("arena-meter");
+    const meterName = meter?.querySelector<HTMLElement>("[data-meter-name]");
+    const meterFill = meter?.querySelector<HTMLElement>("[data-meter-fill]");
+    const meterText = meter?.querySelector<HTMLElement>("[data-meter-text]");
+    const meterLast = meter?.querySelector<HTMLElement>("[data-meter-last]");
+    const thrown = document.getElementById("arena-thrown");
+    let chargingShown = false;
+    let lastThrow: number | null = null;
+    let thrownUntil = 0;
+    const syncChargeUi = (now: number) => {
+      if (!!charge !== chargingShown) {
+        chargingShown = !!charge;
+        body.classList.toggle("arena-charging", chargingShown);
+        if (charge) {
+          undim();
+          if (meterName) meterName.textContent = spellById(charge.spell)?.name ?? "";
+          if (meterLast) {
+            meterLast.hidden = lastThrow === null;
+            meterLast.style.left = `${lastThrow ?? 0}%`;
+          }
+        }
+      }
+      if (charge && meterFill && meterText) {
+        const power = chargePower(now);
+        meterFill.style.width = `${power}%`;
+        meterText.textContent = power >= 100 ? "MAX" : `${Math.round(power)}%`;
+      }
+      body.classList.toggle("arena-thrown", now < thrownUntil);
     };
-    canvas.addEventListener("arena:fullscreen", toggleFull);
-    document.addEventListener("fullscreenchange", onFullscreenChange);
+
+    // A strip showing the whole world, every wizard and the view, in the top corner
+    // over the arena (just under the top strip in full view).
+    const mini = document.getElementById("arena-minimap") as HTMLCanvasElement | null;
+    const miniCtx = mini?.getContext("2d");
+    const sky = document.getElementById("arena-sky");
 
     let shown: ArenaState | null = null;
     // The state the current animation leads to, and states carrying later casts
@@ -254,7 +308,20 @@ const SpellArena = {
     // The canvas is a 200 x 100 cell window onto a wider world; the camera pans it.
     const CELL = W / 200;
     const VIEW_W = W / CELL;
-    const VIEW_H = H / CELL;
+    let VIEW_H = H / CELL;
+    // World rows hidden behind the spell dock at the bottom of the arena. The camera
+    // may scroll that far past the world's bottom (into the sea), so the lowest
+    // ground can always be brought above the dock.
+    let dockPad = 0;
+    const measureDock = () => {
+      const dock = document.getElementById("arena-controls");
+      if (!dock || !canvas.getBoundingClientRect) return 0;
+      const c = canvas.getBoundingClientRect();
+      const d = dock.getBoundingClientRect();
+      const over = c.bottom - d.top;
+      if (!d.height || over <= 0 || d.top < c.top) return 0;
+      return (over + 8) / (c.height / VIEW_H);
+    };
     const scale = () => CELL;
     const cam = { x: 0, y: 0 };
     let camReady = false;
@@ -268,13 +335,16 @@ const SpellArena = {
     // more than a few cells are teleports and flash at both ends.
     const drawn = new Map<string, [number, number]>();
     let cells: Uint8Array | null = null;
+    let ceiling = false;
     const solidAt = (x: number, y: number) =>
       !!shown && !!cells && x >= 0 && x < shown.width && y >= 0 && y < shown.height && cells[y * shown.width + x] === 1;
 
     const clampCam = () => {
       if (!shown) return;
       cam.x = Math.max(0, Math.min(shown.width - VIEW_W, cam.x));
-      cam.y = Math.max(0, Math.min(shown.height - VIEW_H, cam.y));
+      // A view taller than the world sits on its bottom, with sky or rock above.
+      const maxY = shown.height + dockPad - VIEW_H;
+      cam.y = Math.max(Math.min(0, maxY), Math.min(maxY, cam.y));
     };
     const palette = () => PALETTES[shown?.map_id ?? "isles"] ?? PALETTES.isles;
 
@@ -303,15 +373,15 @@ const SpellArena = {
       if (shown && shown.units !== state.units) announceChanges(shown, state);
       const key = state.terrain + state.map_id;
       shown = state;
-      // The client owns the selection; it follows the server only when the
-      // server moves it, so an older queued snapshot can't undo a newer pick.
-      if (state.selected_spell !== serverSelected) {
-        serverSelected = state.selected_spell;
-        selected = state.selected_spell || selected;
-      }
+      // Full view shows open sky above the 2:1 map, in the sky's top colour.
+      if (sky) sky.style.background = palette().sky[0];
       if (key !== terrainKey) {
         terrainKey = key;
         cells = decodeTerrain(state.terrain, state.width, state.height);
+        // A world whose top row is mostly rock (the cavern) has a ceiling to continue upward.
+        let top = 0;
+        for (let x = 0; x < state.width; x++) top += cells[x];
+        ceiling = top > state.width / 2;
         terrainCanvas = terrainImage(cells, state.width, state.height, palette());
       }
       if (state.last_cast) seenCastId = state.last_cast.id;
@@ -373,22 +443,27 @@ const SpellArena = {
     const canAct = () =>
       !!shown && shown.phase === "arena_aim" && shown.current_id === shown.viewer_id && !animation && !castLocked && !!myWizard();
 
-    const previewPath = (power: number) => {
+    // The server's flight step: wind and gravity change the velocity, then it moves.
+    const previewPath = (power: number, steps: number) => {
       const wizard = myWizard();
       const spell = spellDef();
       if (!shown || !wizard || !spell || !aim || spell.input === "instant") return [];
       const p = shown.physics;
       const speed = (p.max_speed * spell.speed * Math.max(power, 5)) / 100;
       const rad = (aim.angle * Math.PI) / 180;
-      const vx = Math.cos(rad) * speed;
+      const ax = shown.wind * p.wind_accel * spell.wind;
+      const ay = p.gravity * spell.gravity;
+      let vx = Math.cos(rad) * speed;
       let vy = -Math.sin(rad) * speed;
       let x = wizard.x + 0.5;
       let y = wizard.y - 2;
       const points: [number, number][] = [];
-      for (let i = 0; i < 7; i++) {
-        vy += p.gravity * spell.gravity * p.dt;
+      for (let i = 0; i < steps; i++) {
+        vx += ax * p.dt;
+        vy += ay * p.dt;
         x += vx * p.dt;
         y += vy * p.dt;
+        if (x < 0 || x >= shown.width || y >= shown.water_level || solidAt(Math.floor(x), Math.floor(y))) break;
         points.push([x, y]);
       }
       return points;
@@ -422,8 +497,8 @@ const SpellArena = {
 
       ctx.fillStyle = pal.hills;
       ctx.beginPath();
-      ctx.moveTo(0, H * 0.62);
-      for (let x = 0; x <= W; x += 40) ctx.lineTo(x, H * 0.5 + Math.sin(x * 0.011) * 40 + Math.sin(x * 0.031) * 14);
+      ctx.moveTo(0, H - 190);
+      for (let x = 0; x <= W; x += 40) ctx.lineTo(x, H - 250 + Math.sin(x * 0.011) * 40 + Math.sin(x * 0.031) * 14);
       ctx.lineTo(W, H);
       ctx.lineTo(0, H);
       ctx.fill();
@@ -449,9 +524,9 @@ const SpellArena = {
       const top = shown.water_level * s;
       ctx.fillStyle = palette().water;
       ctx.beginPath();
-      ctx.moveTo(0, shown.height * s);
       const worldW = shown.width * s;
-      const bottom = shown.height * s;
+      const bottom = (shown.height + dockPad + 4) * s;
+      ctx.moveTo(0, bottom);
       for (let x = 0; x <= worldW; x += 10) ctx.lineTo(x, top + Math.sin(x * 0.04 + t / 400) * 3);
       ctx.lineTo(worldW, bottom);
       ctx.fill();
@@ -832,20 +907,33 @@ const SpellArena = {
         ctx.stroke();
         ctx.restore();
       } else {
-        // A short stub of the arc: enough to read the angle, not the landing spot.
+        // The start of the real arc, wind included: longer while charging, never the landing spot.
         const power = charge ? chargePower(t) : 45;
-        previewPath(power).forEach(([x, y], i, all) => {
-          ctx.globalAlpha = (1 - i / all.length) * (charge ? 1 : 0.6);
-          ctx.fillStyle = color;
+        // Every third physics step, so the dots spread out along the arc.
+        const dots = previewPath(power, charge ? 24 : 15).filter((_, i) => i % 3 === 2);
+        dots.forEach(([x, y], i) => {
+          ctx.globalAlpha = (1 - i / (dots.length + 2)) * (charge ? 1 : 0.6);
+          ctx.fillStyle = charge ? `hsl(${120 - power * 1.2}, 90%, 50%)` : color;
           ctx.strokeStyle = "rgba(17,24,39,0.5)";
           ctx.lineWidth = 1;
           ctx.beginPath();
-          ctx.arc(x * s, y * s, 3, 0, Math.PI * 2);
+          ctx.arc(x * s, y * s, i === 0 ? 3.5 : 3, 0, Math.PI * 2);
           ctx.fill();
           ctx.stroke();
         });
         ctx.globalAlpha = 1;
       }
+
+      // A faint sight line from the wand to the crosshair shows the launch direction.
+      ctx.save();
+      ctx.strokeStyle = "rgba(17,24,39,0.3)";
+      ctx.lineWidth = 1.5;
+      ctx.setLineDash([2, 4]);
+      ctx.beginPath();
+      ctx.moveTo(ox + dir[0] * 3 * s, oy + dir[1] * 3 * s);
+      ctx.lineTo(ox + dir[0] * 14 * s, oy + dir[1] * 14 * s);
+      ctx.stroke();
+      ctx.restore();
 
       // Crosshair a fixed distance out along the aim.
       const cx = ox + dir[0] * 16 * s;
@@ -864,17 +952,9 @@ const SpellArena = {
       ctx.lineTo(cx, cy + 10);
       ctx.stroke();
 
-      // Power bar: a wedge that fills from the wizard while the button is held.
+      // The banner meter shows power; the arc dots above take its colour.
       if (charge) {
         const power = chargePower(t);
-        const len = 6 + (power / 100) * 22;
-        for (let i = 0; i < len; i += 1.5) {
-          const k = i / 28;
-          ctx.fillStyle = `hsl(${120 - k * 120}, 90%, 50%)`;
-          ctx.beginPath();
-          ctx.arc(ox + dir[0] * (2 + i) * s, oy + dir[1] * (2 + i) * s, 1.5 + k * 4, 0, Math.PI * 2);
-          ctx.fill();
-        }
         if (power >= 100) release();
       } else if (spell.input === "charge") {
         ctx.font = "bold 11px ui-sans-serif, system-ui";
@@ -1100,6 +1180,7 @@ const SpellArena = {
 
     const moveCamera = (now: number, dt: number) => {
       if (!shown) return;
+      dockPad = measureDock();
       // Pointer at the left or right edge pans the view, Worms style.
       if (pointer && !charge && !animation) {
         const edge = 40;
@@ -1112,7 +1193,8 @@ const SpellArena = {
       const focus = cameraFocus(now);
       if (focus) {
         const tx = focus[0] - VIEW_W / 2;
-        const ty = focus[1] - VIEW_H * 0.55;
+        // Frame the focus in the part of the view the dock doesn't cover.
+        const ty = focus[1] - (VIEW_H - dockPad) * 0.55;
         if (!camReady) {
           cam.x = tx;
           cam.y = ty;
@@ -1173,78 +1255,139 @@ const SpellArena = {
 
     };
 
-    // A strip in the top corner showing the whole world, every wizard and the view.
-    const MINI = { w: 150, pad: 10 };
-    const miniRect = () => {
-      if (!shown) return null;
-      const h = (MINI.w * shown.height) / shown.width;
-      return { x: W - MINI.w - MINI.pad, y: MINI.pad, w: MINI.w, h };
-    };
-
+    // The minimap is its own canvas over the arena, so in full view it can sit under the
+    // top strip rather than wherever the 2:1 map happens to start.
     const drawMinimap = () => {
-      const r = miniRect();
-      if (!shown || !r || !terrainCanvas) return;
-      const k = r.w / shown.width;
-      ctx.save();
-      ctx.globalAlpha = 0.9;
-      ctx.fillStyle = "rgba(15, 23, 42, 0.55)";
-      ctx.fillRect(r.x, r.y, r.w, r.h);
-      ctx.imageSmoothingEnabled = false;
-      ctx.drawImage(terrainCanvas, r.x, r.y, r.w, r.h);
-      ctx.fillStyle = palette().water;
-      ctx.fillRect(r.x, r.y + shown.water_level * k, r.w, r.h - shown.water_level * k);
+      if (!shown || !terrainCanvas || !mini || !miniCtx) return;
+      const w = mini.clientWidth;
+      const h = (w * shown.height) / shown.width;
+      const dpr = window.devicePixelRatio || 1;
+      if (mini.width !== Math.round(w * dpr) || mini.height !== Math.round(h * dpr)) {
+        mini.width = Math.round(w * dpr);
+        mini.height = Math.round(h * dpr);
+      }
+      const c = miniCtx;
+      const k = w / shown.width;
+      c.setTransform(dpr, 0, 0, dpr, 0, 0);
+      c.clearRect(0, 0, w, h);
+      c.globalAlpha = 0.9;
+      c.fillStyle = "rgba(15, 23, 42, 0.55)";
+      c.fillRect(0, 0, w, h);
+      c.imageSmoothingEnabled = false;
+      c.drawImage(terrainCanvas, 0, 0, w, h);
+      c.fillStyle = palette().water;
+      c.fillRect(0, shown.water_level * k, w, h - shown.water_level * k);
       for (const unit of shown.units) {
         if (unit.dead || unit.kind !== "wizard") continue;
-        ctx.fillStyle = shown.players[unit.id]?.color ?? "#fff";
-        ctx.strokeStyle = "#111827";
-        ctx.lineWidth = 1;
-        ctx.beginPath();
-        ctx.arc(r.x + (unit.x + 0.5) * k, r.y + (unit.y - 1) * k, unit.id === shown.current_id ? 3.5 : 2.5, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.stroke();
+        c.fillStyle = shown.players[unit.id]?.color ?? "#fff";
+        c.strokeStyle = "#111827";
+        c.lineWidth = 1;
+        c.beginPath();
+        c.arc((unit.x + 0.5) * k, (unit.y - 1) * k, unit.id === shown.current_id ? 3.5 : 2.5, 0, Math.PI * 2);
+        c.fill();
+        c.stroke();
       }
-      ctx.globalAlpha = 1;
-      ctx.strokeStyle = "#fff";
-      ctx.lineWidth = 1.5;
-      ctx.strokeRect(r.x + cam.x * k, r.y + cam.y * k, VIEW_W * k, VIEW_H * k);
-      ctx.strokeStyle = "#111827";
-      ctx.lineWidth = 2;
-      ctx.strokeRect(r.x, r.y, r.w, r.h);
-      ctx.restore();
+      c.globalAlpha = 1;
+      c.strokeStyle = "#fff";
+      c.lineWidth = 1.5;
+      c.strokeRect(cam.x * k, cam.y * k, VIEW_W * k, VIEW_H * k);
+      c.strokeStyle = "#111827";
+      c.lineWidth = 2;
+      c.strokeRect(1, 1, w - 2, h - 2);
     };
 
-    // Off-screen wizards get an arrow at the edge so nobody gets lost.
+    // Off-screen wizards get a labelled arrow at the edge; clicking one looks at them.
+    let markers: { id: string; x: number; y: number; w: number; h: number }[] = [];
     const drawOffscreenMarkers = () => {
+      markers = [];
       if (!shown) return;
+      const sides: Record<string, { unit: Unit; y: number }[]> = { left: [], right: [] };
+      // On-screen wizards (body and name), which markers must not cover.
+      const visible: { x: number; top: number; bottom: number }[] = [];
       for (const unit of shown.units) {
         if (unit.dead || unit.kind !== "wizard") continue;
         const sx = (unit.x + 0.5 - cam.x) * CELL;
-        if (sx >= 0 && sx <= W) continue;
-        const left = sx < 0;
-        const y = Math.max(20, Math.min(H - 20, (unit.y - 1 - cam.y) * CELL));
-        const x = left ? 14 : W - 14;
-        ctx.fillStyle = shown.players[unit.id]?.color ?? "#fff";
-        ctx.strokeStyle = "#111827";
-        ctx.lineWidth = 2;
-        ctx.beginPath();
-        ctx.moveTo(x + (left ? -8 : 8), y);
-        ctx.lineTo(x + (left ? 6 : -6), y - 8);
-        ctx.lineTo(x + (left ? 6 : -6), y + 8);
-        ctx.closePath();
-        ctx.fill();
-        ctx.stroke();
+        if (sx >= 0 && sx <= W) {
+          visible.push({ x: sx, top: (unit.y - 4 - cam.y) * CELL - 28, bottom: (unit.y + 1 - cam.y) * CELL });
+          continue;
+        }
+        sides[sx < 0 ? "left" : "right"].push({ unit, y: Math.max(24, Math.min(H - 24, (unit.y - 1 - cam.y) * CELL)) });
       }
+      ctx.save();
+      ctx.font = "bold 12px ui-sans-serif, system-ui";
+      ctx.textBaseline = "middle";
+      for (const [side, list] of Object.entries(sides)) {
+        const left = side === "left";
+        // Stack markers that would overlap, and step around on-screen wizards near this edge.
+        list.sort((a, b) => a.y - b.y);
+        const near = visible.filter((v) => (left ? v.x < 190 : v.x > W - 190));
+        for (let i = 0; i < list.length; i++) {
+          const floor = i > 0 ? list[i - 1].y + 26 : -Infinity;
+          let y = Math.max(list[i].y, floor);
+          for (const v of near) {
+            if (y + 11 < v.top || y - 11 > v.bottom) continue;
+            y = v.top - 12 >= Math.max(floor, 12) ? v.top - 12 : v.bottom + 12;
+          }
+          list[i].y = y;
+        }
+        for (const { unit, y } of list) {
+          const name = shown.players[unit.id]?.name ?? "";
+          const label = name.length > 14 ? `${name.slice(0, 13)}…` : name;
+          const w = ctx.measureText(label).width + 30;
+          const x = left ? 6 : W - 6 - w;
+          ctx.fillStyle = "rgba(255,255,255,0.92)";
+          ctx.strokeStyle = "#111827";
+          ctx.lineWidth = 2;
+          ctx.beginPath();
+          ctx.roundRect?.(x, y - 11, w, 22, 11);
+          ctx.fill();
+          ctx.stroke();
+          ctx.fillStyle = shown.players[unit.id]?.color ?? "#9ca3af";
+          const ax = left ? x + 12 : x + w - 12;
+          ctx.beginPath();
+          ctx.moveTo(ax + (left ? -6 : 6), y);
+          ctx.lineTo(ax + (left ? 4 : -4), y - 6);
+          ctx.lineTo(ax + (left ? 4 : -4), y + 6);
+          ctx.closePath();
+          ctx.fill();
+          ctx.lineWidth = 1.5;
+          ctx.stroke();
+          ctx.fillText(label, left ? x + 22 : x + 8, y + 1);
+          markers.push({ id: unit.id, x, y: y - 11, w, h: 22 });
+        }
+      }
+      ctx.restore();
     };
 
-    const minimapJump = (px: number, py: number) => {
-      const r = miniRect();
-      if (!r || !shown || px < r.x || px > r.x + r.w || py < r.y || py > r.y + r.h) return false;
-      const k = r.w / shown.width;
-      cam.x = (px - r.x) / k - VIEW_W / 2;
-      cam.y = (py - r.y) / k - VIEW_H / 2;
+    // Looks at a wizard for a while, as if the player had panned there by hand.
+    const lookAt = (id: string) => {
+      const unit = shown?.units.find((u) => u.id === id && !u.dead);
+      if (!unit) return;
+      cam.x = unit.x + 0.5 - VIEW_W / 2;
+      cam.y = unit.y - (VIEW_H - dockPad) * 0.55;
+      clampCam();
+      freeLookUntil = performance.now() + 5000;
+    };
+    const onFocus = (event: Event) => lookAt((event as CustomEvent<{ id: string }>).detail?.id);
+
+    // Where the viewer's wizard is on screen, for the first-turn tour to point at.
+    (canvas as HTMLCanvasElement & { viewerPoint?: () => { x: number; y: number; k: number } | null }).viewerPoint = () => {
+      const unit = myWizard();
+      if (!unit) return null;
+      const r = canvas.getBoundingClientRect();
+      const k = (r.width / W) * CELL;
+      const [x, y] = drawn.get(unit.id) ?? [unit.x, unit.y];
+      return { x: r.left + (x + 0.5 - cam.x) * k, y: r.top + (y - cam.y) * k, k };
+    };
+
+    const minimapJump = (event: PointerEvent) => {
+      if (!shown || !mini || event.button !== 0) return;
+      const r = mini.getBoundingClientRect();
+      const k = r.width / shown.width;
+      cam.x = (event.clientX - r.left) / k - VIEW_W / 2;
+      cam.y = (event.clientY - r.top) / k - VIEW_H / 2;
       clampCam();
       freeLookUntil = performance.now() + 4000;
-      return true;
     };
 
     let lastTime = performance.now();
@@ -1271,6 +1414,17 @@ const SpellArena = {
 
       if (shown && terrainCanvas) {
         ctx.imageSmoothingEnabled = false;
+        if (ceiling && cam.y < 0) {
+          // Rock carries on above the world: its top rows mirrored, then solid rock.
+          const rows = 24;
+          const rock = palette().rock[0];
+          ctx.fillStyle = `rgb(${rock[0]}, ${rock[1]}, ${rock[2]})`;
+          ctx.fillRect(0, (cam.y - 1) * CELL, shown.width * CELL, (-cam.y - rows + 1) * CELL);
+          ctx.save();
+          ctx.scale(1, -1);
+          ctx.drawImage(terrainCanvas, 0, 0, shown.width, rows, 0, 0, shown.width * CELL, rows * CELL);
+          ctx.restore();
+        }
         ctx.drawImage(terrainCanvas, 0, 0, shown.width * CELL, shown.height * CELL);
         const caster = animation?.cast.caster_id;
         const knocked = knockedPositions(now);
@@ -1314,9 +1468,10 @@ const SpellArena = {
       drawFloaters(dt);
       ctx.restore();
       drawOffscreenMarkers();
-      drawMinimap();
       drawKnockoutBanner(now);
       ctx.restore();
+      drawMinimap();
+      syncChargeUi(now);
       rafId = requestAnimationFrame(render);
     };
 
@@ -1341,6 +1496,9 @@ const SpellArena = {
       charge = null;
       if (!canAct()) return;
       castLocked = true;
+      lastThrow = Math.round(power);
+      thrownUntil = performance.now() + 2500;
+      if (thrown) thrown.textContent = `${spellById(spell)?.name ?? "Spell"} thrown at ${lastThrow}% power`;
       this.pushEvent("cast", { spell, angle: Math.round(aim.angle * 10) / 10, power: Math.round(power * 10) / 10 });
     };
 
@@ -1371,27 +1529,64 @@ const SpellArena = {
       aim = { angle: (Math.atan2(-dy, dx) * 180) / Math.PI, power: 0 };
     };
 
+    let drag: { x: number; y: number; camX: number; camY: number } | null = null;
     const onPointerMove = (event: PointerEvent) => {
       const rect = canvas.getBoundingClientRect();
+      if (drag) {
+        const perCell = rect.width / VIEW_W;
+        cam.x = drag.camX - (event.clientX - drag.x) / perCell;
+        cam.y = drag.camY - (event.clientY - drag.y) / perCell;
+        clampCam();
+        freeLookUntil = performance.now() + 5000;
+        return;
+      }
       pointer = { x: ((event.clientX - rect.left) / rect.width) * W, y: ((event.clientY - rect.top) / rect.height) * H };
       if (!charge) updateAim(event);
+      dimNear(event.clientX, event.clientY);
     };
     const onPointerLeave = () => {
       pointer = null;
+      undim();
     };
     const onPointerDown = (event: PointerEvent) => {
-      if (event.button !== 0) return;
-      canvas.focus();
       const rect = canvas.getBoundingClientRect();
       const px = ((event.clientX - rect.left) / rect.width) * W;
       const py = ((event.clientY - rect.top) / rect.height) * H;
-      if (minimapJump(px, py)) return;
+      // Right or middle drag pans the view.
+      if (event.button === 1 || event.button === 2) {
+        drag = { x: event.clientX, y: event.clientY, camX: cam.x, camY: cam.y };
+        event.preventDefault();
+        return;
+      }
+      if (event.button !== 0) return;
+      canvas.focus();
+      const marker = markers.find((m) => px >= m.x && px <= m.x + m.w && py >= m.y && py <= m.y + m.h);
+      if (marker) {
+        lookAt(marker.id);
+        return;
+      }
       // Touch and pen taps arrive without a hover first.
       pointer = { x: px, y: py };
       updateAim(event);
       trigger();
     };
-    const onPointerUp = () => release();
+    const onPointerUp = () => {
+      drag = null;
+      release();
+    };
+    // Scrolling (a wheel, or two fingers on a trackpad) pans the view too.
+    const onWheel = (event: WheelEvent) => {
+      if (!shown || event.ctrlKey) return;
+      event.preventDefault();
+      const perCell = canvas.getBoundingClientRect().width / VIEW_W;
+      const dx = event.shiftKey ? event.deltaY : event.deltaX;
+      const dy = event.shiftKey ? 0 : event.deltaY;
+      cam.x += dx / perCell;
+      cam.y += dy / perCell;
+      clampCam();
+      freeLookUntil = performance.now() + 5000;
+    };
+    const onContextMenu = (event: Event) => event.preventDefault();
 
     const onKeyDown = (event: KeyboardEvent) => {
       const target = event.target as HTMLElement | null;
@@ -1399,6 +1594,14 @@ const SpellArena = {
       const key = event.key.toLowerCase();
       if (key === "f" && !event.metaKey && !event.ctrlKey) {
         toggleFull();
+        return;
+      }
+      if (key === "escape" && page.classList.contains("arena-full")) {
+        setFull(false);
+        return;
+      }
+      if (key === "h") {
+        document.getElementById("arena-help-button")?.click();
         return;
       }
       if (key === "c") {
@@ -1436,6 +1639,7 @@ const SpellArena = {
     // charge is dropped rather than left to fire itself at full power.
     const dropCharge = () => {
       charge = null;
+      drag = null;
     };
 
     const onKeyUp = (event: KeyboardEvent) => {
@@ -1446,6 +1650,10 @@ const SpellArena = {
     canvas.addEventListener("pointerdown", onPointerDown);
     canvas.addEventListener("pointerleave", onPointerLeave);
     canvas.addEventListener("pointercancel", dropCharge);
+    mini?.addEventListener("pointerdown", minimapJump);
+    canvas.addEventListener("wheel", onWheel, { passive: false });
+    canvas.addEventListener("contextmenu", onContextMenu);
+    canvas.addEventListener("arena:focus", onFocus);
     window.addEventListener("blur", dropCharge);
     window.addEventListener("pointerup", onPointerUp);
     window.addEventListener("keydown", onKeyDown);
@@ -1458,6 +1666,13 @@ const SpellArena = {
     // than replayed over what may now be our turn.
     this.handleEvent<Partial<ArenaState> & { full?: boolean }>("arena_state", ({ full, ...update }) => {
       latest = { ...latest, ...update } as ArenaState;
+      // The client owns the selection and follows the server only when the server
+      // moves it, such as off a spell that is now cooling down. Checked on arrival,
+      // so a snapshot queued behind a playing cast can't undo a newer pick.
+      if (update.selected_spell !== undefined && update.selected_spell !== serverSelected) {
+        serverSelected = update.selected_spell;
+        selected = update.selected_spell || selected;
+      }
       if (full) {
         animation = null;
         pending = null;
@@ -1473,6 +1688,8 @@ const SpellArena = {
     });
     this.handleEvent<{ spell: string }>("arena_select", ({ spell }) => {
       selected = spell;
+      // The server now holds this pick too, so its next fallback reads as a move.
+      serverSelected = spell;
     });
 
     this.cleanup = () => {
@@ -1486,7 +1703,12 @@ const SpellArena = {
       canvas.removeEventListener("pointercancel", dropCharge);
       window.removeEventListener("blur", dropCharge);
       canvas.removeEventListener("arena:fullscreen", toggleFull);
-      document.removeEventListener("fullscreenchange", onFullscreenChange);
+      mini?.removeEventListener("pointerdown", minimapJump);
+      canvas.removeEventListener("wheel", onWheel);
+      canvas.removeEventListener("contextmenu", onContextMenu);
+      canvas.removeEventListener("arena:focus", onFocus);
+      body.classList.remove("arena-charging", "arena-thrown");
+      undim();
       resizeObserver.disconnect();
       audio?.close();
     };

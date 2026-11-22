@@ -169,7 +169,7 @@ defmodule Flamingo.GameModes.SpellslingersTest do
              Spellslingers.command(state, first, {:cast, "inferno", 45, 50}, context(r, first))
   end
 
-  test "the duel begins once every online wizard has chosen two spellbooks" do
+  test "the duel begins once every online wizard has pressed Ready on two spellbooks" do
     r = roster(["a", "b"])
 
     state =
@@ -181,18 +181,35 @@ defmodule Flamingo.GameModes.SpellslingersTest do
     {:ok, %{state: state}} =
       Spellslingers.start(state, %{seed: 42, arena_map: "castles"}, context(r))
 
-    state =
-      Enum.reduce([{"a", "pyro"}, {"a", "sky"}, {"b", "geo"}], state, fn {id, book}, state ->
-        {:ok, %{state: state}} =
-          Spellslingers.command(state, id, {:choose_book, book}, context(r))
-
+    run = fn state, steps ->
+      Enum.reduce(steps, state, fn {id, command}, state ->
+        {:ok, %{state: state}} = Spellslingers.command(state, id, command, context(r, id))
         state
       end)
+    end
+
+    # Two books alone don't start it, and Ready needs two books.
+    state =
+      run.(state, [{"a", {:choose_book, "pyro"}}, {"a", {:choose_book, "geo"}}])
+
+    assert {:error, :choose_two_books} =
+             Spellslingers.command(state, "b", :toggle_ready, context(r, "b"))
+
+    # Changing a pick after Ready takes the Ready back.
+    state =
+      run.(state, [
+        {"a", :toggle_ready},
+        {"a", {:choose_book, "geo"}},
+        {"a", {:choose_book, "sky"}},
+        {"b", {:choose_book, "geo"}},
+        {"b", {:choose_book, "storm"}},
+        {"b", :toggle_ready}
+      ])
 
     assert state.phase == :arena_books
+    assert state.ready == ["b"]
 
-    {:ok, %{state: state}} =
-      Spellslingers.command(state, "b", {:choose_book, "storm"}, context(r))
+    state = run.(state, [{"a", :toggle_ready}])
 
     assert state.phase == :arena_aim
     assert "inferno" in Spellslingers.spellbook(state, "a")
@@ -345,10 +362,12 @@ defmodule Flamingo.GameModes.SpellslingersTest do
 
     assert length(state.turn_order) == 3
 
-    # Bots never block the spellbook pick: the human choosing is enough to begin.
+    # Bots pick their books at once and never block: the human's Ready is enough to begin.
+    assert Enum.all?(state.turn_order -- ["a"], &(length(state.books[&1]) == 2))
     {:ok, %{state: state}} = Spellslingers.command(state, "a", {:choose_book, "geo"}, context(r))
-    assert state.phase == :arena_books
     {:ok, %{state: state}} = Spellslingers.command(state, "a", {:choose_book, "sky"}, context(r))
+    assert state.phase == :arena_books
+    {:ok, %{state: state}} = Spellslingers.command(state, "a", :toggle_ready, context(r))
     assert state.phase == :arena_aim
     state = if state.current_id == "a", do: pass(state, r), else: state
     bot = state.current_id

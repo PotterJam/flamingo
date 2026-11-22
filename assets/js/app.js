@@ -30,7 +30,9 @@ import DrawingCanvas from "./hooks/drawing_canvas"
 import FinalDrawingShowcase from "./hooks/final_drawing_showcase"
 import SharedDrawing from "./hooks/shared_drawing"
 import SoundManager from "./hooks/sound_manager"
+import ArenaTour from "./hooks/arena_tour"
 import SpellArena from "./hooks/spell_arena"
+import {SpellCards, SpellScene} from "./hooks/spell_cards"
 
 const clampStoredSoundVolume = (value) => {
   const volume = Number.parseInt(value, 10)
@@ -48,7 +50,7 @@ const csrfToken = document.querySelector("meta[name='csrf-token']").getAttribute
 const liveSocket = new LiveSocket("/live", Socket, {
   longPollFallbackMs: 2500,
   params: {_csrf_token: csrfToken},
-  hooks: {AvatarCustomizer, ...colocatedHooks, CountdownTimer, DrawingCanvas, FinalDrawingShowcase, SharedDrawing, SoundManager, SpellArena},
+  hooks: {AvatarCustomizer, ...colocatedHooks, CountdownTimer, DrawingCanvas, FinalDrawingShowcase, SharedDrawing, SoundManager, SpellArena, SpellCards, SpellScene, ArenaTour},
 })
 
 // Show progress bar on live navigation and form submits

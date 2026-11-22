@@ -483,3 +483,78 @@
     transition: none;
   }
 }
+
+/* Spellslingers: overlays drawn straight onto the arena. */
+.arena-outline {
+  -webkit-text-stroke: 3px #fff;
+  paint-order: stroke fill;
+}
+
+/* Chronicle lines drift in and fade out on their own; hovering holds them. */
+@keyframes arena-feed {
+  0% { opacity: 0; transform: translateY(-6px); }
+  6% { opacity: 1; transform: none; }
+  75% { opacity: 1; }
+  100% { opacity: 0; }
+}
+.arena-feed-line { animation: arena-feed 7s ease-out forwards; }
+#arena-ticker:hover .arena-feed-line { animation-play-state: paused; }
+/* The full log replaces the ticker while it is open (JS.show sets an inline display). */
+#arena-wrap:has(#arena-drawer[style*="flex"]) #arena-ticker { visibility: hidden; }
+
+/* While a spell charges the overlays turn to ghosts and let clicks through, and the
+   turn banner becomes the power meter. Body classes, so LiveView patches keep them. */
+.arena-ov { transition: opacity 0.2s ease-out; }
+.arena-charging .arena-ov { opacity: 0.22; pointer-events: none; }
+.arena-near-rail #arena-rail,
+.arena-near-ticker #arena-ticker,
+.arena-near-dock #arena-controls,
+.arena-near-tuning #arena-tuning-button { opacity: 0.45; }
+.arena-charging #arena-turn,
+.arena-thrown #arena-turn { display: none; }
+.arena-charging #arena-meter { display: flex; }
+.arena-thrown:not(.arena-charging) #arena-thrown { display: block; }
+
+@keyframes spell-card-pop {
+  from { opacity: 0; transform: translateY(4px); }
+  to { opacity: 1; transform: none; }
+}
+.spell-card-pop { animation: spell-card-pop 0.16s ease-out; }
+
+.arena-tour-hole {
+  position: fixed;
+  z-index: 80;
+  outline: 3px solid #fcd34d;
+  outline-offset: 3px;
+  box-shadow: 0 0 0 9999px rgba(0, 0, 0, 0.45);
+  pointer-events: none;
+}
+.arena-tour-coach {
+  position: fixed;
+  z-index: 81;
+  width: 270px;
+  padding: 10px 12px;
+  border: 2px solid #000;
+  background: #fcd34d;
+  box-shadow: 0 4px 0 #000;
+  font-size: 14px;
+  font-weight: 700;
+}
+.arena-tour-num {
+  display: inline-grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  flex-shrink: 0;
+  border-radius: 999px;
+  background: #111827;
+  color: #fff;
+  font-size: 12px;
+  font-weight: 900;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .spell-card-pop { animation: none; }
+}
+.arena-tour-hole[hidden],
+.arena-tour-coach[hidden] { display: none; }

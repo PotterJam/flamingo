@@ -58,6 +58,7 @@ defmodule Flamingo.GameModes.Spellslingers do
       crates: [],
       crate_count: 0,
       books: %{},
+      ready: [],
       turn_order: [],
       current_id: nil,
       turn_number: 0,
@@ -186,8 +187,15 @@ defmodule Flamingo.GameModes.Spellslingers do
           rng: rng
       }
 
+      # Bots choose their books straight away, so players see them while picking.
+      {books, rng} =
+        Enum.reduce(bot_ids, {%{}, state.rng}, fn id, {books, rng} ->
+          {mine, rng} = fill_books([], rng)
+          {Map.put(books, id, mine), rng}
+        end)
+
       state =
-        state
+        %{state | books: books, ready: bot_ids, rng: rng}
         |> Units.place_wizards()
         |> Units.log("The arena is #{map_name(map_id)}. Choose your spellbooks!")
 
@@ -219,7 +227,7 @@ defmodule Flamingo.GameModes.Spellslingers do
     |> ok()
   end
 
-  def command(%{phase: :arena_books} = state, actor, {:choose_book, book}, context)
+  def command(%{phase: :arena_books} = state, actor, {:choose_book, book}, _context)
       when book in @book_ids do
     if Map.get(state.participants, actor) == :active and Units.alive?(state, actor) do
       mine = Map.get(state.books, actor, [])
@@ -231,11 +239,28 @@ defmodule Flamingo.GameModes.Spellslingers do
           true -> mine ++ [book]
         end
 
-      state
-      |> Map.update!(:books, &Map.put(&1, actor, mine))
-      |> maybe_begin_duel(context)
+      # Changing a pick takes back a Ready.
+      %{state | books: Map.put(state.books, actor, mine), ready: List.delete(state.ready, actor)}
+      |> ok()
     else
       {:error, :spectator}
+    end
+  end
+
+  # Ready locks in two books; pressing it again goes back to choosing.
+  def command(%{phase: :arena_books} = state, actor, :toggle_ready, context) do
+    cond do
+      Map.get(state.participants, actor) != :active or not Units.alive?(state, actor) ->
+        {:error, :spectator}
+
+      actor in state.ready ->
+        ok(%{state | ready: List.delete(state.ready, actor)})
+
+      length(Map.get(state.books, actor, [])) < 2 ->
+        {:error, :choose_two_books}
+
+      true ->
+        maybe_begin_duel(%{state | ready: [actor | state.ready]}, context)
     end
   end
 
@@ -358,6 +383,7 @@ defmodule Flamingo.GameModes.Spellslingers do
       crates: state.crates,
       books: Catalog.books(),
       chosen_books: state.books,
+      books_ready: state.ready,
       my_spells: spellbook(state, viewer),
       quick_used: state.quick_used,
       cooldowns: Map.get(state.cooldowns, viewer, %{}),
@@ -389,7 +415,7 @@ defmodule Flamingo.GameModes.Spellslingers do
   defp maybe_begin_duel(state, context) do
     waiting =
       Enum.filter(state.turn_order, fn id ->
-        Units.alive?(state, id) and length(Map.get(state.books, id, [])) < 2 and
+        Units.alive?(state, id) and id not in state.ready and
           match?(%{connected: true}, context.roster.players[id])
       end)
 
