@@ -8,6 +8,7 @@ defmodule Flamingo.Accounts.User do
     field :google_sub, :string
     field :email, :string
     field :avatar, :map
+    field :player_name, :string
     field :authenticated_at, :utc_datetime, virtual: true
 
     timestamps(type: :utc_datetime)

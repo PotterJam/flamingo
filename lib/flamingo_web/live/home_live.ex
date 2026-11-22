@@ -25,7 +25,7 @@ defmodule FlamingoWeb.HomeLive do
 
     {:ok,
      assign(socket,
-       name: "",
+       name: (scope && scope.user.player_name) || "",
        room_code: room_code,
        saved_lobby: nil,
        my_saved_lobbies: my_saved_lobbies,
@@ -574,7 +574,7 @@ defmodule FlamingoWeb.HomeLive do
       with {:ok, room_id} <- Rooms.create_room(),
            {:ok, resume_token, _snapshot} <-
              Rooms.join(room_id, name, socket.assigns.avatar, user_id(socket)) do
-        {:noreply, push_navigate(socket, to: ~p"/game/#{room_id}?resume_token=#{resume_token}")}
+        {:noreply, enter_room(socket, name, room_id, resume_token)}
       else
         _ -> {:noreply, assign(socket, error: "Failed to create room")}
       end
@@ -595,7 +595,7 @@ defmodule FlamingoWeb.HomeLive do
       true ->
         case Rooms.join(code, name, socket.assigns.avatar, user_id(socket)) do
           {:ok, resume_token, _snapshot} ->
-            {:noreply, push_navigate(socket, to: ~p"/game/#{code}?resume_token=#{resume_token}")}
+            {:noreply, enter_room(socket, name, code, resume_token)}
 
           {:error, :not_found} ->
             {:noreply, assign(socket, error: "Room not found")}
@@ -610,11 +610,16 @@ defmodule FlamingoWeb.HomeLive do
          {:ok, room_id} <- Rooms.open_saved_lobby(socket.assigns.saved_lobby.name),
          {:ok, resume_token, _snapshot} <-
            Rooms.join(room_id, name, socket.assigns.avatar, user_id(socket)) do
-      {:noreply, push_navigate(socket, to: ~p"/game/#{room_id}?resume_token=#{resume_token}")}
+      {:noreply, enter_room(socket, name, room_id, resume_token)}
     else
       {:name, false} -> {:noreply, assign(socket, error: "Name cannot be empty")}
       _ -> {:noreply, assign(socket, error: "Couldn't open the saved lobby. Try again.")}
     end
+  end
+
+  defp enter_room(socket, name, room_id, resume_token) do
+    if scope = socket.assigns.current_scope, do: Accounts.update_player_name(scope, name)
+    push_navigate(socket, to: ~p"/game/#{room_id}?resume_token=#{resume_token}")
   end
 
   # Subscribes before reading so a change in between still arrives as a message.

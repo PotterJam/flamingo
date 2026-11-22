@@ -38,6 +38,16 @@ defmodule Flamingo.Accounts do
   end
 
   @doc """
+  Remembers the name the user last played under, so the home page can fill it in.
+  """
+  def update_player_name(%Scope{user: user}, name) do
+    user
+    |> Ecto.Changeset.change(player_name: name)
+    |> Ecto.Changeset.validate_length(:player_name, min: 1, max: 20)
+    |> Repo.update()
+  end
+
+  @doc """
   Deletes the account, returning its session tokens so their sockets can be
   disconnected. Requires a sign-in within the last 10 minutes.
   """

@@ -21,6 +21,38 @@ defmodule FlamingoWeb.HomeLiveTest do
     assert has_element?(restored, "#avatar-customizer[data-saved-avatar='true']")
   end
 
+  test "signed-in players get the name they last played under prefilled", %{conn: conn} do
+    conn = log_in_user(conn, user_fixture())
+    room_id = "home-#{System.unique_integer([:positive])}"
+    {:ok, ^room_id} = RoomSupervisor.start_room(room_id)
+
+    {:ok, view, _} = live(conn, ~p"/")
+    assert has_element?(view, "#name-input[value='']")
+
+    view |> form("#lobby-form", lobby: %{name: " Sam ", room_code: ""}) |> render_submit()
+    assert_redirect(view)
+
+    {:ok, view, _} = live(conn, ~p"/")
+    assert has_element?(view, "#name-input[value='Sam']")
+
+    view
+    |> form("#lobby-form", lobby: %{name: "Samantha", room_code: room_id})
+    |> render_submit()
+
+    assert_redirect(view)
+
+    {:ok, view, _} = live(conn, ~p"/")
+
+    view
+    |> form("#lobby-form", lobby: %{name: "Typo", room_code: "no-such-room"})
+    |> render_submit()
+
+    assert has_element?(view, "#lobby-error", "Room not found")
+
+    {:ok, view, _} = live(conn, ~p"/")
+    assert has_element?(view, "#name-input[value='Samantha']")
+  end
+
   test "guest cannot save an avatar to someone else's account", %{conn: conn} do
     user = user_fixture()
     {:ok, view, _} = live(conn, ~p"/")

@@ -174,7 +174,8 @@ const restoreName = (form: HTMLFormElement) => {
   const name = nameInput(form);
   const storedName = sessionStorage.getItem(NAME_STORAGE_KEY);
 
-  if (name && storedName !== null) name.value = storedName;
+  // A signed-in player's saved name arrives prefilled and takes precedence.
+  if (name && !name.value && storedName !== null) name.value = storedName;
 };
 
 const persistName = (form: HTMLFormElement) => {
