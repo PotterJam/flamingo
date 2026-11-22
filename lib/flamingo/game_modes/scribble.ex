@@ -4,7 +4,8 @@ defmodule Flamingo.GameModes.Scribble do
   mode should `:continue` or has `{:finished, result}`.
   """
 
-  alias Flamingo.{DrawingShare, Feed, GameSettings, Scoring}
+  alias Flamingo.{DrawingShare, Feed, GameHistory, GameSettings, Scoring}
+  alias Flamingo.GameHistory.ScribbleResult
 
   @constraints [
     :big_brush,
@@ -43,6 +44,8 @@ defmodule Flamingo.GameModes.Scribble do
       pending_hint_delays: [],
       score_gains: %{},
       final_drawings: [],
+      drawing_id: nil,
+      departed_scores: %{},
       final_result: nil,
       feed: Feed.new()
     })
@@ -72,6 +75,8 @@ defmodule Flamingo.GameModes.Scribble do
     state = %{
       state
       | participants: Map.delete(state.participants, seat_id),
+        departed_scores:
+          Map.put(state.departed_scores, seat_id, Map.get(state.scores, seat_id, 0)),
         scores: Map.delete(state.scores, seat_id),
         correct_guesses: Map.delete(state.correct_guesses, seat_id),
         score_gains: Map.delete(state.score_gains, seat_id),
@@ -385,7 +390,7 @@ defmodule Flamingo.GameModes.Scribble do
 
     # Only an empty word list leaves nothing to offer.
     if choices == [],
-      do: game_ended(state, context.roster),
+      do: game_ended(state, context.roster, true),
       else: begin_choice(state, choices, context.roster)
   end
 
@@ -415,6 +420,8 @@ defmodule Flamingo.GameModes.Scribble do
     state = %{
       state
       | phase: :playing,
+        # Stable from the first stroke, so votes and history can refer to this drawing.
+        drawing_id: Ecto.UUID.generate(),
         word: word,
         used_words: MapSet.put(state.used_words, word),
         word_choices: [],
@@ -462,6 +469,7 @@ defmodule Flamingo.GameModes.Scribble do
     scores = Map.new(state.scores, fn {id, score} -> {id, score + Map.get(gains, id, 0)} end)
 
     drawing = %{
+      id: state.drawing_id,
       drawer_id: state.drawer_id,
       word: state.word,
       round_number: state.current_round + 1,
@@ -503,7 +511,7 @@ defmodule Flamingo.GameModes.Scribble do
         enter_word_choice(%{state | drawer_id: next}, context)
 
       state.current_round + 1 >= state.round_count ->
-        game_ended(state, context.roster)
+        game_ended(state, context.roster, true)
 
       first =
           Enum.find(
@@ -522,11 +530,11 @@ defmodule Flamingo.GameModes.Scribble do
         )
 
       true ->
-        game_ended(state, context.roster)
+        game_ended(state, context.roster, false)
     end
   end
 
-  defp game_ended(state, roster) do
+  defp game_ended(state, roster, completed?) do
     players =
       Map.new(roster.players, fn {id, p} ->
         drawings = Enum.filter(state.final_drawings, &(&1.drawer_id == id))
@@ -548,9 +556,39 @@ defmodule Flamingo.GameModes.Scribble do
          final_result: %{
            players: players,
            player_order: roster.player_order,
-           drawings: state.final_drawings
+           drawings: state.final_drawings,
+           round_count: state.round_count,
+           departed_scores: state.departed_scores,
+           # False when the game stopped because nobody was left to draw.
+           completed?: completed?
          }
      }, [:cancel_phase_timeout, :cancel_hint_timeout]}
+  end
+
+  @doc """
+  The saved lobby record of a finished game: everyone ranked by score, with
+  players who left kept unranked.
+  """
+  def history(result) do
+    scores = Map.new(result.player_order, &{&1, result.players[&1].score})
+    placements = GameHistory.placements(scores)
+
+    present =
+      Enum.map(result.player_order, fn id ->
+        %{seat_id: id, score: scores[id], placement: placements[id], team: nil}
+      end)
+
+    departed =
+      Enum.map(result.departed_scores, fn {id, score} ->
+        %{seat_id: id, score: score, placement: nil, team: nil}
+      end)
+
+    %{
+      details: %ScribbleResult{round_count: result.round_count},
+      completed?: result.completed? and result.drawings != [],
+      players: present ++ departed,
+      drawings: GameHistory.drawings(result.drawings)
+    }
   end
 
   defp reconcile_completion(state, id, context),

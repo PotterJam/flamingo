@@ -540,4 +540,42 @@ defmodule Flamingo.GameModes.SpellslingersTest do
     {:ok, %{state: state}} = Spellslingers.command(state, "a", :pass, context(r, "a"))
     state
   end
+
+  describe "history" do
+    test "the last wizard standing wins and wizards who left are unranked" do
+      {state, r} = started(["a", "b", "c"])
+      state = %{state | damage_dealt: %{"a" => 30, "b" => 12, "c" => 0}}
+      {:ok, %{state: state}} = Spellslingers.remove_member(state, "c", %{id: "c"}, context(r))
+
+      {:ok, %{status: {:finished, result}}} =
+        Spellslingers.remove_member(state, "b", %{id: "b"}, context(r))
+
+      history = Spellslingers.history(result)
+      assert history.completed?
+      assert history.drawings == []
+
+      assert Enum.sort(Enum.map(history.players, &{&1.seat_id, &1.score, &1.placement})) ==
+               [{"a", 30, 1}, {"b", 12, nil}, {"c", 0, nil}]
+    end
+
+    test "AI wizards are left out, a duel needs two humans and nobody surviving has no winner" do
+      result = %{
+        winner_id: nil,
+        map_id: "isles",
+        bots: ["bot-1"],
+        forfeited: [],
+        standings: [
+          %{id: "bot-1", place: 1, damage: 50},
+          %{id: "a", place: 2, damage: 40},
+          %{id: "b", place: 3, damage: 10}
+        ]
+      }
+
+      history = Spellslingers.history(result)
+      assert history.completed?
+      assert Enum.map(history.players, &{&1.seat_id, &1.placement}) == [{"a", 3}, {"b", 4}]
+
+      refute Spellslingers.history(%{result | standings: Enum.take(result.standings, 2)}).completed?
+    end
+  end
 end

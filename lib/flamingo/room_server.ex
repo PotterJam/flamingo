@@ -2,6 +2,7 @@ defmodule Flamingo.RoomServer do
   # Rooms stop themselves once empty, so only restart one that crashed.
   use GenServer, restart: :transient
 
+  alias Flamingo.GameHistory
   alias Flamingo.Room.Members
 
   @disconnect_grace_ms 60_000
@@ -14,11 +15,15 @@ defmodule Flamingo.RoomServer do
     :hint_timer,
     :turn_end_time,
     :idle_timer,
+    # The saved lobby a running game will be recorded against, fixed when it starts.
+    :recording,
     game_module: nil,
     # The mode picked in the lobby, or playing. Ids and drafts belong to the web
     # layer's mode list; the room only keeps them for every viewer to see.
     game_mode: nil,
     settings_draft: %{},
+    # Everyone who held a seat during the current game, including leavers, for its record.
+    game_seats: %{},
     lifecycle: :lobby,
     members: Members.new(),
     game: nil,
@@ -190,7 +195,18 @@ defmodule Flamingo.RoomServer do
 
       true ->
         state = state |> cancel_slot(:phase_timer) |> cancel_slot(:hint_timer)
-        state = %{state | game: nil, game_module: nil, lifecycle: :lobby} |> commit()
+
+        state =
+          %{
+            state
+            | game: nil,
+              game_module: nil,
+              lifecycle: :lobby,
+              recording: nil,
+              game_seats: %{}
+          }
+          |> commit()
+
         {:reply, :ok, state}
     end
   end
@@ -312,7 +328,7 @@ defmodule Flamingo.RoomServer do
 
     with {:ok, members} <- Members.add(state.members, id, token, name, avatar, user_id),
          {:ok, state} <- admit_member(%{state | members: members}, %{id: id, name: name}) do
-      state = commit(%{state | idle_timer: nil})
+      state = state |> track_game_seat(id) |> Map.put(:idle_timer, nil) |> commit()
       {:reply, {:ok, token, snapshot_for(state, id)}, state}
     else
       {:error, reason} -> {:reply, {:error, reason}, state}
@@ -339,7 +355,18 @@ defmodule Flamingo.RoomServer do
          true <- state.lifecycle == :lobby || {:error, :game_in_progress},
          {:ok, game} <- game_for_start(module, context),
          {:ok, result} <- module.start(game, settings, context) do
-      state = %{state | game_module: module, game_mode: mode}
+      seats = Map.new(Members.ordered_ids(state.members), &{&1, game_seat(state, &1)})
+
+      state = %{
+        state
+        | game_module: module,
+          game_mode: mode,
+          game_seats: seats,
+          recording:
+            state.saved_lobby &&
+              %{saved_lobby: state.saved_lobby, mode: mode, started_at: context.now}
+      }
+
       run_call(state, {:ok, result}, context.now)
     else
       {:error, reason} -> {:reply, {:error, reason}, state}
@@ -377,7 +404,38 @@ defmodule Flamingo.RoomServer do
           {:finished, final_result}
       end
 
+    state =
+      if match?({:finished, _}, lifecycle) and not match?({:finished, _}, state.lifecycle),
+        do: record_game(state, elem(lifecycle, 1), now),
+        else: state
+
     %{state | game: result.state, lifecycle: lifecycle} |> apply_timers(result.timers, now)
+  end
+
+  # Saves a finished game in a saved lobby without holding up the room; a failed
+  # write is logged by the task and only costs that game's record.
+  defp record_game(%{recording: nil} = state, _result, _now), do: state
+
+  defp record_game(state, result, now) do
+    with %{completed?: true} = history <- state.game_module.history(result) do
+      record =
+        Map.merge(history, state.recording)
+        |> Map.merge(%{finished_at: now, seats: state.game_seats})
+
+      Task.Supervisor.start_child(Flamingo.TaskSupervisor, fn -> GameHistory.record(record) end)
+    end
+
+    %{state | recording: nil}
+  end
+
+  defp track_game_seat(%{lifecycle: :lobby} = state, _id), do: state
+
+  defp track_game_seat(state, id),
+    do: %{state | game_seats: Map.put(state.game_seats, id, game_seat(state, id))}
+
+  defp game_seat(state, id) do
+    seat = Members.fetch!(state.members, id)
+    Map.take(seat, [:name, :user_id])
   end
 
   defp context(state, members \\ nil, actor \\ nil) do
@@ -439,7 +497,15 @@ defmodule Flamingo.RoomServer do
     if Members.ordered_ids(state.members) == [] do
       # Nobody is left to see the game, so the next arrival starts in a fresh lobby.
       state = state |> cancel_slot(:phase_timer) |> cancel_slot(:hint_timer)
-      schedule_idle_shutdown(%{state | game: nil, game_module: nil, lifecycle: :lobby})
+
+      schedule_idle_shutdown(%{
+        state
+        | game: nil,
+          game_module: nil,
+          lifecycle: :lobby,
+          recording: nil,
+          game_seats: %{}
+      })
     else
       state
     end

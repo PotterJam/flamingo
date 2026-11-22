@@ -13,6 +13,7 @@ defmodule Flamingo.Application do
       {DNSCluster, query: Application.get_env(:flamingo, :dns_cluster_query) || :ignore},
       {Phoenix.PubSub, name: Flamingo.PubSub},
       {Registry, keys: :unique, name: Flamingo.SavedLobbyRegistry},
+      {Task.Supervisor, name: Flamingo.TaskSupervisor},
       {Flamingo.RoomSupervisor, []},
       FlamingoWeb.Endpoint
     ]

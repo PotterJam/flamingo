@@ -28,6 +28,9 @@ defmodule Flamingo.GameModes.Telephone do
     })
   end
 
+  @doc "Telephone has no winners, so its games keep no history."
+  def history(_result), do: nil
+
   def admit_member(state, %{id: id}, context) do
     participation = if state.phase == :lobby, do: :active, else: :spectator
 

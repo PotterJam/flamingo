@@ -812,6 +812,17 @@ defmodule Flamingo.GameModes.ScribbleTest do
            ] = result.drawings
   end
 
+  test "a game nobody is left to finish is marked abandoned for history" do
+    {:ok, %{state: state}} = Scribble.start(admitted(), %{round_count: 2}, context())
+    {:ok, %{state: state}} = Scribble.command(state, "a", {:select_word, "cat"}, context())
+    {:ok, %{state: state}} = Scribble.command(state, "b", {:guess, "cat"}, context())
+
+    offline = context(roster: roster(false))
+    assert {:ok, %{status: {:finished, result}}} = Scribble.timeout(state, :turn_reveal, offline)
+
+    refute Scribble.history(result).completed?
+  end
+
   test "a word list shorter than the game refills instead of ending it" do
     words_context = %{
       context()
@@ -828,6 +839,7 @@ defmodule Flamingo.GameModes.ScribbleTest do
 
     {%{status: {:finished, result}}, "dog"} = complete_turn(state, words_context)
     assert length(result.drawings) == 4
+    assert Scribble.history(result).completed?
   end
 
   test "an empty word list finishes without scheduling another phase" do

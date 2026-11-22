@@ -45,6 +45,7 @@ defmodule Flamingo.Accounts do
     if sudo_mode?(user, -10) do
       Repo.transact(fn ->
         tokens = Repo.all_by(UserToken, user_id: user.id)
+        Flamingo.GameHistory.forget_user(user.id)
 
         with {:ok, _user} <- Repo.delete(user) do
           {:ok, tokens}

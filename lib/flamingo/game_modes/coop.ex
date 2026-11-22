@@ -5,7 +5,7 @@ defmodule Flamingo.GameModes.Coop do
   through the teams; chat and correct guesses are shared like Classic.
   """
 
-  alias Flamingo.{Feed, GameSettings, Scoring}
+  alias Flamingo.{Feed, GameHistory, GameSettings, Scoring}
   alias Flamingo.GameModes.Scribble
 
   @shared_events [:guess, :close_guess, :correct_guess, :drawing_vote]
@@ -177,7 +177,7 @@ defmodule Flamingo.GameModes.Coop do
     state = %{state | final_drawings: state.final_drawings ++ drawings}
 
     if state.current_round + 1 >= state.round_count,
-      do: finish_game(state, context.roster),
+      do: finish_game(state, context.roster, true),
       else: begin_round(%{state | current_round: state.current_round + 1}, context)
   end
 
@@ -403,7 +403,7 @@ defmodule Flamingo.GameModes.Coop do
     }
 
     if games == %{},
-      do: finish_game(state, context.roster),
+      do: finish_game(state, context.roster, false),
       else:
         ok(state, :ok, [:cancel_hint_timeout, {:schedule_phase_timeout, :word_choice, 10_000}])
   end
@@ -503,7 +503,7 @@ defmodule Flamingo.GameModes.Coop do
     ])
   end
 
-  defp finish_game(state, roster) do
+  defp finish_game(state, roster, completed?) do
     teams = Map.take(state.teams, roster.player_order)
 
     players =
@@ -526,13 +526,44 @@ defmodule Flamingo.GameModes.Coop do
       players: players,
       player_order: order,
       drawings: state.final_drawings,
-      teams: teams
+      teams: teams,
+      team_scores: state.team_scores,
+      round_count: state.round_count,
+      departed_teams: Map.drop(state.teams, roster.player_order),
+      # False when no team had enough players left to keep going.
+      completed?: completed?
     }
 
     ok(%{state | phase: :game_ended, final_result: result}, :ok, [
       :cancel_phase_timeout,
       :cancel_hint_timeout
     ])
+  end
+
+  @doc """
+  The saved lobby record of a finished game. Every member of a team shares its
+  score and placing; players who left keep their team's score unranked, and
+  watchers who joined without a team are left out.
+  """
+  def history(result) do
+    placements = GameHistory.placements(result.team_scores)
+
+    present =
+      for id <- result.player_order, team = result.teams[id] do
+        %{seat_id: id, score: result.team_scores[team], placement: placements[team], team: team}
+      end
+
+    departed =
+      for {id, team} <- result.departed_teams do
+        %{seat_id: id, score: result.team_scores[team], placement: nil, team: team}
+      end
+
+    %{
+      details: %Flamingo.GameHistory.ScribbleResult{round_count: result.round_count},
+      completed?: result.completed? and result.drawings != [],
+      players: present ++ departed,
+      drawings: GameHistory.drawings(result.drawings)
+    }
   end
 
   defp hint_timer(state, now) do

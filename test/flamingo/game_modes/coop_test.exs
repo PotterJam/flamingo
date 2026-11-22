@@ -124,6 +124,19 @@ defmodule Flamingo.GameModes.CoopTest do
 
       assert Coop.view(state, "1", context.roster).team_scores == %{1 => 190, 2 => 400}
       assert Enum.map(result.drawings, &{&1.drawer_id, &1.word}) == [{"1", "cat"}, {"3", "cat"}]
+
+      # Every member of the winning team wins; each shares their team's score.
+      history = Coop.history(result)
+      assert history.completed?
+
+      assert Enum.sort(Enum.map(history.players, &{&1.seat_id, &1.team, &1.score, &1.placement})) ==
+               [
+                 {"1", 1, 190, 2},
+                 {"2", 1, 190, 2},
+                 {"3", 2, 400, 1},
+                 {"4", 2, 400, 1},
+                 {"5", 2, 400, 1}
+               ]
     end
   end
 

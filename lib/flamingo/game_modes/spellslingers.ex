@@ -76,6 +76,7 @@ defmodule Flamingo.GameModes.Spellslingers do
       events: [],
       eliminated: [],
       damage_dealt: %{},
+      forfeited: [],
       rng: nil,
       final_result: nil
     }
@@ -103,6 +104,7 @@ defmodule Flamingo.GameModes.Spellslingers do
     state = %{state | participants: Map.delete(state.participants, id), host_id: host_id}
 
     if state.phase in [:arena_books, :arena_aim, :arena_resolve] and Units.alive?(state, id) do
+      state = %{state | forfeited: [id | state.forfeited]}
       state = state |> forfeit(id) |> Units.log("#{Units.player_name(state, id)} left the arena.")
 
       cond do
@@ -663,6 +665,9 @@ defmodule Flamingo.GameModes.Spellslingers do
 
     result = %{
       winner_id: winner,
+      map_id: state.map_id,
+      bots: for({id, %{bot: true}} <- state.players, do: id),
+      forfeited: state.forfeited,
       standings:
         (survivors ++ state.eliminated)
         |> Enum.with_index(1)
@@ -678,6 +683,33 @@ defmodule Flamingo.GameModes.Spellslingers do
 
     state = %{state | phase: :game_ended, final_result: result} |> Units.log(message)
     ok(state, [:cancel_phase_timeout, :cancel_hint_timeout])
+  end
+
+  @doc """
+  The saved lobby record of a finished duel, scored by damage dealt. The last
+  wizard standing wins; a duel nobody survived has no winner. Wizards who left
+  are kept unranked. AI wizards hold no seat, so they are never recorded, and a
+  duel needs two human wizards to count.
+  """
+  def history(result) do
+    humans = Enum.reject(result.standings, &(&1.id in result.bots))
+    # Without a survivor, the last wizard to fall still did not win.
+    offset = if result.winner_id, do: 0, else: 1
+
+    %{
+      details: %Flamingo.GameHistory.SpellslingersResult{map: result.map_id},
+      completed?: length(humans) >= 2,
+      players:
+        Enum.map(humans, fn row ->
+          %{
+            seat_id: row.id,
+            score: row.damage,
+            placement: if(row.id not in result.forfeited, do: row.place + offset),
+            team: nil
+          }
+        end),
+      drawings: []
+    }
   end
 
   ## Casting
