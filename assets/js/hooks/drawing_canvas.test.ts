@@ -12,7 +12,7 @@ test.each(["single_stroke", ""] as const)("pointer release and cancellation with
       addEventListener: (name: string, listener: (event: PointerEvent) => void) => listeners.set(name, listener),
       setPointerCapture: () => {},
     },
-    ctx: { getImageData: () => imageData, putImageData: () => {} },
+    ctx: { createImageData: () => imageData, putImageData: () => {} },
     isPainting: false, strokeUsed: false, lastCoord: null, straightStart: null,
     activeTool: "pen", selectedColor: "#000000", selectedThickness: 9,
     eventStack: [], redoStack: [],

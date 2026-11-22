@@ -92,11 +92,22 @@ interface DrawingCanvasHook {
 const isUndoBoundary = (type: string) =>
   type === "start" || type === "fill" || type === "clear";
 
+// Each canvas's pixels live here and are only ever written out. Reading them
+// back with getImageData returns slightly randomised pixels in browsers with
+// canvas fingerprinting protection (Safari, Firefox, Brave), and writing that
+// back on every stroke segment piles the noise up into static around lines.
+const pixels = new WeakMap<CanvasRenderingContext2D, ImageData>();
+
 const canvasEffect = (
   ctx: CanvasRenderingContext2D,
   fn: (imageData: ImageData) => void
 ) => {
-  const imageData = ctx.getImageData(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
+  let imageData = pixels.get(ctx);
+  if (!imageData) {
+    imageData = ctx.createImageData(CANVAS_WIDTH, CANVAS_HEIGHT);
+    clear(imageData);
+    pixels.set(ctx, imageData);
+  }
   fn(imageData);
   ctx.putImageData(imageData, 0, 0);
 };
