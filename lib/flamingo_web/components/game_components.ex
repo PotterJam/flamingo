@@ -2,6 +2,7 @@ defmodule FlamingoWeb.GameComponents do
   use Phoenix.Component
 
   alias Flamingo.Avatar
+  alias Phoenix.LiveView.JS
 
   import FlamingoWeb.CoreComponents, only: [button: 1, button_group: 1, icon: 1, input: 1]
 
@@ -643,6 +644,243 @@ defmodule FlamingoWeb.GameComponents do
           <.icon name={:trash} class="h-4 w-4" />
         </button>
       </div>
+    </div>
+    """
+  end
+
+  attr :id, :string, default: "final-podium"
+  attr :class, :any, default: nil
+  attr :compact, :boolean, default: false
+  slot :inner_block, required: true
+
+  def podium(assigns) do
+    ~H"""
+    <div class="overflow-x-auto">
+      <div class={@class || "min-w-[29rem] sm:min-w-[33rem]"}>
+        <ol
+          id={@id}
+          aria-label="Podium"
+          class={[
+            "mx-auto grid w-fit grid-cols-[repeat(3,2.5rem)] items-end",
+            if(@compact, do: "pt-10 pb-2", else: "pt-16 pb-6 sm:grid-cols-[repeat(3,3rem)]")
+          ]}
+        >
+          {render_slot(@inner_block)}
+        </ol>
+      </div>
+    </div>
+    """
+  end
+
+  attr :rank, :integer, required: true
+  attr :label, :any, default: nil
+  attr :compact, :boolean, default: false
+
+  def podium_step(assigns) do
+    assigns = assign_new(assigns, :display_label, fn -> assigns.label || assigns.rank + 1 end)
+
+    ~H"""
+    <span
+      aria-hidden="true"
+      class={[
+        "relative z-10 flex h-full w-full items-center justify-center overflow-hidden border-2 border-border font-black",
+        if(@compact, do: "text-base", else: "text-xl"),
+        @rank == 0 && "bg-yellow-300 text-yellow-400",
+        @rank == 1 && "border-r-0 bg-slate-200 text-slate-300",
+        @rank == 2 && "border-l-0 bg-orange-300 text-[#d9a36b]"
+      ]}
+    >
+      <span
+        :for={stripe <- 0..11}
+        class="podium-stripe pointer-events-none"
+        style={"--stripe-index: #{stripe}; --stripe-delay: #{rem(stripe, 3) * 60}ms"}
+      >
+      </span>
+      <span class="relative text-black">{@display_label}</span>
+    </span>
+    """
+  end
+
+  def podium_slot_class(rank, opts \\ []) do
+    compact? = Keyword.get(opts, :compact, false)
+
+    [
+      "relative row-start-1",
+      rank == 0 && if(compact?, do: "col-start-2 h-18", else: "col-start-2 h-26"),
+      rank == 1 && if(compact?, do: "col-start-1 h-11", else: "col-start-1 h-16"),
+      rank == 2 && if(compact?, do: "col-start-3 h-5", else: "col-start-3 h-6")
+    ]
+  end
+
+  def podium_label_class(rank, opts \\ []) do
+    compact? = Keyword.get(opts, :compact, false)
+
+    [
+      "absolute bottom-full flex items-center",
+      if(compact?, do: "-mb-1.5 gap-1.5 px-2 py-1", else: "-mb-2 gap-2 px-3 py-2"),
+      rank == 1 &&
+        if(compact?,
+          do: "right-1/2 -mr-6 flex-row-reverse",
+          else: "right-1/2 -mr-8 flex-row-reverse"
+        ),
+      rank != 1 && if(compact?, do: "left-1/2 -ml-6", else: "left-1/2 -ml-8")
+    ]
+  end
+
+  @constraints %{
+    "hidden_canvas" => "draw blind",
+    "single_stroke" => "one stroke",
+    "straight_lines" => "straight lines only",
+    "rotating_canvas" => "moving target",
+    "mirror" => "mirror mode",
+    "big_brush" => "big brush",
+    "rainbow_strokes" => "rainbow strokes",
+    "fading_ink" => "fading ink",
+    "kaleidoscope" => "kaleidoscope"
+  }
+
+  def constraint_mode(nil), do: nil
+  def constraint_mode(c) when is_atom(c), do: c |> Atom.to_string() |> constraint_mode()
+  def constraint_mode(c) when is_binary(c), do: Map.get(@constraints, c)
+
+  attr :votes, :map, required: true
+  attr :id, :string, default: nil
+
+  def drawing_votes(assigns) do
+    ~H"""
+    <span
+      :if={@votes.thumbs_up > 0 or @votes.thumbs_down > 0}
+      id={@id}
+      class="flex shrink-0 items-center gap-2 text-xs font-semibold sm:text-sm"
+    >
+      <span
+        :if={@votes.thumbs_up > 0}
+        class="flex items-center gap-1 text-green-700"
+        aria-label={"#{@votes.thumbs_up} thumbs up"}
+      >
+        <.icon name={:thumbs_up} class="h-4 w-4" /> {@votes.thumbs_up}
+      </span>
+      <span
+        :if={@votes.thumbs_down > 0}
+        class="flex items-center gap-1 text-red-600"
+        aria-label={"#{@votes.thumbs_down} thumbs down"}
+      >
+        <.icon name={:thumbs_down} class="h-4 w-4" /> {@votes.thumbs_down}
+      </span>
+    </span>
+    """
+  end
+
+  attr :id, :string, default: "final-drawings"
+  attr :heading_id, :string, default: "final-drawing-word"
+  attr :aria_label, :string, required: true
+  attr :selected_key, :any, default: nil
+  attr :drawing, :map, default: nil
+  attr :drawing_index, :integer, required: true
+  attr :drawing_count, :integer, required: true
+  attr :canvas_id, :string, default: nil
+  attr :copy_id, :string, default: nil
+  attr :constraint_id, :string, default: nil
+  attr :share_url, :string, default: nil
+  slot :subtitle
+
+  def drawing_showcase(assigns) do
+    assigns =
+      assign(
+        assigns,
+        :constraint_label,
+        assigns.drawing && constraint_mode(Map.get(assigns.drawing, :constraint))
+      )
+
+    ~H"""
+    <div
+      id={@id}
+      aria-label={@aria_label}
+      class="flex min-w-0 flex-col justify-center p-4 sm:p-6"
+      phx-hook="FinalDrawingShowcase"
+      data-selected-player-id={@selected_key && to_string(@selected_key)}
+    >
+      <%= if is_nil(@drawing) do %>
+        <div id={"#{@id}-empty"} class="bg-white p-6 text-center font-bold text-gray-500">
+          No drawings to show
+        </div>
+      <% else %>
+        <div class="w-full">
+          <div class="mb-4 grid grid-cols-[3rem_minmax(0,1fr)_3rem] items-center">
+            <div class="col-start-2 text-center">
+              <h2 id={@heading_id} class="text-2xl font-bold">
+                {@drawing.word}
+              </h2>
+              {render_slot(@subtitle)}
+            </div>
+            <.button
+              id="replay-final-drawing"
+              type="button"
+              variant="ghost"
+              size="icon"
+              class="justify-self-end text-black"
+              data-replay-final-drawings
+              aria-label="Replay drawing"
+            >
+              <.icon name={:refresh_cw} class="h-5 w-5" />
+            </.button>
+          </div>
+          <div
+            id={@canvas_id}
+            phx-hook="DrawingCanvas"
+            phx-update="ignore"
+            data-is-drawer="false"
+            data-final-drawing-replay="true"
+            data-final-drawing-events={Jason.encode!(@drawing.ops)}
+            data-constraint={Map.get(@drawing, :constraint) || ""}
+          >
+            <canvas width="700" height="500" class="aspect-[7/5] w-full bg-white"></canvas>
+          </div>
+          <p
+            :if={@constraint_label}
+            id={@constraint_id}
+            class="mt-2 text-center text-sm font-bold text-yellow-600"
+          >
+            drawn with {@constraint_label}
+          </p>
+          <nav aria-label="Drawing navigation" class="mt-4 flex items-center justify-center gap-2">
+            <.button
+              id="previous-final-drawing"
+              type="button"
+              variant="ghost"
+              phx-click="previous_drawing"
+              disabled={@drawing_index == 0}
+              class="flex items-center gap-1"
+              aria-label="Previous drawing"
+            >
+              <.icon name={:arrow_left} class="h-4 w-4" /> Prev
+            </.button>
+            <.button
+              :if={@share_url}
+              id={@copy_id}
+              type="button"
+              variant="ghost"
+              on_confirm_click={JS.dispatch("phx:copy", detail: %{text: @share_url})}
+              data-drawing-share-url={@share_url}
+            >
+              <span class="flex items-center gap-1">
+                <.icon name={:copy} class="h-4 w-4" /> Copy
+              </span>
+            </.button>
+            <.button
+              id="next-final-drawing"
+              type="button"
+              variant="ghost"
+              phx-click="next_drawing"
+              disabled={@drawing_index >= @drawing_count - 1}
+              class="flex items-center gap-1"
+              aria-label="Next drawing"
+            >
+              Next <.icon name={:arrow_right} class="h-4 w-4" />
+            </.button>
+          </nav>
+        </div>
+      <% end %>
     </div>
     """
   end

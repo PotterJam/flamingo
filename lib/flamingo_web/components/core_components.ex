@@ -307,6 +307,84 @@ defmodule FlamingoWeb.CoreComponents do
   end
 
   @doc """
+  Renders a navigation breadcrumb trail.
+
+  ## Examples
+
+      <.breadcrumb id="history-breadcrumb">
+        <:item navigate={~p"/saved-lobby/friday-doodles"}>friday-doodles</:item>
+        <:item>Game history</:item>
+      </.breadcrumb>
+  """
+  attr :id, :string, default: nil
+  attr :class, :any, default: nil
+
+  slot :item, required: true do
+    attr :navigate, :string
+    attr :patch, :string
+    attr :href, :string
+  end
+
+  def breadcrumb(assigns) do
+    ~H"""
+    <nav id={@id} aria-label="Breadcrumb" class={@class}>
+      <ol class="flex flex-wrap items-center gap-1.5 text-sm font-semibold text-foreground sm:gap-2">
+        <%= for {item, idx} <- Enum.with_index(@item) do %>
+          <li :if={idx > 0} role="presentation" aria-hidden="true">
+            <.icon name={:chevron_right} class="size-3.5 text-foreground/50" />
+          </li>
+          <li class="inline-flex items-center">
+            <%= if item[:navigate] || item[:patch] || item[:href] do %>
+              <.link
+                navigate={item[:navigate]}
+                patch={item[:patch]}
+                href={item[:href]}
+                class="text-foreground/70 underline-offset-4 transition-colors hover:text-foreground hover:underline focus-visible:outline-2 focus-visible:outline-offset-2"
+              >
+                {render_slot(item)}
+              </.link>
+            <% else %>
+              <span aria-current="page" class="font-black text-foreground">
+                {render_slot(item)}
+              </span>
+            <% end %>
+          </li>
+        <% end %>
+      </ol>
+    </nav>
+    """
+  end
+
+  @badge_colors %{
+    gray: "bg-gray-100 text-gray-600",
+    pink: "bg-pink-100 text-pink-700",
+    purple: "bg-purple-100 text-purple-700",
+    green: "bg-green-100 text-green-700",
+    amber: "bg-amber-100 text-amber-800"
+  }
+
+  @doc """
+  Renders a soft pastel pill badge with text in the matching colour scale.
+  """
+  attr :color, :atom, default: :gray, values: [:gray, :pink, :purple, :green, :amber]
+  attr :class, :any, default: nil
+  slot :inner_block, required: true
+
+  def badge(assigns) do
+    assigns = assign(assigns, :color_class, Map.fetch!(@badge_colors, assigns.color))
+
+    ~H"""
+    <span class={[
+      "inline-flex shrink-0 items-center rounded-full px-2 py-0.5 text-xs leading-tight font-bold whitespace-nowrap",
+      @color_class,
+      @class
+    ]}>
+      {render_slot(@inner_block)}
+    </span>
+    """
+  end
+
+  @doc """
   Renders an input with label and error messages.
 
   A `Phoenix.HTML.FormField` may be passed as argument,

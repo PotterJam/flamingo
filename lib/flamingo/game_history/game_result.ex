@@ -12,5 +12,8 @@ defmodule Flamingo.GameHistory.GameResult do
     field :finished_at, :utc_datetime
     belongs_to :saved_lobby, Flamingo.SavedLobbies.SavedLobby
     has_many :players, Flamingo.GameHistory.GameResultPlayer
+    has_one :scribble_result, Flamingo.GameHistory.ScribbleResult
+    has_one :spellslingers_result, Flamingo.GameHistory.SpellslingersResult
+    has_many :drawings, Flamingo.GameHistory.ScribbleDrawing
   end
 end

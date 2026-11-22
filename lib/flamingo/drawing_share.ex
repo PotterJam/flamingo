@@ -86,6 +86,29 @@ defmodule Flamingo.DrawingShare do
   def decode(_encoded), do: {:error, :invalid_drawing}
 
   @doc """
+  Extracts compact drawing ops from a share payload without expanding them into
+  full draw events.
+  """
+  def decode_ops(@version_prefix <> encoded) do
+    with {:ok, compressed} <- Base.url_decode64(encoded, padding: false),
+         {:ok, json} <- safe_uncompress(compressed),
+         {:ok, %{"v" => 2, "o" => ops}} when is_list(ops) <- Jason.decode(json),
+         true <- Enum.all?(ops, &valid_op?/1) do
+      {:ok, ops}
+    else
+      _ -> {:error, :invalid_drawing}
+    end
+  end
+
+  def decode_ops(encoded) when is_binary(encoded) do
+    with {:ok, %{events: events}} <- decode(encoded) do
+      {:ok, compact_ops(events)}
+    end
+  end
+
+  def decode_ops(_encoded), do: {:error, :invalid_drawing}
+
+  @doc """
   Collapses raw draw events into compact ops:
 
     * `["p", color, line_width, [x0, y0, dx1, dy1, ...]]` - a simplified,

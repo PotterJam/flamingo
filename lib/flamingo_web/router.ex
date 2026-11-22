@@ -57,6 +57,8 @@ defmodule FlamingoWeb.Router do
       live "/", HomeLive
       live "/join/:room_code", HomeLive
       live "/saved-lobby/:saved_lobby_name", HomeLive
+      live "/saved-lobby/:saved_lobby_name/history", LobbyHistoryLive
+      live "/saved-lobby/:saved_lobby_name/history/:id", GameResultLive
       live "/game/:room_id", LobbyLive
       live "/game/:room_id/scribble", ScribbleLive
       live "/game/:room_id/telephone", TelephoneLive

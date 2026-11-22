@@ -1,7 +1,9 @@
 defmodule FlamingoWeb.HomeLive do
   use FlamingoWeb, :live_view
 
-  alias Flamingo.{Accounts, Avatar, Rooms, SavedLobbies}
+  import FlamingoWeb.GameHistoryComponents
+
+  alias Flamingo.{Accounts, Avatar, GameHistory, Rooms, SavedLobbies}
 
   def mount(%{"saved_lobby_name" => name} = params, session, socket) do
     case SavedLobbies.get_saved_lobby_by_name(name) do
@@ -13,7 +15,14 @@ defmodule FlamingoWeb.HomeLive do
 
       saved_lobby ->
         {:ok, socket} = mount(Map.delete(params, "saved_lobby_name"), session, socket)
-        {:ok, assign(socket, saved_lobby: saved_lobby)}
+
+        {:ok,
+         assign(socket,
+           saved_lobby: saved_lobby,
+           standings: GameHistory.standings(saved_lobby.id),
+           recent_games: GameHistory.list_games(saved_lobby.id, limit: 3),
+           total_games: GameHistory.count_games(saved_lobby.id)
+         )}
     end
   end
 
@@ -28,6 +37,9 @@ defmodule FlamingoWeb.HomeLive do
        name: (scope && scope.user.player_name) || "",
        room_code: room_code,
        saved_lobby: nil,
+       standings: [],
+       recent_games: [],
+       total_games: 0,
        my_saved_lobbies: my_saved_lobbies,
        lobby_presence: if(connected?(socket), do: watch_presence(my_saved_lobbies), else: %{}),
        avatar: saved_avatar || Avatar.random(),
@@ -37,7 +49,12 @@ defmodule FlamingoWeb.HomeLive do
 
   def render(assigns) do
     ~H"""
-    <Layouts.app flash={@flash} current_scope={@current_scope} show_logo={false} changelog>
+    <Layouts.app
+      flash={@flash}
+      current_scope={@current_scope}
+      show_logo={not is_nil(@saved_lobby)}
+      changelog
+    >
       <Layouts.account_menu current_scope={@current_scope} />
       <.form
         for={%{}}
@@ -349,13 +366,16 @@ defmodule FlamingoWeb.HomeLive do
 
         <div
           id="lobby-fields-panel"
-          class="flex flex-col items-center justify-center gap-6 px-4 pt-10 pb-36 *:w-full *:max-w-2xl sm:px-10 lg:pt-28"
+          class={[
+            "flex flex-col items-center justify-center gap-6 px-4 pt-10 pb-36 *:w-full *:max-w-2xl sm:px-10",
+            if(@saved_lobby, do: "lg:py-20", else: "lg:pt-28")
+          ]}
         >
-          <div id="home-logo" class="flex justify-center py-2">
+          <div :if={!@saved_lobby} id="home-logo" class="flex justify-center py-2">
             <.logo size={:hero} />
           </div>
 
-          <label for="name-input" class="block">
+          <label :if={!@saved_lobby} for="name-input" class="block">
             <span class="mb-1 block text-sm font-bold">Your name</span>
             <input
               type="text"
@@ -369,13 +389,31 @@ defmodule FlamingoWeb.HomeLive do
             />
           </label>
 
-          <p :if={@error} id="lobby-error" class="text-sm font-bold text-red-600">{@error}</p>
+          <p :if={!@saved_lobby && @error} id="lobby-error" class="text-sm font-bold text-red-600">
+            {@error}
+          </p>
 
-          <.box :if={@saved_lobby} class="bg-white p-5">
-            <p class="text-xs text-gray-500">Saved lobby</p>
-            <p id="saved-lobby-name" class="mb-4 truncate text-2xl font-black">
-              {@saved_lobby.name}
-            </p>
+          <.box :if={@saved_lobby} id="saved-lobby-join-box" class="space-y-4 bg-white p-5">
+            <div>
+              <p class="text-xs text-gray-500">Saved lobby</p>
+              <p id="saved-lobby-name" class="truncate text-2xl font-black">
+                {@saved_lobby.name}
+              </p>
+            </div>
+            <label for="name-input" class="block">
+              <span class="mb-1 block text-sm font-bold">Your name</span>
+              <input
+                type="text"
+                value={@name}
+                name="lobby[name]"
+                placeholder="Enter your name"
+                maxlength="20"
+                class="w-full rounded-base border-2 border-border bg-white px-4 py-3 text-lg placeholder:text-gray-400 focus:ring-2 focus:ring-ring focus:ring-offset-2 focus:outline-none"
+                id="name-input"
+                phx-update="ignore"
+              />
+            </label>
+            <p :if={@error} id="lobby-error" class="text-sm font-bold text-red-600">{@error}</p>
             <.button
               type="submit"
               name="lobby[action]"
@@ -388,6 +426,49 @@ defmodule FlamingoWeb.HomeLive do
             >
               Join lobby
             </.button>
+          </.box>
+
+          <.box
+            :if={@saved_lobby}
+            id="saved-lobby-history-box"
+            class="overflow-hidden bg-white p-0"
+          >
+            <section id="saved-lobby-standings" class="p-5">
+              <h2 class="text-xl font-black">Standings</h2>
+              <.standings_podium
+                id="saved-lobby-standings-table"
+                standings={@standings}
+                has_games?={@total_games > 0}
+                current_user_id={@current_scope && @current_scope.user.id}
+              />
+            </section>
+
+            <section id="saved-lobby-recent-games" class="border-t-2 border-border p-5">
+              <h2 class="mb-1 text-xl font-black">Recent games</h2>
+              <p :if={@recent_games == []} class="py-2 text-sm text-gray-600">
+                No games played here yet. Finish a game in this lobby to record its results and drawings.
+              </p>
+              <div :if={@recent_games != []} class="-mx-3 space-y-0.5">
+                <.game_summary_row
+                  :for={game <- @recent_games}
+                  game={game}
+                  lobby_name={@saved_lobby.name}
+                  id={"recent-game-#{game.id}"}
+                />
+              </div>
+            </section>
+
+            <div :if={@total_games > 0} class="border-t-2 border-border">
+              <.button
+                id="saved-lobby-see-all-games"
+                navigate={~p"/saved-lobby/#{@saved_lobby.name}/history"}
+                variant="ghost"
+                class="flex w-full items-center justify-between gap-2 rounded-none border-0! px-5! py-2.5! font-bold"
+              >
+                <span>See all</span>
+                <.icon name={:arrow_right} class="h-5 w-5" />
+              </.button>
+            </div>
           </.box>
 
           <div :if={!@saved_lobby} class="grid gap-5 sm:grid-cols-2">
@@ -520,8 +601,18 @@ defmodule FlamingoWeb.HomeLive do
     if scope = socket.assigns.current_scope do
       case Accounts.update_avatar(scope, avatar) do
         {:ok, user} ->
+          standings =
+            Enum.map(socket.assigns.standings, fn
+              %{user_id: id} = row when id == user.id -> %{row | avatar: user.avatar}
+              row -> row
+            end)
+
           {:reply, %{saved: true},
-           assign(socket, current_scope: %{scope | user: user}, avatar: user.avatar)}
+           assign(socket,
+             current_scope: %{scope | user: user},
+             avatar: user.avatar,
+             standings: standings
+           )}
 
         {:error, _changeset} ->
           {:reply, %{saved: false}, socket}

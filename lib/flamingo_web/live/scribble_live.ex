@@ -89,34 +89,6 @@ defmodule FlamingoWeb.ScribbleLive do
 
   defp palette, do: @palette
 
-  attr :player, :map, required: true
-  attr :id, :string, required: true
-
-  defp final_votes(assigns) do
-    ~H"""
-    <span
-      :if={@player.thumbs_up > 0 or @player.thumbs_down > 0}
-      id={"final-votes-#{@id}"}
-      class="flex shrink-0 items-center gap-2 text-xs font-semibold sm:text-sm"
-    >
-      <span
-        :if={@player.thumbs_up > 0}
-        class="flex items-center gap-1 text-green-700"
-        aria-label={"#{@player.thumbs_up} thumbs up"}
-      >
-        <.icon name={:thumbs_up} class="h-4 w-4" /> {@player.thumbs_up}
-      </span>
-      <span
-        :if={@player.thumbs_down > 0}
-        class="flex items-center gap-1 text-red-600"
-        aria-label={"#{@player.thumbs_down} thumbs down"}
-      >
-        <.icon name={:thumbs_down} class="h-4 w-4" /> {@player.thumbs_down}
-      </span>
-    </span>
-    """
-  end
-
   attr :player_id, :string, required: true
   attr :host_id, :string, required: true
   attr :final_players, :map, required: true
@@ -130,10 +102,14 @@ defmodule FlamingoWeb.ScribbleLive do
     selected_drawings =
       drawings_for_player(assigns.final_drawings, assigns.teams, assigns.selected_player_id)
 
+    drawing = Enum.at(selected_drawings, assigns.selected_drawing_index)
+
     assigns =
       assign(assigns,
         selected_drawings: selected_drawings,
-        drawing: Enum.at(selected_drawings, assigns.selected_drawing_index)
+        drawing: drawing,
+        share_url: drawing && drawing_share_url(drawing, assigns.final_players),
+        artist: drawing && assigns.final_players[drawing.drawer_id]
       )
 
     ~H"""
@@ -163,112 +139,42 @@ defmodule FlamingoWeb.ScribbleLive do
           </div>
         </div>
 
-        <div
+        <.drawing_showcase
           id="final-drawings"
-          aria-label={
+          heading_id="final-drawing-word"
+          aria_label={
             if(@teams == %{}, do: "Selected player's drawings", else: "Selected team's drawings")
           }
-          class="flex min-w-0 flex-col justify-center p-4 sm:p-6"
-          phx-hook="FinalDrawingShowcase"
-          data-selected-player-id={@selected_player_id}
+          selected_key={@selected_player_id}
+          drawing={@drawing}
+          drawing_index={@selected_drawing_index}
+          drawing_count={length(@selected_drawings)}
+          canvas_id={@drawing && "final-drawing-#{@drawing.drawer_id}-round-#{@drawing.round_number}"}
+          copy_id={
+            @drawing && "copy-final-drawing-#{@drawing.drawer_id}-round-#{@drawing.round_number}"
+          }
+          constraint_id={
+            @drawing &&
+              "final-drawing-constraint-#{@drawing.drawer_id}-round-#{@drawing.round_number}"
+          }
+          share_url={@share_url}
         >
-          <%= if is_nil(@drawing) do %>
-            <div class="bg-white p-6 text-center font-bold">
-              No drawings to show
-            </div>
-          <% else %>
-            <% share_url = drawing_share_url(@drawing, @final_players) %>
-            <% drawing_constraint = constraint_mode(Map.get(@drawing, :constraint)) %>
-            <div class="w-full">
-              <div class="mb-4 grid grid-cols-[3rem_minmax(0,1fr)_3rem] items-center">
-                <div class="col-start-2 text-center">
-                  <h3 id="final-drawing-word" class="text-2xl font-bold">
-                    {@drawing.word}
-                  </h3>
-                  <% artist = @final_players[@drawing.drawer_id] %>
-                  <p
-                    :if={@teams != %{}}
-                    id="final-drawing-artist"
-                    class="mt-1 flex items-center justify-center gap-2 text-sm font-semibold text-gray-600"
-                  >
-                    <.flamingo_avatar
-                      avatar={Map.get(artist, :avatar, %{})}
-                      class="h-7 w-7 shrink-0"
-                      label={"#{artist.name}'s avatar"}
-                    />
-                    <span class="min-w-0 truncate">
-                      Drawn by <span class="font-bold text-black">{artist.name}</span>
-                    </span>
-                  </p>
-                </div>
-                <.button
-                  id="replay-final-drawing"
-                  type="button"
-                  variant="ghost"
-                  size="icon"
-                  class="text-black"
-                  data-replay-final-drawings
-                  aria-label="Replay drawing"
-                >
-                  <.icon name={:refresh_cw} class="h-5 w-5" />
-                </.button>
-              </div>
-              <div
-                id={"final-drawing-#{@drawing.drawer_id}-round-#{@drawing.round_number}"}
-                phx-hook="DrawingCanvas"
-                phx-update="ignore"
-                data-is-drawer="false"
-                data-final-drawing-replay="true"
-                data-final-drawing-events={Jason.encode!(@drawing.ops)}
-                data-constraint={Map.get(@drawing, :constraint)}
-              >
-                <canvas width="700" height="500" class="aspect-[7/5] w-full bg-white"></canvas>
-              </div>
-              <p
-                :if={drawing_constraint}
-                id={"final-drawing-constraint-#{@drawing.drawer_id}-round-#{@drawing.round_number}"}
-                class="mt-2 text-center text-sm font-bold text-yellow-600"
-              >
-                drawn with {drawing_constraint}
-              </p>
-              <nav
-                aria-label="Drawing navigation"
-                class="mt-4 flex items-center justify-center gap-2"
-              >
-                <.button
-                  id="previous-final-drawing"
-                  variant="ghost"
-                  phx-click="previous_drawing"
-                  disabled={@selected_drawing_index == 0}
-                  class="flex items-center gap-1"
-                  aria-label="Previous drawing"
-                >
-                  <.icon name={:arrow_left} class="h-4 w-4" /> Prev
-                </.button>
-                <.button
-                  variant="ghost"
-                  on_confirm_click={JS.dispatch("phx:copy", detail: %{text: share_url})}
-                  id={"copy-final-drawing-#{@drawing.drawer_id}-round-#{@drawing.round_number}"}
-                  data-drawing-share-url={share_url}
-                >
-                  <span class="flex items-center gap-1">
-                    <.icon name={:copy} class="h-4 w-4" /> Copy
-                  </span>
-                </.button>
-                <.button
-                  id="next-final-drawing"
-                  variant="ghost"
-                  phx-click="next_drawing"
-                  disabled={@selected_drawing_index >= length(@selected_drawings) - 1}
-                  class="flex items-center gap-1"
-                  aria-label="Next drawing"
-                >
-                  Next <.icon name={:arrow_right} class="h-4 w-4" />
-                </.button>
-              </nav>
-            </div>
-          <% end %>
-        </div>
+          <:subtitle :if={@teams != %{} && @artist}>
+            <p
+              id="final-drawing-artist"
+              class="mt-1 flex items-center justify-center gap-2 text-sm font-semibold text-gray-600"
+            >
+              <.flamingo_avatar
+                avatar={Map.get(@artist, :avatar, %{})}
+                class="h-7 w-7 shrink-0"
+                label={"#{@artist.name}'s avatar"}
+              />
+              <span class="min-w-0 truncate">
+                Drawn by <span class="font-bold text-black">{@artist.name}</span>
+              </span>
+            </p>
+          </:subtitle>
+        </.drawing_showcase>
       </.card>
     </div>
     """
@@ -351,7 +257,7 @@ defmodule FlamingoWeb.ScribbleLive do
               <span class="min-w-0 flex-1 truncate font-bold">
                 {Map.get(@final_players, pid).name}
               </span>
-              <.final_votes player={Map.fetch!(@final_players, pid)} id={pid} />
+              <.drawing_votes votes={Map.fetch!(@final_players, pid)} id={"final-votes-#{pid}"} />
               <span class="shrink-0 text-pink-500 font-semibold">
                 {Map.get(@final_players, pid).score}
               </span>
@@ -449,7 +355,7 @@ defmodule FlamingoWeb.ScribbleLive do
             <span class="text-lg">{idx + 1}</span>
             <.team_avatars team={team} players={@final_players} />
             <span class="min-w-0 flex-1 truncate font-bold">Team {team.id}</span>
-            <.final_votes player={team.votes} id={"team-#{team.id}"} />
+            <.drawing_votes votes={team.votes} id={"final-votes-team-#{team.id}"} />
             <span class="shrink-0 font-semibold text-pink-500">{team.score}</span>
           </button>
         </li>
@@ -576,24 +482,6 @@ defmodule FlamingoWeb.ScribbleLive do
     """
   end
 
-  slot :inner_block, required: true
-
-  defp podium(assigns) do
-    ~H"""
-    <div class="overflow-x-auto">
-      <div class="min-w-[29rem] sm:min-w-[33rem]">
-        <ol
-          id="final-podium"
-          aria-label="Podium"
-          class="mx-auto grid w-fit grid-cols-[repeat(3,2.5rem)] items-end pt-16 pb-6 sm:grid-cols-[repeat(3,3rem)]"
-        >
-          {render_slot(@inner_block)}
-        </ol>
-      </div>
-    </div>
-    """
-  end
-
   attr :rank, :integer, required: true
   attr :name, :string, required: true
   attr :votes, :map, required: true
@@ -608,51 +496,12 @@ defmodule FlamingoWeb.ScribbleLive do
     ]}>
       <span class="podium-player-details relative flex min-w-0 items-center gap-1 sm:gap-2">
         <span class="min-w-0 truncate font-bold" title={@name}>{@name}</span>
-        <.final_votes player={@votes} id={@id} />
+        <.drawing_votes votes={@votes} id={"final-votes-#{@id}"} />
         <span class="shrink-0 font-semibold text-pink-500">{@score}</span>
       </span>
     </span>
     """
   end
-
-  attr :rank, :integer, required: true
-
-  defp podium_step(assigns) do
-    ~H"""
-    <span
-      aria-hidden="true"
-      class={[
-        "relative z-10 flex h-full w-full items-center justify-center overflow-hidden border-2 border-border text-xl font-black",
-        @rank == 0 && "bg-yellow-300 text-yellow-400",
-        @rank == 1 && "border-r-0 bg-slate-200 text-slate-300",
-        @rank == 2 && "border-l-0 bg-orange-300 text-[#d9a36b]"
-      ]}
-    >
-      <span
-        :for={stripe <- 0..11}
-        class="podium-stripe pointer-events-none"
-        style={"--stripe-index: #{stripe}; --stripe-delay: #{rem(stripe, 3) * 60}ms"}
-      >
-      </span>
-      <span class="relative text-black">{@rank + 1}</span>
-    </span>
-    """
-  end
-
-  defp podium_slot_class(rank),
-    do: [
-      "relative row-start-1",
-      rank == 0 && "col-start-2 h-26",
-      rank == 1 && "col-start-1 h-16",
-      rank == 2 && "col-start-3 h-6"
-    ]
-
-  defp podium_label_class(rank),
-    do: [
-      "absolute bottom-full -mb-2 flex items-center gap-2 px-3 py-2",
-      rank == 1 && "right-1/2 -mr-8 flex-row-reverse",
-      rank != 1 && "left-1/2 -ml-8"
-    ]
 
   defp constraint_label(:hidden_canvas), do: "Draw blind — your canvas is hidden"
   defp constraint_label(:single_stroke), do: "One stroke — don't lift your pen"
@@ -664,17 +513,6 @@ defmodule FlamingoWeb.ScribbleLive do
   defp constraint_label(:fading_ink), do: "Draw fast! Your ink will fade"
   defp constraint_label(:kaleidoscope), do: "Kaleidoscope — every stroke is reflected eight ways"
   defp constraint_label(_constraint), do: nil
-
-  defp constraint_mode(:hidden_canvas), do: "draw blind"
-  defp constraint_mode(:single_stroke), do: "one stroke"
-  defp constraint_mode(:straight_lines), do: "straight lines only"
-  defp constraint_mode(:rotating_canvas), do: "moving target"
-  defp constraint_mode(:mirror), do: "mirror mode"
-  defp constraint_mode(:big_brush), do: "big brush"
-  defp constraint_mode(:rainbow_strokes), do: "rainbow strokes"
-  defp constraint_mode(:fading_ink), do: "fading ink"
-  defp constraint_mode(:kaleidoscope), do: "kaleidoscope"
-  defp constraint_mode(_constraint), do: nil
 
   defp winning_player_id(players, player_order) do
     Enum.max_by(player_order, fn pid -> Map.get(players, pid).score end, fn -> nil end)

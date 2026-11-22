@@ -162,6 +162,31 @@ defmodule Flamingo.GameHistoryTest do
 
     assert {:ok, %{drawer_name: "Alice", word: ^first, events: [_ | _]}} =
              DrawingShare.decode(hd(drawings).payload)
+
+    assert {:ok, [["p", "#000000", 9, _] | _]} = DrawingShare.decode_ops(hd(drawings).payload)
+    assert {:error, :invalid_drawing} = DrawingShare.decode_ops("not-valid")
+
+    assert [%{id: listed_id}] = GameHistory.list_games(saved_lobby.id, mode: :classic)
+    assert listed_id == game.id
+
+    assert GameHistory.list_games(saved_lobby.id, mode: :spellslingers) == []
+    assert GameHistory.count_games(saved_lobby.id) == 1
+    assert GameHistory.count_games(saved_lobby.id, mode: :classic) == 1
+    assert GameHistory.count_games(saved_lobby.id, mode: :coop) == 0
+
+    loaded = GameHistory.get_game(saved_lobby.id, game.id)
+    assert loaded.scribble_result.round_count == 1
+
+    assert Enum.map(loaded.players, &{&1.name, &1.placement}) == [
+             {"Alice", 1},
+             {"Bob", 1},
+             {"Cara", nil}
+           ]
+
+    assert length(loaded.drawings) == 2
+
+    assert GameHistory.get_game(saved_lobby.id, "not-a-uuid") == nil
+    assert GameHistory.get_game(Ecto.UUID.generate(), game.id) == nil
   end
 
   test "standings count wins for signed-in players only, keeping deleted accounts' games" do

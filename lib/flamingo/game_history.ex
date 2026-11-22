@@ -118,7 +118,7 @@ defmodule Flamingo.GameHistory do
       from [p, g] in lobby_players,
         join: u in assoc(p, :user),
         distinct: p.user_id,
-        order_by: [p.user_id, desc: g.finished_at],
+        order_by: [p.user_id, desc: g.finished_at, desc: g.id],
         select: {p.user_id, %{name: p.name, avatar: u.avatar}}
 
     latest = latest |> Repo.all() |> Map.new()
@@ -135,6 +135,83 @@ defmodule Flamingo.GameHistory do
     |> Enum.map(&Map.merge(&1, latest[&1.user_id]))
     |> Enum.sort_by(&{-&1.wins, &1.played, &1.name})
   end
+
+  @doc """
+  Lists finished games for a saved lobby, newest first, with mode details and
+  ordered players preloaded.
+
+  Options:
+    * `:limit` - maximum number of games to return
+    * `:offset` - number of games to skip (default `0`)
+    * `:mode` - filter to a single game mode atom
+  """
+  def list_games(saved_lobby_id, opts \\ []) do
+    players_query = ordered_players_query()
+
+    saved_lobby_id
+    |> games_query(opts)
+    |> order_by([g], desc: g.finished_at, desc: g.id)
+    |> maybe_limit(Keyword.get(opts, :limit))
+    |> maybe_offset(Keyword.get(opts, :offset))
+    |> preload(players: ^players_query)
+    |> Repo.all()
+  end
+
+  @doc "Counts finished games for a saved lobby, optionally filtered by `:mode`."
+  def count_games(saved_lobby_id, opts \\ []) do
+    saved_lobby_id
+    |> games_query(opts)
+    |> Repo.aggregate(:count, :id)
+  end
+
+  @doc """
+  Fetches a single finished game belonging to `saved_lobby_id`, with mode
+  details, ordered players (and their current account avatars), and ordered
+  drawings preloaded. Returns `nil` when not found or when `game_id` is invalid.
+  """
+  def get_game(saved_lobby_id, game_id) do
+    case Ecto.UUID.cast(game_id) do
+      {:ok, uuid} ->
+        players_query = from(p in ordered_players_query(), preload: [:user])
+        drawings_query = from(d in ScribbleDrawing, order_by: [asc: d.turn])
+
+        from(g in GameResult,
+          where: g.saved_lobby_id == ^saved_lobby_id and g.id == ^uuid,
+          preload: [
+            :scribble_result,
+            :spellslingers_result,
+            players: ^players_query,
+            drawings: ^drawings_query
+          ]
+        )
+        |> Repo.one()
+
+      :error ->
+        nil
+    end
+  end
+
+  defp games_query(saved_lobby_id, opts) do
+    base = from(g in GameResult, where: g.saved_lobby_id == ^saved_lobby_id)
+
+    case Keyword.get(opts, :mode) do
+      nil -> base
+      mode -> where(base, [g], g.mode == ^mode)
+    end
+  end
+
+  defp ordered_players_query do
+    from(p in GameResultPlayer,
+      order_by: [asc_nulls_last: p.placement, desc_nulls_last: p.score, asc: p.name, asc: p.id]
+    )
+  end
+
+  defp maybe_limit(query, nil), do: query
+  defp maybe_limit(query, limit), do: limit(query, ^limit)
+
+  defp maybe_offset(query, nil), do: query
+  defp maybe_offset(query, 0), do: query
+  defp maybe_offset(query, offset), do: offset(query, ^offset)
 
   @doc "Keeps a deleted account's games for the other players, uncredited."
   def forget_user(user_id) do
