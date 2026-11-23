@@ -254,20 +254,27 @@ test("a rejoin shows the board as it is instead of replaying a cast it missed", 
   expect(casts(a.sent)).toHaveLength(1);
 });
 
-test("arrow keys walk and float exactly like WASD", () => {
+test("arrow keys walk, jump and float exactly like WASD, and jumps go the way the wizard last faced", () => {
   const a = mount();
-  a.server("arena_state", state());
-  a.tick(1);
   const moves = (keys: string[]) =>
     keys.map((key) => {
       now += 100;
       a.key(key);
       const last = a.sent.at(-1)!;
-      return [last.name, last.dir];
+      return [last.name, last.kind ?? last.dir, last.kind ? last.dir : undefined];
     });
-  const expected = [["walk", -1], ["walk", 1], ["rise", 1], ["rise", -1]];
-  expect(moves(["a", "d", "w", "s"])).toEqual(expected);
-  expect(moves(["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown"])).toEqual(expected);
+  a.server("arena_state", state());
+  a.tick(1);
+  // Standing on the left half, a wizard that has not moved faces right.
+  const standing = [["jump", "high", 1], ["walk", -1, undefined], ["jump", "high", -1], ["jump", "long", -1], ["walk", 1, undefined], ["jump", "long", 1]];
+  expect(moves(["w", "a", "w", "s", "d", "s"])).toEqual(standing);
+  expect(moves(["ArrowUp", "ArrowLeft", "ArrowUp", "ArrowDown", "ArrowRight", "ArrowDown"])).toEqual(standing);
+
+  // While levitating the same keys float up and down instead.
+  const floating = state({ units: [{ ...state().units[0], float: 2 }] });
+  a.server("arena_state", floating);
+  a.tick(now + 1);
+  expect(moves(["w", "s", "ArrowUp", "ArrowDown"])).toEqual([["rise", 1, undefined], ["rise", -1, undefined], ["rise", 1, undefined], ["rise", -1, undefined]]);
 });
 
 test("full power waits for the release instead of firing itself", () => {

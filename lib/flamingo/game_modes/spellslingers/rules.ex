@@ -40,6 +40,11 @@ defmodule Flamingo.GameModes.Spellslingers.Rules do
       @sky @height - 100
       @wizard_hp 100
       @max_climb 2
+      # Jumps, as in Arcanists: a high jump goes up and a little forward, a long jump
+      # low and far. Each is {apex height, distance over flat ground} in cells, and
+      # spends @jump_cost of the turn's walking steps.
+      @jumps %{high: {10, 6}, long: {4, 18}}
+      @jump_cost 5
       @dt 0.04
       @max_speed 78.0
       @max_steps 450

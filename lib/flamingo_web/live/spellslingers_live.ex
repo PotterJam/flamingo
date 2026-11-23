@@ -22,6 +22,7 @@ defmodule FlamingoWeb.SpellslingersLive do
        wind: 0,
        walk_left: 0,
        walk_budget: 0,
+       jump_cost: 0,
        units: [],
        cooldowns: %{},
        events: [],
@@ -191,6 +192,7 @@ defmodule FlamingoWeb.SpellslingersLive do
               selected_spell={@selected_spell}
               spell_groups={@spell_groups}
               walk_left={@walk_left}
+              jump_cost={@jump_cost}
             />
 
             <.drawer
@@ -219,6 +221,7 @@ defmodule FlamingoWeb.SpellslingersLive do
             phx-hook="ArenaTour"
             data-active={to_string(@watching?)}
             data-walk={@walk_budget}
+            data-jump={@jump_cost}
             hidden
           />
 
@@ -438,6 +441,10 @@ defmodule FlamingoWeb.SpellslingersLive do
         <span class="inline-flex items-center gap-1.5">
           <.key_cap key="A" /><.key_cap key="D" /> or <.key_cap key="←" /><.key_cap key="→" />
           walk
+        </span>
+        <span class="inline-flex items-center gap-1.5">
+          <.key_cap key="W" /><.key_cap key="↑" /> high jump
+          <.key_cap key="S" /><.key_cap key="↓" /> long jump, the way you face
         </span>
         <span>Scroll or right-drag to look around</span>
         <span class="inline-flex items-center gap-1.5"><.key_cap key="F" /> full view</span>
@@ -1013,6 +1020,7 @@ defmodule FlamingoWeb.SpellslingersLive do
   attr :selected_spell, :any, required: true
   attr :spell_groups, :any, required: true
   attr :walk_left, :any, required: true
+  attr :jump_cost, :any, required: true
 
   # The spell dock floats over the bottom of the arena: an icon hotbar grouped by book,
   # with walking and Pass turn on the same line. Spell names live in the cards.
@@ -1113,6 +1121,26 @@ defmodule FlamingoWeb.SpellslingersLive do
         >
           <.icon name={:arrow_right} class="size-5" />
         </.button>
+        <%!-- Jumps go the way the wizard faces, which only the arena hook knows --%>
+        <div :if={!@floating?} id="jump-controls" class="flex flex-col gap-0.5">
+          <button
+            :for={
+              {kind, key, icon, label} <- [
+                {"high", "W", :chevrons_up, "High jump"},
+                {"long", "S", :redo, "Long jump"}
+              ]
+            }
+            type="button"
+            id={"jump-#{kind}"}
+            phx-click={JS.dispatch("arena:jump", to: "#arena-canvas", detail: %{kind: kind})}
+            disabled={!@can_act? or @walk_left < @jump_cost}
+            aria-label={label}
+            title={"#{label} (#{key}), the way you face. Costs #{@jump_cost} steps."}
+            class="flex h-[19px] w-11 cursor-pointer items-center justify-center gap-1 border-2 border-border bg-white text-[10px] font-black hover:bg-amber-50 disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            <.icon name={icon} class="size-3.5" />{key}
+          </button>
+        </div>
         <div :if={@floating?} id="rise-controls" class="flex flex-col gap-0.5">
           <button
             type="button"
@@ -1331,7 +1359,25 @@ defmodule FlamingoWeb.SpellslingersLive do
 
   def handle_event("walk", %{"dir" => dir}, socket) when dir in @dirs do
     case Rooms.command(socket.assigns.room_id, {:walk, parse_dir(dir)}) do
-      {:error, reason} when reason not in [:blocked, :no_steps_left, :not_your_turn] ->
+      # Too steep to walk: the arena suggests a jump over the wizard's head.
+      {:error, :blocked} ->
+        {:noreply, push_event(socket, "arena_blocked", %{})}
+
+      {:error, reason} when reason not in [:no_steps_left, :not_your_turn] ->
+        {:noreply, put_flash(socket, :error, command_error(reason))}
+
+      _ ->
+        {:noreply, socket}
+    end
+  end
+
+  def handle_event("jump", %{"kind" => kind, "dir" => dir}, socket)
+      when kind in ["high", "long"] and dir in @dirs do
+    case Rooms.command(
+           socket.assigns.room_id,
+           {:jump, String.to_existing_atom(kind), parse_dir(dir)}
+         ) do
+      {:error, reason} when reason not in [:no_steps_left, :floating, :not_your_turn] ->
         {:noreply, put_flash(socket, :error, command_error(reason))}
 
       _ ->
@@ -1416,6 +1462,7 @@ defmodule FlamingoWeb.SpellslingersLive do
         wind: snapshot.wind,
         walk_left: snapshot.walk_left,
         walk_budget: snapshot.walk_budget,
+        jump_cost: snapshot.jump_cost,
         cooldowns: snapshot.cooldowns,
         quick_used: Map.get(snapshot, :quick_used, false),
         final_result: snapshot.final_result,
@@ -1475,7 +1522,8 @@ defmodule FlamingoWeb.SpellslingersLive do
           :crates,
           :my_spells,
           :map_id,
-          :quick_used
+          :quick_used,
+          :last_jump
         ]
     )
     |> Map.put(:selected_spell, selected)

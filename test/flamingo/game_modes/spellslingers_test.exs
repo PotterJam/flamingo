@@ -271,6 +271,47 @@ defmodule Flamingo.GameModes.SpellslingersTest do
     assert state.units[first].hp == 100
   end
 
+  test "a high jump clears a wall too steep to walk up, and a long jump goes further" do
+    {state, r} = started()
+    [first, _second] = state.turn_order
+    {width, height} = Spellslingers.dimensions()
+
+    # Flat ground with its surface at row 80 and a wall six cells high to the right.
+    terrain =
+      for y <- 0..(height - 1), x <- 0..(width - 1), into: <<>> do
+        if y > 80 or (x in 152..175 and y > 74), do: <<1>>, else: <<0>>
+      end
+
+    wizard = %{state.units[first] | x: 148, y: 80}
+    others = Map.new(state.units, fn {id, u} -> {id, %{u | x: 20, y: 80}} end)
+    state = %{state | terrain: terrain, units: Map.put(others, first, wizard), walk_left: 40}
+    ctx = context(r, first)
+
+    walked =
+      Enum.reduce(1..3, state, fn _, state ->
+        {:ok, %{state: state}} = Spellslingers.command(state, first, {:walk, 1}, ctx)
+        state
+      end)
+
+    assert Spellslingers.command(walked, first, {:walk, 1}, ctx) == {:error, :blocked}
+
+    # Right up against the wall, a high jump climbs its face and lands on top.
+    {:ok, %{state: high}} = Spellslingers.command(walked, first, {:jump, :high, 1}, ctx)
+    assert %{x: x, y: 74} = high.units[first]
+    assert x > 151
+    assert high.walk_left == 32
+    assert high.units[first].hp == 100
+    assert %{id: ^first, n: 1, path: [_, _ | _]} = high.last_jump
+
+    {:ok, %{state: long}} = Spellslingers.command(state, first, {:jump, :long, -1}, ctx)
+    {:ok, %{state: hop}} = Spellslingers.command(state, first, {:jump, :high, -1}, ctx)
+    assert long.units[first].y == 80 and hop.units[first].y == 80
+    assert 148 - long.units[first].x > 148 - hop.units[first].x + 6
+
+    assert {:error, :no_steps_left} =
+             Spellslingers.command(%{state | walk_left: 4}, first, {:jump, :long, 1}, ctx)
+  end
+
   test "an explosion knocks a nearby wizard away from the blast" do
     {state, r} = started()
     [first, second] = state.turn_order

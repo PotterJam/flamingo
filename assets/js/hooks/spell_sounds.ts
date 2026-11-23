@@ -296,6 +296,16 @@ export function createSpellSounds(volume: () => number, makeContext: () => BaseA
 
     teleport,
 
+    // A wizard pushing off for a jump, and its feet touching down again.
+    jump() {
+      tone({ wave: "triangle", from: 220, to: 520, dur: 0.18, gain: 0.18 });
+      hiss({ filter: "bandpass", from: 600, to: 1800, q: 1, dur: 0.25, gain: 0.25 });
+    },
+    landed() {
+      tone({ from: 140, to: 70, dur: 0.12, gain: 0.25 });
+      hiss({ from: 700, to: 200, dur: 0.12, gain: 0.3 });
+    },
+
     // Health changing on the board, from spells, minions, falls or crates.
     hurt(amount: number) {
       const k = Math.min(1, amount / 40);

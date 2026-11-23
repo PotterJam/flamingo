@@ -74,6 +74,8 @@ type ArenaState = {
   spells: Spell[];
   my_spells: string[];
   selected_spell: string;
+  // The latest jump, numbered so each one plays once; its path is in unit cells.
+  last_jump: { n: number; id: string; path: [number, number][] } | null;
   physics: { dt: number; gravity: number; max_speed: number; wind_accel: number; playback_speed: number; place_range: number };
 };
 
@@ -316,6 +318,11 @@ const SpellArena = {
     let aim: { angle: number; power: number } | null = null;
     let castLocked = false;
     let lastWalk = 0;
+    // Which way the viewer's wizard faces: the last way it walked or aimed. Jumps go this way.
+    let facing = 0;
+    let seenJump = -1;
+    let jumping: { id: string; path: [number, number][]; start: number } | null = null;
+    let lastBlockedHint = 0;
     let frame = 0;
     let shakeUntil = 0;
     let shakePower = 0;
@@ -407,6 +414,14 @@ const SpellArena = {
 
     const show = (state: ArenaState, skip?: Set<string>) => {
       if (shown && shown.units !== state.units) announceChanges(shown, state, skip);
+      const jump = state.last_jump;
+      if (jump && jump.n !== seenJump) {
+        seenJump = jump.n;
+        if (shown) {
+          jumping = { id: jump.id, path: jump.path, start: performance.now() };
+          sounds.jump();
+        }
+      }
       const key = state.terrain + state.map_id;
       shown = state;
       // Full view shows open sky above the 2:1 map, in the sky's top colour.
@@ -461,7 +476,13 @@ const SpellArena = {
     const myWizard = () => shown?.units.find((u) => u.kind === "wizard" && u.id === shown?.viewer_id && !u.dead);
 
     const canAct = () =>
-      !!shown && shown.phase === "arena_aim" && shown.current_id === shown.viewer_id && !animation && !castLocked && !!myWizard();
+      !!shown &&
+      shown.phase === "arena_aim" &&
+      shown.current_id === shown.viewer_id &&
+      !animation &&
+      !castLocked &&
+      !jumping &&
+      !!myWizard();
 
     // The server's flight step: wind and gravity change the velocity, then it moves.
     const previewPath = (power: number, steps: number) => {
@@ -963,8 +984,10 @@ const SpellArena = {
       const unit = shown.units.find((u) => u.id === shown!.current_id);
       if (!unit) return;
       const s = scale();
-      const cx = (unit.x + 0.5) * s;
-      const y = (unit.y + 1) * s - 58 + Math.sin(t / 180) * 4;
+      // Follows the wizard as drawn, so it rides along mid-jump.
+      const [ux, uy] = drawn.get(unit.id) ?? [unit.x, unit.y];
+      const cx = (ux + 0.5) * s;
+      const y = (uy + 1) * s - 58 + Math.sin(t / 180) * 4;
       ctx.fillStyle = shown.players[unit.id]?.color ?? "#111827";
       ctx.strokeStyle = "#111827";
       ctx.lineWidth = 2;
@@ -1244,6 +1267,20 @@ const SpellArena = {
       clampCam();
     };
 
+    // Where a jumping wizard is along its arc; it kicks up dust where it lands.
+    const jumpPosition = (unit: Unit, now: number) => {
+      if (!jumping || jumping.id !== unit.id || !shown) return null;
+      const { path } = jumping;
+      const p = shown.physics;
+      const step = ((now - jumping.start) / 1000) * (p.playback_speed / p.dt);
+      if (step < path.length - 1) return pointAt(path, step) as [number, number];
+      jumping = null;
+      const s = scale();
+      burst((unit.x + 0.5) * s, (unit.y + 1) * s, "#a8a29e", 10, 50);
+      sounds.landed();
+      return null;
+    };
+
     const glide = (unit: Unit, dt: number) => {
       const s = scale();
       const prev = drawn.get(unit.id);
@@ -1462,7 +1499,7 @@ const SpellArena = {
         const caster = animation?.cast.caster_id;
         const knocked = knockedPositions(now);
         const units = shown.units.map((u) => {
-          const at = knocked.get(u.id);
+          const at = knocked.get(u.id) ?? jumpPosition(u, now);
           if (at) {
             drawn.set(u.id, [at[0], at[1]]);
             return { ...u, x: at[0], y: at[1], dead: false };
@@ -1474,11 +1511,13 @@ const SpellArena = {
 
         for (const unit of units) {
           if (unit.kind === "wizard") {
-            const facing =
-              unit.id === shown.viewer_id && aim
-                ? Math.cos((aim.angle * Math.PI) / 180) >= 0 ? 1 : -1
+            const path = jumping?.id === unit.id ? jumping.path : null;
+            const faces = path
+              ? Math.sign(path[path.length - 1][0] - path[0][0]) || 1
+              : unit.id === shown.viewer_id && facing
+                ? facing
                 : unit.id === caster ? 1 : unit.x < shown.width / 2 ? 1 : -1;
-            drawWizard(unit, now, facing);
+            drawWizard(unit, now, faces);
           } else {
             drawMinion(unit, now);
           }
@@ -1571,7 +1610,19 @@ const SpellArena = {
       const dx = x - (wizard.x + 0.5);
       const dy = y - (wizard.y - 2);
       aim = { angle: (Math.atan2(-dy, dx) * 180) / Math.PI, power: 0 };
+      facing = dx >= 0 ? 1 : -1;
     };
+
+    // Jumps go the way the wizard faces, as in Arcanists. While levitating, the jump
+    // keys float up and down instead.
+    const jump = (kind: "high" | "long") => {
+      const wizard = myWizard();
+      if (!shown || !wizard || !canAct() || performance.now() - lastWalk < 85) return;
+      lastWalk = performance.now();
+      if ((wizard.float ?? 0) > 0) this.pushEvent("rise", { dir: kind === "high" ? 1 : -1 });
+      else this.pushEvent("jump", { kind, dir: facing || (wizard.x < shown.width / 2 ? 1 : -1) });
+    };
+    const onJump = (event: Event) => jump((event as CustomEvent<{ kind: "high" | "long" }>).detail.kind);
 
     let drag: { x: number; y: number; camX: number; camY: number } | null = null;
     const onPointerMove = (event: PointerEvent) => {
@@ -1678,12 +1729,11 @@ const SpellArena = {
         event.preventDefault();
         if (!canAct() || performance.now() - lastWalk < 85) return;
         lastWalk = performance.now();
-        this.pushEvent("walk", { dir: key === "a" || key === "arrowleft" ? -1 : 1 });
+        facing = key === "a" || key === "arrowleft" ? -1 : 1;
+        this.pushEvent("walk", { dir: facing });
       } else if (key === "w" || key === "arrowup" || key === "s" || key === "arrowdown") {
         event.preventDefault();
-        if (!canAct() || performance.now() - lastWalk < 85) return;
-        lastWalk = performance.now();
-        this.pushEvent("rise", { dir: key === "w" || key === "arrowup" ? 1 : -1 });
+        if (!event.repeat) jump(key === "w" || key === "arrowup" ? "high" : "long");
       } else if (/^[0-9-]$/.test(key)) {
         const spell = shown.my_spells[key === "0" ? 9 : key === "-" ? 10 : Number(key) - 1];
         if (spell) this.pushEvent("select_spell", { spell });
@@ -1709,6 +1759,7 @@ const SpellArena = {
     canvas.addEventListener("wheel", onWheel, { passive: false });
     canvas.addEventListener("contextmenu", onContextMenu);
     canvas.addEventListener("arena:focus", onFocus);
+    canvas.addEventListener("arena:jump", onJump);
     window.addEventListener("blur", dropCharge);
     window.addEventListener("pointerup", onPointerUp);
     window.addEventListener("keydown", onKeyDown);
@@ -1729,6 +1780,9 @@ const SpellArena = {
         selected = update.selected_spell || selected;
       }
       if (full) {
+        // A jump that happened while we were away is already over.
+        seenJump = latest.last_jump?.n ?? -1;
+        jumping = null;
         animation = null;
         pending = null;
         backlog.length = 0;
@@ -1737,6 +1791,13 @@ const SpellArena = {
       } else {
         receive(latest);
       }
+    });
+    // Walking into a slope too steep to climb teaches the jump.
+    this.handleEvent("arena_blocked", () => {
+      const wizard = myWizard();
+      if (!wizard || performance.now() - lastBlockedHint < 2500) return;
+      lastBlockedHint = performance.now();
+      floatText(wizard, "Too steep! W to jump", "#111827", 15);
     });
     this.handleEvent("arena_unlock", () => {
       castLocked = false;
@@ -1762,6 +1823,7 @@ const SpellArena = {
       canvas.removeEventListener("wheel", onWheel);
       canvas.removeEventListener("contextmenu", onContextMenu);
       canvas.removeEventListener("arena:focus", onFocus);
+      canvas.removeEventListener("arena:jump", onJump);
       body.classList.remove("arena-charging", "arena-thrown");
       undim();
       resizeObserver.disconnect();

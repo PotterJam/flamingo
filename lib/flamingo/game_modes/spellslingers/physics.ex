@@ -97,6 +97,53 @@ defmodule Flamingo.GameModes.Spellslingers.Physics do
     end)
   end
 
+  @doc """
+  Flies a wizard through a jump of the given {apex height, flat distance} toward
+  `dir` and returns {landed unit, path}. The arc keeps its shape whatever the
+  gravity is tuned to.
+  """
+  def jump(state, unit, {height, distance}, dir) do
+    g = state.tuning.gravity
+    vy = :math.sqrt(2 * g * height)
+    start = {unit.x + 0.5, unit.y + 0.5}
+    velocity = {dir * distance * g / (2 * vy), -vy}
+    jump_step(state, unit, start, velocity, [{unit.x * 1.0, unit.y * 1.0}], 0)
+  end
+
+  defp jump_step(state, unit, pos, _v, path, 300), do: land(state, unit, pos, path)
+
+  # Unlike knockback, a wall met on the way up slides the jumper up its face, so a
+  # jump from right beside a cliff still climbs it. The map's edges count as walls.
+  defp jump_step(state, unit, {x, y}, {vx, vy}, path, n) do
+    vy = vy + state.tuning.gravity * @dt
+    substeps = max(1, ceil(max(abs(vx), abs(vy)) * @dt / 0.6))
+
+    result =
+      Enum.reduce_while(1..substeps, {x, y}, fn _, {cx, cy} ->
+        px = cx + vx * @dt / substeps
+        py = cy + vy * @dt / substeps
+
+        cond do
+          py >= state.water_level -> {:halt, {:gone, {px, py}}}
+          not Units.blocked?(state, unit, floor(px), floor(py)) -> {:cont, {px, py}}
+          vy < 0 and not Units.blocked?(state, unit, floor(cx), floor(py)) -> {:cont, {cx, py}}
+          true -> {:halt, {:land, {cx, cy}}}
+        end
+      end)
+
+    case result do
+      {:gone, {px, py}} ->
+        unit = %{unit | x: px |> floor() |> clamp(0, @width - 1), y: state.water_level}
+        {unit, Enum.reverse([{px - 0.5, py - 0.5} | path])}
+
+      {:land, pos} ->
+        land(state, unit, pos, path)
+
+      {px, py} ->
+        jump_step(state, unit, {px, py}, {vx, vy}, [{px - 0.5, py - 0.5} | path], n + 1)
+    end
+  end
+
   defp knock_flight(state, unit, velocity) do
     start = {unit.x + 0.5, unit.y + 0.5}
     knock_step(state, unit, start, velocity, [{unit.x * 1.0, unit.y * 1.0}], 0)

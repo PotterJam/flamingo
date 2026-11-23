@@ -29,7 +29,7 @@ const besideWizard = (r: Box, c: DOMRect): [number, number] => {
   return [x, r.top + (r.height - c.height) / 2];
 };
 
-const steps = (walk: string): Step[] => [
+const steps = (walk: string, jump: string): Step[] => [
   {
     target: WIZARD,
     text: "This is you, with the arrow overhead. Move the mouse to aim at another wizard.",
@@ -47,7 +47,7 @@ const steps = (walk: string): Step[] => [
   },
   {
     target: "#arena-moves",
-    text: `Walk with A / D, the arrow keys or these buttons. You get ${walk} steps a turn.`,
+    text: `Walk with A / D or ← →. Too steep? W high-jumps and S long-jumps the way you face, for ${jump} steps each. You get ${walk} steps a turn.`,
     place: (r, c) => [r.left - 200, r.top - c.height - 16],
   },
   {
@@ -64,7 +64,7 @@ interface TourHook {
 }
 
 const start = (hook: TourHook) => {
-  const list = steps(hook.el.dataset.walk || "40");
+  const list = steps(hook.el.dataset.walk || "40", hook.el.dataset.jump || "5");
   let step = 0;
   let raf = 0;
 

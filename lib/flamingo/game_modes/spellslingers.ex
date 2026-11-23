@@ -22,6 +22,7 @@ defmodule Flamingo.GameModes.Spellslingers do
     Catalog,
     Crates,
     Minions,
+    Physics,
     Rng,
     Rules,
     Spells,
@@ -65,6 +66,7 @@ defmodule Flamingo.GameModes.Spellslingers do
       rise_after: 0,
       wind: 0,
       walk_left: 0,
+      last_jump: nil,
       tuning: Rules.default_tuning(),
       cooldowns: %{},
       cast_this_turn: [],
@@ -272,6 +274,11 @@ defmodule Flamingo.GameModes.Spellslingers do
     with :ok <- check_turn(state, actor), do: walk(state, actor, dir, context)
   end
 
+  def command(%{phase: :arena_aim} = state, actor, {:jump, kind, dir}, context)
+      when kind in [:high, :long] and dir in [-1, 1] do
+    with :ok <- check_turn(state, actor), do: jump(state, actor, kind, dir, context)
+  end
+
   def command(%{phase: :arena_aim} = state, actor, {:rise, dir}, _context) when dir in [-1, 1] do
     with :ok <- check_turn(state, actor),
          true <- state.walk_left > 0 || {:error, :no_steps_left},
@@ -324,7 +331,7 @@ defmodule Flamingo.GameModes.Spellslingers do
 
   def command(_state, _actor, command, _context)
       when command == :pass or
-             (is_tuple(command) and elem(command, 0) in [:walk, :rise, :cast, :place]),
+             (is_tuple(command) and elem(command, 0) in [:walk, :jump, :rise, :cast, :place]),
       do: {:error, :not_your_turn}
 
   def command(_state, _actor, _command, _context), do: {:error, :invalid_command}
@@ -375,6 +382,8 @@ defmodule Flamingo.GameModes.Spellslingers do
       wind: state.wind,
       walk_left: state.walk_left,
       walk_budget: state.tuning.walk_budget,
+      jump_cost: @jump_cost,
+      last_jump: state.last_jump,
       tuning: state.tuning,
       tuned?: state.tuning != Rules.default_tuning(),
       width: @width,
@@ -601,18 +610,47 @@ defmodule Flamingo.GameModes.Spellslingers do
          {:ok, wizard} <- Units.step(state, state.units[actor], dir) do
       {wizard, fall} = Units.settle(state, wizard)
 
-      state =
-        %{state | walk_left: state.walk_left - 1}
-        |> Units.put_unit(wizard)
-        |> Units.fall_damage(wizard.id, fall)
-        |> Crates.collect_crates()
-        |> Units.resolve_deaths()
+      %{state | walk_left: state.walk_left - 1}
+      |> Units.put_unit(wizard)
+      |> Units.fall_damage(wizard.id, fall)
+      |> after_move(actor, context)
+    end
+  end
 
-      cond do
-        winner_decided?(state) -> finish(state)
-        not Units.alive?(state, actor) -> end_turn(state, context)
-        true -> ok(state)
-      end
+  # A jump spends a few steps and flies the wizard along an arc. Only a net drop
+  # from where it took off can hurt, the same as walking off that ledge would.
+  defp jump(state, actor, kind, dir, context) do
+    wizard = state.units[actor]
+
+    with true <- state.walk_left >= @jump_cost || {:error, :no_steps_left},
+         true <- Map.get(wizard, :float, 0) == 0 || {:error, :floating} do
+      {flown, path} = Physics.jump(state, wizard, @jumps[kind], dir)
+      {landed, _} = Units.settle(state, flown)
+      path = if landed.y != flown.y, do: path ++ [{landed.x * 1.0, landed.y * 1.0}], else: path
+      n = if state.last_jump, do: state.last_jump.n + 1, else: 1
+
+      %{
+        state
+        | walk_left: state.walk_left - @jump_cost,
+          last_jump: %{
+            n: n,
+            id: actor,
+            path: Enum.map(path, fn {x, y} -> [Float.round(x, 2), Float.round(y, 2)] end)
+          }
+      }
+      |> Units.put_unit(landed)
+      |> Units.fall_damage(actor, max(0, landed.y - wizard.y))
+      |> after_move(actor, context)
+    end
+  end
+
+  defp after_move(state, actor, context) do
+    state = state |> Crates.collect_crates() |> Units.resolve_deaths()
+
+    cond do
+      winner_decided?(state) -> finish(state)
+      not Units.alive?(state, actor) -> end_turn(state, context)
+      true -> ok(state)
     end
   end
 
