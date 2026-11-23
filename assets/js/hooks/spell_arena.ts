@@ -853,18 +853,6 @@ const SpellArena = {
           const x0 = zone.x0 * s;
           const w = (zone.x1 - zone.x0) * s;
           const top = Math.max(cam.y * s + 30, 30);
-          ctx.fillStyle = "rgba(30, 41, 59, 0.12)";
-          ctx.fillRect(x0, top, w, shown.water_level * s - top);
-          ctx.setLineDash([5, 5]);
-          ctx.strokeStyle = "rgba(30, 41, 59, 0.45)";
-          ctx.lineWidth = 1.5;
-          ctx.beginPath();
-          ctx.moveTo(x0, top);
-          ctx.lineTo(x0, shown.water_level * s);
-          ctx.moveTo(x0 + w, top);
-          ctx.lineTo(x0 + w, shown.water_level * s);
-          ctx.stroke();
-          ctx.setLineDash([]);
           const cx = x0 + w / 2 + Math.sin(t / 900) * 3;
           ctx.fillStyle = "#475569";
           ctx.strokeStyle = "#111827";
@@ -1054,7 +1042,7 @@ const SpellArena = {
           ctx.stroke();
           ctx.setLineDash([]);
           if (spell.effect === "thunderhead") {
-            ctx.fillRect(px - 16 * s, py - 40 * s, 32 * s, (rest - py + 40) * s);
+            ctx.fillRect(px - 16 * s, py - 1 * s, 32 * s, 2 * s);
           } else if (spell.effect === "cataclysm") {
             ctx.beginPath();
             ctx.arc(px, py, spell.radius * s, 0, Math.PI * 2);
