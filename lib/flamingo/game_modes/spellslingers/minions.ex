@@ -29,7 +29,8 @@ defmodule Flamingo.GameModes.Spellslingers.Minions do
       max_hp: stats.hp,
       dead: false,
       ward: 0,
-      float: 0
+      # Dragons fly: they hover wherever they are put.
+      float: if(kind == :dragon, do: 999, else: 0)
     }
 
     cond do
@@ -57,7 +58,10 @@ defmodule Flamingo.GameModes.Spellslingers.Minions do
   def minions_act(state, owner) do
     state.units
     |> Map.values()
-    |> Enum.filter(&(&1.kind != :wizard and &1.owner == owner and Units.alive_unit?(&1)))
+    # Dragons act with their owner's lasting spells instead (see Zones).
+    |> Enum.filter(
+      &(&1.kind not in [:wizard, :dragon] and &1.owner == owner and Units.alive_unit?(&1))
+    )
     |> Enum.sort_by(& &1.id)
     |> Enum.reduce(state, &minion_act(&2, &1.id))
   end

@@ -28,7 +28,8 @@ defmodule Flamingo.GameModes.Spellslingers do
     Spells,
     Surges,
     Terrain,
-    Units
+    Units,
+    Zones
   }
 
   alias Flamingo.GameSettings
@@ -69,6 +70,12 @@ defmodule Flamingo.GameModes.Spellslingers do
       last_jump: nil,
       tuning: Rules.default_tuning(),
       cooldowns: %{},
+      # Turns each wizard has finished, which charges their grand spell, and the
+      # grand spells each has spent.
+      turns_taken: %{},
+      grand_used: %{},
+      zones: [],
+      zone_count: 0,
       cast_this_turn: [],
       quick_used: false,
       bot_plan: nil,
@@ -318,7 +325,8 @@ defmodule Flamingo.GameModes.Spellslingers do
          true <- spell.id in spellbook(state, actor) || {:error, :unknown_spell},
          true <- spell_ready?(state, actor, spell.id) || {:error, :spell_cooling_down},
          true <- (x >= 0 and x < @width and y >= 0 and y < @height) || {:error, :invalid_aim},
-         true <- Spells.in_place_range?(state, actor, x, y) || {:error, :out_of_range} do
+         true <-
+           spell.sky || Spells.in_place_range?(state, actor, x, y) || {:error, :out_of_range} do
       cast(state, actor, spell, 0, 0, {x * 1.0, y * 1.0})
     end
   end
@@ -350,6 +358,21 @@ defmodule Flamingo.GameModes.Spellslingers do
 
   def timeout(%{phase: :arena_resolve} = state, :arena_surge, context),
     do: start_turn(state, state.current_id, nil, context)
+
+  # The new wizard's lasting spells have played out; their turn starts now.
+  def timeout(%{phase: :arena_resolve} = state, :arena_zones, context) do
+    cond do
+      winner_decided?(state) ->
+        finish(state)
+
+      not Units.alive?(state, state.current_id) ->
+        end_turn(state, context)
+
+      true ->
+        state = %{state | phase: :arena_aim}
+        ok(state, aim_timers(state))
+    end
+  end
 
   def timeout(%{phase: :arena_aim, current_id: bot} = state, :arena_bot, context) do
     if Bots.bot?(state, bot) and Units.alive?(state, bot) do
@@ -397,7 +420,10 @@ defmodule Flamingo.GameModes.Spellslingers do
       books_ready: state.ready,
       my_spells: spellbook(state, viewer),
       quick_used: state.quick_used,
-      cooldowns: Map.get(state.cooldowns, viewer, %{}),
+      cooldowns: view_cooldowns(state, viewer),
+      grand_spent: Map.get(state.grand_used, viewer, []),
+      grand_charge: Catalog.grand_charge(),
+      zones: state.zones,
       spells: Enum.map(Catalog.spells(), &Map.drop(&1, [:icon])),
       last_cast: state.last_cast,
       events: state.events,
@@ -407,6 +433,7 @@ defmodule Flamingo.GameModes.Spellslingers do
         max_speed: @max_speed,
         wind_accel: state.tuning.wind_accel,
         playback_speed: @playback_speed,
+        grand_intro_ms: @grand_intro_ms,
         place_range: state.tuning.place_range
       },
       final_result: state.final_result
@@ -555,7 +582,17 @@ defmodule Flamingo.GameModes.Spellslingers do
         |> Surges.surge_after(surge)
         |> Crates.maybe_drop_crate()
 
-      ok(state, aim_timers(state))
+      # Lasting spells act first, played out like a cast before the clock starts.
+      case Zones.tick(state, next) do
+        {false, state} ->
+          ok(state, aim_timers(state))
+
+        {true, state} ->
+          ok(%{state | phase: :arena_resolve}, [
+            :cancel_hint_timeout,
+            {:schedule_phase_timeout, :arena_zones, state.last_cast.duration_ms + 1200}
+          ])
+      end
     end
   end
 
@@ -583,7 +620,11 @@ defmodule Flamingo.GameModes.Spellslingers do
         end)
       end)
 
-    %{state | cooldowns: cooldowns}
+    %{
+      state
+      | cooldowns: cooldowns,
+        turns_taken: Map.update(state.turns_taken, owner, 1, &(&1 + 1))
+    }
   end
 
   defp rise_tide(state) do
@@ -692,8 +733,30 @@ defmodule Flamingo.GameModes.Spellslingers do
 
   defp apply_bot_move({:pass, state}, _bot, context), do: end_turn(state, context)
 
-  defp spell_ready?(state, actor, spell_id),
-    do: Map.get(Map.get(state.cooldowns, actor, %{}), spell_id, 0) == 0
+  defp spell_ready?(state, actor, spell_id) do
+    if Catalog.grand?(spell_id),
+      do:
+        grand_charge_left(state, actor) == 0 and
+          spell_id not in Map.get(state.grand_used, actor, []),
+      else: Map.get(Map.get(state.cooldowns, actor, %{}), spell_id, 0) == 0
+  end
+
+  defp grand_charge_left(state, actor),
+    do: max(Catalog.grand_charge() - Map.get(state.turns_taken, actor, 0), 0)
+
+  # Cooldowns as a player sees them: a charging grand spell counts down like one.
+  # Mana crates and storms refresh cooldowns but never a grand spell's charge.
+  defp view_cooldowns(state, viewer) do
+    left = grand_charge_left(state, viewer)
+    cooldowns = Map.get(state.cooldowns, viewer, %{})
+
+    if left > 0,
+      do:
+        spellbook(state, viewer)
+        |> Enum.filter(&Catalog.grand?/1)
+        |> Enum.reduce(cooldowns, &Map.put(&2, &1, left)),
+      else: cooldowns
+  end
 
   defp winner_decided?(state), do: Enum.count(state.turn_order, &Units.alive?(state, &1)) <= 1
 
@@ -760,6 +823,11 @@ defmodule Flamingo.GameModes.Spellslingers do
           if(spell.cooldown > 0,
             do: put_in(state.cooldowns, [actor, spell.id], spell.cooldown),
             else: state.cooldowns
+          ),
+        grand_used:
+          if(spell.grand,
+            do: Map.update(state.grand_used, actor, [spell.id], &[spell.id | &1]),
+            else: state.grand_used
           )
     }
 

@@ -10,6 +10,25 @@ defmodule Flamingo.GameModes.Spellslingers.Terrain do
       else: {x, y}
   end
 
+  @doc """
+  The open cell a unit at column `x` would stand on, searching down from row `from`,
+  or nil when the column drops into the sea.
+  """
+  def ground_below(state, x, from) do
+    x = floor(x)
+    from = max(floor(from), 0)
+
+    Enum.find(from..(state.water_level - 1)//1, fn y ->
+      not solid?(state.terrain, x, y) and solid?(state.terrain, x, y + 1)
+    end)
+  end
+
+  @doc "The first open row from the top of column `x`, under any cavern ceiling."
+  def sky_row(state, x) do
+    x = floor(x)
+    Enum.find(0..(@height - 1), 0, &(not solid?(state.terrain, x, &1)))
+  end
+
   @doc false
   def solid?(terrain, x, y) when x >= 0 and x < @width and y >= 0 and y < @height,
     do: :binary.at(terrain, y * @width + x) == 1

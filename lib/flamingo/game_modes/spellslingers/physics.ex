@@ -11,16 +11,20 @@ defmodule Flamingo.GameModes.Spellslingers.Physics do
     {:math.cos(radians) * speed, -:math.sin(radians) * speed}
   end
 
-  @doc false
-  def fly(state, origin, velocity, spell, ignore) do
+  @doc """
+  Flies a projectile until it hits something. `steer`, when given, turns the
+  velocity each step: `steer.({x, y}, {vx, vy})` returns the new velocity.
+  """
+  def fly(state, origin, velocity, spell, ignore, steer \\ nil) do
     ax = state.wind * state.tuning.wind_accel * spell.wind
     ay = state.tuning.gravity * spell.gravity
-    fly_step(state, origin, velocity, {ax, ay}, [origin], 0, ignore)
+    fly_step(state, origin, velocity, {ax, ay, steer}, [origin], 0, ignore)
   end
 
   defp fly_step(_state, pos, _v, _a, path, @max_steps, _), do: {Enum.reverse(path), {:lost, pos}}
 
-  defp fly_step(state, {x, y}, {vx, vy}, {ax, ay}, path, n, near) do
+  defp fly_step(state, {x, y}, {vx, vy}, {ax, ay, steer} = accel, path, n, near) do
+    {vx, vy} = if steer, do: steer.({x, y}, {vx, vy}), else: {vx, vy}
     vx = vx + ax * @dt
     vy = vy + ay * @dt
     # Sub-steps keep fast bolts from tunnelling through thin walls.
@@ -42,7 +46,7 @@ defmodule Flamingo.GameModes.Spellslingers.Physics do
       end)
 
     case result do
-      {{_, _} = pos, near} -> fly_step(state, pos, {vx, vy}, {ax, ay}, [pos | path], n + 1, near)
+      {{_, _} = pos, near} -> fly_step(state, pos, {vx, vy}, accel, [pos | path], n + 1, near)
       {kind, pos} -> {Enum.reverse([pos | path]), {kind, pos}}
     end
   end

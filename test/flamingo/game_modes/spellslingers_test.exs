@@ -608,6 +608,177 @@ defmodule Flamingo.GameModes.SpellslingersTest do
     state
   end
 
+  # Wild magic and crates off, so turns run the same every time.
+  defp calm(state),
+    do: %{state | wind: 0, tuning: %{state.tuning | surge_chance: 0, crate_chance: 0}}
+
+  # Ends the current turn; when the next wizard's lasting spells play first, lets them finish.
+  defp next_turn(state, r) do
+    {:ok, %{state: state}} =
+      Spellslingers.command(state, state.current_id, :pass, context(r, state.current_id))
+
+    case state.phase do
+      :arena_resolve ->
+        {:ok, %{state: state}} = Spellslingers.timeout(state, :arena_zones, context(r))
+        state
+
+      _ ->
+        state
+    end
+  end
+
+  test "a grand spell charges until its caster's fifth turn, then casts once per duel" do
+    {state, r} = started()
+    [first, second] = state.turn_order
+    state = calm(%{state | books: %{first => ["storm"], second => ["sky"]}})
+    {width, _} = Spellslingers.dimensions()
+    far = {:place, "thunderhead", width - 30, 10}
+
+    assert Spellslingers.view(state, first, r).cooldowns["thunderhead"] == 4
+
+    assert {:error, :spell_cooling_down} =
+             Spellslingers.command(state, first, far, context(r, first))
+
+    state = Enum.reduce(1..8, state, fn _, state -> next_turn(state, r) end)
+    assert state.current_id == first
+    refute Map.has_key?(Spellslingers.view(state, first, r).cooldowns, "thunderhead")
+
+    # Sky spells reach anywhere on the map, beyond the usual placing range.
+    {:ok, %{state: cast}} = Spellslingers.command(state, first, far, context(r, first))
+    assert cast.last_cast.grand
+
+    # A mana crate refreshes cooldowns, but never a spent grand spell.
+    {:ok, %{state: back}} = Spellslingers.timeout(cast, :arena_resolve, context(r))
+    back = next_turn(%{back | cooldowns: %{first => %{}, second => %{}}}, r)
+    assert back.current_id == first
+
+    assert {:error, :spell_cooling_down} =
+             Spellslingers.command(back, first, far, context(r, first))
+
+    assert "thunderhead" in Spellslingers.view(back, first, r).grand_spent
+  end
+
+  test "a thunderhead strikes the wizard under it at the start of each of its caster's turns" do
+    {state, r} = started()
+    [first, second] = state.turn_order
+    state = calm(%{state | books: %{first => ["storm"]}, turns_taken: %{first => 4}})
+    foe = state.units[second]
+
+    {:ok, %{state: cast}} =
+      Spellslingers.command(
+        state,
+        first,
+        {:place, "thunderhead", foe.x, foe.y - 20},
+        context(r, first)
+      )
+
+    # Casting only gathers the cloud; the foe gets a turn to run.
+    assert cast.units[second].hp == 100
+    {:ok, %{state: theirs}} = Spellslingers.timeout(cast, :arena_resolve, context(r))
+    assert theirs.current_id == second
+
+    {:ok, %{state: struck, timers: timers}} =
+      Spellslingers.command(theirs, second, :pass, context(r, second))
+
+    assert struck.phase == :arena_resolve
+    assert Enum.any?(timers, &match?({:schedule_phase_timeout, :arena_zones, _}, &1))
+    assert struck.units[second].hp < 100
+    assert [%{kind: :thunderhead, turns: 2}] = struck.zones
+
+    {:ok, %{state: mine}} = Spellslingers.timeout(struck, :arena_zones, context(r))
+    assert mine.phase == :arena_aim
+    assert mine.current_id == first
+
+    # Three strikes, then the storm clears.
+    mine = Enum.reduce(1..4, mine, fn _, state -> next_turn(state, r) end)
+    assert mine.zones == []
+  end
+
+  test "the rising tide lifts the sea now and again on its caster's turns" do
+    {state, r} = started()
+    [first, _second] = state.turn_order
+    state = calm(%{state | books: %{first => ["wild"]}, turns_taken: %{first => 4}})
+    sea = state.water_level
+
+    {:ok, %{state: cast}} =
+      Spellslingers.command(state, first, {:cast, "tide", 0, 0}, context(r, first))
+
+    assert cast.water_level == sea - 3
+
+    {:ok, %{state: later}} = Spellslingers.timeout(cast, :arena_resolve, context(r))
+    later = next_turn(later, r)
+    assert later.current_id == first
+    assert later.water_level == sea - 6
+  end
+
+  test "a seeker arrow fired straight up comes down on the enemy, not on its caster" do
+    {state, r} = started()
+    [first, second] = state.turn_order
+    state = calm(%{state | books: %{first => ["storm"]}})
+
+    {:ok, %{state: cast}} =
+      Spellslingers.command(state, first, {:cast, "seeker", 90, 75}, context(r, first))
+
+    [x, _] = cast.last_cast.segments |> hd() |> Map.fetch!(:path) |> List.last()
+    assert abs(x - state.units[second].x) < abs(x - state.units[first].x)
+  end
+
+  test "a skipping stone bounces off the ground before it bursts" do
+    {state, r} = started()
+    [first, second] = state.turn_order
+    state = calm(%{state | books: %{first => ["geo"]}})
+    toward = if state.units[second].x > state.units[first].x, do: -40, else: 220
+
+    {:ok, %{state: cast}} =
+      Spellslingers.command(state, first, {:cast, "skipstone", toward, 60}, context(r, first))
+
+    [first_hop | _] = segments = cast.last_cast.segments
+    assert length(segments) > 1
+    assert first_hop.hit and first_hop.radius == 0
+    # Each hop starts where the last one stopped.
+    for [a, b] <- Enum.chunk_every(segments, 2, 1, :discard),
+        do: assert(b.start == a.start + length(a.path) - 1)
+  end
+
+  test "napalm burns a wizard standing in it, and a summoned dragon breathes fire" do
+    {state, r} = started()
+    [first, second] = state.turn_order
+    state = calm(%{state | books: %{first => ["sky"]}, turns_taken: %{first => 4}})
+    foe = state.units[second]
+    me = state.units[first]
+
+    state =
+      Spells.add_zone(state, %{
+        kind: :napalm,
+        owner: first,
+        x0: foe.x - 3,
+        x1: foe.x + 3,
+        y: foe.y,
+        turns: 1
+      })
+
+    {:ok, %{state: summoned}} =
+      Spellslingers.command(
+        state,
+        first,
+        {:place, "dragon", me.x + 4, me.y - 10},
+        context(r, first)
+      )
+
+    assert [dragon] = for({_, %{kind: :dragon} = u} <- summoned.units, do: u)
+    assert dragon.owner == first
+    # It hovers where it was placed rather than dropping to the ground.
+    assert dragon.y < me.y - 5
+
+    {:ok, %{state: theirs}} = Spellslingers.timeout(summoned, :arena_resolve, context(r))
+    {:ok, %{state: mine}} = Spellslingers.command(theirs, second, :pass, context(r, second))
+
+    assert Enum.any?(mine.last_cast.segments, &(&1.spell == "dragon"))
+    assert mine.units[second].hp < 100
+    # The napalm had one turn left, so it has burned out.
+    assert mine.zones == []
+  end
+
   describe "history" do
     test "the last wizard standing wins and wizards who left are unranked" do
       {state, r} = started(["a", "b", "c"])

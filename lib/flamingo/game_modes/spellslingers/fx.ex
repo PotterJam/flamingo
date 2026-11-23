@@ -19,8 +19,13 @@ defmodule Flamingo.GameModes.Spellslingers.Fx do
     auras: [],
     hits: [],
     impulses: %{},
-    shake: false
+    shake: false,
+    grand: false
   ]
+
+  @doc "The step after every flight recorded so far, where a follow-up flight starts."
+  def next_start(fx),
+    do: fx.segments |> Enum.map(&(&1.start + length(&1.path))) |> Enum.max(fn -> 0 end)
 
   def new(state, target), do: %__MODULE__{state: state, target: target}
 

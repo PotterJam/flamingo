@@ -49,6 +49,8 @@ defmodule Flamingo.GameModes.Spellslingers.Rules do
       @max_speed 78.0
       @max_steps 450
       @playback_speed 1.6
+      # How long a grand spell's title card plays before its effects.
+      @grand_intro_ms 1300
       @book_ms 45_000
       @max_bots 5
       @bot_think_ms 1400

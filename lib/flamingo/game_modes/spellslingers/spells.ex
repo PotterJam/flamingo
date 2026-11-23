@@ -3,7 +3,16 @@ defmodule Flamingo.GameModes.Spellslingers.Spells do
 
   use Flamingo.GameModes.Spellslingers.Rules
 
-  alias Flamingo.GameModes.Spellslingers.{Crates, Fx, Minions, Physics, Rng, Terrain, Units}
+  alias Flamingo.GameModes.Spellslingers.{
+    Catalog,
+    Crates,
+    Fx,
+    Minions,
+    Physics,
+    Rng,
+    Terrain,
+    Units
+  }
 
   @doc """
   Runs a cast: `effects` gets a fresh `Fx` and returns it with the cast's
@@ -11,7 +20,7 @@ defmodule Flamingo.GameModes.Spellslingers.Spells do
   is recorded as the state's `last_cast` for clients to replay.
   """
   def run(state, caster, spell_id, target, effects) do
-    fx = effects.(Fx.new(state, target))
+    fx = effects.(%{Fx.new(state, target) | grand: Catalog.grand?(spell_id)})
     {after_fx, knocks} = resolve_fx(fx.state, fx)
     record_cast(after_fx, state, caster, spell_id, fx, knocks)
   end
@@ -58,7 +67,10 @@ defmodule Flamingo.GameModes.Spellslingers.Spells do
         do: round(knock * @dt * 1000 / @playback_speed * 1.9) + 1100,
         else: 0
 
-    extra = if(beams != [], do: 500, else: 0) + if(fx.shake, do: 700, else: 0) + slow_mo
+    # Grand spells open with a title card before anything flies.
+    extra =
+      if(beams != [], do: 500, else: 0) + if(fx.shake, do: 700, else: 0) + slow_mo +
+        if(fx.grand, do: @grand_intro_ms, else: 0)
 
     %{
       state
@@ -75,6 +87,7 @@ defmodule Flamingo.GameModes.Spellslingers.Spells do
           hits: Enum.reverse(fx.hits),
           knocks: Enum.map(knocks, fn k -> %{k | path: Enum.map(k.path, &round_point/1)} end),
           shake: fx.shake,
+          grand: fx.grand,
           auras: Enum.reverse(fx.auras),
           ko: knocked_out,
           flight_steps: flight,
@@ -212,6 +225,17 @@ defmodule Flamingo.GameModes.Spellslingers.Spells do
       {fx, _, _} ->
         fizzle(fx)
     end
+  end
+
+  # A dragon flies, so it appears right where it was placed instead of dropping to the ground.
+  def effect(:summon, %{target: {x, y}} = fx, actor, %{minion: :dragon}, _angle, _power) do
+    segment = %{path: [{x, y - 3}, {x, y}], start: 0, spell: "dragon", radius: 0, hit: true}
+
+    %{
+      fx
+      | state: Minions.summon(fx.state, actor, :dragon, x, y + 1),
+        segments: [segment | fx.segments]
+    }
   end
 
   def effect(:summon, fx, actor, spell, angle, power) do
@@ -466,6 +490,152 @@ defmodule Flamingo.GameModes.Spellslingers.Spells do
     end
   end
 
+  def effect(:napalm, fx, actor, spell, angle, power) do
+    case throw_spell(fx, actor, spell, angle, power) do
+      {fx, {kind, {x, y}}, _} when kind in [:terrain, :unit] ->
+        fx = Physics.explode(fx, actor, {x, y}, spell.radius, spell.damage, spell.knock)
+        ground = Terrain.ground_below(fx.state, x, y - 3) || floor(y)
+        cx = floor(x)
+
+        state =
+          fx.state
+          |> add_zone(%{kind: :napalm, owner: actor, x0: cx - 6, x1: cx + 6, y: ground, turns: 3})
+          |> Units.log("Burning napalm splashes across the ground.")
+
+        %{fx | state: state}
+
+      {fx, _, _} ->
+        fizzle(fx)
+    end
+  end
+
+  def effect(:bounce, fx, actor, spell, angle, power) do
+    origin = Units.caster_origin(fx.state, actor)
+    bounce(fx, actor, spell, origin, Physics.launch(spell, angle, power), actor, 0, 3)
+  end
+
+  def effect(:seeker, fx, actor, spell, angle, power) do
+    enemies =
+      for {_, unit} <- fx.state.units,
+          Units.alive_unit?(unit) and unit.owner != actor,
+          do: Units.center(unit)
+
+    # Once the arrow starts to fall it turns toward the nearest enemy, a little each step.
+    steer = fn {x, y}, {vx, vy} = v ->
+      if vy <= 0 or enemies == [] do
+        v
+      else
+        {tx, ty} = Enum.min_by(enemies, fn {ex, ey} -> (ex - x) ** 2 + (ey - y) ** 2 end)
+        heading = :math.atan2(vy, vx)
+        turn = clamp(angle_between(heading, :math.atan2(ty - y, tx - x)), -0.16, 0.16)
+        speed = max(:math.sqrt(vx * vx + vy * vy), 32)
+        {:math.cos(heading + turn) * speed, :math.sin(heading + turn) * speed}
+      end
+    end
+
+    {path, {kind, pos}} =
+      Physics.fly(
+        fx.state,
+        Units.caster_origin(fx.state, actor),
+        Physics.launch(spell, angle, power),
+        spell,
+        actor,
+        steer
+      )
+
+    hit? = kind in [:terrain, :unit]
+
+    segment = %{
+      path: path,
+      start: 0,
+      spell: spell.id,
+      radius: if(hit?, do: spell.radius, else: 0),
+      hit: hit?
+    }
+
+    fx = %{fx | segments: [segment | fx.segments]}
+
+    if hit?,
+      do: Physics.explode(fx, actor, pos, spell.radius, spell.damage, spell.knock),
+      else: fizzle(fx)
+  end
+
+  # A grand meteor tears out of the sky at the chosen spot; sky spells need no line of sight.
+  def effect(:cataclysm, %{target: {x, y}} = fx, actor, spell, _angle, _power) do
+    x = clamp(x, 2, @width - 3)
+    from_x = if x + 26 < @width - 1, do: x + 26, else: x - 26
+    from = {from_x, Terrain.sky_row(fx.state, from_x) + 0.5}
+    {fx0, fy0} = from
+    distance = max(:math.sqrt((x - fx0) ** 2 + (y - fy0) ** 2), 1.0)
+    velocity = {(x - fx0) / distance * 55, (y - fy0) / distance * 55}
+    {path, {kind, pos}} = Physics.fly(fx.state, from, velocity, %{gravity: 0.0, wind: 0.0}, nil)
+    hit? = kind in [:terrain, :unit]
+
+    segment = %{
+      path: path,
+      start: 0,
+      spell: spell.id,
+      radius: if(hit?, do: spell.radius, else: 0),
+      hit: hit?
+    }
+
+    fx = %{fx | segments: [segment | fx.segments], shake: true}
+    fx = %{fx | state: Units.log(fx.state, "The sky tears open!")}
+
+    if hit?,
+      do: Physics.explode(fx, actor, pos, spell.radius, spell.damage, spell.knock),
+      else: %{fx | state: Units.log(fx.state, "…and the meteor hisses into the sea.")}
+  end
+
+  def effect(:volcano, %{target: {x, y}} = fx, actor, _spell, _angle, _power) do
+    x = clamp(floor(x), 10, @width - 11)
+
+    case Terrain.ground_below(fx.state, x, y) do
+      nil ->
+        fizzle(fx)
+
+      ground ->
+        cx = x + 0.5
+
+        cone =
+          for {dy, r} <- [{2, 9}, {0, 7.5}, {-2, 6}, {-4, 4.5}, {-6, 3}], do: {cx, ground + dy, r}
+
+        state =
+          fx.state
+          |> Units.raise_ground(cone)
+          |> Terrain.carve([{cx, ground - 8, 2}])
+
+        zone = %{kind: :volcano, owner: actor, x: cx, y: ground - 10.0, turns: 3}
+
+        state =
+          state
+          |> add_zone(zone)
+          |> Units.log("A volcano bursts from the ground!")
+
+        erupt(%{fx | state: state, shake: true}, zone, 0)
+    end
+  end
+
+  def effect(:thunderhead, %{target: {x, _}} = fx, actor, _spell, _angle, _power) do
+    x = clamp(floor(x), 18, @width - 19)
+
+    state =
+      fx.state
+      |> add_zone(%{kind: :thunderhead, owner: actor, x0: x - 16, x1: x + 16, turns: 3})
+      |> Units.log("A thunderhead gathers. It will strike for three rounds.")
+
+    %{fx | state: state}
+  end
+
+  def effect(:tide, fx, actor, _spell, _angle, _power) do
+    state =
+      fx.state
+      |> rise_sea()
+      |> add_zone(%{kind: :tide, owner: actor, turns: 3})
+
+    %{fx | state: state, shake: true}
+  end
+
   def effect(:chaos, fx, actor, spell, angle, power) do
     {fx, {kind, {x, y}}, steps} = throw_spell(fx, actor, spell, angle, power)
     landed? = kind in [:terrain, :unit]
@@ -600,5 +770,225 @@ defmodule Flamingo.GameModes.Spellslingers.Spells do
       Units.raise_ground(fx.state, for(dx <- -7..7, do: {x + dx, y + 0.5, 1.2}))
 
     %{fx | state: Units.log(state, "A stone ledge rises from the air!")}
+  end
+
+  ## Spells that outlast their cast
+
+  @doc "Adds a lasting effect, which acts at the start of its owner's turns."
+  def add_zone(state, zone) do
+    zone = Map.put(zone, :id, "z#{state.zone_count + 1}")
+    %{state | zones: state.zones ++ [zone], zone_count: state.zone_count + 1}
+  end
+
+  def rise_sea(state) do
+    %{state | water_level: max(state.water_level - 3, 10)}
+    |> Units.log("The sea rises!")
+  end
+
+  @doc "Four lava bombs from a volcano's vent, flying from step `start`."
+  def erupt(fx, zone, start) do
+    spell = Catalog.spell("volcano")
+
+    Enum.reduce(0..3, fx, fn i, fx ->
+      {a, rng} = :rand.uniform_s(fx.state.rng)
+      {b, rng} = :rand.uniform_s(rng)
+      fx = %{fx | state: %{fx.state | rng: rng}}
+      velocity = {(a - 0.5) * 64, -42.0 - b * 16}
+
+      {path, {kind, pos}} =
+        Physics.fly(fx.state, {zone.x, zone.y}, velocity, %{gravity: 1.0, wind: 0.5}, nil)
+
+      hit? = kind in [:terrain, :unit]
+
+      segment = %{
+        path: path,
+        start: start + i * 5,
+        spell: "volcano",
+        radius: if(hit?, do: spell.radius, else: 0),
+        hit: hit?
+      }
+
+      fx = %{fx | segments: [segment | fx.segments]}
+
+      if hit?,
+        do: Physics.explode(fx, zone.owner, pos, spell.radius, spell.damage, spell.knock),
+        else: fx
+    end)
+  end
+
+  @doc """
+  Three lightning strikes inside a thunderhead's strip. The first seeks the tallest
+  living thing under the cloud; the rest fall at random.
+  """
+  def strike(fx, zone, start) do
+    spell = Catalog.spell("thunderhead")
+
+    tallest =
+      fx.state.units
+      |> Map.values()
+      |> Enum.filter(&(Units.alive_unit?(&1) and &1.x >= zone.x0 and &1.x <= zone.x1))
+      |> Enum.min_by(&(&1.y - Units.unit_height(&1)), fn -> nil end)
+
+    {columns, rng} =
+      Enum.reduce(0..2, {[], fx.state.rng}, fn i, {cols, rng} ->
+        {r, rng} = :rand.uniform_s(rng)
+        col = if i == 0 and tallest, do: tallest.x, else: zone.x0 + floor(r * (zone.x1 - zone.x0))
+        {cols ++ [col], rng}
+      end)
+
+    fx = %{fx | state: %{fx.state | rng: rng} |> Units.log("The thunderhead strikes!")}
+
+    columns
+    |> Enum.with_index()
+    |> Enum.reduce(fx, fn {col, i}, fx ->
+      from = {col + 0.5, Terrain.sky_row(fx.state, col) + 0.5}
+
+      {path, {kind, pos}} =
+        Physics.fly(fx.state, from, {0.0, 70.0}, %{gravity: 0.0, wind: 0.0}, nil)
+
+      hit? = kind in [:terrain, :unit]
+
+      segment = %{
+        path: path,
+        start: start + i * 6,
+        spell: "thunderhead",
+        radius: if(hit?, do: spell.radius, else: 0),
+        hit: hit?
+      }
+
+      fx = %{fx | segments: [segment | fx.segments]}
+
+      if hit?,
+        do: Physics.explode(fx, zone.owner, pos, spell.radius, spell.damage, spell.knock),
+        else: fx
+    end)
+  end
+
+  @doc "Napalm burns every unit standing in it."
+  def burn(fx, zone) do
+    fx.state.units
+    |> Map.values()
+    |> Enum.filter(fn unit ->
+      Units.alive_unit?(unit) and unit.x >= zone.x0 and unit.x <= zone.x1 and
+        abs(unit.y - zone.y) <= 4
+    end)
+    |> Enum.sort_by(& &1.id)
+    |> Enum.reduce(fx, fn unit, fx ->
+      state =
+        fx.state
+        |> Units.damage(unit.id, 8, zone.owner)
+        |> Units.log("Napalm burns #{Units.unit_name(fx.state, unit)}!")
+
+      %{fx | state: state}
+    end)
+  end
+
+  @doc "A dragon glides toward the nearest enemy and breathes a fireball at it."
+  def dragon_breath(fx, dragon) do
+    target =
+      fx.state.units
+      |> Map.values()
+      |> Enum.filter(&(Units.alive_unit?(&1) and &1.owner != dragon.owner))
+      |> Enum.min_by(&((&1.x - dragon.x) ** 2 + (&1.y - dragon.y) ** 2), fn -> nil end)
+
+    if target do
+      dragon = glide(fx.state, dragon, target)
+      state = Units.put_unit(fx.state, dragon)
+      {ox, oy} = Units.center(dragon)
+      {tx, ty} = Units.center(target)
+      distance = max(:math.sqrt((tx - ox) ** 2 + (ty - oy) ** 2), 1.0)
+      velocity = {(tx - ox) / distance * 60, (ty - oy) / distance * 60}
+
+      {path, {kind, pos}} =
+        Physics.fly(state, {ox, oy}, velocity, %{gravity: 0.0, wind: 0.0}, dragon.id)
+
+      hit? = kind in [:terrain, :unit]
+
+      segment = %{
+        path: path,
+        start: Fx.next_start(fx),
+        spell: "dragon",
+        radius: if(hit?, do: 4, else: 0),
+        hit: hit?
+      }
+
+      state = Units.log(state, "#{Units.unit_name(state, dragon)} breathes fire!")
+      fx = %{fx | state: state, segments: [segment | fx.segments]}
+      if hit?, do: Physics.explode(fx, dragon.owner, pos, 4, 18, 22), else: fx
+    else
+      fx
+    end
+  end
+
+  # Up to six cells toward the target, keeping a little distance.
+  defp glide(state, dragon, target) do
+    dir = if target.x > dragon.x, do: 1, else: -1
+    steps = clamp(abs(target.x - dragon.x) - 14, 0, 6)
+
+    Enum.find_value(steps..0//-1, dragon, fn n ->
+      x = dragon.x + dir * n
+      if n == 0 or not Units.blocked?(state, dragon, x, dragon.y), do: %{dragon | x: x}
+    end)
+  end
+
+  defp bounce(fx, actor, spell, origin, velocity, ignore, start, left) do
+    {path, {kind, pos}} = Physics.fly(fx.state, origin, velocity, spell, ignore)
+    steps = length(path)
+    {vx, vy} = exit_velocity(path, velocity)
+    speed = :math.sqrt(vx * vx + vy * vy)
+
+    if kind == :terrain and left > 0 and speed > 10 do
+      segment = %{path: path, start: start, spell: spell.id, radius: 0, hit: true}
+      back = Enum.at(path, -2, origin)
+      fx = %{fx | segments: [segment | fx.segments]}
+
+      bounce(
+        fx,
+        actor,
+        spell,
+        back,
+        reflect(fx.state, back, pos, {vx, vy}),
+        nil,
+        start + steps - 1,
+        left - 1
+      )
+    else
+      hit? = kind in [:terrain, :unit]
+
+      segment = %{
+        path: path,
+        start: start,
+        spell: spell.id,
+        radius: if(hit?, do: spell.radius, else: 0),
+        hit: hit?
+      }
+
+      fx = %{fx | segments: [segment | fx.segments]}
+
+      if hit?,
+        do: Physics.explode(fx, actor, pos, spell.radius, spell.damage, spell.knock),
+        else: fizzle(fx)
+    end
+  end
+
+  defp exit_velocity(path, fallback) do
+    case Enum.take(path, -3) do
+      [{x0, y0}, {x1, y1}, _] -> {(x1 - x0) / @dt, (y1 - y0) / @dt}
+      _ -> fallback
+    end
+  end
+
+  # Bounces off a floor or ceiling when the stone moved into it vertically, else off a wall.
+  defp reflect(state, {bx, _by}, {_x, y}, {vx, vy}) do
+    if Terrain.solid?(state.terrain, floor(bx), floor(y)) do
+      {vx * 0.7, if(vy > 0, do: min(-vy * 0.6, -14.0), else: -vy * 0.6)}
+    else
+      {-vx * 0.6, vy * 0.7}
+    end
+  end
+
+  defp angle_between(from, to) do
+    d = to - from
+    :math.atan2(:math.sin(d), :math.cos(d))
   end
 end

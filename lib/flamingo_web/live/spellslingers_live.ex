@@ -37,6 +37,8 @@ defmodule FlamingoWeb.SpellslingersLive do
        turn_end_time: nil,
        selected_spell: "ember",
        quick_used: false,
+       grand_spent: [],
+       lasting?: false,
        last_cast_id: nil,
        pending_board: nil,
        sent: %{},
@@ -97,6 +99,7 @@ defmodule FlamingoWeb.SpellslingersLive do
             players={@players}
             selected_def={@selected_def}
             surging?={@surging?}
+            lasting?={@lasting?}
             tuned?={@tuned?}
             turn_end_time={@turn_end_time}
             wind={@wind}
@@ -189,6 +192,7 @@ defmodule FlamingoWeb.SpellslingersLive do
               participation={@participation}
               phase={@phase}
               quick_used={@quick_used}
+              grand_spent={@grand_spent}
               selected_spell={@selected_spell}
               spell_groups={@spell_groups}
               walk_left={@walk_left}
@@ -247,6 +251,7 @@ defmodule FlamingoWeb.SpellslingersLive do
   attr :players, :any, required: true
   attr :selected_def, :any, required: true
   attr :surging?, :any, required: true
+  attr :lasting?, :any, required: true
   attr :tuned?, :any, required: true
   attr :turn_end_time, :any, required: true
   attr :wind, :any, required: true
@@ -280,6 +285,8 @@ defmodule FlamingoWeb.SpellslingersLive do
                 Your turn! Aim and click to cast.
               <% @phase == :arena_resolve and @surging? -> %>
                 Wild magic! Meteors are falling…
+              <% @phase == :arena_resolve and @lasting? -> %>
+                {player_name(@players, @current_id)}'s lasting spells stir…
               <% @phase == :arena_resolve -> %>
                 {player_name(@players, @current_id)}'s spell is flying…
               <% true -> %>
@@ -1017,6 +1024,7 @@ defmodule FlamingoWeb.SpellslingersLive do
   attr :participation, :any, required: true
   attr :phase, :any, required: true
   attr :quick_used, :any, required: true
+  attr :grand_spent, :any, default: []
   attr :selected_spell, :any, required: true
   attr :spell_groups, :any, required: true
   attr :walk_left, :any, required: true
@@ -1051,9 +1059,13 @@ defmodule FlamingoWeb.SpellslingersLive do
             data-card={spell.id}
             aria-label={spell.name}
             aria-pressed={to_string(@selected_spell == spell.id)}
-            disabled={Map.get(@cooldowns, spell.id, 0) > 0 or (spell.quick and @quick_used)}
+            disabled={
+              Map.get(@cooldowns, spell.id, 0) > 0 or (spell.quick and @quick_used) or
+                spell.id in @grand_spent
+            }
             class={[
               "relative grid size-[46px] cursor-pointer touch-none place-items-center border-2 border-border p-0 transition-all duration-150 select-none",
+              spell.grand && "outline-2 outline-offset-1 outline-amber-400",
               "disabled:cursor-not-allowed disabled:hover:translate-y-0",
               if(@selected_spell == spell.id,
                 do: "-translate-y-1 bg-amber-300 shadow-rounded",
@@ -1080,6 +1092,17 @@ defmodule FlamingoWeb.SpellslingersLive do
               style={"background: #{group.color}2e; color: #{group.color}"}
             >
               <.icon name={spell.icon} class="size-4" />
+            </span>
+            <.icon
+              :if={spell.grand}
+              name={:crown}
+              class="absolute -top-2.5 left-1/2 size-3.5 -translate-x-1/2 fill-amber-300 text-black"
+            />
+            <span
+              :if={spell.id in @grand_spent}
+              class="absolute inset-0 flex items-center justify-center bg-gray-300 text-[10px] font-black text-gray-600"
+            >
+              SPENT
             </span>
             <span
               :if={Map.get(@cooldowns, spell.id, 0) > 0}
@@ -1198,7 +1221,11 @@ defmodule FlamingoWeb.SpellslingersLive do
   # One spell card per spell, copied out by the SpellCards hook: how it casts, a looping
   # clip of it being cast (drawn by the hook into data-clip), its numbers and its blurb.
   defp spell_card(assigns) do
-    {how_icon, how_text} = Map.fetch!(@how, assigns.spell.input)
+    # Aimless spells (Rising Tide) cast on picking, like quick ones, but end the turn.
+    {how_icon, how_text} =
+      if assigns.spell.input == "instant" and not assigns.spell.quick,
+        do: {:zap, "Casts on picking"},
+        else: Map.fetch!(@how, assigns.spell.input)
 
     assigns =
       assign(assigns, how_icon: how_icon, how_text: how_text, stats: card_stats(assigns.spell))
@@ -1262,7 +1289,8 @@ defmodule FlamingoWeb.SpellslingersLive do
        pips(spell.knock, @maxima.knock)},
       {"Wind", :wind, wind_text(spell), nil},
       {"Cooldown", :hourglass,
-       case spell.cooldown do
+       case if(spell.grand, do: :grand, else: spell.cooldown) do
+         :grand -> "Once, from turn 5"
          0 -> "None"
          1 -> "1 turn"
          n -> "#{n} turns"
@@ -1330,14 +1358,15 @@ defmodule FlamingoWeb.SpellslingersLive do
   end
 
   def handle_event("select_spell", %{"spell" => spell}, socket) do
-    quick? = Enum.any?(Spellslingers.spells(), &(&1.id == spell and &1.quick))
+    # Quick spells and aimless ones (Rising Tide) need no aim: picking one casts it.
+    quick? = Enum.any?(Spellslingers.spells(), &(&1.id == spell and &1.input == "instant"))
 
     cond do
       # A spell that is still recharging can't be picked, even from the keyboard.
-      spell not in socket.assigns.my_spells or Map.get(socket.assigns.cooldowns, spell, 0) > 0 ->
+      spell not in socket.assigns.my_spells or Map.get(socket.assigns.cooldowns, spell, 0) > 0 or
+          spell in socket.assigns.grand_spent ->
         {:noreply, socket}
 
-      # Quick spells need no aim: picking one casts it.
       quick? ->
         case Rooms.command(socket.assigns.room_id, {:cast, spell, 0, 0}) do
           {:error, reason} -> {:noreply, put_flash(socket, :error, command_error(reason))}
@@ -1444,7 +1473,8 @@ defmodule FlamingoWeb.SpellslingersLive do
 
     selected =
       if Map.get(snapshot.cooldowns, socket.assigns.selected_spell, 0) > 0 or
-           socket.assigns.selected_spell not in snapshot.my_spells,
+           socket.assigns.selected_spell not in snapshot.my_spells or
+           socket.assigns.selected_spell in Map.get(snapshot, :grand_spent, []),
          do: "ember",
          else: socket.assigns.selected_spell
 
@@ -1459,6 +1489,8 @@ defmodule FlamingoWeb.SpellslingersLive do
         online: snapshot.online,
         current_id: snapshot.current_id,
         surging?: match?(%{caster_id: nil}, snapshot.last_cast),
+        lasting?: match?(%{spell: "zones"}, snapshot.last_cast),
+        grand_spent: Map.get(snapshot, :grand_spent, []),
         wind: snapshot.wind,
         walk_left: snapshot.walk_left,
         walk_budget: snapshot.walk_budget,
@@ -1523,7 +1555,8 @@ defmodule FlamingoWeb.SpellslingersLive do
           :my_spells,
           :map_id,
           :quick_used,
-          :last_jump
+          :last_jump,
+          :zones
         ]
     )
     |> Map.put(:selected_spell, selected)
@@ -1552,7 +1585,9 @@ defmodule FlamingoWeb.SpellslingersLive do
             do: 0,
             else: Enum.max(Enum.map(cast.knocks, &length(&1.path)), fn -> 0 end) / 0.35
 
-        delay = round((cast.flight_steps + knock) * p.dt * 1000 / p.playback_speed) + 250
+        # A grand spell's title card plays before anything flies.
+        intro = if Map.get(cast, :grand), do: p.grand_intro_ms, else: 0
+        delay = round((cast.flight_steps + knock) * p.dt * 1000 / p.playback_speed) + intro + 250
         Process.send_after(self(), {:reveal_board, cast_id}, delay)
         assign(socket, last_cast_id: cast_id, pending_board: Map.put(board, :id, cast_id))
 

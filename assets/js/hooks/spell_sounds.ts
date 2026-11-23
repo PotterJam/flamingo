@@ -6,7 +6,8 @@
 type School = "fire" | "earth" | "storm" | "nature" | "arcane";
 
 const SCHOOLS: Record<string, School> = {
-  ember: "fire", inferno: "fire", firerain: "fire", surge: "fire",
+  ember: "fire", inferno: "fire", firerain: "fire", surge: "fire", napalm: "fire", cataclysm: "fire", volcano: "fire", dragon: "fire",
+  skipstone: "earth", seeker: "storm", thunderhead: "storm", tide: "nature",
   boulder: "earth", rampart: "earth", golem: "earth", quake: "earth", burrow: "earth", ledge: "earth",
   lance: "storm", gust: "storm", chain: "storm", updraft: "storm",
   bloom: "nature", thornling: "nature", wisp: "nature",
@@ -15,13 +16,13 @@ const SCHOOLS: Record<string, School> = {
 const schoolOf = (spell: string) => SCHOOLS[spell] ?? "arcane";
 
 // Spells that land with an explosion; the rest have their own landing sound or none.
-const EXPLODES = new Set(["ember", "inferno", "boulder", "lance", "cluster", "firerain", "surge", "chain", "chaos"]);
+const EXPLODES = new Set(["ember", "inferno", "boulder", "lance", "cluster", "firerain", "surge", "chain", "chaos", "napalm", "skipstone", "seeker", "cataclysm", "volcano", "thunderhead", "dragon"]);
 const SUMMONS = new Set(["imp", "golem", "wisp", "thornling"]);
 // Meteors: wild-magic surges and the falling half of Meteor Rain.
-const METEORS = new Set(["firerain", "surge"]);
+const METEORS = new Set(["firerain", "surge", "cataclysm", "volcano"]);
 
 type Segment = { path: unknown[]; start: number; spell: string; radius: number; hit: boolean };
-type Cast = { spell: string; segments: Segment[]; auras?: { kind: string }[] };
+type Cast = { spell: string; segments: Segment[]; auras?: { kind: string }[]; grand?: boolean };
 
 // The charge hum: oscillators that rise through a filter, with a noise layer on top.
 const CHARGE: Record<School, { wave: OscillatorType; from: number; to: number; open: [number, number]; noise: [BiquadFilterType, number, number] }> = {
@@ -205,7 +206,18 @@ export function createSpellSounds(volume: () => number, makeContext: () => BaseA
     // A cast starting to play: its launch, and the whistle of any meteors falling later.
     cast(cast: Cast, msPerStep: number) {
       const { spell } = cast;
-      if (spell === "quake") {
+      if (cast.grand) {
+        // An omen: a detuned choir rising under a swelling hiss, and a slam as the title lands.
+        for (const f of [110, 112, 165, 220]) tone({ wave: "sawtooth", from: f, to: f * 2, dur: 1.3, gain: 0.035, attack: 0.6 });
+        hiss({ filter: "bandpass", from: 300, to: 3000, q: 1, dur: 1.3, gain: 0.15, attack: 0.9 });
+        tone({ wave: "square", from: 55, dur: 0.3, gain: 0.25, at: 0.2 });
+      }
+      if (spell === "tide") {
+        hiss({ from: 400, to: 1200, dur: 1.6, gain: 0.7, attack: 0.6 });
+        tone({ from: 70, to: 50, dur: 1.6, gain: 0.25, attack: 0.5, vibrato: 3 });
+      } else if (spell === "zones" || cast.grand) {
+        // Lasting spells and grand spells speak through their landings.
+      } else if (spell === "quake") {
         rumble(2.8, 1);
         for (const at of [0.35, 0.9, 1.5]) hiss({ filter: "bandpass", from: 1600, to: 250, q: 0.8, dur: 0.22, gain: 0.4, at });
       } else if (spell === "gust") {
@@ -249,7 +261,19 @@ export function createSpellSounds(volume: () => number, makeContext: () => BaseA
     // One flight ending: a blast, a landing, or a fizzle where it fell out of the world.
     land(segment: Segment) {
       const { spell, hit, radius } = segment;
-      if (!hit) {
+      if (spell === "skipstone" && hit && radius === 0) {
+        // A stone skipping off the ground.
+        tone({ wave: "triangle", from: 500, to: 260, dur: 0.1, gain: 0.25 });
+        hiss({ filter: "bandpass", from: 1200, q: 2, dur: 0.08, gain: 0.3 });
+      } else if (spell === "cataclysm" && hit) {
+        tone({ from: 90, to: 28, dur: 1.6, gain: 0.9 });
+        hiss({ from: 3000, to: 60, dur: 2.4, gain: 0.9 });
+        for (let i = 0; i < 6; i++) hiss({ filter: "bandpass", from: 700 + i * 200, to: 300, dur: 0.12, gain: 0.25, at: 0.5 + i * 0.18 });
+      } else if (spell === "thunderhead" && hit) {
+        tone({ wave: "sawtooth", from: 2400, to: 120, dur: 0.35, gain: 0.2 });
+        hiss({ filter: "highpass", from: 5000, to: 800, dur: 0.5, gain: 0.5 });
+        rumble(1.2, 0.5);
+      } else if (!hit) {
         hiss({ filter: "bandpass", from: 1600, to: 350, q: 1.5, dur: 0.45, gain: 0.6 });
         tone({ from: 700, to: 220, dur: 0.18, gain: 0.16 });
       } else if (EXPLODES.has(spell)) {

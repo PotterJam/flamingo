@@ -11,8 +11,16 @@ defmodule Flamingo.GameModes.Spellslingers.Catalog do
     cooldown: 0,
     minion: nil,
     quick: false,
-    place: false
+    place: false,
+    # Grand spells: one per book, charging for the caster's first turns and castable once
+    # per duel. Sky spells strike anywhere from above, so they have no placing range.
+    grand: false,
+    sky: false,
+    aimless: false
   }
+
+  # A grand spell is ready on its caster's fifth turn.
+  @grand_charge 4
 
   # The colour clients draw each spell's flight, aim line and effects in.
   @colors %{
@@ -38,7 +46,15 @@ defmodule Flamingo.GameModes.Spellslingers.Catalog do
     "levitate" => "#c4b5fd",
     "ledge" => "#a8a29e",
     "updraft" => "#7dd3fc",
-    "swap" => "#f0abfc"
+    "swap" => "#f0abfc",
+    "napalm" => "#ea580c",
+    "skipstone" => "#a8a29e",
+    "seeker" => "#38bdf8",
+    "cataclysm" => "#fb923c",
+    "volcano" => "#b91c1c",
+    "thunderhead" => "#fde047",
+    "tide" => "#2563eb",
+    "dragon" => "#7c3aed"
   }
 
   @spells [
@@ -281,6 +297,105 @@ defmodule Flamingo.GameModes.Spellslingers.Catalog do
               cooldown: 3
             },
             %{
+              id: "napalm",
+              name: "Napalm Flask",
+              blurb:
+                "A lobbed flask that splashes fire on the ground. It burns anyone standing in it for a few turns.",
+              icon: :flask_conical,
+              effect: :napalm,
+              radius: 3,
+              damage: 10,
+              knock: 10,
+              cooldown: 2
+            },
+            %{
+              id: "skipstone",
+              name: "Skipping Stone",
+              blurb:
+                "Bounces off the ground three times, then bursts. Lob it into a hole or round a corner.",
+              icon: :disc,
+              effect: :bounce,
+              radius: 6,
+              damage: 26,
+              knock: 34,
+              wind: 0.5,
+              cooldown: 2
+            },
+            %{
+              id: "seeker",
+              name: "Seeker Arrow",
+              blurb: "A lobbed arrow that turns toward the nearest enemy once it starts to fall.",
+              icon: :locate_fixed,
+              effect: :seeker,
+              radius: 3,
+              damage: 20,
+              knock: 16,
+              cooldown: 2
+            },
+            %{
+              id: "cataclysm",
+              grand: true,
+              place: true,
+              sky: true,
+              name: "Cataclysm",
+              blurb:
+                "Grand spell. Tear open the sky anywhere: a burning meteor gouges a vast crater.",
+              icon: :orbit,
+              effect: :cataclysm,
+              radius: 16,
+              damage: 60,
+              knock: 70
+            },
+            %{
+              id: "volcano",
+              grand: true,
+              place: true,
+              sky: true,
+              name: "Volcano",
+              blurb:
+                "Grand spell. A volcano bursts from the ground and hurls lava bombs for three rounds.",
+              icon: :mountain_snow,
+              effect: :volcano,
+              radius: 5,
+              damage: 14,
+              knock: 22
+            },
+            %{
+              id: "thunderhead",
+              grand: true,
+              place: true,
+              sky: true,
+              name: "Thunderhead",
+              blurb:
+                "Grand spell. A storm parks over a strip of the map and strikes it for three rounds. Lightning seeks the tallest target.",
+              icon: :cloud_rain_wind,
+              effect: :thunderhead,
+              radius: 3,
+              damage: 18,
+              knock: 16
+            },
+            %{
+              id: "tide",
+              grand: true,
+              aimless: true,
+              name: "Rising Tide",
+              blurb:
+                "Grand spell. The sea rises now and on each of your next three turns. High ground wins.",
+              icon: :waves,
+              effect: :tide
+            },
+            %{
+              id: "dragon",
+              grand: true,
+              place: true,
+              name: "Summon Dragon",
+              blurb:
+                "Grand spell. A flying dragon that breathes fire at the nearest enemy every turn.",
+              icon: :bird,
+              effect: :summon,
+              minion: :dragon
+            },
+            %{
               id: "chaos",
               name: "Chaos Orb",
               blurb: "Nobody knows. Not even you.",
@@ -295,7 +410,7 @@ defmodule Flamingo.GameModes.Spellslingers.Catalog do
             # beam, click to place it, or cast at once on picking it.
             input =
               cond do
-                spell.quick -> "instant"
+                spell.quick or spell.aimless -> "instant"
                 spell.place -> "place"
                 spell.gravity == 0 -> "beam"
                 true -> "charge"
@@ -313,41 +428,41 @@ defmodule Flamingo.GameModes.Spellslingers.Catalog do
       id: "pyro",
       icon: :flame,
       name: "Pyromancy",
-      blurb: "Cluster hexes, raining meteors, a huge inferno and a cackling imp.",
+      blurb: "Cluster hexes, meteors, napalm, an imp, and the grand Cataclysm.",
       color: "#f97316",
-      spells: ~w(cluster inferno firerain imp)
+      spells: ~w(cluster inferno firerain imp napalm cataclysm)
     },
     %{
       id: "geo",
       icon: :mountain,
       name: "Geomancy",
-      blurb: "Hurl boulders, raise walls, summon a golem and shake the world.",
+      blurb: "Boulders, skipping stones, walls, a golem, quakes, and the grand Volcano.",
       color: "#a16207",
-      spells: ~w(boulder rampart golem quake)
+      spells: ~w(boulder rampart golem quake skipstone volcano)
     },
     %{
       id: "storm",
       icon: :cloud_lightning,
       name: "Tempest",
-      blurb: "Lightning lances, chain strikes, flinging gales and a darting wisp.",
+      blurb: "Lances, seeker arrows, chain strikes, gales, a wisp, and the grand Thunderhead.",
       color: "#0ea5e9",
-      spells: ~w(lance gust chain wisp)
+      spells: ~w(lance gust chain wisp seeker thunderhead)
     },
     %{
       id: "wild",
       icon: :leaf,
       name: "Wildcraft",
-      blurb: "Thornlings, tunnels, healing, and the Chaos Orb.",
+      blurb: "Thornlings, tunnels, healing, the Chaos Orb, and the grand Rising Tide.",
       color: "#16a34a",
-      spells: ~w(thornling bloom burrow chaos)
+      spells: ~w(thornling bloom burrow chaos tide)
     },
     %{
       id: "sky",
       icon: :feather,
       name: "Skyward",
-      blurb: "Levitate over gaps, conjure ledges, fling foes skyward and warp-swap.",
+      blurb: "Levitate, ledges, updrafts, warp-swaps, and a grand fire-breathing dragon.",
       color: "#8b5cf6",
-      spells: ~w(levitate ledge updraft swap)
+      spells: ~w(levitate ledge updraft swap dragon)
     }
   ]
 
@@ -357,7 +472,9 @@ defmodule Flamingo.GameModes.Spellslingers.Catalog do
     thornling: %{name: "thornling", hp: 30, bite: 14, hop: 12, reach: 5},
     imp: %{name: "imp", hp: 20, bite: 10, hop: 20, reach: 7},
     golem: %{name: "golem", hp: 60, bite: 20, hop: 5, reach: 5},
-    wisp: %{name: "wisp", hp: 15, bite: 8, hop: 26, reach: 9}
+    wisp: %{name: "wisp", hp: 15, bite: 8, hop: 26, reach: 9},
+    # The dragon flies and breathes fire instead of biting.
+    dragon: %{name: "dragon", hp: 120, bite: 0, hop: 12, reach: 0}
   }
 
   @maps [
@@ -376,6 +493,8 @@ defmodule Flamingo.GameModes.Spellslingers.Catalog do
   def map_ids, do: @map_ids
   def book_ids, do: @book_ids
   def core, do: @core
+  def grand_charge, do: @grand_charge
+  def grand?(id), do: match?(%{grand: true}, Map.get(@spell_index, id))
   def spell(id), do: Map.fetch!(@spell_index, id)
   def minion(kind), do: Map.fetch!(@minions, kind)
 

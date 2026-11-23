@@ -98,7 +98,7 @@ defmodule Flamingo.GameModes.Spellslingers.Units do
 
   # Flies the spell's main projectile and records it as the first segment.
 
-  def unit_height(%{kind: kind}) when kind in [:wizard, :golem], do: 3
+  def unit_height(%{kind: kind}) when kind in [:wizard, :golem, :dragon], do: 3
   def unit_height(%{kind: :crate}), do: 1
   def unit_height(_), do: 2
 
@@ -219,6 +219,8 @@ defmodule Flamingo.GameModes.Spellslingers.Units do
     |> Map.update!(:eliminated, &[unit.id | &1])
     |> log("#{player_name(state, unit.id)} #{how}!")
     |> remove_minions(unit.id)
+    # A fallen wizard's lasting spells end with them.
+    |> Map.update(:zones, [], fn zones -> Enum.reject(zones, &(&1.owner == unit.id)) end)
   end
 
   defp kill(state, unit, how) do

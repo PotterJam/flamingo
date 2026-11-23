@@ -26,7 +26,7 @@ defmodule Flamingo.GameModes.Spellslingers.Bots do
     })
   end
 
-  @bot_attacks ~w(inferno firerain chain cluster boulder lance gust updraft ember)
+  @bot_attacks ~w(inferno firerain chain seeker cluster skipstone boulder napalm lance gust updraft ember)
   @bot_summons ~w(imp golem wisp thornling)
   @bot_walk 16
 
@@ -127,9 +127,16 @@ defmodule Flamingo.GameModes.Spellslingers.Bots do
       summon = Enum.find(@bot_summons, &(&1 in ready))
 
       owned = Minions.count(state, me.id)
+      grand = Enum.find(ready, &Catalog.spell(&1).grand)
 
       {spell_id, point, near_ok} =
         cond do
+          grand && roll < 0.6 ->
+            point =
+              if grand == "dragon", do: {mx + dir * 6, my - 2}, else: Units.center(target)
+
+            {grand, point, true}
+
           me.hp < 45 and "bloom" in ready ->
             {"bloom", {mx, my + 1}, true}
 
@@ -151,20 +158,35 @@ defmodule Flamingo.GameModes.Spellslingers.Bots do
 
       spell = Catalog.spell(spell_id)
 
-      if spell.place do
-        {x, y} = within_place_range(me, point, state.tuning.place_range)
-        {{:place, spell_id, x, y}, state}
-      else
-        {angle, power, _} =
-          bot_aim(state, Units.caster_origin(state, me.id), me.id, point, spell, near_ok: near_ok)
+      cond do
+        spell.aimless ->
+          {{:cast, spell_id, 0, 0}, state}
 
-        {jitter_a, rng} = :rand.normal_s(state.rng)
-        {jitter_p, rng} = :rand.normal_s(rng)
-        angle = clamp(angle + jitter_a * 1.5, -180, 360)
-        power = clamp(power + jitter_p * 2.5, 5, 100)
-        {{:cast, spell_id, angle, power}, %{state | rng: rng}}
+        spell.place ->
+          {px, py} = point
+
+          {x, y} =
+            if spell.sky,
+              do: {Float.round(px * 1.0, 1), Float.round(py * 1.0, 1)},
+              else: within_place_range(me, point, state.tuning.place_range)
+
+          {{:place, spell_id, x, y}, state}
+
+        true ->
+          aim_and_cast(state, me, spell, spell_id, point, near_ok)
       end
     end
+  end
+
+  defp aim_and_cast(state, me, spell, spell_id, point, near_ok) do
+    {angle, power, _} =
+      bot_aim(state, Units.caster_origin(state, me.id), me.id, point, spell, near_ok: near_ok)
+
+    {jitter_a, rng} = :rand.normal_s(state.rng)
+    {jitter_p, rng} = :rand.normal_s(rng)
+    angle = clamp(angle + jitter_a * 1.5, -180, 360)
+    power = clamp(power + jitter_p * 2.5, 5, 100)
+    {{:cast, spell_id, angle, power}, %{state | rng: rng}}
   end
 
   # Pulls a point back toward the bot until it is inside the placement range,
