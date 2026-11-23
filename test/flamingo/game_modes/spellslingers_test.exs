@@ -779,6 +779,110 @@ defmodule Flamingo.GameModes.SpellslingersTest do
     assert mine.zones == []
   end
 
+  test "an ice age freezes the foe out of their next turn, and they can't be refrozen at once" do
+    {state, r} = started()
+    [first, second] = state.turn_order
+    state = calm(%{state | books: %{first => ["frost"]}, turns_taken: %{first => 4}})
+
+    {:ok, %{state: cast}} =
+      Spellslingers.command(state, first, {:cast, "iceage", 0, 0}, context(r, first))
+
+    assert cast.units[second].frozen == 1
+    assert cast.units[second].hp == 80
+
+    # The foe's turn passes at once, so the caster acts again.
+    {:ok, %{state: again}} = Spellslingers.timeout(cast, :arena_resolve, context(r))
+    assert again.current_id == first
+    assert again.phase == :arena_aim
+    assert again.units[second].frozen == 0
+    assert Spells.freeze(again, second).units[second].frozen == 0
+
+    # Once they have played a turn, they can be frozen again.
+    back = again |> next_turn(r) |> next_turn(r)
+    assert back.current_id == first
+    assert Spells.freeze(back, second).units[second].frozen == 1
+  end
+
+  test "the doomsday clock goes off two of its caster's turns after it lands" do
+    {state, r} = started()
+    [first, second] = state.turn_order
+    state = calm(%{state | books: %{first => ["cogs"]}, turns_taken: %{first => 4}})
+    foe = state.units[second]
+
+    {:ok, %{state: cast}} =
+      Spellslingers.command(state, first, {:place, "doomsday", foe.x, foe.y}, context(r, first))
+
+    assert [%{kind: :bomb, turns: 2}] = cast.zones
+    {:ok, %{state: state}} = Spellslingers.timeout(cast, :arena_resolve, context(r))
+    state = state |> next_turn(r)
+    assert state.current_id == first
+    assert state.units[second].hp == 100
+    assert [%{kind: :bomb, turns: 1}] = state.zones
+
+    state = state |> next_turn(r) |> next_turn(r)
+    assert state.current_id == first
+    assert state.zones == []
+    assert state.units[second].hp < 60
+  end
+
+  test "rot eats a decaying wizard on their turns, and a lich drains enemies on its own" do
+    {state, r} = started()
+    [first, second] = state.turn_order
+    state = calm(%{state | books: %{first => ["dark"]}, turns_taken: %{first => 4}})
+    state = put_in(state.units[second], Map.put(state.units[second], :decay, 1))
+    state = put_in(state.units[first].hp, 70)
+
+    {:ok, %{state: cast}} =
+      Spellslingers.command(state, first, {:cast, "lich", 0, 0}, context(r, first))
+
+    assert cast.units[first].max_hp == 150
+    assert cast.units[first].hp == 120
+
+    {:ok, %{state: theirs}} = Spellslingers.timeout(cast, :arena_resolve, context(r))
+    {:ok, %{state: theirs}} = Spellslingers.timeout(theirs, :arena_zones, context(r))
+    assert theirs.current_id == second
+    assert theirs.units[second].hp == 94
+    assert theirs.units[second].decay == 0
+
+    mine = next_turn(theirs, r)
+    assert mine.current_id == first
+    assert mine.units[second].hp == 86
+    assert mine.units[first].hp == 128
+    assert [%{kind: :lich, turns: 4}] = mine.zones
+  end
+
+  test "a tower lifts its caster onto a new column of rock, and a turret shoots on its owner's turns" do
+    {state, r} = started()
+    [first, second] = state.turn_order
+    state = calm(%{state | books: %{first => ["cogs"]}})
+    state = put_in(state.tuning.place_range, 250)
+    me = state.units[first]
+    foe = state.units[second]
+
+    {:ok, %{state: towered}} =
+      Spellslingers.command(state, first, {:cast, "tower", 0, 0}, context(r, first))
+
+    raised = towered.units[first]
+    assert raised.y == me.y - 10
+    assert Terrain.solid?(towered.terrain, raised.x, raised.y + 1)
+    assert raised.ward == 20
+
+    toward = if foe.x > me.x, do: -14, else: 14
+
+    {:ok, %{state: built}} =
+      Spellslingers.command(
+        state,
+        first,
+        {:place, "turret", foe.x + toward, foe.y - 4},
+        context(r, first)
+      )
+
+    assert [_turret] = for({_, %{kind: :turret} = u} <- built.units, do: u)
+    {:ok, %{state: theirs}} = Spellslingers.timeout(built, :arena_resolve, context(r))
+    {:ok, %{state: mine}} = Spellslingers.command(theirs, second, :pass, context(r, second))
+    assert Enum.any?(mine.last_cast.segments, &(&1.spell == "turret"))
+  end
+
   describe "history" do
     test "the last wizard standing wins and wizards who left are unranked" do
       {state, r} = started(["a", "b", "c"])

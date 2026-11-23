@@ -26,8 +26,8 @@ defmodule Flamingo.GameModes.Spellslingers.Bots do
     })
   end
 
-  @bot_attacks ~w(inferno firerain chain seeker cluster skipstone boulder napalm lance gust updraft ember)
-  @bot_summons ~w(imp golem wisp thornling)
+  @bot_attacks ~w(inferno firerain clockbomb chain frostbolt seeker cluster decay skipstone boulder napalm bonespear lance gust updraft ember)
+  @bot_summons ~w(imp golem wisp thornling raisedead turret)
   @bot_walk 16
 
   # A bot's turn runs on the hint timer in stages: think (maybe raise a ward and pick a
@@ -136,6 +136,12 @@ defmodule Flamingo.GameModes.Spellslingers.Bots do
               if grand == "dragon", do: {mx + dir * 6, my - 2}, else: Units.center(target)
 
             {grand, point, true}
+
+          "drain" in ready and me.hp < 80 and unit_distance(target, me) < 22 ->
+            {"drain", nil, true}
+
+          "nova" in ready and unit_distance(target, me) < 12 ->
+            {"nova", nil, true}
 
           me.hp < 45 and "bloom" in ready ->
             {"bloom", {mx, my + 1}, true}

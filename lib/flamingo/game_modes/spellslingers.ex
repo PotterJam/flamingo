@@ -4,7 +4,7 @@ defmodule Flamingo.GameModes.Spellslingers do
   terrain.
 
   Each player is a wizard. A duel opens with every wizard choosing a spellbook,
-  which adds four spells to the core spells every wizard knows. On their turn a wizard may
+  which adds its spells to the core spells every wizard knows. On their turn a wizard may
   walk a little, then casts one spell: bolts that blast craters and knock wizards
   flying, spells that raise or tunnel through land, summoned minions that fight
   for their owner, and wilder magic. Crates drop between turns, wild-magic surges
@@ -582,16 +582,28 @@ defmodule Flamingo.GameModes.Spellslingers do
         |> Surges.surge_after(surge)
         |> Crates.maybe_drop_crate()
 
-      # Lasting spells act first, played out like a cast before the clock starts.
-      case Zones.tick(state, next) do
-        {false, state} ->
-          ok(state, aim_timers(state))
+      case state.units[next] do
+        # A frozen wizard thaws and loses this turn; they can't be refrozen before their next.
+        %{frozen: frozen} = wizard when frozen > 0 ->
+          state
+          |> Units.put_unit(%{wizard | frozen: 0} |> Map.put(:thawed, true))
+          |> Units.log("#{Units.player_name(state, next)} is frozen solid and loses the turn.")
+          |> end_turn(context)
 
-        {true, state} ->
-          ok(%{state | phase: :arena_resolve}, [
-            :cancel_hint_timeout,
-            {:schedule_phase_timeout, :arena_zones, state.last_cast.duration_ms + 1200}
-          ])
+        wizard ->
+          state = Units.put_unit(state, Map.put(wizard, :thawed, false))
+
+          # Lasting spells act first, played out like a cast before the clock starts.
+          case Zones.tick(state, next) do
+            {false, state} ->
+              ok(state, aim_timers(state))
+
+            {true, state} ->
+              ok(%{state | phase: :arena_resolve}, [
+                :cancel_hint_timeout,
+                {:schedule_phase_timeout, :arena_zones, state.last_cast.duration_ms + 1200}
+              ])
+          end
       end
     end
   end

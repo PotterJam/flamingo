@@ -98,7 +98,7 @@ defmodule Flamingo.GameModes.Spellslingers.Units do
 
   # Flies the spell's main projectile and records it as the first segment.
 
-  def unit_height(%{kind: kind}) when kind in [:wizard, :golem, :dragon], do: 3
+  def unit_height(%{kind: kind}) when kind in [:wizard, :golem, :dragon, :zombie], do: 3
   def unit_height(%{kind: :crate}), do: 1
   def unit_height(_), do: 2
 

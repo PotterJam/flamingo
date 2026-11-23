@@ -54,7 +54,22 @@ defmodule Flamingo.GameModes.Spellslingers.Catalog do
     "volcano" => "#b91c1c",
     "thunderhead" => "#fde047",
     "tide" => "#2563eb",
-    "dragon" => "#7c3aed"
+    "dragon" => "#7c3aed",
+    "frostbolt" => "#67e8f9",
+    "icefloe" => "#bae6fd",
+    "blizzard" => "#e0f2fe",
+    "nova" => "#7dd3fc",
+    "iceage" => "#22d3ee",
+    "bonespear" => "#e7e5e4",
+    "decay" => "#84cc16",
+    "raisedead" => "#65a30d",
+    "drain" => "#e11d48",
+    "lich" => "#a3e635",
+    "clockbomb" => "#f59e0b",
+    "turret" => "#64748b",
+    "tower" => "#94a3b8",
+    "magnet" => "#ef4444",
+    "doomsday" => "#dc2626"
   }
 
   @spells [
@@ -396,6 +411,180 @@ defmodule Flamingo.GameModes.Spellslingers.Catalog do
               minion: :dragon
             },
             %{
+              id: "frostbolt",
+              name: "Frost Shard",
+              blurb:
+                "A lobbed shard of ice. Anyone caught in it is frozen solid and loses their next turn.",
+              icon: :snowflake,
+              effect: :freeze_bolt,
+              radius: 4,
+              damage: 16,
+              knock: 10,
+              cooldown: 3
+            },
+            %{
+              id: "icefloe",
+              place: true,
+              name: "Ice Floe",
+              blurb: "Freezes the sea's surface into a sheet of ice you can walk across.",
+              icon: :diamond,
+              effect: :icefloe,
+              cooldown: 2
+            },
+            %{
+              id: "blizzard",
+              place: true,
+              sky: true,
+              name: "Blizzard",
+              blurb:
+                "Snow hammers a stretch of the map at the start of each of your next three turns.",
+              icon: :cloud_snow,
+              effect: :blizzard,
+              damage: 9,
+              cooldown: 5
+            },
+            %{
+              id: "nova",
+              aimless: true,
+              name: "Frost Nova",
+              blurb: "Casts on picking: everything close to you is chilled and frozen.",
+              icon: :thermometer_snowflake,
+              effect: :nova,
+              radius: 12,
+              damage: 10,
+              cooldown: 4
+            },
+            %{
+              id: "iceage",
+              grand: true,
+              aimless: true,
+              name: "Ice Age",
+              blurb:
+                "Grand spell. Every enemy and their minions freeze solid and lose a turn, so you act twice.",
+              icon: :mountain_snow,
+              effect: :ice_age,
+              damage: 20
+            },
+            %{
+              id: "bonespear",
+              name: "Bone Spear",
+              blurb: "A straight, fast spear of bone. Ignores gravity and wind.",
+              icon: :bone,
+              effect: :blast,
+              radius: 2,
+              damage: 24,
+              knock: 10,
+              gravity: 0.0,
+              wind: 0.0,
+              speed: 1.5,
+              cooldown: 2
+            },
+            %{
+              id: "decay",
+              name: "Decay Bolt",
+              blurb:
+                "A lobbed blob of rot. Anyone splashed keeps losing health at the start of their next three turns.",
+              icon: :droplets,
+              effect: :decay,
+              radius: 5,
+              damage: 10,
+              knock: 14,
+              cooldown: 2
+            },
+            %{
+              id: "raisedead",
+              place: true,
+              name: "Raise Dead",
+              blurb: "A shambling zombie claws out of the ground. Slow, tough, bites hard.",
+              icon: :hand,
+              effect: :summon,
+              minion: :zombie,
+              cooldown: 3
+            },
+            %{
+              id: "drain",
+              aimless: true,
+              name: "Life Drain",
+              blurb:
+                "Casts on picking: rips life from every enemy near you and heals you with it.",
+              icon: :heart_crack,
+              effect: :drain,
+              radius: 20,
+              damage: 10,
+              cooldown: 3
+            },
+            %{
+              id: "lich",
+              grand: true,
+              aimless: true,
+              name: "Lichdom",
+              blurb:
+                "Grand spell. Become a Lich: up to 150 health, and you drain every enemy at the start of your next five turns.",
+              icon: :skull,
+              effect: :lich,
+              damage: 8
+            },
+            %{
+              id: "clockbomb",
+              name: "Clockwork Bomb",
+              blurb:
+                "Lob a ticking bomb. It goes off at the start of your next turn, unless they run.",
+              icon: :alarm_clock,
+              effect: :clockbomb,
+              radius: 8,
+              damage: 36,
+              knock: 44,
+              cooldown: 3
+            },
+            %{
+              id: "turret",
+              place: true,
+              name: "Build Turret",
+              blurb:
+                "A bolted-down turret that shoots the nearest enemy at the start of your turns.",
+              icon: :crosshair,
+              effect: :summon,
+              minion: :turret,
+              cooldown: 4
+            },
+            %{
+              id: "tower",
+              aimless: true,
+              name: "Arcane Tower",
+              blurb: "Casts on picking: a stone tower lifts you high and wards you.",
+              icon: :tower_control,
+              effect: :tower,
+              cooldown: 4
+            },
+            %{
+              id: "magnet",
+              name: "Magnet Pulse",
+              blurb: "A straight pulse that yanks everything near where it lands toward you.",
+              icon: :magnet,
+              effect: :magnet,
+              radius: 10,
+              damage: 4,
+              knock: 50,
+              gravity: 0.0,
+              wind: 0.0,
+              speed: 1.2,
+              cooldown: 2
+            },
+            %{
+              id: "doomsday",
+              grand: true,
+              place: true,
+              sky: true,
+              name: "Doomsday Clock",
+              blurb:
+                "Grand spell. Drop a colossal clockwork bomb anywhere. Two turns later it levels everything around it.",
+              icon: :clock_alert,
+              effect: :doomsday,
+              radius: 20,
+              damage: 65,
+              knock: 70
+            },
+            %{
               id: "chaos",
               name: "Chaos Orb",
               blurb: "Nobody knows. Not even you.",
@@ -463,6 +652,30 @@ defmodule Flamingo.GameModes.Spellslingers.Catalog do
       blurb: "Levitate, ledges, updrafts, warp-swaps, and a grand fire-breathing dragon.",
       color: "#8b5cf6",
       spells: ~w(levitate ledge updraft swap dragon)
+    },
+    %{
+      id: "frost",
+      icon: :snowflake,
+      name: "Frost",
+      blurb: "Freezing shards, ice floes, blizzards, a frost nova, and the grand Ice Age.",
+      color: "#06b6d4",
+      spells: ~w(frostbolt icefloe blizzard nova iceage)
+    },
+    %{
+      id: "dark",
+      icon: :skull,
+      name: "Underdark",
+      blurb: "Bone spears, decay, the walking dead, life drain, and the grand Lichdom.",
+      color: "#9f1239",
+      spells: ~w(bonespear decay raisedead drain lich)
+    },
+    %{
+      id: "cogs",
+      icon: :cog,
+      name: "Cogs",
+      blurb: "Clockwork bombs, turrets, towers, magnets, and the grand Doomsday Clock.",
+      color: "#475569",
+      spells: ~w(clockbomb turret tower magnet doomsday)
     }
   ]
 
@@ -474,7 +687,10 @@ defmodule Flamingo.GameModes.Spellslingers.Catalog do
     golem: %{name: "golem", hp: 60, bite: 20, hop: 5, reach: 5},
     wisp: %{name: "wisp", hp: 15, bite: 8, hop: 26, reach: 9},
     # The dragon flies and breathes fire instead of biting.
-    dragon: %{name: "dragon", hp: 120, bite: 0, hop: 12, reach: 0}
+    dragon: %{name: "dragon", hp: 120, bite: 0, hop: 12, reach: 0},
+    zombie: %{name: "zombie", hp: 40, bite: 16, hop: 7, reach: 5},
+    # The turret never moves; it shoots at the start of its owner's turn instead (see Zones).
+    turret: %{name: "turret", hp: 50, bite: 0, hop: 0, reach: 0}
   }
 
   @maps [

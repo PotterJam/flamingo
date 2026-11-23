@@ -58,12 +58,17 @@ defmodule Flamingo.GameModes.Spellslingers.Minions do
   def minions_act(state, owner) do
     state.units
     |> Map.values()
-    # Dragons act with their owner's lasting spells instead (see Zones).
-    |> Enum.filter(
-      &(&1.kind not in [:wizard, :dragon] and &1.owner == owner and Units.alive_unit?(&1))
-    )
+    |> Enum.filter(&(&1.kind != :wizard and &1.owner == owner and Units.alive_unit?(&1)))
     |> Enum.sort_by(& &1.id)
-    |> Enum.reduce(state, &minion_act(&2, &1.id))
+    |> Enum.reduce(state, fn minion, state ->
+      cond do
+        # A frozen minion sits this turn out and thaws.
+        Map.get(minion, :frozen, 0) > 0 -> Units.put_unit(state, %{minion | frozen: 0})
+        # Dragons and turrets act with their owner's lasting spells instead (see Zones).
+        minion.kind in [:dragon, :turret] -> state
+        true -> minion_act(state, minion.id)
+      end
+    end)
   end
 
   defp minion_act(state, id) do

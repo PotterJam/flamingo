@@ -11,13 +11,17 @@ const SCHOOLS: Record<string, School> = {
   boulder: "earth", rampart: "earth", golem: "earth", quake: "earth", burrow: "earth", ledge: "earth",
   lance: "storm", gust: "storm", chain: "storm", updraft: "storm",
   bloom: "nature", thornling: "nature", wisp: "nature",
+  frostbolt: "storm", icefloe: "storm", blizzard: "storm", nova: "storm", iceage: "storm",
+  decay: "nature", raisedead: "earth", bonespear: "earth",
+  clockbomb: "earth", turret: "earth", tower: "earth", magnet: "storm", doomsday: "fire",
 };
 
 const schoolOf = (spell: string) => SCHOOLS[spell] ?? "arcane";
 
 // Spells that land with an explosion; the rest have their own landing sound or none.
-const EXPLODES = new Set(["ember", "inferno", "boulder", "lance", "cluster", "firerain", "surge", "chain", "chaos", "napalm", "skipstone", "seeker", "cataclysm", "volcano", "thunderhead", "dragon"]);
-const SUMMONS = new Set(["imp", "golem", "wisp", "thornling"]);
+const EXPLODES = new Set(["ember", "inferno", "boulder", "lance", "cluster", "firerain", "surge", "chain", "chaos", "napalm", "skipstone", "seeker", "cataclysm", "volcano", "thunderhead", "dragon", "frostbolt", "decay", "bonespear", "clockbomb", "doomsday", "turret", "magnet"]);
+// Summons arrive with a puff; a turret's own shots (with a blast radius) explode instead.
+const SUMMONS = new Set(["imp", "golem", "wisp", "thornling", "raisedead", "turret"]);
 // Meteors: wild-magic surges and the falling half of Meteor Rain.
 const METEORS = new Set(["firerain", "surge", "cataclysm", "volcano"]);
 
@@ -269,6 +273,18 @@ export function createSpellSounds(volume: () => number, makeContext: () => BaseA
         tone({ from: 90, to: 28, dur: 1.6, gain: 0.9 });
         hiss({ from: 3000, to: 60, dur: 2.4, gain: 0.9 });
         for (let i = 0; i < 6; i++) hiss({ filter: "bandpass", from: 700 + i * 200, to: 300, dur: 0.12, gain: 0.25, at: 0.5 + i * 0.18 });
+      } else if (spell === "doomsday" && hit && radius > 0) {
+        tone({ from: 70, to: 24, dur: 2, gain: 0.9 });
+        hiss({ from: 2500, to: 50, dur: 2.6, gain: 0.9 });
+        chime([1568, 1568, 1568], 0.12, 0.08, "square");
+      } else if (spell === "doomsday" || (spell === "clockbomb" && hit && radius === 0)) {
+        // The bomb landing and starting to tick.
+        for (let i = 0; i < 4; i++) tone({ wave: "square", from: 1800, dur: 0.03, gain: 0.08, at: i * 0.3 });
+      } else if ((spell === "icefloe" || spell === "blizzard") && hit) {
+        chime([1319, 1568, 2093], 0.05, 0.06, "triangle");
+        hiss({ filter: "highpass", from: 6000, dur: 0.4, gain: 0.12 });
+      } else if (SUMMONS.has(spell) && radius === 0) {
+        hiss({ filter: "bandpass", from: 1400, to: 300, q: 1, dur: 0.35, gain: 0.3 });
       } else if (spell === "thunderhead" && hit) {
         tone({ wave: "sawtooth", from: 2400, to: 120, dur: 0.35, gain: 0.2 });
         hiss({ filter: "highpass", from: 5000, to: 800, dur: 0.5, gain: 0.5 });
@@ -311,6 +327,13 @@ export function createSpellSounds(volume: () => number, makeContext: () => BaseA
     aftermath(cast: Cast) {
       for (const aura of cast.auras ?? []) {
         if (aura.kind === "ward") chime([880, 1320, 1760], 0.05, 0.08, "sine");
+        else if (aura.kind === "nova" || aura.kind === "iceage") {
+          chime([2093, 1568, 1319, 1047], 0.04, 0.07, "triangle");
+          hiss({ filter: "highpass", from: 7000, to: 3000, dur: 0.6, gain: 0.2 });
+        } else if (aura.kind === "drain" || aura.kind === "lich") {
+          tone({ wave: "sawtooth", from: 220, to: 110, dur: 0.9, gain: 0.06, vibrato: 7 });
+          tone({ wave: "sine", from: 330, to: 165, dur: 0.9, gain: 0.05, at: 0.05 });
+        }
         else if (aura.kind === "levitate") {
           hiss({ filter: "bandpass", from: 500, to: 2500, q: 1.5, dur: 0.7, gain: 0.5, attack: 0.15 });
           tone({ from: 400, to: 1000, dur: 0.6, gain: 0.07, attack: 0.1 });

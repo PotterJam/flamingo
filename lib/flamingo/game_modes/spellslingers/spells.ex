@@ -636,6 +636,230 @@ defmodule Flamingo.GameModes.Spellslingers.Spells do
     %{fx | state: state, shake: true}
   end
 
+  def effect(:freeze_bolt, fx, actor, spell, angle, power) do
+    case throw_spell(fx, actor, spell, angle, power) do
+      {fx, {kind, {x, y}}, _} when kind in [:terrain, :unit] ->
+        fx = Physics.explode(fx, actor, {x, y}, spell.radius, spell.damage, spell.knock)
+
+        state =
+          fx.state
+          |> units_near({x, y}, spell.radius + 2)
+          |> Enum.reject(&(&1.id == actor))
+          |> Enum.reduce(fx.state, &freeze(&2, &1.id))
+
+        %{fx | state: state}
+
+      {fx, _, _} ->
+        fizzle(fx)
+    end
+  end
+
+  # The sea's surface freezes into a walkable sheet below the chosen spot.
+  def effect(:icefloe, %{target: {x, _}} = fx, _actor, _spell, _angle, _power) do
+    x = clamp(floor(x), 12, @width - 13)
+    top = fx.state.water_level - 1
+    path = for i <- 0..6, do: {x + 0.5, top - 6 + i * 1.0}
+    segment = %{path: path, start: 0, spell: "icefloe", radius: 0, hit: true}
+
+    state =
+      fx.state
+      |> Units.raise_ground(for dx <- -11..11, do: {x + 0.5 + dx, top + 0.6, 1.1})
+      |> Units.log("The sea freezes over!")
+
+    %{fx | state: state, segments: [segment | fx.segments]}
+  end
+
+  def effect(:blizzard, %{target: {x, _}} = fx, actor, _spell, _angle, _power) do
+    x = clamp(floor(x), 14, @width - 15)
+
+    state =
+      fx.state
+      |> add_zone(%{kind: :blizzard, owner: actor, x0: x - 13, x1: x + 13, turns: 3})
+      |> Units.log("A blizzard rolls in. It will lash the ground for three rounds.")
+
+    %{fx | state: state}
+  end
+
+  def effect(:nova, fx, actor, spell, _angle, _power) do
+    origin = Units.center(fx.state.units[actor])
+
+    fx.state
+    |> units_near(origin, spell.radius)
+    |> Enum.reject(&(&1.id == actor))
+    |> Enum.reduce(%{fx | auras: [%{id: actor, kind: "nova"} | fx.auras]}, fn unit, fx ->
+      state = fx.state |> Units.damage(unit.id, spell.damage, actor) |> freeze(unit.id)
+      %{fx | state: state, auras: [%{id: unit.id, kind: "nova"} | fx.auras]}
+    end)
+  end
+
+  def effect(:ice_age, fx, actor, spell, _angle, _power) do
+    fx = %{fx | state: Units.log(fx.state, "An ice age falls over the arena!"), shake: true}
+
+    fx.state.units
+    |> Map.values()
+    |> Enum.filter(&(Units.alive_unit?(&1) and &1.owner != actor))
+    |> Enum.sort_by(& &1.id)
+    |> Enum.reduce(fx, fn unit, fx ->
+      state = fx.state |> Units.damage(unit.id, spell.damage, actor) |> freeze(unit.id)
+      %{fx | state: state, auras: [%{id: unit.id, kind: "iceage"} | fx.auras]}
+    end)
+  end
+
+  def effect(:decay, fx, actor, spell, angle, power) do
+    case throw_spell(fx, actor, spell, angle, power) do
+      {fx, {kind, {x, y}}, _} when kind in [:terrain, :unit] ->
+        fx = Physics.explode(fx, actor, {x, y}, spell.radius, spell.damage, spell.knock)
+
+        state =
+          fx.state
+          |> units_near({x, y}, spell.radius + 2)
+          |> Enum.reject(&(&1.id == actor))
+          |> Enum.reduce(fx.state, fn unit, state ->
+            state
+            |> Units.put_unit(Map.put(unit, :decay, 3))
+            |> Units.log("Rot takes hold of #{Units.unit_name(state, unit)}.")
+          end)
+
+        %{fx | state: state}
+
+      {fx, _, _} ->
+        fizzle(fx)
+    end
+  end
+
+  def effect(:drain, fx, actor, spell, _angle, _power) do
+    me = fx.state.units[actor]
+    {mx, my} = Units.center(me)
+
+    victims =
+      fx.state
+      |> units_near({mx, my}, spell.radius)
+      |> Enum.filter(&(&1.owner != actor))
+
+    fx = drain(fx, actor, victims, spell.damage)
+
+    if victims == [],
+      do: %{fx | state: Units.log(fx.state, "…but nobody is close enough to drain.")},
+      else: %{fx | auras: [%{id: actor, kind: "drain"} | fx.auras]}
+  end
+
+  def effect(:lich, fx, actor, _spell, _angle, _power) do
+    me = fx.state.units[actor]
+
+    state =
+      fx.state
+      |> Units.put_unit(%{me | max_hp: 150, hp: min(me.hp + 50, 150)})
+      |> add_zone(%{kind: :lich, owner: actor, turns: 5})
+      |> Units.log("#{Units.player_name(fx.state, actor)} rises as a Lich!")
+
+    %{fx | state: state, shake: true, auras: [%{id: actor, kind: "lich"} | fx.auras]}
+  end
+
+  def effect(:clockbomb, fx, actor, spell, angle, power) do
+    case throw_spell(fx, actor, spell, angle, power) do
+      {fx, {kind, {x, y}}, _} when kind in [:terrain, :unit] ->
+        {x, y} = Terrain.surface_above(fx.state, x, y)
+
+        bomb = %{
+          kind: :bomb,
+          owner: actor,
+          spell: "clockbomb",
+          x: x,
+          y: y,
+          radius: spell.radius,
+          damage: spell.damage,
+          knock: spell.knock,
+          turns: 1
+        }
+
+        state =
+          fx.state
+          |> add_zone(bomb)
+          |> Units.log("A clockwork bomb starts ticking…")
+
+        %{fx | state: state}
+
+      {fx, _, _} ->
+        fizzle(fx)
+    end
+  end
+
+  def effect(:doomsday, %{target: {x, y}} = fx, actor, spell, _angle, _power) do
+    x = clamp(floor(x), 4, @width - 5)
+    {_, y} = Terrain.surface_above(fx.state, x, y)
+
+    case Terrain.ground_below(fx.state, x, y) do
+      nil ->
+        %{fx | state: Units.log(fx.state, "…and the bomb sinks into the sea.")}
+
+      ground ->
+        sky = Terrain.sky_row(fx.state, x) + 0.5
+        path = for i <- 0..12, do: {x + 0.5, sky + (ground + 0.5 - sky) * i / 12}
+        segment = %{path: path, start: 0, spell: "doomsday", radius: 0, hit: true}
+
+        bomb = %{
+          kind: :bomb,
+          owner: actor,
+          spell: "doomsday",
+          x: x + 0.5,
+          y: ground + 0.5,
+          radius: spell.radius,
+          damage: spell.damage,
+          knock: spell.knock,
+          turns: 2
+        }
+
+        state =
+          fx.state
+          |> add_zone(bomb)
+          |> Units.log("The Doomsday Clock lands. It strikes in two turns!")
+
+        %{fx | state: state, shake: true, segments: [segment | fx.segments]}
+    end
+  end
+
+  # A tower of stone rises under the caster, lifting them high and warding them.
+  def effect(:tower, fx, actor, _spell, _angle, _power) do
+    me = fx.state.units[actor]
+    lifted = %{me | y: me.y - 10}
+
+    if lifted.y < 4 or Units.blocked?(fx.state, lifted, lifted.x, lifted.y) do
+      %{fx | state: Units.log(fx.state, "…but there is no room to raise a tower.")}
+    else
+      tower =
+        for y <- (lifted.y + 1)..(me.y + 1), dx <- -2..2, do: {me.x + 0.5 + dx, y + 0.5, 0.75}
+
+      state =
+        fx.state
+        |> Units.put_unit(Map.put(lifted, :ward, 20))
+        |> Units.raise_ground(tower)
+        |> Units.log("An arcane tower lifts #{Units.player_name(fx.state, actor)} high!")
+
+      %{fx | state: state, auras: [%{id: actor, kind: "ward"} | fx.auras]}
+    end
+  end
+
+  def effect(:magnet, fx, actor, spell, angle, power) do
+    case throw_spell(fx, actor, spell, angle, power) do
+      {fx, {kind, {x, y}}, _} when kind in [:terrain, :unit, :water] ->
+        {ox, oy} = Units.center(fx.state.units[actor])
+
+        fx.state
+        |> units_near({x, y}, spell.radius)
+        |> Enum.reject(&(&1.id == actor))
+        |> Enum.reduce(fx, fn unit, fx ->
+          {cx, cy} = Units.center(unit)
+          distance = max(:math.sqrt((ox - cx) ** 2 + (oy - cy) ** 2), 1.0)
+          pull = spell.knock * min(1.0, distance / 30)
+          fx = %{fx | state: Units.damage(fx.state, unit.id, spell.damage, actor)}
+          Fx.push(fx, unit.id, {(ox - cx) / distance * pull, -pull * 0.45})
+        end)
+
+      {fx, _, _} ->
+        fizzle(fx)
+    end
+  end
+
   def effect(:chaos, fx, actor, spell, angle, power) do
     {fx, {kind, {x, y}}, steps} = throw_spell(fx, actor, spell, angle, power)
     landed? = kind in [:terrain, :unit]
@@ -883,16 +1107,25 @@ defmodule Flamingo.GameModes.Spellslingers.Spells do
     end)
   end
 
-  @doc "A dragon glides toward the nearest enemy and breathes a fireball at it."
-  def dragon_breath(fx, dragon) do
+  @doc """
+  A dragon glides toward the nearest enemy and breathes a fireball at it; a turret
+  stays put and shoots a bolt at the nearest enemy in range.
+  """
+  def minion_shot(fx, dragon) do
+    {spell, radius, damage, knock, verb, range} =
+      if dragon.kind == :dragon,
+        do: {"dragon", 4, 18, 22, "breathes fire", 10_000},
+        else: {"turret", 2, 12, 12, "fires", 80}
+
     target =
       fx.state.units
       |> Map.values()
       |> Enum.filter(&(Units.alive_unit?(&1) and &1.owner != dragon.owner))
+      |> Enum.filter(&((&1.x - dragon.x) ** 2 + (&1.y - dragon.y) ** 2 <= range * range))
       |> Enum.min_by(&((&1.x - dragon.x) ** 2 + (&1.y - dragon.y) ** 2), fn -> nil end)
 
     if target do
-      dragon = glide(fx.state, dragon, target)
+      dragon = if dragon.kind == :dragon, do: glide(fx.state, dragon, target), else: dragon
       state = Units.put_unit(fx.state, dragon)
       {ox, oy} = Units.center(dragon)
       {tx, ty} = Units.center(target)
@@ -907,17 +1140,130 @@ defmodule Flamingo.GameModes.Spellslingers.Spells do
       segment = %{
         path: path,
         start: Fx.next_start(fx),
-        spell: "dragon",
-        radius: if(hit?, do: 4, else: 0),
+        spell: spell,
+        radius: if(hit?, do: radius, else: 0),
         hit: hit?
       }
 
-      state = Units.log(state, "#{Units.unit_name(state, dragon)} breathes fire!")
+      state = Units.log(state, "#{Units.unit_name(state, dragon)} #{verb}!")
       fx = %{fx | state: state, segments: [segment | fx.segments]}
-      if hit?, do: Physics.explode(fx, dragon.owner, pos, 4, 18, 22), else: fx
+      if hit?, do: Physics.explode(fx, dragon.owner, pos, radius, damage, knock), else: fx
     else
       fx
     end
+  end
+
+  @doc "Snow lashes every unit standing under a blizzard."
+  def snow(fx, zone, damage) do
+    fx.state.units
+    |> Map.values()
+    |> Enum.filter(&(Units.alive_unit?(&1) and &1.x >= zone.x0 and &1.x <= zone.x1))
+    |> Enum.sort_by(& &1.id)
+    |> Enum.reduce(%{fx | state: Units.log(fx.state, "The blizzard howls!")}, fn unit, fx ->
+      {cx, cy} = Units.center(unit)
+      path = for i <- 0..10, do: {cx + (10 - i) * 0.6, cy - 12 + i * 1.2}
+
+      segment = %{
+        path: path,
+        start: Fx.next_start(fx),
+        spell: "blizzard",
+        radius: 0,
+        hit: true
+      }
+
+      state = Units.damage(fx.state, unit.id, damage, zone.owner)
+      %{fx | state: state, segments: [segment | fx.segments]}
+    end)
+  end
+
+  @doc "A clockwork bomb ticks down, and goes off on its last turn."
+  def tick_bomb(fx, %{turns: 1} = bomb) do
+    segment = %{
+      path: [{bomb.x, bomb.y - 1}, {bomb.x, bomb.y}],
+      start: Fx.next_start(fx),
+      spell: bomb.spell,
+      radius: bomb.radius,
+      hit: true
+    }
+
+    fx = %{
+      fx
+      | segments: [segment | fx.segments],
+        shake: fx.shake or bomb.radius >= 12,
+        state:
+          Units.log(
+            fx.state,
+            if(bomb.spell == "doomsday",
+              do: "The Doomsday Clock strikes midnight!",
+              else: "BOOM! The clockwork bomb goes off!"
+            )
+          )
+    }
+
+    Physics.explode(fx, bomb.owner, {bomb.x, bomb.y}, bomb.radius, bomb.damage, bomb.knock)
+  end
+
+  def tick_bomb(fx, bomb),
+    do: %{fx | state: Units.log(fx.state, "Tick… tock… #{bomb.turns - 1} more turn.")}
+
+  @doc "Rot eats at a decaying unit."
+  def rot(fx, unit) do
+    state =
+      fx.state
+      |> Units.damage(unit.id, 6, nil)
+      |> then(&Units.put_unit(&1, Map.update!(&1.units[unit.id], :decay, fn d -> d - 1 end)))
+      |> Units.log("Decay eats at #{Units.unit_name(fx.state, unit)}.")
+
+    %{fx | state: state}
+  end
+
+  @doc "Drains `amount` from each victim and heals `actor` by what it took."
+  def drain(fx, actor, victims, amount) do
+    {mx, my} = Units.center(fx.state.units[actor])
+
+    fx =
+      Enum.reduce(victims, fx, fn unit, fx ->
+        {cx, cy} = Units.center(unit)
+        before = fx.state.units[unit.id].hp
+        state = Units.damage(fx.state, unit.id, amount, actor)
+        taken = before - state.units[unit.id].hp
+        me = state.units[actor]
+        state = Units.put_unit(state, %{me | hp: min(me.max_hp, me.hp + taken)})
+        beam = Enum.map([cx, cy, mx, my], &Float.round(&1 * 1.0, 2))
+        %{fx | state: state, beams: [beam | fx.beams]}
+      end)
+
+    %{fx | state: Units.log(fx.state, "#{Units.player_name(fx.state, actor)} drinks their life!")}
+  end
+
+  @doc """
+  Freezes a unit so it loses its next turn. A wizard who just thawed can't be frozen
+  again before taking a turn.
+  """
+  def freeze(state, id) do
+    case state.units[id] do
+      %{} = unit ->
+        if Units.alive_unit?(unit) and Map.get(unit, :frozen, 0) == 0 and
+             not Map.get(unit, :thawed, false),
+           do:
+             state
+             |> Units.put_unit(Map.put(unit, :frozen, 1))
+             |> Units.log("#{Units.unit_name(state, unit)} is frozen solid!"),
+           else: state
+
+      nil ->
+        state
+    end
+  end
+
+  defp units_near(state, {x, y}, radius) do
+    state.units
+    |> Map.values()
+    |> Enum.filter(fn unit ->
+      {cx, cy} = Units.center(unit)
+      Units.alive_unit?(unit) and (cx - x) ** 2 + (cy - y) ** 2 <= radius * radius
+    end)
+    |> Enum.sort_by(& &1.id)
   end
 
   # Up to six cells toward the target, keeping a little distance.

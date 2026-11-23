@@ -5,7 +5,7 @@ import { createSpellSounds } from "./spell_sounds";
 // only draws its snapshots, animates the flight and knockback paths the server computed,
 // and turns pointer and keyboard input into commands.
 
-type UnitKind = "wizard" | "thornling" | "imp" | "golem" | "wisp" | "dragon";
+type UnitKind = "wizard" | "thornling" | "imp" | "golem" | "wisp" | "dragon" | "zombie" | "turret";
 
 type Unit = {
   id: string;
@@ -18,6 +18,9 @@ type Unit = {
   dead: boolean;
   ward?: number;
   float?: number;
+  // Frozen units lose their next turn; decaying ones lose health on each of theirs.
+  frozen?: number;
+  decay?: number;
 };
 
 type Crate = { id: string; type: "health" | "mana"; x: number; y: number };
@@ -39,8 +42,18 @@ type Spell = {
 };
 
 // Spells that outlast their cast, from the server: napalm on the ground, a volcano's
-// vent, a thunderhead's strip of sky, and a rising tide.
-type Zone = { id: string; kind: "napalm" | "volcano" | "thunderhead" | "tide"; owner: string; x?: number; y?: number; x0?: number; x1?: number; turns: number };
+// vent, a thunderhead's or blizzard's strip of sky, a rising tide, a ticking bomb, and a Lich.
+type Zone = {
+  id: string;
+  kind: "napalm" | "volcano" | "thunderhead" | "tide" | "blizzard" | "bomb" | "lich";
+  owner: string;
+  x?: number;
+  y?: number;
+  x0?: number;
+  x1?: number;
+  radius?: number;
+  turns: number;
+};
 
 type Segment = { path: [number, number][]; start: number; spell: string; radius: number; hit: boolean };
 
@@ -767,6 +780,58 @@ const SpellArena = {
         ctx.fillRect(cx + face * 10 - 1, y - 6, 2, 2);
         if (frame % 5 === 0) burst(cx + face * 13, y - 3, "#fb923c", 1, 12);
         top = y - 16;
+      } else if (unit.kind === "zombie") {
+        // A hunched green zombie, arms reaching for its prey.
+        const lurch = Math.sin(t / 400 + unit.x) * 1.5;
+        const face = unit.x < (shown.width ?? 300) / 2 ? 1 : -1;
+        ctx.fillStyle = "#4d7c0f";
+        ctx.beginPath();
+        ctx.roundRect(cx - 5, feet - 13, 10, 13, 2);
+        ctx.fill();
+        ctx.stroke();
+        ctx.fillStyle = "#84cc16";
+        ctx.beginPath();
+        ctx.arc(cx + face * 1.5 + lurch * 0.3, feet - 16, 4.2, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.stroke();
+        ctx.strokeStyle = "#84cc16";
+        ctx.lineWidth = 2.5;
+        ctx.beginPath();
+        ctx.moveTo(cx + face * 3, feet - 10);
+        ctx.lineTo(cx + face * 10, feet - 11 + lurch);
+        ctx.stroke();
+        eyes(cx + face * 1.5, feet - 17, "#fef08a");
+        top = feet - 23;
+      } else if (unit.kind === "turret") {
+        // A riveted turret whose barrel tracks the nearest enemy.
+        const prey = shown.units
+          .filter((u) => !u.dead && u.owner !== unit.owner)
+          .sort((a, b) => Math.abs(a.x - unit.x) - Math.abs(b.x - unit.x))[0];
+        const angle = prey ? Math.atan2((prey.y - 1 - unit.y) * s, (prey.x - unit.x) * s) : -Math.PI / 2;
+        ctx.fillStyle = "#475569";
+        ctx.beginPath();
+        ctx.moveTo(cx - 7, feet);
+        ctx.lineTo(cx + 7, feet);
+        ctx.lineTo(cx + 4, feet - 6);
+        ctx.lineTo(cx - 4, feet - 6);
+        ctx.closePath();
+        ctx.fill();
+        ctx.stroke();
+        ctx.save();
+        ctx.translate(cx, feet - 9);
+        ctx.rotate(angle);
+        ctx.fillStyle = "#334155";
+        ctx.fillRect(0, -1.6, 10, 3.2);
+        ctx.strokeRect(0, -1.6, 10, 3.2);
+        ctx.restore();
+        ctx.fillStyle = "#94a3b8";
+        ctx.beginPath();
+        ctx.arc(cx, feet - 9, 4.5, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.stroke();
+        ctx.fillStyle = frame % 40 < 20 ? "#ef4444" : "#7f1d1d";
+        ctx.fillRect(cx - 1, feet - 10, 2, 2);
+        top = feet - 17;
       } else {
         const float = Math.sin(t / 260 + unit.x) * 2.5;
         ctx.globalAlpha = 0.85;
@@ -866,6 +931,74 @@ const SpellArena = {
           ctx.stroke();
           ctx.fillRect(cx - w * 0.42, top, w * 0.84, 16);
           turnsBadge(cx, top - 2, zone.turns, "#ca8a04");
+        } else if (zone.kind === "blizzard" && zone.x0 !== undefined && zone.x1 !== undefined) {
+          const x0 = zone.x0 * s;
+          const w = (zone.x1 - zone.x0) * s;
+          // Low enough to stay clear of the wizard rail in the arena's top corner.
+          const top = Math.max(cam.y * s + 80, 80);
+          const cx = x0 + w / 2 + Math.sin(t / 700) * 3;
+          ctx.fillStyle = "#e2e8f0";
+          ctx.strokeStyle = "#111827";
+          ctx.lineWidth = 2;
+          ctx.beginPath();
+          for (const [dx, dy, r] of [[-0.3, 4, 13], [-0.1, -4, 17], [0.12, -5, 16], [0.32, 4, 12]]) {
+            ctx.moveTo(cx + dx * w + r, top + dy);
+            ctx.arc(cx + dx * w, top + dy, r, 0, Math.PI * 2);
+          }
+          ctx.fill();
+          ctx.stroke();
+          if (frame % 3 === 0) {
+            particles.push({
+              x: x0 + Math.random() * w, y: top + 10, vx: -20 + Math.random() * 10, vy: 60 + Math.random() * 30,
+              life: 1400, max: 1400, color: "#fff", size: 2,
+            });
+          }
+          turnsBadge(cx, top - 2, zone.turns, "#0891b2");
+        } else if (zone.kind === "bomb" && zone.x !== undefined && zone.y !== undefined) {
+          // A clockwork bomb, its hand ticking round; the Doomsday Clock is a giant one.
+          const big = (zone.radius ?? 0) >= 12;
+          const r = big ? 9 : 4;
+          const bx = zone.x * s;
+          const by = zone.y * s - r;
+          const urgent = zone.turns <= 1;
+          ctx.fillStyle = "#1f2937";
+          ctx.strokeStyle = "#111827";
+          ctx.lineWidth = 2;
+          ctx.beginPath();
+          ctx.arc(bx, by, r, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.stroke();
+          ctx.fillStyle = urgent && frame % 20 < 10 ? "#fca5a5" : "#fef3c7";
+          ctx.beginPath();
+          ctx.arc(bx, by, r * 0.65, 0, Math.PI * 2);
+          ctx.fill();
+          const hand = t / (urgent ? 120 : 400);
+          ctx.strokeStyle = "#b91c1c";
+          ctx.lineWidth = big ? 2 : 1.2;
+          ctx.beginPath();
+          ctx.moveTo(bx, by);
+          ctx.lineTo(bx + Math.cos(hand) * r * 0.55, by + Math.sin(hand) * r * 0.55);
+          ctx.stroke();
+          ctx.fillStyle = "#f59e0b";
+          ctx.fillRect(bx - 1.5, by - r - 3, 3, 3);
+          if (frame % 6 === 0) burst(bx, by - r - 3, "#fde047", 1, 15);
+          if (big) turnsBadge(bx, by - r - 12, zone.turns, "#b91c1c");
+        } else if (zone.kind === "lich") {
+          // The Lich's sickly glow and how many more turns it hungers.
+          const lich = shown.units.find((u) => u.id === zone.owner && !u.dead);
+          if (lich) {
+            const lx = (lich.x + 0.5) * s;
+            const ly = (lich.y + 1) * s - 14;
+            const glow = ctx.createRadialGradient(lx, ly, 2, lx, ly, 20);
+            glow.addColorStop(0, `rgba(163, 230, 53, ${0.55 + 0.15 * Math.sin(t / 200)})`);
+            glow.addColorStop(1, "rgba(163, 230, 53, 0)");
+            ctx.fillStyle = glow;
+            ctx.beginPath();
+            ctx.arc(lx, ly, 20, 0, Math.PI * 2);
+            ctx.fill();
+            if (frame % 7 === 0) burst(lx + (Math.random() - 0.5) * 16, ly + 8, "#a3e635", 1, 18);
+            turnsBadge(lx + 16, ly + 6, zone.turns, "#4d7c0f");
+          }
         }
       }
       for (const scar of scars) {
@@ -915,6 +1048,33 @@ const SpellArena = {
         if (frame % 6 === 0) burst(cx + (Math.random() - 0.5) * 10, feet + 2, "#ddd6fe", 1, 15);
       }
 
+      if ((unit.decay ?? 0) > 0) {
+        ctx.fillStyle = `rgba(132, 204, 22, ${0.25 + 0.1 * Math.sin(t / 220)})`;
+        ctx.beginPath();
+        ctx.ellipse(cx, feet - 1, 9, 3, 0, 0, Math.PI * 2);
+        ctx.fill();
+        if (frame % 8 === 0) burst(cx + (Math.random() - 0.5) * 10, feet - 6 - Math.random() * 10, "#84cc16", 1, 12);
+      }
+
+      if ((unit.frozen ?? 0) > 0) {
+        // Locked in a block of ice until their turn passes.
+        const tall = unit.kind === "wizard" ? 28 : 18;
+        ctx.fillStyle = "rgba(165, 243, 252, 0.55)";
+        ctx.strokeStyle = "#0891b2";
+        ctx.lineWidth = 1.5;
+        ctx.beginPath();
+        ctx.roundRect(cx - 9, feet - tall, 18, tall, 2);
+        ctx.fill();
+        ctx.stroke();
+        ctx.strokeStyle = "rgba(255, 255, 255, 0.85)";
+        ctx.beginPath();
+        ctx.moveTo(cx - 6, feet - tall + 4);
+        ctx.lineTo(cx - 2, feet - tall + 10);
+        ctx.moveTo(cx + 4, feet - 8);
+        ctx.lineTo(cx + 6, feet - 4);
+        ctx.stroke();
+      }
+
       if ((unit.ward ?? 0) > 0) {
         const r = unit.kind === "wizard" ? 17 : 12;
         const cy = feet - r * 0.75;
@@ -953,7 +1113,7 @@ const SpellArena = {
       if (!shown || unit.dead) return;
       const s = scale();
       const cx = (unit.x + 0.5) * s;
-      const tall = unit.kind === "wizard" ? 34 : unit.kind === "golem" || unit.kind === "dragon" ? 28 : 22;
+      const tall = unit.kind === "wizard" ? 34 : unit.kind === "golem" || unit.kind === "dragon" || unit.kind === "zombie" ? 28 : 22;
       const top = (unit.y + 1) * s - tall;
 
       if (unit.kind === "wizard") {
@@ -987,7 +1147,10 @@ const SpellArena = {
       const inRange = !!def?.sky || Math.hypot(x - wizard.x - 0.5, y - wizard.y + 1) <= shown.physics.place_range;
       // Anything but a ledge drops to the ground below; over the sea it is wasted. Of the
       // sky spells only the volcano needs ground under it.
-      const drops = def?.sky ? def.effect === "volcano" : def?.effect !== "ledge" && def?.id !== "dragon";
+      // Ice floes form on the sea itself, so the sea is where they belong.
+      const drops = def?.sky
+        ? def.effect === "volcano" || def.effect === "doomsday"
+        : !["ledge", "icefloe"].includes(def?.effect ?? "") && def?.id !== "dragon";
       const sinks = drops && dropTo(x, y) >= shown.water_level - 1;
       return { x, y, inRange, sinks };
     };
@@ -1041,8 +1204,17 @@ const SpellArena = {
           ctx.lineTo(px, rest * s);
           ctx.stroke();
           ctx.setLineDash([]);
-          if (spell.effect === "thunderhead") {
-            ctx.fillRect(px - 16 * s, py - 1 * s, 32 * s, 2 * s);
+          if (spell.effect === "thunderhead" || spell.effect === "blizzard") {
+            const half = spell.effect === "blizzard" ? 13 : 16;
+            ctx.fillRect(px - half * s, py - 1 * s, half * 2 * s, 2 * s);
+          } else if (spell.effect === "icefloe") {
+            ctx.fillRect(px - 11 * s, (shown.water_level - 1) * s, 22 * s, 1.5 * s);
+            ctx.strokeRect(px - 11 * s, (shown.water_level - 1) * s, 22 * s, 1.5 * s);
+          } else if (spell.effect === "doomsday") {
+            ctx.beginPath();
+            ctx.arc(px, rest * s, spell.radius * s, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.stroke();
           } else if (spell.effect === "cataclysm") {
             ctx.beginPath();
             ctx.arc(px, py, spell.radius * s, 0, Math.PI * 2);
@@ -1302,7 +1474,7 @@ const SpellArena = {
           animation!.landed.add(n);
           sounds.land(segment);
           const [x, y] = segment.path[last];
-          if (segment.hit && segment.radius > 0 && cast.grand && segment.spell === "cataclysm") {
+          if (segment.hit && segment.radius > 0 && ((cast.grand && segment.spell === "cataclysm") || segment.spell === "doomsday")) {
             // The grand impact: a white flash, a beat of stillness, then the blast and a glowing scar.
             flashUntil = now + 220;
             animation!.start += 140;
