@@ -523,6 +523,32 @@ defmodule Flamingo.GameModes.SpellslingersTest do
     assert after_knock.units[second].dead
   end
 
+  test "each hit is timed to the moment the meteor that strikes the wizard lands" do
+    {state, _r} = started()
+    [first, second] = state.turn_order
+    state = %{state | wind: 0}
+    a = state.units[first]
+    b = state.units[second]
+
+    # The later meteor falls on the first wizard, so hits follow landings, not unit order.
+    cast =
+      Spells.run(state, nil, "surge", nil, fn fx ->
+        fx
+        |> Spells.fx_with_meteor(b.x + 0.5, 0, "surge")
+        |> Spells.fx_with_meteor(a.x + 0.5, 40, "surge")
+      end).last_cast
+
+    [late, early] = cast.segments |> Enum.sort_by(& &1.start, :desc)
+    landing = fn segment -> segment.start + length(segment.path) - 1 end
+
+    assert [%{id: ^second, at: at_b}] = Enum.filter(cast.hits, &(&1.id == second))
+    assert [%{id: ^first, at: at_a}] = Enum.filter(cast.hits, &(&1.id == first))
+    assert at_b == landing.(early)
+    assert at_a == landing.(late)
+    assert at_a > at_b
+    assert cast.flight_steps > at_a
+  end
+
   test "chain lightning does not arc back into the wizard it struck" do
     {state, r} = started()
     [first, second] = state.turn_order

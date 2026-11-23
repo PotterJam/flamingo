@@ -70,7 +70,7 @@ defmodule Flamingo.GameModes.Spellslingers.Physics do
 
       if Units.alive_unit?(unit) and distance <= reach do
         falloff = max(0.35, 1 - distance / (reach + 1))
-        fx = %{fx | state: Units.damage(fx.state, unit.id, round(damage * falloff), actor)}
+        fx = Fx.hit(fx, unit.id, round(damage * falloff), actor)
         Fx.add_impulse(fx, unit.id, cx - x, cy - y, distance, knock * falloff)
       else
         fx

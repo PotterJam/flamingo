@@ -21,7 +21,7 @@ const SUMMONS = new Set(["imp", "golem", "wisp", "thornling"]);
 const METEORS = new Set(["firerain", "surge"]);
 
 type Segment = { path: unknown[]; start: number; spell: string; radius: number; hit: boolean };
-type Cast = { spell: string; segments: Segment[]; beams: unknown[]; auras?: { kind: string }[]; ko?: string[] };
+type Cast = { spell: string; segments: Segment[]; auras?: { kind: string }[] };
 
 // The charge hum: oscillators that rise through a filter, with a noise layer on top.
 const CHARGE: Record<School, { wave: OscillatorType; from: number; to: number; open: [number, number]; noise: [BiquadFilterType, number, number] }> = {
@@ -271,22 +271,26 @@ export function createSpellSounds(volume: () => number, makeContext: () => BaseA
       }
     },
 
-    // What happens once the flights end: lightning arcing, auras, and knockouts.
+    // Lightning arcing to the next target.
+    zap() {
+      for (let i = 0; i < 6; i++) hiss({ filter: "highpass", from: 2500 + Math.random() * 3000, dur: 0.05, gain: 0.15, at: i * 0.07 });
+      tone({ wave: "square", from: 110, to: 90, dur: 0.45, gain: 0.07, vibrato: 50 });
+    },
+
+    // A wizard knocked out, as they land or sink.
+    knockout() {
+      explosion("inferno", 14);
+      tone({ wave: "sawtooth", from: 420, to: 110, dur: 1.1, gain: 0.07, at: 0.15, vibrato: 6 });
+    },
+
+    // What happens once the flights end: auras appearing.
     aftermath(cast: Cast) {
-      if (cast.beams.length) {
-        for (let i = 0; i < 6; i++) hiss({ filter: "highpass", from: 2500 + Math.random() * 3000, dur: 0.05, gain: 0.15, at: i * 0.07 });
-        tone({ wave: "square", from: 110, to: 90, dur: 0.45, gain: 0.07, vibrato: 50 });
-      }
       for (const aura of cast.auras ?? []) {
         if (aura.kind === "ward") chime([880, 1320, 1760], 0.05, 0.08, "sine");
         else if (aura.kind === "levitate") {
           hiss({ filter: "bandpass", from: 500, to: 2500, q: 1.5, dur: 0.7, gain: 0.5, attack: 0.15 });
           tone({ from: 400, to: 1000, dur: 0.6, gain: 0.07, attack: 0.1 });
         }
-      }
-      if (cast.ko?.length) {
-        explosion("inferno", 14);
-        tone({ wave: "sawtooth", from: 420, to: 110, dur: 1.1, gain: 0.07, at: 0.15, vibrato: 6 });
       }
     },
 

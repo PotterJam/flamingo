@@ -1487,7 +1487,8 @@ defmodule FlamingoWeb.SpellslingersLive do
   end
 
   # Holds back HP and chronicle updates from a new cast until its flight has played out,
-  # so health bars drop when spells visibly land rather than when they are cast.
+  # so health bars drop when spells visibly land rather than when they are cast. A
+  # knockout waits for its slow-motion knockback (0.35x on the canvas) to land too.
   defp defer_board(socket, snapshot, initial?) do
     cast = snapshot.last_cast
     cast_id = cast && cast.id
@@ -1497,7 +1498,13 @@ defmodule FlamingoWeb.SpellslingersLive do
     cond do
       not initial? and cast_id != nil and cast_id != socket.assigns.last_cast_id ->
         p = snapshot.physics
-        delay = round(cast.flight_steps * p.dt * 1000 / p.playback_speed) + 250
+
+        knock =
+          if cast.ko == [],
+            do: 0,
+            else: Enum.max(Enum.map(cast.knocks, &length(&1.path)), fn -> 0 end) / 0.35
+
+        delay = round((cast.flight_steps + knock) * p.dt * 1000 / p.playback_speed) + 250
         Process.send_after(self(), {:reveal_board, cast_id}, delay)
         assign(socket, last_cast_id: cast_id, pending_board: Map.put(board, :id, cast_id))
 

@@ -37,12 +37,17 @@ type Spell = {
 
 type Segment = { path: [number, number][]; start: number; spell: string; radius: number; hit: boolean };
 
+type Hit = { id: string; at: number; hp: number; ward: number };
+
 type Cast = {
   id: number;
   caster_id: string | null;
   spell: string;
   segments: Segment[];
-  beams: [number, number, number, number][];
+  // Lightning arcs, each striking at a step of the flight timeline.
+  beams: { line: [number, number, number, number]; at: number }[];
+  // Each unit struck, at the step it is struck, with the health and ward it is left with.
+  hits?: Hit[];
   knocks: { id: string; path: [number, number][] }[];
   shake: boolean;
   auras: { id: string; kind: string }[];
@@ -83,6 +88,12 @@ type Animation = {
   landed: Set<number>;
   // When the projectiles finished and the post-cast state took over.
   aftermathAt: number | null;
+  // Hits not yet shown, soonest first, and arcs already struck.
+  hits: Hit[];
+  zapped: Set<number>;
+  // Knocked-out wizards already shown falling, and when the first one fell.
+  koShown: Set<string>;
+  koAt: number | null;
 };
 
 interface SpellArenaHook {
@@ -363,13 +374,15 @@ const SpellArena = {
     // Shows how much each unit's health changed between two states, where it stood.
     // One sound per kind of change, at the size of the biggest hit, so a quake hitting
     // everyone is one thump rather than a pile of them.
-    const announceChanges = (before: ArenaState, after: ArenaState) => {
+    // Units in `skip` are left to the cast playing, which shows their knockout itself.
+    const announceChanges = (before: ArenaState, after: ArenaState, skip?: Set<string>) => {
       const old = new Map(before.units.map((u) => [u.id, u]));
       let worstHit = 0;
       let healed = false;
       let blocked = false;
       let summoned = false;
       for (const unit of after.units) {
+        if (skip?.has(unit.id)) continue;
         const prev = old.get(unit.id);
         if (!prev) {
           summoned ||= !unit.dead;
@@ -392,8 +405,8 @@ const SpellArena = {
       if (summoned) sounds.summoned();
     };
 
-    const show = (state: ArenaState) => {
-      if (shown && shown.units !== state.units) announceChanges(shown, state);
+    const show = (state: ArenaState, skip?: Set<string>) => {
+      if (shown && shown.units !== state.units) announceChanges(shown, state, skip);
       const key = state.terrain + state.map_id;
       shown = state;
       // Full view shows open sky above the 2:1 map, in the sky's top colour.
@@ -421,7 +434,16 @@ const SpellArena = {
         else backlog.push(state);
       } else if (shown && cast && cast.id !== seenCastId) {
         seenCastId = cast.id;
-        animation = { cast, start: performance.now(), landed: new Set(), aftermathAt: null };
+        animation = {
+          cast,
+          start: performance.now(),
+          landed: new Set(),
+          aftermathAt: null,
+          hits: [...(cast.hits ?? [])].sort((a, b) => a.at - b.at),
+          zapped: new Set(),
+          koShown: new Set(),
+          koAt: null,
+        };
         pending = state;
         castLocked = true;
         sounds.cast(cast, (shown.physics.dt * 1000) / shown.physics.playback_speed);
@@ -1003,11 +1025,48 @@ const SpellArena = {
       return [x0 + (x1 - x0) * f, y0 + (y1 - y0) * f];
     };
 
+    // Shows the hits the flight has reached on the board still on screen, so health
+    // drops and damage numbers pop as each wizard is struck.
+    const applyHits = (step: number) => {
+      if (!animation || !shown) return;
+      const due = new Map<string, Hit>();
+      while (animation.hits.length && animation.hits[0].at <= step) {
+        const hit = animation.hits.shift()!;
+        due.set(hit.id, hit);
+      }
+      if (!due.size) return;
+      const next = {
+        ...shown,
+        units: shown.units.map((u) => {
+          const hit = due.get(u.id);
+          return hit ? { ...u, hp: hit.hp, ward: hit.ward } : u;
+        }),
+      };
+      announceChanges(shown, next);
+      shown = next;
+    };
+
+    // Lightning arcs flash for a moment from the step each one strikes.
+    const drawBeams = (now: number) => {
+      if (!animation || !shown) return;
+      const s = scale();
+      const step = castStep(now, animation.start);
+      animation.cast.beams.forEach(({ line: [x0, y0, x1, y1], at }, n) => {
+        if (step < at || step > at + 20) return;
+        if (!animation!.zapped.has(n)) {
+          animation!.zapped.add(n);
+          sounds.zap();
+        }
+        lightning(x0 * s, y0 * s, x1 * s, y1 * s, "#93c5fd");
+      });
+    };
+
     const drawFlight = (now: number) => {
       if (!animation || !shown) return;
       const { cast } = animation;
       const s = scale();
       const step = castStep(now, animation.start);
+      applyHits(step);
 
       cast.segments.forEach((segment, n) => {
         const local = step - segment.start;
@@ -1056,7 +1115,6 @@ const SpellArena = {
       if (step >= cast.flight_steps) {
         animation.aftermathAt = now;
         if (cast.shake) shake(6, 700);
-        if (cast.ko?.length) shake(10, 900);
         sounds.aftermath(cast);
         for (const aura of cast.auras ?? []) {
           const unit = (pending ?? shown)?.units.find((u) => u.id === aura.id);
@@ -1066,7 +1124,7 @@ const SpellArena = {
           }
         }
         if (pending) {
-          show(pending);
+          show(pending, new Set(cast.ko ?? []));
           pending = null;
           castLocked = true;
         }
@@ -1086,19 +1144,30 @@ const SpellArena = {
 
     const drawAftermath = (now: number) => {
       if (!animation || animation.aftermathAt === null || !shown) return;
+      const { cast } = animation;
       const elapsed = now - animation.aftermathAt;
-      const s = scale();
+      const step = castStep(now, animation.aftermathAt, knockSpeed(cast));
 
-      if (elapsed < 500) {
-        for (const [x0, y0, x1, y1] of animation.cast.beams) lightning(x0 * s, y0 * s, x1 * s, y1 * s, "#93c5fd");
+      // A knocked-out wizard falls when their knockback ends, or at once if nothing knocked them.
+      let fell = false;
+      for (const id of cast.ko ?? []) {
+        const knock = cast.knocks.find((k) => k.id === id);
+        if (animation.koShown.has(id) || (knock && step < knock.path.length - 1)) continue;
+        animation.koShown.add(id);
+        animation.koAt ??= now;
+        const unit = shown.units.find((u) => u.id === id);
+        if (unit) floatText(unit, "KO!", "#dc2626", 30);
+        fell = true;
+      }
+      if (fell) {
+        shake(10, 900);
+        sounds.knockout();
       }
 
-      const knockSteps = Math.max(0, ...animation.cast.knocks.map((k) => k.path.length));
-      const slow = knockSpeed(animation.cast) < 1;
-
+      const knockSteps = Math.max(0, ...cast.knocks.map((k) => k.path.length));
       const done =
-        castStep(now, animation.aftermathAt, knockSpeed(animation.cast)) >= knockSteps &&
-        elapsed > (slow ? 1300 : animation.cast.beams.length ? 500 : 250);
+        step >= knockSteps &&
+        (animation.koAt !== null ? now - animation.koAt > 1300 : elapsed > (cast.beams.length ? 500 : 250));
 
       if (done) {
         animation = null;
@@ -1200,27 +1269,23 @@ const SpellArena = {
     };
 
     const drawKnockoutBanner = (now: number) => {
-      if (!animation || animation.aftermathAt === null) return;
-      const elapsed = now - animation.aftermathAt;
-      const slow = knockSpeed(animation.cast) < 1;
-      if (slow) {
-        const pulse = 1 + 0.08 * Math.sin(elapsed / 90);
-        ctx.save();
-        ctx.globalAlpha = Math.min(1, elapsed / 250);
-        ctx.fillStyle = "rgba(17, 24, 39, 0.18)";
-        ctx.fillRect(0, 0, W, H);
-        ctx.translate(W / 2, H * 0.28);
-        ctx.scale(pulse, pulse);
-        ctx.font = "900 54px ui-sans-serif, system-ui";
-        ctx.textAlign = "center";
-        ctx.lineWidth = 8;
-        ctx.strokeStyle = "#111827";
-        ctx.strokeText("KNOCKOUT!", 0, 0);
-        ctx.fillStyle = "#facc15";
-        ctx.fillText("KNOCKOUT!", 0, 0);
-        ctx.restore();
-      }
-
+      if (!animation || animation.koAt === null) return;
+      const elapsed = now - animation.koAt;
+      const pulse = 1 + 0.08 * Math.sin(elapsed / 90);
+      ctx.save();
+      ctx.globalAlpha = Math.min(1, elapsed / 250);
+      ctx.fillStyle = "rgba(17, 24, 39, 0.18)";
+      ctx.fillRect(0, 0, W, H);
+      ctx.translate(W / 2, H * 0.28);
+      ctx.scale(pulse, pulse);
+      ctx.font = "900 54px ui-sans-serif, system-ui";
+      ctx.textAlign = "center";
+      ctx.lineWidth = 8;
+      ctx.strokeStyle = "#111827";
+      ctx.strokeText("KNOCKOUT!", 0, 0);
+      ctx.fillStyle = "#facc15";
+      ctx.fillText("KNOCKOUT!", 0, 0);
+      ctx.restore();
     };
 
     // The minimap is its own canvas over the arena, so in full view it can sit under the
@@ -1424,6 +1489,7 @@ const SpellArena = {
         drawTurnMarker(now);
         drawAim(now);
         if (animation && animation.aftermathAt === null) drawFlight(now);
+        drawBeams(now);
         drawAftermath(now);
       } else {
         ctx.fillStyle = "#111827";

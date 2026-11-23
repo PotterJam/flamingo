@@ -37,9 +37,15 @@ defmodule Flamingo.GameModes.Spellslingers.Spells do
 
   defp record_cast(state, before, caster, spell_id, fx, knocks) do
     segments = Enum.reverse(fx.segments)
-    flight = segments |> Enum.map(&(&1.start + length(&1.path))) |> Enum.max(fn -> 0 end)
-    knock = knocks |> Enum.map(&length(&1.path)) |> Enum.max(fn -> 0 end)
     beams = Enum.reverse(fx.beams)
+
+    # The flight lasts until the last projectile lands and the last unit is struck.
+    flight =
+      Enum.map(segments, &(&1.start + length(&1.path)))
+      |> Enum.concat(Enum.map(fx.hits, &(&1.at + 1)))
+      |> Enum.max(fn -> 0 end)
+
+    knock = knocks |> Enum.map(&length(&1.path)) |> Enum.max(fn -> 0 end)
 
     knocked_out =
       for {id, %{kind: :wizard} = unit} <- before.units,
@@ -66,6 +72,7 @@ defmodule Flamingo.GameModes.Spellslingers.Spells do
               %{segment | path: Enum.map(segment.path, &round_point/1)}
             end),
           beams: beams,
+          hits: Enum.reverse(fx.hits),
           knocks: Enum.map(knocks, fn k -> %{k | path: Enum.map(k.path, &round_point/1)} end),
           shake: fx.shake,
           auras: Enum.reverse(fx.auras),
@@ -111,7 +118,7 @@ defmodule Flamingo.GameModes.Spellslingers.Spells do
       hit: hit?
     }
 
-    {%{fx | segments: [segment | fx.segments]}, impact, length(path)}
+    {%{fx | segments: [segment | fx.segments], at: length(path) - 1}, impact, length(path)}
   end
 
   defp fizzle(fx), do: %{fx | state: Units.log(fx.state, "…and it fizzles out.")}
@@ -138,7 +145,8 @@ defmodule Flamingo.GameModes.Spellslingers.Spells do
 
           fx = %{
             fx
-            | segments: [
+            | at: steps + length(path) - 1,
+              segments: [
                 %{
                   path: path,
                   start: steps,
@@ -237,8 +245,8 @@ defmodule Flamingo.GameModes.Spellslingers.Spells do
     |> Enum.sort_by(& &1.id)
     |> Enum.reduce(fx, fn unit, fx ->
       {r, rng} = :rand.uniform_s(fx.state.rng)
-      state = %{fx.state | rng: rng} |> Units.damage(unit.id, spell.damage, actor)
-      Fx.push(%{fx | state: state}, unit.id, {(r - 0.5) * 24, -18.0})
+      fx = Fx.hit(%{fx | state: %{fx.state | rng: rng}}, unit.id, spell.damage, actor)
+      Fx.push(fx, unit.id, {(r - 0.5) * 24, -18.0})
     end)
   end
 
@@ -254,7 +262,7 @@ defmodule Flamingo.GameModes.Spellslingers.Spells do
 
           if Units.alive_unit?(unit) and distance <= spell.radius do
             falloff = max(0.35, 1 - distance / (spell.radius + 1))
-            fx = %{fx | state: Units.damage(fx.state, unit.id, spell.damage, actor)}
+            fx = Fx.hit(fx, unit.id, spell.damage, actor)
             Fx.add_impulse(fx, unit.id, cx - x, cy - y, distance, spell.knock * falloff)
           else
             fx
@@ -295,23 +303,27 @@ defmodule Flamingo.GameModes.Spellslingers.Spells do
       end)
       |> Enum.reverse()
 
-    state = Terrain.carve(fx.state, Enum.map(points, fn {x, y} -> {x, y, 2.6} end))
+    fx = %{fx | state: Terrain.carve(fx.state, Enum.map(points, fn {x, y} -> {x, y, 2.6} end))}
 
-    state =
-      state.units
+    # The drawn path keeps every other point, so the point the tunnel first
+    # reaches a unit at, halved, is the step it passes through them.
+    fx =
+      fx.state.units
       |> Map.values()
-      |> Enum.filter(fn unit ->
+      |> Enum.filter(&(Units.alive_unit?(&1) and &1.id != actor))
+      |> Enum.sort_by(& &1.id)
+      |> Enum.reduce(fx, fn unit, fx ->
         {cx, cy} = Units.center(unit)
+        reached = Enum.find_index(points, fn {x, y} -> (cx - x) ** 2 + (cy - y) ** 2 <= 6 end)
 
-        Units.alive_unit?(unit) and unit.id != actor and
-          Enum.any?(points, fn {x, y} -> (cx - x) ** 2 + (cy - y) ** 2 <= 6 end)
+        if reached,
+          do: Fx.hit(%{fx | at: div(reached, 2) + 1}, unit.id, spell.damage, actor),
+          else: fx
       end)
-      |> Enum.reduce(state, &Units.damage(&2, &1.id, spell.damage, actor))
-      |> Units.unbury_all()
 
     path = [{ox, oy} | Enum.take_every(points, 2)]
     segment = %{path: path, start: 0, spell: "burrow", radius: 0, hit: false}
-    %{fx | state: state, segments: [segment | fx.segments]}
+    %{fx | state: Units.unbury_all(fx.state), segments: [segment | fx.segments]}
   end
 
   def effect(:heal, fx, actor, spell, angle, power) do
@@ -546,7 +558,7 @@ defmodule Flamingo.GameModes.Spellslingers.Spells do
       hit: hit?
     }
 
-    fx = %{fx | segments: [segment | fx.segments]}
+    fx = %{fx | segments: [segment | fx.segments], at: start + length(path) - 1}
     if hit?, do: Physics.explode(fx, actor, elem(impact, 1), radius, damage, knock), else: fx
   end
 
@@ -569,14 +581,11 @@ defmodule Flamingo.GameModes.Spellslingers.Spells do
         fx
 
       {unit, {cx, cy}, d} ->
-        state = fx.state |> Units.damage(unit.id, 14, actor)
-        state = Units.log(state, "Lightning arcs to #{Units.unit_name(state, unit)}!")
-
-        fx = %{
-          fx
-          | state: state,
-            beams: [[x, y, cx, cy] |> Enum.map(&Float.round(&1 * 1.0, 2)) | fx.beams]
-        }
+        # Each arc strikes a moment after the one before it.
+        fx = Fx.hit(%{fx | at: fx.at + 6}, unit.id, 14, actor)
+        state = Units.log(fx.state, "Lightning arcs to #{Units.unit_name(fx.state, unit)}!")
+        line = Enum.map([x, y, cx, cy], &Float.round(&1 * 1.0, 2))
+        fx = %{fx | state: state, beams: [%{line: line, at: fx.at} | fx.beams]}
 
         fx = Fx.add_impulse(fx, unit.id, cx - x, cy - y, d, 14)
         chain(fx, actor, {cx, cy}, MapSet.put(hit, unit.id), jumps - 1)
