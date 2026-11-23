@@ -553,7 +553,7 @@ defmodule Flamingo.GameModes.Spellslingers.Spells do
       hit: hit?
     }
 
-    fx = %{fx | segments: [segment | fx.segments]}
+    fx = %{fx | segments: [segment | fx.segments], at: segment.start + length(segment.path) - 1}
 
     if hit?,
       do: Physics.explode(fx, actor, pos, spell.radius, spell.damage, spell.knock),
@@ -579,7 +579,13 @@ defmodule Flamingo.GameModes.Spellslingers.Spells do
       hit: hit?
     }
 
-    fx = %{fx | segments: [segment | fx.segments], shake: true}
+    fx = %{
+      fx
+      | segments: [segment | fx.segments],
+        at: segment.start + length(segment.path) - 1,
+        shake: true
+    }
+
     fx = %{fx | state: Units.log(fx.state, "The sky tears open!")}
 
     if hit?,
@@ -687,8 +693,8 @@ defmodule Flamingo.GameModes.Spellslingers.Spells do
     |> units_near(origin, spell.radius)
     |> Enum.reject(&(&1.id == actor))
     |> Enum.reduce(%{fx | auras: [%{id: actor, kind: "nova"} | fx.auras]}, fn unit, fx ->
-      state = fx.state |> Units.damage(unit.id, spell.damage, actor) |> freeze(unit.id)
-      %{fx | state: state, auras: [%{id: unit.id, kind: "nova"} | fx.auras]}
+      fx = Fx.hit(fx, unit.id, spell.damage, actor)
+      %{fx | state: freeze(fx.state, unit.id), auras: [%{id: unit.id, kind: "nova"} | fx.auras]}
     end)
   end
 
@@ -700,8 +706,8 @@ defmodule Flamingo.GameModes.Spellslingers.Spells do
     |> Enum.filter(&(Units.alive_unit?(&1) and &1.owner != actor))
     |> Enum.sort_by(& &1.id)
     |> Enum.reduce(fx, fn unit, fx ->
-      state = fx.state |> Units.damage(unit.id, spell.damage, actor) |> freeze(unit.id)
-      %{fx | state: state, auras: [%{id: unit.id, kind: "iceage"} | fx.auras]}
+      fx = Fx.hit(fx, unit.id, spell.damage, actor)
+      %{fx | state: freeze(fx.state, unit.id), auras: [%{id: unit.id, kind: "iceage"} | fx.auras]}
     end)
   end
 
@@ -851,7 +857,7 @@ defmodule Flamingo.GameModes.Spellslingers.Spells do
           {cx, cy} = Units.center(unit)
           distance = max(:math.sqrt((ox - cx) ** 2 + (oy - cy) ** 2), 1.0)
           pull = spell.knock * min(1.0, distance / 30)
-          fx = %{fx | state: Units.damage(fx.state, unit.id, spell.damage, actor)}
+          fx = Fx.hit(fx, unit.id, spell.damage, actor)
           Fx.push(fx, unit.id, {(ox - cx) / distance * pull, -pull * 0.45})
         end)
 
@@ -1032,7 +1038,7 @@ defmodule Flamingo.GameModes.Spellslingers.Spells do
         hit: hit?
       }
 
-      fx = %{fx | segments: [segment | fx.segments]}
+      fx = %{fx | segments: [segment | fx.segments], at: segment.start + length(segment.path) - 1}
 
       if hit?,
         do: Physics.explode(fx, zone.owner, pos, spell.radius, spell.damage, spell.knock),
@@ -1080,7 +1086,7 @@ defmodule Flamingo.GameModes.Spellslingers.Spells do
         hit: hit?
       }
 
-      fx = %{fx | segments: [segment | fx.segments]}
+      fx = %{fx | segments: [segment | fx.segments], at: segment.start + length(segment.path) - 1}
 
       if hit?,
         do: Physics.explode(fx, zone.owner, pos, spell.radius, spell.damage, spell.knock),
@@ -1098,12 +1104,8 @@ defmodule Flamingo.GameModes.Spellslingers.Spells do
     end)
     |> Enum.sort_by(& &1.id)
     |> Enum.reduce(fx, fn unit, fx ->
-      state =
-        fx.state
-        |> Units.damage(unit.id, 8, zone.owner)
-        |> Units.log("Napalm burns #{Units.unit_name(fx.state, unit)}!")
-
-      %{fx | state: state}
+      fx = Fx.hit(fx, unit.id, 8, zone.owner)
+      %{fx | state: Units.log(fx.state, "Napalm burns #{Units.unit_name(fx.state, unit)}!")}
     end)
   end
 
@@ -1146,7 +1148,14 @@ defmodule Flamingo.GameModes.Spellslingers.Spells do
       }
 
       state = Units.log(state, "#{Units.unit_name(state, dragon)} #{verb}!")
-      fx = %{fx | state: state, segments: [segment | fx.segments]}
+
+      fx = %{
+        fx
+        | state: state,
+          segments: [segment | fx.segments],
+          at: segment.start + length(segment.path) - 1
+      }
+
       if hit?, do: Physics.explode(fx, dragon.owner, pos, radius, damage, knock), else: fx
     else
       fx
@@ -1171,8 +1180,8 @@ defmodule Flamingo.GameModes.Spellslingers.Spells do
         hit: true
       }
 
-      state = Units.damage(fx.state, unit.id, damage, zone.owner)
-      %{fx | state: state, segments: [segment | fx.segments]}
+      fx = %{fx | segments: [segment | fx.segments], at: segment.start + length(segment.path) - 1}
+      Fx.hit(fx, unit.id, damage, zone.owner)
     end)
   end
 
@@ -1189,6 +1198,7 @@ defmodule Flamingo.GameModes.Spellslingers.Spells do
     fx = %{
       fx
       | segments: [segment | fx.segments],
+        at: segment.start + 1,
         shake: fx.shake or bomb.radius >= 12,
         state:
           Units.log(
@@ -1208,9 +1218,10 @@ defmodule Flamingo.GameModes.Spellslingers.Spells do
 
   @doc "Rot eats at a decaying unit."
   def rot(fx, unit) do
+    fx = Fx.hit(fx, unit.id, 6, nil)
+
     state =
       fx.state
-      |> Units.damage(unit.id, 6, nil)
       |> then(&Units.put_unit(&1, Map.update!(&1.units[unit.id], :decay, fn d -> d - 1 end)))
       |> Units.log("Decay eats at #{Units.unit_name(fx.state, unit)}.")
 
@@ -1225,12 +1236,13 @@ defmodule Flamingo.GameModes.Spellslingers.Spells do
       Enum.reduce(victims, fx, fn unit, fx ->
         {cx, cy} = Units.center(unit)
         before = fx.state.units[unit.id].hp
-        state = Units.damage(fx.state, unit.id, amount, actor)
-        taken = before - state.units[unit.id].hp
-        me = state.units[actor]
-        state = Units.put_unit(state, %{me | hp: min(me.max_hp, me.hp + taken)})
-        beam = Enum.map([cx, cy, mx, my], &Float.round(&1 * 1.0, 2))
-        %{fx | state: state, beams: [beam | fx.beams]}
+        # Each drain strikes a moment after the one before it, like chain lightning.
+        fx = Fx.hit(%{fx | at: fx.at + 6}, unit.id, amount, actor)
+        taken = before - fx.state.units[unit.id].hp
+        me = fx.state.units[actor]
+        state = Units.put_unit(fx.state, %{me | hp: min(me.max_hp, me.hp + taken)})
+        line = Enum.map([cx, cy, mx, my], &Float.round(&1 * 1.0, 2))
+        %{fx | state: state, beams: [%{line: line, at: fx.at} | fx.beams]}
       end)
 
     %{fx | state: Units.log(fx.state, "#{Units.player_name(fx.state, actor)} drinks their life!")}
@@ -1286,7 +1298,7 @@ defmodule Flamingo.GameModes.Spellslingers.Spells do
     if kind == :terrain and left > 0 and speed > 10 do
       segment = %{path: path, start: start, spell: spell.id, radius: 0, hit: true}
       back = Enum.at(path, -2, origin)
-      fx = %{fx | segments: [segment | fx.segments]}
+      fx = %{fx | segments: [segment | fx.segments], at: segment.start + length(segment.path) - 1}
 
       bounce(
         fx,
@@ -1309,7 +1321,7 @@ defmodule Flamingo.GameModes.Spellslingers.Spells do
         hit: hit?
       }
 
-      fx = %{fx | segments: [segment | fx.segments]}
+      fx = %{fx | segments: [segment | fx.segments], at: segment.start + length(segment.path) - 1}
 
       if hit?,
         do: Physics.explode(fx, actor, pos, spell.radius, spell.damage, spell.knock),
