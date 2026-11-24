@@ -131,7 +131,6 @@ defmodule FlamingoWeb.SpellslingersLive do
             <.spell_panel
               ammo={@ammo}
               locked={@locked}
-              hud_box={@hud_box}
               participation={@participation}
               quick_used={@quick_used}
               selected_spell={@selected_spell}
@@ -559,19 +558,20 @@ defmodule FlamingoWeb.SpellslingersLive do
 
   attr :ammo, :map, required: true
   attr :locked, :any, required: true
-  attr :hud_box, :string, required: true
   attr :participation, :any, required: true
   attr :quick_used, :any, required: true
   attr :selected_spell, :any, required: true
   attr :spell_rows, :any, required: true
 
-  # Tab or right-click opens every spell you carry, one row per way of casting, like
-  # Worms' weapon panel: pointing at a spell shows its picture and numbers in the pane
-  # beside the grid at once (the SpellCards hook), and away from the grid the pane shows
+  # Tab or right-click slides in every spell you carry, Worms style: a paper tray of
+  # wells, a colour stripe under each way of casting, and under the tray the pointed-at
+  # spell's name, numbers and traits (the SpellCards hook); away from the tray it shows
   # the selected spell. Picking one closes it; the number keys still pick directly.
   defp spell_panel(assigns) do
     spells =
-      Enum.flat_map(assigns.spell_rows, fn {_label, row} -> Enum.map(row, &elem(&1, 0)) end)
+      Enum.flat_map(assigns.spell_rows, fn {_label, _color, row} ->
+        Enum.map(row, &elem(&1, 0))
+      end)
 
     shown =
       if Enum.any?(spells, &(&1.id == assigns.selected_spell)),
@@ -584,25 +584,22 @@ defmodule FlamingoWeb.SpellslingersLive do
     <div
       :if={@participation == :active}
       id="arena-spells"
-      class={[
-        @hud_box,
-        "absolute top-1/2 right-4 z-30 hidden w-[min(56rem,calc(100vw-2rem))] -translate-y-1/2 p-3"
-      ]}
+      class="kit-panel absolute top-1/2 right-4 z-30 hidden -translate-y-1/2"
     >
-      <div class="mb-2.5 flex items-center justify-between">
-        <h2 class="text-base font-black">Kit</h2>
-        <span class="flex items-center gap-1.5 text-xs font-bold text-gray-600">
-          <.key_cap key="Tab" /> or right-click to close
+      <div class="absolute -top-6 right-4 flex h-6 items-center gap-1.5 rounded-t-[9px] bg-gray-800 pr-1.5 pl-2.5 text-[11px] font-black tracking-[0.16em] text-amber-200">
+        KIT
+        <span class="inline-grid h-4 min-w-4 place-items-center rounded-[3px] bg-amber-200 px-1 text-[9.5px] tracking-normal text-gray-900">
+          Tab
         </span>
       </div>
-      <div class="grid grid-cols-[1fr_17rem] items-start gap-3">
-        <div class="grid content-start gap-2">
+      <div class="kit-tray bg-paper grid gap-2 p-2.5">
+        <div class="flex w-[332px] flex-wrap gap-x-1 gap-y-[9px]">
           <div
-            :for={{label, spells} <- @spell_rows}
-            class="grid grid-cols-[4.5rem_1fr] items-center gap-2"
+            :for={{label, color, spells} <- @spell_rows}
+            class="flex flex-col gap-[3px]"
+            title={label}
           >
-            <span class="text-xs font-black text-gray-600 uppercase">{label}</span>
-            <div class="flex flex-wrap gap-1.5">
+            <div class="flex gap-1">
               <button
                 :for={{spell, index} <- spells}
                 type="button"
@@ -611,43 +608,36 @@ defmodule FlamingoWeb.SpellslingersLive do
                   JS.push("select_spell", value: %{spell: spell.id}) |> JS.hide(to: "#arena-spells")
                 }
                 data-card={spell.id}
+                data-grand={spell.grand}
                 aria-label={spell.name}
                 aria-pressed={to_string(@selected_spell == spell.id)}
                 disabled={
                   Map.has_key?(@locked, spell.id) or (spell.quick and @quick_used) or
                     Map.get(@ammo, spell.id) == 0
                 }
-                class={[
-                  "group relative grid size-[58px] cursor-pointer touch-none place-items-center rounded-sm border-2 border-border p-0 transition-transform duration-100 select-none",
-                  spell.grand && "outline-2 outline-offset-1 outline-amber-400",
-                  "disabled:cursor-not-allowed disabled:bg-gray-200",
-                  if(@selected_spell == spell.id,
-                    do: "-translate-y-0.5 bg-amber-300 shadow-[0_3px_0_#111827]",
-                    else: "bg-paper hover:-translate-y-0.5 hover:bg-amber-50"
-                  )
-                ]}
+                style={"animation-delay: #{index * 14}ms"}
+                class="kit-slot relative grid size-[52px] cursor-pointer touch-none place-items-center rounded-[10px] p-0 select-none disabled:cursor-not-allowed"
               >
-                <span class="absolute top-0 left-[3px] z-10 text-[10px] font-black text-gray-600">
+                <span class="absolute top-0.5 left-[5px] text-[9px] font-black text-gray-500">
                   {key_label(index)}
                 </span>
-                <.spell_sprite
-                  spell={spell}
-                  class={[
-                    "size-[46px] transition-transform group-enabled:group-hover:scale-110",
-                    (Map.has_key?(@locked, spell.id) or Map.get(@ammo, spell.id) == 0) &&
-                      "opacity-40 grayscale"
-                  ]}
-                />
-                <.icon
-                  :if={spell.grand}
-                  name={:crown}
-                  class="absolute -top-2.5 left-1/2 size-3.5 -translate-x-1/2 fill-amber-300 text-black"
-                />
+                <.spell_sprite spell={spell} class="kit-sprite size-[42px]" />
+                <span
+                  :if={Map.has_key?(@locked, spell.id)}
+                  class="absolute inset-x-[3px] bottom-[3px] flex h-4 items-center justify-center gap-0.5 rounded-[6px] bg-gray-900/80 text-[10.5px] font-black text-amber-300"
+                  title={"Unlocks in #{Map.get(@locked, spell.id)} of your turns"}
+                >
+                  <.icon name={:lock} class="size-2.5" />
+                  {Map.get(@locked, spell.id)}
+                </span>
                 <span
                   :if={!Map.has_key?(@locked, spell.id)}
                   class={[
-                    "absolute -right-1.5 -bottom-1.5 grid h-[18px] min-w-[18px] place-items-center rounded-full border-2 border-border px-1 text-[11px] font-black",
-                    if(Map.get(@ammo, spell.id) == 0, do: "bg-gray-300", else: "bg-paper")
+                    "absolute right-[3px] bottom-[3px] grid h-[15px] min-w-4 place-items-center rounded-[6px] px-[3px] text-[10px] leading-none font-black",
+                    if(Map.get(@ammo, spell.id) == 0,
+                      do: "bg-gray-400 text-gray-900",
+                      else: "bg-gray-900/80 text-white"
+                    )
                   ]}
                   title={
                     if Map.has_key?(@ammo, spell.id),
@@ -657,22 +647,21 @@ defmodule FlamingoWeb.SpellslingersLive do
                 >
                   {Map.get(@ammo, spell.id, "∞")}
                 </span>
-                <span
-                  :if={Map.has_key?(@locked, spell.id)}
-                  class="absolute -right-1.5 -bottom-1.5 flex h-[18px] items-center gap-0.5 rounded-full border-2 border-border bg-amber-300 px-1 text-[11px] font-black text-gray-900"
-                  title={"Unlocks in #{Map.get(@locked, spell.id)} of your turns"}
-                >
-                  <.icon name={:lock} class="size-2.5" />
-                  {Map.get(@locked, spell.id)}
-                </span>
               </button>
             </div>
+            <i class="h-[3px] rounded-full opacity-85" style={"background: #{color}"}></i>
           </div>
         </div>
-        <%!-- Every pane sits in the same grid cell, so the panel is always as tall as the
-             tallest one and pointing along the grid never resizes or shifts it --%>
-        <div id="arena-spell-info" class="grid border-2 border-border bg-paper">
-          <.spell_info :for={spell <- @spells} spell={spell} shown?={spell.id == @shown} />
+        <%!-- Every pane sits in the same grid cell, so the tray is always as tall as the
+             tallest one and pointing along it never resizes or shifts it --%>
+        <div id="arena-spell-info" class="grid w-[332px] grid-cols-1">
+          <.spell_info
+            :for={spell <- @spells}
+            spell={spell}
+            shown?={spell.id == @shown}
+            ammo={@ammo}
+            locked={@locked}
+          />
         </div>
       </div>
     </div>
@@ -975,6 +964,15 @@ defmodule FlamingoWeb.SpellslingersLive do
     |> JS.add_class("bg-amber-300", to: "#drawer-tab-#{tab}")
   end
 
+  # The tray's groups, each with the colour of its stripe and its spells' cast chips.
+  @kit_groups [
+    thrown: {"Thrown", "#fcd34d"},
+    straight: {"Straight", "#93c5fd"},
+    placed: {"Placed", "#86efac"},
+    instant: {"Instant", "#f9a8d4"},
+    grand: {"Big ones", "#fbbf24"}
+  ]
+
   @how %{
     "charge" => {:gauge, "Hold to charge"},
     "beam" => {:mouse_pointer_click, "Click to fire"},
@@ -987,91 +985,178 @@ defmodule FlamingoWeb.SpellslingersLive do
             {key, Spellslingers.spells() |> Enum.map(&Map.fetch!(&1, key)) |> Enum.max()}
           end)
 
+  @meters [
+    {"Power", :flame, :damage},
+    {"Area", :target, :radius},
+    {"Push", :arrow_up_right, :knock}
+  ]
+
+  # What sets each spell apart, as a worded tag that explains itself on hover. Each
+  # family has a colour: what it does on a hit, how it aims, the land, moving, big ones.
+  @trait_families %{
+    hit: "#fb923c",
+    aim: "#93c5fd",
+    land: "#d6a36b",
+    move: "#f9a8d4",
+    big: "#fbbf24"
+  }
+
+  @traits %{
+    wind: {:wind, "Rides the wind", "Wind bends it all the way.", :aim},
+    light_wind: {:wind_arrow_down, "Shrugs off wind", "Wind barely moves it.", :aim},
+    straight:
+      {:mouse_pointer_click, "Dead straight", "No gravity, no wind: goes where you point.", :aim},
+    anywhere:
+      {:map_pin, "Anywhere", "Reaches any spot on the map, no line of sight needed.", :aim},
+    short: {:ruler, "Short reach", "Only reaches so far.", :aim},
+    bounces: {:redo_2, "Bounces", "Rolls and bounces before it goes off.", :hit},
+    scatters: {:split, "Scatters", "Splits into several smaller blasts.", :hit},
+    homing: {:radar, "Homing", "Turns towards the nearest enemy as it falls.", :hit},
+    walks: {:footprints, "Walks", "Lands and scuttles on until it meets a flamingo.", :hit},
+    pulls: {:magnet, "Pulls", "Drags the first flamingo hit over to you.", :hit},
+    trap: {:timer, "Trap", "Waits, then goes off when your turn ends.", :hit},
+    digs: {:shovel, "Digs", "Cuts through the land.", :land},
+    builds: {:brick_wall, "Builds", "Makes new ground: bridges, roofs, cover.", :land},
+    moves: {:bird, "Moves you", "Gets you somewhere else on the map.", :move},
+    keeps_turn:
+      {:fast_forward, "Keeps your turn", "You can still walk and throw after it.", :move},
+    big: {:crown, "Big one", "Grand spell: title card, darkened sky, huge payoff.", :big},
+    whole_map: {:globe, "Whole map", "Hits every part of the island at once.", :big},
+    spares_you: {:shield, "Spares you", "Hurts everyone except you.", :big}
+  }
+
+  @spell_traits %{
+    "firebolt" => [:wind],
+    "fuserune" => [:bounces, :light_wind],
+    "embers" => [:scatters, :wind],
+    "thunderegg" => [:scatters, :wind],
+    "seeker" => [:homing],
+    "hexhare" => [:walks, :light_wind],
+    "lance" => [:straight],
+    "hook" => [:pulls, :short],
+    "tunnel" => [:digs, :short],
+    "blastrune" => [:trap],
+    "meteors" => [:anywhere, :scatters],
+    "slab" => [:builds],
+    "broom" => [:moves, :keeps_turn],
+    "blink" => [:moves, :anywhere],
+    "holyorb" => [:big, :bounces],
+    "anvil" => [:big, :anywhere, :digs],
+    "quake" => [:big, :whole_map, :spares_you],
+    "starfall" => [:big, :whole_map, :scatters]
+  }
+
   attr :spell, :map, required: true
   attr :shown?, :boolean, required: true
+  attr :ammo, :map, required: true
+  attr :locked, :map, required: true
 
-  # A spell's pane in the spell panel: its painted scene, how it casts, its numbers and
-  # its blurb. Every pane is rendered; the selected one shows unless the hook says otherwise.
+  # A spell's pane under the tray: its name, how it casts, ammo or lock, three meters
+  # and its trait tags. Every pane is rendered; the selected one shows unless the hook
+  # says otherwise.
   defp spell_info(assigns) do
-    # Aimless spells (Earthquake) cast on picking, like quick ones, but end the turn.
+    # Aimless spells (Flock Stomp) cast on picking, like quick ones, but end the turn.
     {how_icon, how_text} =
       if assigns.spell.input == "instant" and not assigns.spell.quick,
         do: {:zap, "Goes off on picking"},
         else: Map.fetch!(@how, assigns.spell.input)
 
+    {_label, color} = Keyword.fetch!(@kit_groups, kit_group(assigns.spell))
+
+    meters =
+      for {label, icon, key} <- @meters,
+          do: {label, icon, pips(Map.fetch!(assigns.spell, key), @maxima[key])}
+
+    traits =
+      for key <- Map.get(@spell_traits, assigns.spell.id, []) do
+        {icon, label, text, family} = Map.fetch!(@traits, key)
+        {icon, label, text, Map.fetch!(@trait_families, family)}
+      end
+
     assigns =
-      assign(assigns, how_icon: how_icon, how_text: how_text, stats: card_stats(assigns.spell))
+      assign(assigns,
+        how_icon: how_icon,
+        how_text: how_text,
+        color: color,
+        meters: meters,
+        traits: traits,
+        locked_for: Map.get(assigns.locked, assigns.spell.id)
+      )
 
     ~H"""
     <div
       data-info={@spell.id}
-      class={["spell-card-pop [grid-area:1/1]", if(@shown?, do: "visible", else: "invisible")]}
+      class={[
+        "spell-card-pop grid grid-cols-1 gap-2 [grid-area:1/1]",
+        if(@shown?, do: "visible", else: "invisible")
+      ]}
     >
-      <img
-        src={"/images/spellslingers/guide/#{@spell.id}.webp"}
-        alt=""
-        width="640"
-        height="400"
-        class="block aspect-[16/10] w-full border-b-2 border-border object-cover"
-      />
-      <div class="grid gap-2 px-2.5 py-2">
-        <div class="flex items-center gap-2 text-[17px] leading-tight font-black">
-          <.spell_sprite spell={@spell} class="size-7 shrink-0" />
-          {@spell.name}
-          <.icon :if={@spell.grand} name={:crown} class="size-4 shrink-0 fill-amber-300" />
-        </div>
-        <span class="inline-flex w-fit items-center gap-1 border-2 border-border bg-amber-300 px-1.5 py-px text-[11px] font-black">
+      <div class="flex h-9 items-center gap-1.5 rounded-[9px] bg-gray-900/90 pr-1.5 pl-2.5 text-white">
+        <b class="min-w-0 truncate text-[15px] font-black">{@spell.name}</b>
+        <span
+          class="ml-auto inline-flex h-[21px] shrink-0 items-center gap-1 rounded-full px-2 text-[10.5px] font-black whitespace-nowrap text-gray-900"
+          style={"background: #{@color}"}
+        >
           <.icon name={@how_icon} class="size-3" /> {@how_text}
         </span>
-        <p class="text-[13px] leading-snug text-gray-700">
-          {String.replace_prefix(@spell.blurb, "Quick: ", "")}
-        </p>
-        <div class="grid grid-cols-[auto_1fr] items-center gap-x-2 gap-y-1 text-[12px]">
-          <%= for {label, icon, value, pips} <- @stats do %>
-            <span class="inline-flex items-center gap-1 font-bold">
+        <span
+          :if={@locked_for}
+          title={"Unlocks in #{@locked_for} of your turns"}
+          class="inline-flex h-[21px] shrink-0 items-center gap-1 rounded-full bg-gray-950 px-2 text-[10.5px] font-black whitespace-nowrap text-amber-300"
+        >
+          <.icon name={:lock} class="size-3" />
+          {@locked_for}
+        </span>
+        <span
+          :if={!@locked_for}
+          class="inline-flex h-[21px] shrink-0 items-center gap-1 rounded-full bg-[#fffaf0] px-2 text-[10.5px] font-black whitespace-nowrap text-gray-900"
+        >
+          <.icon name={:package} class="size-3" /> {Map.get(@ammo, @spell.id, "∞")}
+        </span>
+      </div>
+      <div class="grid grid-cols-3 gap-x-2 px-0.5">
+        <span
+          :for={{label, icon, pips} <- @meters}
+          class={[
+            "flex items-center gap-1 text-[9.5px] font-black uppercase",
+            !pips && "opacity-30"
+          ]}
+        >
+          <.icon name={icon} class="size-3 shrink-0" /> {label}
+          <span class="ml-auto flex gap-0.5">
+            <i
+              :for={i <- 1..5}
+              class={[
+                "h-2 w-[7px] rounded-[2px]",
+                if(pips && i <= pips, do: "bg-gray-900", else: "bg-gray-900/15")
+              ]}
+            >
+            </i>
+          </span>
+        </span>
+      </div>
+      <div class="flex flex-wrap gap-1">
+        <span
+          :for={{icon, label, text, color} <- @traits}
+          class="kit-trait relative inline-flex h-[23px] cursor-help items-center gap-1 rounded-full bg-[#fffaf0]/85 pr-2.5 pl-2 text-[11px] font-black whitespace-nowrap shadow-[0_1px_0_rgb(80_45_15/0.25)] hover:bg-white"
+        >
+          <span class="contents" style={"color: #{color}"}>
+            <.icon name={icon} class="size-3.5" />
+          </span>
+          {label}
+          <span class="kit-tip pointer-events-none absolute top-full left-0 z-10 mt-2 w-52 rounded-[9px] bg-gray-900 px-2.5 py-1.5 text-[11.5px] leading-snug font-medium whitespace-normal text-gray-200 shadow-[0_8px_18px_rgb(0_0_0/0.3)]">
+            <b
+              class="mb-0.5 flex items-center gap-1 text-[12.5px] font-black"
+              style={"color: #{color}"}
+            >
               <.icon name={icon} class="size-3.5" /> {label}
-            </span>
-            <span class="flex items-center justify-end gap-2">
-              <span :if={pips} class="flex gap-[3px]">
-                <i
-                  :for={i <- 1..5}
-                  class={[
-                    "h-2 w-3 border-[1.5px] border-black",
-                    if(i <= pips, do: "bg-gray-900", else: "bg-paper")
-                  ]}
-                >
-                </i>
-              </span>
-              <b class="min-w-6 text-right font-black whitespace-nowrap">{value}</b>
-            </span>
-          <% end %>
-        </div>
+            </b>
+            {text}
+          </span>
+        </span>
       </div>
     </div>
     """
-  end
-
-  defp card_stats(spell) do
-    [
-      {"Damage", :flame, if(spell.damage > 0, do: spell.damage, else: "—"),
-       pips(spell.damage, @maxima.damage)},
-      {"Area", :target, if(spell.radius > 0, do: "", else: "—"),
-       pips(spell.radius, @maxima.radius)},
-      {"Knockback", :arrow_up_right, if(spell.knock > 0, do: "", else: "—"),
-       pips(spell.knock, @maxima.knock)},
-      {"Wind", :wind, wind_text(spell), nil},
-      {"Ammo", :package,
-       case Map.get(Flamingo.GameModes.Spellslingers.Catalog.starting_ammo(), spell.id) do
-         nil -> "Unlimited"
-         n -> to_string(n)
-       end, nil},
-      {"Unlocks", :lock,
-       case Flamingo.GameModes.Spellslingers.Catalog.unlock(spell.id) do
-         0 -> "From the start"
-         1 -> "After your 1st turn"
-         n -> "After #{n} of your turns"
-       end, nil}
-    ]
   end
 
   defp pips(value, _max) when value in [0, nil], do: nil
@@ -1082,11 +1167,6 @@ defmodule FlamingoWeb.SpellslingersLive do
   defp cast_hint(%{input: "beam"}), do: "click to fire"
   defp cast_hint(%{input: "place"}), do: "click a spot"
   defp cast_hint(_spell), do: "click to use"
-
-  defp wind_text(%{input: input}) when input in ["instant", "place"], do: "—"
-  defp wind_text(%{wind: wind}) when wind == 0, do: "None"
-  defp wind_text(%{wind: wind}) when wind < 1, do: "Light"
-  defp wind_text(_spell), do: "Full"
 
   # Splits a chronicle line so each wizard's name can take their colour.
   defp paint(text, players) do
@@ -1437,16 +1517,20 @@ defmodule FlamingoWeb.SpellslingersLive do
   defp key_label(11), do: "-"
   defp key_label(_), do: ""
 
-  @rows [{"charge", "Thrown"}, {"beam", "Straight"}, {"place", "Placed"}, {"instant", "Instant"}]
+  defp kit_group(%{grand: true}), do: :grand
+  defp kit_group(%{input: "charge"}), do: :thrown
+  defp kit_group(%{input: "beam"}), do: :straight
+  defp kit_group(%{input: "place"}), do: :placed
+  defp kit_group(_spell), do: :instant
 
-  # Spells in hotkey order, one row per way of casting, for the spell panel.
+  # Spells in hotkey order, one group per way of casting and one for the big ones.
   defp spell_rows(ids) do
     spells = ids |> my_spells() |> Enum.with_index(1)
 
-    for {input, label} <- @rows,
-        row = Enum.filter(spells, fn {spell, _} -> spell.input == input end),
+    for {group, {label, color}} <- @kit_groups,
+        row = Enum.filter(spells, fn {spell, _} -> kit_group(spell) == group end),
         row != [],
-        do: {label, row}
+        do: {label, color, row}
   end
 
   defp my_spells(ids), do: Enum.map(ids, &Spellslingers.spell/1)

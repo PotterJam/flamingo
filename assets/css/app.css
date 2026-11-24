@@ -568,9 +568,65 @@
   font-weight: 900;
 }
 
+/* The kit is a paper tray of pressed-in wells that slides in from the right edge; the
+   pointed-at spell rises out of its well and the selected one sits up as a gold card. */
+.kit-panel { animation: kit-in 0.24s cubic-bezier(0.2, 0.9, 0.3, 1.18); }
+@keyframes kit-in {
+  from { opacity: 0; transform: translateX(30px); }
+}
+.kit-tray {
+  border-radius: 14px;
+  box-shadow: 0 0 0 2px rgb(17 24 39 / 0.8), 0 5px 0 rgb(17 24 39 / 0.55), 0 16px 30px rgb(70 10 40 / 0.28);
+}
+.kit-slot {
+  background: rgb(120 80 40 / 0.11);
+  box-shadow: inset 0 2px 4px rgb(80 45 15 / 0.28);
+  transition: translate 0.09s, background-color 0.09s, box-shadow 0.09s;
+  animation: kit-slot-in 0.22s cubic-bezier(0.2, 0.9, 0.3, 1.4) backwards;
+}
+@keyframes kit-slot-in {
+  from { opacity: 0; transform: translateX(14px) scale(0.85); }
+}
+.kit-slot .kit-sprite { transition: transform 0.14s cubic-bezier(0.2, 0.9, 0.3, 1.6); }
+.kit-slot:enabled:hover {
+  background: #fffaf0;
+  translate: 0 -3px;
+  box-shadow: 0 5px 10px rgb(80 45 15 / 0.3);
+}
+.kit-slot:enabled:hover .kit-sprite { transform: scale(1.16) rotate(-6deg); }
+.kit-slot:disabled .kit-sprite { filter: grayscale(1) brightness(0.9); opacity: 0.42; }
+.kit-slot[data-grand] {
+  background: radial-gradient(circle at 50% 45%, rgb(253 230 138 / 0.8), rgb(251 191 36 / 0.35));
+  box-shadow: inset 0 0 0 2px rgb(217 119 6 / 0.45), inset 0 2px 4px rgb(80 45 15 / 0.2);
+}
+.kit-slot[data-grand]:enabled:hover::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: linear-gradient(115deg, transparent 35%, rgb(255 255 255 / 0.75) 50%, transparent 65%) 0 0 / 250% 100%;
+  animation: kit-sheen 0.7s ease-out;
+  pointer-events: none;
+}
+@keyframes kit-sheen {
+  from { background-position: 120% 0; }
+  to { background-position: -60% 0; }
+}
+.kit-slot[aria-pressed="true"] {
+  background: linear-gradient(#fde68a, #fbbf24);
+  translate: 0 -3px;
+  box-shadow: 0 5px 0 #b45309, 0 8px 14px rgb(180 83 9 / 0.35);
+}
+/* A trait tag explains itself in a tooltip hung under it; a tap opens it on touch. */
+.kit-tip { display: none; }
+.kit-trait:hover .kit-tip { display: block; }
+
 @media (prefers-reduced-motion: reduce) {
   .spell-card-pop,
+  .kit-panel,
+  .kit-slot,
   .arena-tour-hole { animation: none; }
+  .kit-slot[data-grand]:enabled:hover::after { content: none; }
   .arena-banner { animation: arena-banner 2.4s steps(1, end) forwards; }
 }
 .arena-tour-hole[hidden],
