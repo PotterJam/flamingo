@@ -270,19 +270,21 @@ export function paintLand(
   return result;
 }
 
-// Blasts leave their craters ringed in charred earth, like Worms: a band of near-black
-// right at the edge of the hole that browns out into the ground around it. Drawn
-// source-atop on painted land, so it only darkens land. The band starts inside the
-// carved radius because the traced edge sits a little inside it.
+// Blasts leave their craters ringed in charred earth, like Worms: a dark band right at
+// the edge of the hole that browns out into the ground around it. Drawn source-atop on
+// painted land, so it only darkens land. The band starts inside the carved radius
+// because the traced edge sits a little inside it. It stays translucent and a couple of
+// cells wide, so the texture shows through: a sliver of land left over a crater, or a
+// whole thin platform, still reads as ground to stand on rather than part of the hole.
 function scorch(c: CanvasRenderingContext2D, x: number, y: number, r: number) {
   const R = LAND_RES;
-  const outer = r + 3.2;
+  const outer = r + 2.4;
   const g = c.createRadialGradient(x * R, y * R, Math.max(0, r - 1.5) * R, x * R, y * R, outer * R);
   const at = (d: number) => Math.max(0, Math.min(1, (d - (r - 1.5)) / (outer - (r - 1.5))));
-  g.addColorStop(0, "rgba(22,12,8,0.92)");
-  g.addColorStop(at(r + 0.9), "rgba(30,16,10,0.85)");
-  g.addColorStop(at(r + 1.8), "rgba(70,34,18,0.45)");
-  g.addColorStop(1, "rgba(70,34,18,0)");
+  g.addColorStop(0, "rgba(30,14,9,0.74)");
+  g.addColorStop(at(r + 0.7), "rgba(36,18,11,0.62)");
+  g.addColorStop(at(r + 1.5), "rgba(64,30,16,0.3)");
+  g.addColorStop(1, "rgba(64,30,16,0)");
   c.fillStyle = g;
   c.fillRect((x - outer) * R, (y - outer) * R, outer * 2 * R, outer * 2 * R);
 }
