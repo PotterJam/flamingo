@@ -334,6 +334,20 @@ defmodule FlamingoWeb.SpellslingersLive do
       </button>
       <button
         type="button"
+        id="arena-aim-mode"
+        phx-click={JS.dispatch("arena:aim-mode", to: "#arena-canvas")}
+        class="flex cursor-pointer items-center gap-2 rounded-sm px-2 py-1.5 text-left hover:bg-amber-100"
+        title="Switch how you throw: drag back like a slingshot, hold to charge, or Classic Worms"
+      >
+        <.icon name={:crosshair} class="size-4" />
+        <span class="flex-1">
+          <span class="block text-[11px] leading-tight font-semibold text-stone-500">Aiming</span>
+          <span id="arena-aim-mode-label" phx-update="ignore">Classic Worms</span>
+        </span>
+        <.icon name={:arrow_left_right} class="size-4 text-stone-500" />
+      </button>
+      <button
+        type="button"
         id="arena-fullscreen"
         phx-click={JS.dispatch("arena:fullscreen", to: "#arena-canvas")}
         class="flex cursor-pointer items-center gap-2 rounded-sm px-2 py-1.5 text-left hover:bg-amber-100"
@@ -757,7 +771,15 @@ defmodule FlamingoWeb.SpellslingersLive do
           <span>Cross gaps with Take Flight, or Migrate to anywhere.</span>
         </.help_step>
         <.help_step n={2} image="help-throw" title="Throw">
-          <span>Hold the mouse to charge, aim with the pointer, let go to throw.</span>
+          <span>
+            Swing the crosshair with the mouse, fine-tune with
+            <.key_cap key="↑" /><.key_cap key="↓" />.
+            Hold <.key_cap key="Space" />
+            or the mouse to fire: the longer, the harder, and a full bar fires itself.
+          </span>
+          <span>
+            Menu → Aiming switches to a slingshot drag or a charge with a dotted arc.
+          </span>
           <span>Wind bends what you throw.</span>
           <span class="inline-flex items-center gap-1">
             <.key_cap key="Esc" /> or right-click cancels a charge
@@ -1016,7 +1038,7 @@ defmodule FlamingoWeb.SpellslingersLive do
   ]
 
   @how %{
-    "charge" => {:gauge, "Hold to charge"},
+    "charge" => {:gauge, "Set power, let go to throw"},
     "beam" => {:mouse_pointer_click, "Click to fire"},
     "place" => {:crosshair, "Click a spot"},
     "instant" => {:zap, "Instant, turn goes on"}
@@ -1205,7 +1227,7 @@ defmodule FlamingoWeb.SpellslingersLive do
   defp pips(value, max), do: max(1, round(value / max * 5))
 
   # The turn banner's reminder of how the selected spell is cast.
-  defp cast_hint(%{input: "charge"}), do: "hold, then let go to throw"
+  defp cast_hint(%{input: "charge"}), do: "set the power, then let go"
   defp cast_hint(%{input: "beam"}), do: "click to fire"
   defp cast_hint(%{input: "place"}), do: "click a spot"
   defp cast_hint(_spell), do: "click to use"

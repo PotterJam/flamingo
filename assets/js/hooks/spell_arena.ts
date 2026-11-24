@@ -332,7 +332,8 @@ const SpellArena = {
         body.classList.toggle("arena-charging", chargingShown);
         // The hum lasts exactly as long as the charge, however it ends.
         stopChargeSound?.();
-        stopChargeSound = charge ? sounds.charge(charge.spell, CHARGE_MS) : null;
+        // A pull has no time in it, so the rising hum belongs to holding only.
+        stopChargeSound = charge && !charge.pull ? sounds.charge(charge.spell, CHARGE_MS) : null;
         if (charge) {
           undim();
           const meterName = meterPart("name");
@@ -352,6 +353,8 @@ const SpellArena = {
         meterText.textContent = power >= 100 ? "MAX" : `${Math.round(power)}%`;
       }
       body.classList.toggle("arena-thrown", now < thrownUntil);
+      const modeLabel = document.getElementById("arena-aim-mode-label");
+      if (modeLabel && modeLabel.textContent !== AIM_LABELS[aimMode]) modeLabel.textContent = AIM_LABELS[aimMode];
     };
 
     const sky = document.getElementById("arena-sky");
@@ -502,13 +505,47 @@ const SpellArena = {
     // pointer left near the side after a throw doesn't drag the camera away.
     let edgeArmed = false;
     let pointer: { x: number; y: number } | null = null;
-    // Lobbed spells charge while the button is held, like a power bar.
-    let charge: { start: number; spell: string } | null = null;
+    // Lobbed spells charge while the button is held, like a power bar. In drag aiming
+    // (Worms Across Worlds' slingshot) `pull` holds where the press began and where the
+    // pointer is now, in client pixels: the throw goes opposite the pull, and the pull's
+    // length is the power, so it stays put while the player studies the arc.
+    type Pull = { x0: number; y0: number; x: number; y: number; full: number };
+    let charge: { start: number; spell: string; pull?: Pull } | null = null;
     const CHARGE_MS = 1300;
+    // A pull shorter than this is let go of without throwing.
+    const PULL_DEAD = 14;
     // The hint under the wizard teaches the charge; after a few throws it is known.
     const THROWS_KEY = "spellslingers_throws";
     const store = globalThis.localStorage as Storage | undefined;
     let throwsSeen = Number(store?.getItem(THROWS_KEY)) || 0;
+    // How the player throws: "drag" pulls back like a slingshot, "hold" charges over time
+    // with an arc preview, and "classic" is Worms Armageddon: a crosshair turned with the
+    // up and down arrows, a power bar that fires itself when full, and no arc at all.
+    type AimMode = "drag" | "hold" | "classic";
+    const AIM_KEY = "spellslingers_aim_mode";
+    const AIM_LABELS: Record<AimMode, string> = { drag: "Drag back to throw", hold: "Hold to charge", classic: "Classic Worms" };
+    const AIM_NEXT: Record<AimMode, AimMode> = { drag: "hold", hold: "classic", classic: "drag" };
+    const saved = store?.getItem(AIM_KEY);
+    let aimMode: AimMode = saved === "hold" || saved === "drag" ? saved : "classic";
+    canvas.addEventListener("arena:aim-mode", () => {
+      aimMode = AIM_NEXT[aimMode];
+      store?.setItem(AIM_KEY, aimMode);
+      charge = null;
+    });
+    // Classic: which way an arrow is turning the crosshair (1 up, -1 down), how fast in
+    // degrees a second, and how far out the crosshair sits, in cells.
+    let heldAim = 0;
+    const AIM_TURN = 70;
+    // Mouse for the big swing, arrows for the last degree: a tap nudges one degree,
+    // holding turns smoothly after a beat, and the mouse leaves the nudged aim alone
+    // until it is moved a real distance from where it was.
+    const AIM_STEP = 1;
+    const AIM_HOLD_MS = 220;
+    const NUDGE_SLACK = 24;
+    let heldAimSince = 0;
+    let nudgedAt: { x: number; y: number } | null = null;
+    let pointerClient: { x: number; y: number } | null = null;
+    const CROSSHAIR = 11;
     // Where each unit is drawn. Steps glide toward the server position; jumps of
     // more than a few cells are teleports and flash at both ends.
     const drawn = new Map<string, [number, number]>();
@@ -712,21 +749,42 @@ const SpellArena = {
       const spell = spellDef();
       if (!shown || !wizard || !spell || !aim || spell.input === "instant") return [];
       const p = shown.physics;
-      const speed = (p.max_speed * spell.speed * Math.max(power, 5)) / 100;
-      const rad = (aim.angle * Math.PI) / 180;
+      // Rounded to the tenths the cast is sent with, so the arc is the one the server flies.
+      const sent = (v: number) => Math.round(v * 10) / 10;
+      const speed = (p.max_speed * spell.speed * Math.max(sent(power), 5)) / 100;
+      const rad = (sent(aim.angle) * Math.PI) / 180;
       const ax = shown.wind * p.wind_accel * spell.wind;
       const ay = p.gravity * spell.gravity;
       let vx = Math.cos(rad) * speed;
       let vy = -Math.sin(rad) * speed;
       let x = wizard.x + 0.5;
       let y = wizard.y - 2;
+      // `Physics.unit_hit`: a flamingo stops the shot, except the caster until it is clear of them.
+      const alive = shown.units.filter((u) => !u.dead && u.hp > 0);
+      // `Units.hit_parts`: {half width, bottom, top} in cells above the feet.
+      const FLAMINGO_PARTS = [[0.9, -0.2, 2.6], [1.7, 2.6, 5.2], [1.3, 5.2, 8.1]];
+      const hits = (u: Unit, px: number, py: number) => {
+        const dx = Math.abs(px - u.x - 0.5);
+        const up = u.y + 1 - py;
+        const parts = u.kind === "wizard" ? FLAMINGO_PARTS : [[1.6, -0.2, 2.4]];
+        return parts.some(([half, bottom, top]) => dx <= half && up >= bottom && up <= top);
+      };
+      let near: Unit | null = wizard;
       const points: [number, number][] = [];
       for (let i = 0; i < steps; i++) {
         vx += ax * p.dt;
         vy += ay * p.dt;
+        // The server's sub-steps, so thin walls and flamingos stop the arc where they stop the shot.
+        const n = Math.max(1, Math.ceil((Math.hypot(vx, vy) * p.dt) / 0.5));
+        for (let j = 1; j <= n; j++) {
+          const px = x + (vx * p.dt * j) / n;
+          const py = y + (vy * p.dt * j) / n;
+          if (near && !hits(near, px, py)) near = null;
+          if (px < 0 || px >= shown.width || py >= shown.water_level || solidAt(Math.floor(px), Math.floor(py))) return points;
+          if (alive.some((u) => u !== near && hits(u, px, py))) return points;
+        }
         x += vx * p.dt;
         y += vy * p.dt;
-        if (x < 0 || x >= shown.width || y >= shown.water_level || solidAt(Math.floor(x), Math.floor(y))) break;
         points.push([x, y]);
       }
       return points;
@@ -1504,6 +1562,84 @@ const SpellArena = {
         ctx.lineTo(ox + dir[0] * reach * s, oy + dir[1] * reach * s);
         ctx.stroke();
         ctx.restore();
+      } else if (aimMode === "classic") {
+        // Worms Armageddon: a crosshair at a set distance, and while firing a fan of
+        // dots growing out along the aim, yellow to red. No arc: wind is on the meter only.
+        const cx = ox + dir[0] * CROSSHAIR * s;
+        const cy = oy + dir[1] * CROSSHAIR * s;
+        if (charge) {
+          const power = chargePower(t) / 100;
+          const reach = 1.5 + power * (CROSSHAIR - 1.5);
+          for (let d = 1.5; d <= reach; d += 0.9) {
+            const k = (d - 1.5) / (CROSSHAIR - 1.5);
+            ctx.fillStyle = `hsl(${55 - k * 55}, 95%, 52%)`;
+            ctx.beginPath();
+            ctx.arc(ox + dir[0] * d * s, oy + dir[1] * d * s, (0.35 + k * 0.9) * s, 0, Math.PI * 2);
+            ctx.fill();
+          }
+        }
+        ctx.save();
+        ctx.strokeStyle = "#b91c1c";
+        ctx.lineWidth = 2.5;
+        ctx.beginPath();
+        ctx.arc(cx, cy, 0.9 * s, 0, Math.PI * 2);
+        for (const [ax, ay] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+          ctx.moveTo(cx + ax * 0.5 * s, cy + ay * 0.5 * s);
+          ctx.lineTo(cx + ax * 1.6 * s, cy + ay * 1.6 * s);
+        }
+        ctx.stroke();
+        ctx.restore();
+      } else if (charge?.pull || (aimMode === "drag" && !charge)) {
+        // Slingshot: the band from where the press began to the pointer, and the arc the
+        // throw will fly at exactly this pull's power, wind included, until it meets
+        // something. Nothing changes until the pull does, so what you see is what flies.
+        const pull = charge?.pull;
+        if (pull) {
+          const [ax, ay] = toCells({ clientX: pull.x0, clientY: pull.y0 });
+          const [bx, by] = toCells({ clientX: pull.x, clientY: pull.y });
+          ctx.save();
+          ctx.strokeStyle = "rgba(17,24,39,0.45)";
+          ctx.lineWidth = 2;
+          ctx.setLineDash([5, 5]);
+          ctx.beginPath();
+          ctx.moveTo(ax * s, ay * s);
+          ctx.lineTo(bx * s, by * s);
+          ctx.stroke();
+          ctx.setLineDash([]);
+          ctx.fillStyle = "white";
+          ctx.beginPath();
+          ctx.arc(ax * s, ay * s, 4, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.stroke();
+          ctx.restore();
+        }
+        const live = !!pull && Math.hypot(pull.x - pull.x0, pull.y - pull.y0) >= PULL_DEAD;
+        if (live) {
+          const power = chargePower(t);
+          const path = previewPath(power, 90);
+          const dots = path.filter((_, i) => i % 2 === 1);
+          ctx.fillStyle = `hsl(${120 - power * 1.2}, 90%, 50%)`;
+          ctx.strokeStyle = "rgba(17,24,39,0.55)";
+          ctx.lineWidth = 1;
+          dots.forEach(([x, y], i) => {
+            ctx.globalAlpha = Math.max(0.35, 1 - i / (dots.length * 1.4));
+            ctx.beginPath();
+            ctx.arc(x * s, y * s, 2.8, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.stroke();
+          });
+          ctx.globalAlpha = 1;
+          // The power, at the end of the band, as a number you can repeat next turn.
+          const [bx, by] = toCells({ clientX: pull!.x, clientY: pull!.y });
+          const label = power >= 100 ? "MAX" : `${Math.round(power)}%`;
+          ctx.font = "bold 12px ui-sans-serif, system-ui";
+          ctx.textAlign = "center";
+          ctx.lineWidth = 3;
+          ctx.strokeStyle = "white";
+          ctx.strokeText(label, bx * s, by * s + 20);
+          ctx.fillStyle = "#111827";
+          ctx.fillText(label, bx * s, by * s + 20);
+        }
       } else {
         // The start of the real arc, wind included: longer while charging, never the landing spot.
         const power = charge ? chargePower(t) : 45;
@@ -1526,7 +1662,18 @@ const SpellArena = {
       // waits for the release rather than firing itself.
       // Just under the feet, for the first few throws only; the banner says it too.
       if (spell.input === "charge" && throwsSeen < 3) {
-        const text = charge ? "let go to throw · right-click cancels" : "hold to charge";
+        const text =
+          aimMode === "classic"
+            ? charge
+              ? "let go to fire · fires itself when full"
+              : "↑ ↓ aim · hold Space or the mouse to fire"
+            : aimMode === "drag" && !(charge && !charge.pull)
+            ? charge
+              ? "pull further for more power · let go to throw"
+              : "press and drag back to aim"
+            : charge
+              ? "let go to throw · right-click cancels"
+              : "hold to charge";
         const y = (wizard.y + 1) * s + 14 + Math.sin(t / 200);
         ctx.font = "bold 11px ui-sans-serif, system-ui";
         ctx.textAlign = "center";
@@ -2730,6 +2877,14 @@ const SpellArena = {
       syncVeil(now);
       if (landDirty) buildLand();
       if ((heldDir || heldV) && now >= nextStepAt) moveStep(now);
+      if (aimMode === "classic") {
+        // The crosshair is out from the start of the turn, even before the mouse moves.
+        if (!aim && canCast()) setLift(0);
+        // The crosshair turns while an arrow is held, but not once the shot is charging.
+        if (heldAim && !charge && canCast() && now - heldAimSince >= AIM_HOLD_MS) setLift(liftOf() + heldAim * AIM_TURN * (Math.min(64, now - lastTime) / 1000));
+        // A full power bar fires by itself, as in Worms.
+        if (charge && !charge.pull && chargePower(now) >= 100) release();
+      }
       // The server has had long enough to confirm the last step; its word stands.
       if (predicted && now - predicted.at > 600) predicted = null;
       const dt = Math.min(64, now - lastTime);
@@ -2870,7 +3025,7 @@ const SpellArena = {
     rafId = requestAnimationFrame(render);
 
     // ---- Input ----
-    const toCells = (event: PointerEvent) => {
+    const toCells = (event: { clientX: number; clientY: number }) => {
       const rect = canvas.getBoundingClientRect();
       const s = scale();
       return [
@@ -2879,10 +3034,22 @@ const SpellArena = {
       ];
     };
 
-    const chargePower = (now: number) => (charge ? Math.min(100, 8 + ((now - charge.start) / CHARGE_MS) * 92) : 0);
+    // A pull's power is its length against a full pull; a held charge's is its time.
+    const chargePower = (now: number) => {
+      if (!charge) return 0;
+      const pull = charge.pull;
+      if (pull) return Math.min(100, (Math.hypot(pull.x - pull.x0, pull.y - pull.y0) / pull.full) * 100);
+      return Math.min(100, 8 + ((now - charge.start) / CHARGE_MS) * 92);
+    };
 
     const release = () => {
       if (!charge || !aim) return;
+      // Letting go of a pull too short to read is putting the spell down, not a throw.
+      const pull = charge.pull;
+      if (pull && Math.hypot(pull.x - pull.x0, pull.y - pull.y0) < PULL_DEAD) {
+        charge = null;
+        return;
+      }
       const power = chargePower(performance.now());
       const spell = charge.spell;
       charge = null;
@@ -2909,7 +3076,8 @@ const SpellArena = {
     };
 
     // Lobbed spells charge; beams fire at once; placed spells conjure where you click.
-    const trigger = () => {
+    // A press at `at` (client pixels) in drag aiming starts a pull from there instead.
+    const trigger = (at?: { x: number; y: number }) => {
       const spell = spellDef();
       const wizard = myWizard();
       if (!canCast() || !spell || !wizard || charge) return;
@@ -2920,6 +3088,8 @@ const SpellArena = {
         this.pushEvent("select_spell", { spell: spell.id });
         return;
       }
+      // A classic player may fire without ever touching the mouse.
+      if (!aim && aimMode === "classic") setLift(0);
       if (!aim) return;
       if (spell.input === "place") {
         const target = placeTarget();
@@ -2929,9 +3099,26 @@ const SpellArena = {
       } else if (spell.input === "beam") {
         castLocked = true;
         this.pushEvent("cast", { spell: spell.id, angle: Math.round(aim.angle * 10) / 10, power: 100 });
+      } else if (at && aimMode === "drag") {
+        const rect = canvas.getBoundingClientRect();
+        // A full pull is a comfortable mouse or thumb drag, whatever the zoom.
+        const full = Math.max(90, Math.min(220, rect.height * 0.4));
+        charge = { start: performance.now(), spell: spell.id, pull: { x0: at.x, y0: at.y, x: at.x, y: at.y, full } };
       } else {
         charge = { start: performance.now(), spell: spell.id };
       }
+    };
+
+    // Classic aiming works in degrees above the way the flamingo faces, -90 to 90, so
+    // turning round mirrors the crosshair as it does for a worm.
+    const liftOf = () => {
+      if (!aim) return 0;
+      const rad = (aim.angle * Math.PI) / 180;
+      return (Math.atan2(Math.sin(rad), Math.abs(Math.cos(rad))) * 180) / Math.PI;
+    };
+    const setLift = (lift: number) => {
+      const l = Math.max(-90, Math.min(90, lift));
+      aim = { angle: (facing || 1) >= 0 ? l : 180 - l, power: 0 };
     };
 
     const updateAim = (event: PointerEvent) => {
@@ -2975,8 +3162,24 @@ const SpellArena = {
       }
       pointer = { x: ((event.clientX - rect.left) / rect.width) * W, y: ((event.clientY - rect.top) / rect.height) * H };
       edgeArmed = true;
-      // Aim follows the mouse while charging too.
-      updateAim(event);
+      const pull = charge?.pull;
+      if (pull) {
+        // The throw goes the opposite way to the pull, like a slingshot.
+        pull.x = event.clientX;
+        pull.y = event.clientY;
+        const dx = pull.x0 - pull.x;
+        const dy = pull.y0 - pull.y;
+        if (Math.hypot(dx, dy) >= PULL_DEAD) {
+          aim = { angle: (Math.atan2(-dy, dx) * 180) / Math.PI, power: 0 };
+          facing = dx >= 0 ? 1 : -1;
+        }
+        return;
+      }
+      // Aim follows the mouse while charging too, except in classic, where the shot
+      // is lined up first and then fired.
+      pointerClient = { x: event.clientX, y: event.clientY };
+      if (nudgedAt && Math.hypot(event.clientX - nudgedAt.x, event.clientY - nudgedAt.y) >= NUDGE_SLACK) nudgedAt = null;
+      if (!(aimMode === "classic" && (charge || nudgedAt))) updateAim(event);
       dimNear(event.clientX, event.clientY);
     };
     const onPointerLeave = () => {
@@ -3009,8 +3212,12 @@ const SpellArena = {
       }
       // Touch and pen taps arrive without a hover first.
       pointer = { x: px, y: py };
-      updateAim(event);
-      trigger();
+      // In classic a click fires along the crosshair as it is, nudges and all; the
+      // hover has already aimed it. A touch tap, with no hover, still aims first.
+      if (!(aimMode === "classic" && aim)) updateAim(event);
+      // Keep the pull's moves coming even when it is dragged off the arena.
+      canvas.setPointerCapture?.(event.pointerId);
+      trigger({ x: event.clientX, y: event.clientY });
     };
     const onPointerUp = () => {
       if (drag?.button === 2 && !drag.moved && shown?.participation === "active") toggleSpells();
@@ -3076,12 +3283,34 @@ const SpellArena = {
         return;
       }
 
+      // Classic: the up and down arrows turn the crosshair; W and S still jump.
+      if (aimMode === "classic" && (key === "arrowup" || key === "arrowdown")) {
+        event.preventDefault();
+        if (!aim) setLift(0);
+        if (event.repeat) return;
+        heldAim = key === "arrowup" ? 1 : -1;
+        heldAimSince = performance.now();
+        if (!charge && canCast()) setLift(liftOf() + heldAim * AIM_STEP);
+        nudgedAt = pointerClient ?? { x: -1e9, y: -1e9 };
+        return;
+      }
+      // Worms' own jumps: Enter jumps forward, Backspace straight up.
+      if (key === "enter" || key === "backspace") {
+        if (target?.closest("button, a")) return;
+        event.preventDefault();
+        if (!event.repeat) jump(key === "enter" ? "long" : "high");
+        return;
+      }
+
       if (key === "a" || key === "arrowleft" || key === "d" || key === "arrowright") {
         event.preventDefault();
         const dir = key === "a" || key === "arrowleft" ? -1 : 1;
         if (event.repeat && heldDir === dir) return;
         heldDir = dir;
+        // Turning round swings a classic crosshair over to the new side.
+        const lift = liftOf();
         facing = dir;
+        if (aimMode === "classic" && aim && !charge) setLift(lift);
         const now = performance.now();
         if (now >= nextStepAt) moveStep(now);
       } else if (key === "w" || key === "arrowup" || key === "s" || key === "arrowdown") {
@@ -3107,6 +3336,7 @@ const SpellArena = {
       drag = null;
       heldDir = 0;
       heldV = 0;
+      heldAim = 0;
     };
 
     const onKeyUp = (event: KeyboardEvent) => {
@@ -3116,6 +3346,7 @@ const SpellArena = {
       if (dir && dir === heldDir) heldDir = 0;
       const v = key === "w" || key === "arrowup" ? 1 : key === "s" || key === "arrowdown" ? -1 : 0;
       if (v && v === heldV) heldV = 0;
+      if ((key === "arrowup" && heldAim === 1) || (key === "arrowdown" && heldAim === -1)) heldAim = 0;
     };
 
     canvas.addEventListener("pointermove", onPointerMove);

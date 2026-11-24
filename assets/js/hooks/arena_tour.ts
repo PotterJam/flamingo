@@ -63,7 +63,13 @@ const steps = (walk: string, jump: string): Step[] => [
   },
   {
     target: WIZARD,
-    text: "Hold the mouse button or Space to charge, then let go to throw. Right-click or Esc cancels. Esc on its own opens the menu.",
+    // Follows the aiming chosen in the menu (`spellslingers_aim_mode`, classic unless set otherwise).
+    text:
+      localStorage.getItem("spellslingers_aim_mode") === "hold"
+        ? "Hold the mouse button or Space to charge, then let go to throw. Right-click or Esc cancels. Esc on its own opens the menu."
+        : localStorage.getItem("spellslingers_aim_mode") === "drag"
+          ? "Press and drag back like a slingshot: the further you pull, the harder, and the dots show exactly where it flies. Let go to throw. Right-click or Esc cancels. Esc on its own opens the menu."
+          : "Swing the crosshair with the mouse, fine-tune with the up and down arrows. Hold Space or the mouse button to fire: let go early for a softer shot, or it fires itself when the bar is full. Watch the wind meter. Esc on its own opens the menu.",
     place: besideWizard,
     done: () => false,
   },

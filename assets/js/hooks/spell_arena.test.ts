@@ -8,8 +8,13 @@ Object.defineProperty(globalThis, "performance", { value: { now: () => now }, co
 
 const noop = () => {};
 
-function mount() {
+function mount(aimMode: "hold" | "drag" | "classic" = "hold") {
   now = 0;
+  const saved = new Map([["spellslingers_aim_mode", aimMode]]);
+  globalThis.localStorage = {
+    getItem: (k: string) => saved.get(k) ?? null,
+    setItem: (k: string, v: string) => saved.set(k, v),
+  } as never;
   const listeners = new Map<string, (event: unknown) => void>();
   const events = new Map<string, (payload: unknown) => void>();
   const sent: Record<string, unknown>[] = [];
@@ -84,6 +89,7 @@ function mount() {
     blur: () => listeners.get("window:blur")?.({}),
     key: (key: string) =>
       listeners.get("window:keydown")!({ key, repeat: false, target: null, metaKey: false, ctrlKey: false, preventDefault: noop }),
+    keyUp: (key: string) => listeners.get("window:keyup")!({ key }),
   };
 }
 
@@ -386,4 +392,101 @@ test("during the retreat after a cast the wizard still walks, but casts nothing"
   for (let t = 2; t < 300; t += 16) a.tick(t);
   expect(casts(a.sent)).toEqual([]);
   expect(a.sent.some((e) => e.name === "walk")).toBe(true);
+});
+
+test("dragging back throws the opposite way at the pull's power, however long it is held", () => {
+  const a = mount("drag");
+  a.server("arena_state", state());
+  a.tick(1);
+  // A full pull is 40% of the 500 px arena's height: 200 px.
+  a.down();
+  a.move(550, 300);
+  a.tick(5000);
+  now = 5000;
+  a.up();
+  const [thrown] = casts(a.sent);
+  // Pulled down and left, so it flies up and right; 141 px of 200 is 71%.
+  expect(thrown.angle).toBe(45);
+  expect(thrown.power).toBeCloseTo(70.7, 1);
+});
+
+test("letting go of a pull too short to read throws nothing and keeps the turn", () => {
+  const a = mount("drag");
+  a.server("arena_state", state());
+  a.tick(1);
+  a.down();
+  a.move(655, 203);
+  now = 800;
+  a.up();
+  expect(casts(a.sent)).toEqual([]);
+  a.down();
+  a.move(650, 400);
+  a.up();
+  expect(casts(a.sent).map((e) => [e.angle, e.power])).toEqual([[90, 100]]);
+});
+
+test("classic aiming: held arrows turn the crosshair, and a full power bar fires by itself", () => {
+  const a = mount("classic");
+  a.server("arena_state", state());
+  a.tick(1);
+  // Facing right, with the crosshair level; Up held 0.7 s lifts it 1 degree, then 70 a second after 0.22 s.
+  a.key("d");
+  a.keyUp("d");
+  a.key("ArrowUp");
+  for (let t = 16; t <= 716; t += 16) a.tick(t);
+  a.keyUp("ArrowUp");
+  a.key(" ");
+  // The mouse cannot swing a shot that is already charging.
+  a.move(350, 200);
+  for (let t = 720; t < 3000; t += 16) a.tick(t);
+  const [thrown] = casts(a.sent);
+  expect(thrown.power).toBe(100);
+  expect(thrown.angle as number).toBeGreaterThan(30);
+  expect(thrown.angle as number).toBeLessThan(40);
+  // Arrows aim rather than jump.
+  expect(a.sent.some((e) => e.name === "jump")).toBe(false);
+});
+
+test("classic aiming: turning round mirrors the crosshair, and an early release is a softer shot", () => {
+  const a = mount("classic");
+  a.server("arena_state", state());
+  a.tick(1);
+  a.key("d");
+  a.keyUp("d");
+  a.key("ArrowUp");
+  for (let t = 16; t <= 716; t += 16) a.tick(t);
+  a.keyUp("ArrowUp");
+  a.key("a");
+  a.keyUp("a");
+  a.key(" ");
+  now = 1100;
+  a.keyUp(" ");
+  const [thrown] = casts(a.sent);
+  expect(180 - (thrown.angle as number)).toBeGreaterThan(30);
+  expect(180 - (thrown.angle as number)).toBeLessThan(40);
+  expect(thrown.power as number).toBeLessThan(50);
+});
+
+test("classic aiming: the mouse swings the crosshair, arrow taps fine-tune it a degree each, and a click fires as tuned", () => {
+  const fire = (nudges: number, wobble: boolean) => {
+    const a = mount("classic");
+    a.server("arena_state", state());
+    a.tick(1);
+    a.move(602, 190);
+    for (let i = 0; i < nudges; i++) {
+      a.key("ArrowUp");
+      a.keyUp("ArrowUp");
+    }
+    // A small wobble of the mouse keeps the nudges; the click fires where they left it.
+    if (wobble) a.move(607, 193);
+    for (let t = 16; t < 200; t += 16) a.tick(t);
+    a.down();
+    now = 900;
+    a.up();
+    return casts(a.sent)[0].angle as number;
+  };
+  // Two taps add exactly two degrees to where the mouse pointed, wobble or not.
+  expect(fire(2, true) - fire(0, false)).toBeCloseTo(2, 5);
+  // Without a nudge, the mouse still aims the crosshair directly.
+  expect(fire(0, true)).not.toBe(fire(0, false));
 });
