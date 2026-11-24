@@ -728,16 +728,20 @@ const SpellArena = {
       const pal = palette();
       const backdrop = art.backdrops[shown?.map_id ?? ""];
       if (shown && ready(backdrop)) {
-        // The painting sits behind the world and slides a little as the camera pans,
-        // so the distance reads as distance.
-        const k = Math.max((W * 1.2) / backdrop.naturalWidth, (H * 1.08) / backdrop.naturalHeight);
+        // The painting is a far layer: it slides a tenth as far as the world when the
+        // camera pans and grows a little when it zooms, both around the view's middle,
+        // so the distance reads as distance. It is sized so it never runs out, even
+        // zoomed all the way in at the edge of the world.
+        const DEPTH = 0.1;
+        const grow = (zoom / ZOOM_MIN) ** 0.2;
+        const k = Math.max(W / backdrop.naturalWidth, H / backdrop.naturalHeight) * 1.08 * grow;
         const bw = backdrop.naturalWidth * k;
         const bh = backdrop.naturalHeight * k;
-        const panX = Math.max(1, shown.width - VIEW_W);
-        const panY = Math.max(1, shown.height - VIEW_H);
-        const fx = Math.max(0, Math.min(1, cam.x / panX));
-        const fy = Math.max(0, Math.min(1, cam.y / panY));
-        ctx.drawImage(backdrop, -(bw - W) * fx, -(bh - H) * fy, bw, bh);
+        const slideX = (cam.x + VIEW_W / 2 - shown.width / 2) * CELL * zoom * DEPTH;
+        const slideY = (cam.y + VIEW_H / 2 - shown.height / 2) * CELL * zoom * DEPTH;
+        const x = Math.max(W - bw, Math.min(0, (W - bw) / 2 - slideX));
+        const y = Math.max(H - bh, Math.min(0, (H - bh) / 2 - slideY));
+        ctx.drawImage(backdrop, x, y, bw, bh);
         if (shown.map_id === "cavern") {
           for (let i = 0; i < 40; i++) {
             ctx.globalAlpha = 0.3 + 0.3 * Math.sin(t / 700 + i);
@@ -1475,8 +1479,10 @@ const SpellArena = {
       // Follows the wizard as drawn, so it rides along mid-jump.
       const [ux, uy] = drawn.get(unit.id) ?? [unit.x, unit.y];
       const cx = (ux + 0.5) * s;
-      // Clear of the nameplate under it, even at the bottom of its bob.
-      const y = (uy + 1) * s - 66 + Math.sin(t / 180) * 3;
+      // Over the name drawLabels prints (its caps reach about 14px above the plate's
+      // top), clear of it even at the bottom of its bob.
+      const top = (uy + 1) * s - (LABEL_TALL * s + 3);
+      const y = top - 28 + Math.sin(t / 180) * 3;
       ctx.fillStyle = shown.players[unit.id]?.color ?? "#111827";
       ctx.strokeStyle = "#111827";
       ctx.lineWidth = 2;
@@ -2669,8 +2675,9 @@ const SpellArena = {
         shakePower = 0;
       }
 
-      drawBackground(now);
+      // The camera moves first so the backdrop follows this frame's view, not the last.
       moveCamera(now, dt);
+      drawBackground(now);
       const zoomPunch = punchAt(now);
       ctx.save();
       ctx.translate(W / 2, H / 2);
