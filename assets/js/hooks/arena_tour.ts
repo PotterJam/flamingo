@@ -114,8 +114,8 @@ const start = (hook: TourHook) => {
       </div>`;
   };
 
-  // Pointing at the wizard brings the camera round to it when it is out of view,
-  // as clicking its name in the rail does; a cast in flight still takes the camera.
+  // Pointing at the wizard brings the camera back round to it when it is out of view,
+  // and the camera keeps following it from there; a cast in flight still takes the camera.
   let lookedAt = 0;
   const advance = () => {
     if (step === list.length - 1) finish();

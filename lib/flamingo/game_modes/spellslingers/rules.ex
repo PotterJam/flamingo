@@ -62,10 +62,11 @@ defmodule Flamingo.GameModes.Spellslingers.Rules do
       @grand_intro_ms 1300
       # A new duel waits for every player's arena to load, up to @load_wait_ms, then
       # each flamingo drops in while the camera visits it, @intro_step_ms apiece, and
-      # @intro_tail_ms more before the first turn's clock starts.
+      # @intro_tail_ms more, while the camera heads back to the first player, before the
+      # first turn's clock starts.
       @load_wait_ms 15_000
       @intro_step_ms 900
-      @intro_tail_ms 700
+      @intro_tail_ms 1000
       @max_bots 5
       @bot_think_ms 1400
       @bot_names ~w(Merlina Grimble Zephyra Thornwick Pyrrha)

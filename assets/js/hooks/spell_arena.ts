@@ -2267,10 +2267,12 @@ const SpellArena = {
     // then the wizard whose turn it is. Free look pauses following between casts.
     const cameraFocus = (now: number): [number, number] | null => {
       if (!shown) return null;
-      // The intro visits each flamingo as it drops in, starting where the first will.
+      // The intro visits each flamingo as it drops in, starting where the first will, then
+      // heads back to the first so the opening turn starts with its flamingo in view.
       if (shown.phase === "arena_loading" || shown.phase === "arena_intro") {
         const order = introOrder();
-        const i = introAt === null ? 0 : Math.min(order.length - 1, Math.floor((now - introAt) / introStep()));
+        const at = introAt === null ? 0 : Math.floor((now - introAt) / introStep());
+        const i = at < order.length ? at : 0;
         const unit = shown.units.find((u) => u.id === order[i]);
         if (unit) return [unit.x + 0.5, unit.y - 4];
       }
@@ -2587,10 +2589,12 @@ const SpellArena = {
       clampCam();
       freeLookUntil = performance.now() + 5000;
     };
-    // Without an id (as from the tour), it looks at the viewer's own wizard.
+    // Without an id (as from the tour, on the viewer's own turn) the camera goes back to
+    // following the turn's wizard, gliding there and staying with it as it walks.
     const onFocus = (event: Event) => {
-      const id = (event as CustomEvent<{ id?: string } | null>).detail?.id ?? shown?.viewer_id;
+      const id = (event as CustomEvent<{ id?: string } | null>).detail?.id;
       if (id) lookAt(id);
+      else freeLookUntil = 0;
     };
 
     // Where the viewer's wizard is on screen, for the first-turn tour to point at.

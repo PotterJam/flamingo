@@ -134,7 +134,7 @@ defmodule Flamingo.GameModes.SpellslingersTest do
 
     assert state.phase == :arena_intro
     # A step per flamingo, then the tail.
-    assert timers == [{:schedule_phase_timeout, :arena_intro, 900 * 3 + 700}]
+    assert timers == [{:schedule_phase_timeout, :arena_intro, 900 * 3 + 1000}]
 
     {:ok, %{state: state, timers: timers}} =
       Spellslingers.timeout(state, :arena_intro, context(offline))
