@@ -1,88 +1,59 @@
 defmodule Flamingo.GameModes.Spellslingers.Spells do
   @moduledoc """
   What each spell in the arsenal does. Every cast gathers its flights, hits and
-  knockback in an `Fx`, which `run/5` resolves and records for clients to replay.
+  knockback in an `Fx`, which `run/6` resolves and records as a `Timeline`.
   """
 
   use Flamingo.GameModes.Spellslingers.Rules
 
-  alias Flamingo.GameModes.Spellslingers.{Crates, Fx, Physics, Rng, Terrain, Units}
+  alias Flamingo.GameModes.Spellslingers.{Fx, Physics, Rng, Terrain, Timeline, Units}
 
   @doc """
   Runs a cast: `effects` gets a fresh `Fx` and returns it with the cast's
-  effects applied. Then knockback, deaths and settling resolve, and the result
-  is recorded as the state's `last_cast` for clients to replay.
+  effects applied. Then everyone knocked flies, everyone comes down and lands,
+  and the whole of it is recorded as the state's `timeline` for clients to play.
   """
   def run(state, caster, spell_id, target, effects, grand \\ false) do
-    fx = effects.(%{Fx.new(state, target) | grand: grand})
-    {after_fx, knocks} = resolve_fx(fx.state, fx)
-    record_cast(after_fx, state, caster, spell_id, fx, knocks)
-  end
-
-  def in_place_range?(state, actor, x, y) do
-    caster = state.units[actor]
-    :math.sqrt((x - caster.x - 0.5) ** 2 + (y - caster.y + 1) ** 2) <= state.tuning.place_range
-  end
-
-  defp resolve_fx(state, fx) do
-    {state, knocks} = Physics.apply_knocks(state, fx.impulses)
-    # Anything knocked off the map or into the sea is gone before settling could
-    # lift it back onto nearby ground.
-    state =
-      state
-      |> Units.resolve_deaths()
-      |> Units.settle_all()
-      |> Crates.collect_crates()
-      |> Units.resolve_deaths()
-
-    {state, knocks}
-  end
-
-  defp record_cast(state, before, caster, spell_id, fx, knocks) do
+    opened = Timeline.open(state, caster_id: caster, spell: spell_id, grand: grand)
+    fx = effects.(%{Fx.new(opened, target) | grand: grand})
     segments = Enum.reverse(fx.segments)
 
-    # The flight lasts until the last projectile lands and the last unit is struck.
+    # The flight lasts until the last projectile lands and the last unit is struck;
+    # knockbacks start then.
     flight =
       Enum.map(segments, &(&1.start + length(&1.path)))
       |> Enum.concat(Enum.map(fx.hits, &(&1.at + 1)))
       |> Enum.max(fn -> 0 end)
 
-    knock = knocks |> Enum.map(&length(&1.path)) |> Enum.max(fn -> 0 end)
+    hits = for hit <- Fx.reveal(fx, state), do: Map.put(hit, :kind, "hit")
+    state = %{fx.state | clock: flight}
 
-    knocked_out =
-      for {id, %{kind: :wizard} = unit} <- before.units,
-          Units.alive_unit?(unit) and not Units.alive?(state, id),
-          do: id
-
-    # A knockout's knockback opens in slow motion on clients (about 250 ms lost) and the
-    # KO banner holds a moment after, so the turn waits for both.
-    slow_mo = if knocked_out != [], do: 950, else: 0
-
-    # Grand spells open with a title card before anything flies.
-    extra =
-      if(fx.shake, do: 700, else: 0) + slow_mo + if(fx.grand, do: @grand_intro_ms, else: 0)
-
-    %{
-      state
-      | cast_count: state.cast_count + 1,
-        last_cast: %{
-          id: state.cast_count + 1,
-          caster_id: caster,
-          spell: spell_id,
-          segments:
-            Enum.map(segments, fn segment ->
-              %{segment | path: Enum.map(segment.path, &round_point/1)}
-            end),
-          hits: Fx.reveal(fx, before),
-          knocks: Enum.map(knocks, fn k -> %{k | path: Enum.map(k.path, &round_point/1)} end),
-          shake: fx.shake,
-          grand: fx.grand,
-          auras: Enum.reverse(fx.auras),
-          ko: knocked_out,
-          flight_steps: flight,
-          duration_ms: round((flight + knock) * @dt * 1000 / @playback_speed) + extra + 300
+    state =
+      update_in(state.timeline, fn t ->
+        %{
+          t
+          | segments:
+              Enum.map(segments, &%{&1 | path: Enum.map(&1.path, fn p -> round_point(p) end)}),
+            # Events are kept newest first until the timeline closes.
+            events: Enum.reverse(hits) ++ t.events,
+            auras: Enum.reverse(fx.auras),
+            shake: fx.shake,
+            flight_steps: flight
         }
-    }
+      end)
+
+    {state, knocks} = Physics.apply_knocks(state, fx.impulses)
+    state = Enum.reduce(knocks, state, &Timeline.move(&2, &1.id, "knock", flight, &1.path))
+
+    flights =
+      Map.new(knocks, fn k -> {k.id, {flight + length(k.path) - 1, opened.units[k.id].y}} end)
+
+    state |> Units.come_down(flight, flights) |> Timeline.close()
+  end
+
+  def in_place_range?(state, actor, x, y) do
+    caster = state.units[actor]
+    :math.sqrt((x - caster.x - 0.5) ** 2 + (y - caster.y + 1) ** 2) <= state.tuning.place_range
   end
 
   defp round_point({x, y}), do: [Float.round(x * 1.0, 2), Float.round(y * 1.0, 2)]
@@ -107,7 +78,7 @@ defmodule Flamingo.GameModes.Spellslingers.Spells do
 
   defp add_segment(fx, path, start, spell, radius, hit?) do
     segment = %{path: path, start: start, spell: spell, radius: radius, hit: hit?}
-    %{fx | segments: [segment | fx.segments], at: start + length(path) - 1}
+    Fx.at(%{fx | segments: [segment | fx.segments]}, start + length(path) - 1)
   end
 
   # The throw that flies a hooked miner on a short arc to land just in front of the
@@ -295,7 +266,7 @@ defmodule Flamingo.GameModes.Spellslingers.Spells do
         reached = Enum.find_index(points, &(Units.distance_to(unit, &1) <= 1.5))
 
         if reached,
-          do: Fx.hit(%{fx | at: div(reached, 2) + 1}, unit.id, spell.damage, actor),
+          do: Fx.hit(Fx.at(fx, div(reached, 2) + 1), unit.id, spell.damage, actor),
           else: fx
       end)
 
@@ -357,10 +328,11 @@ defmodule Flamingo.GameModes.Spellslingers.Spells do
 
     case Units.free_spot(fx.state, floor(x), floor(y), wizard) do
       {:ok, moved} ->
-        {moved, fall} = Units.settle(fx.state, moved)
+        # It appears in the air over the spot and drops from there once the cast lands.
         from = {wizard.x + 0.5, wizard.y - 1.0}
         fx = add_segment(fx, [from, {moved.x + 0.5, moved.y - 1.0}], 0, "blink", 0, true)
-        %{fx | state: fx.state |> Units.put_unit(moved) |> Units.fall_damage(actor, fall)}
+        state = Timeline.move(fx.state, actor, "blink", fx.state.clock, [{moved.x, moved.y}])
+        %{fx | state: Units.put_unit(state, moved)}
 
       :error ->
         %{fx | state: Units.log(fx.state, "…but there was no room to land.")}
@@ -430,7 +402,7 @@ defmodule Flamingo.GameModes.Spellslingers.Spells do
     |> run(owner, "blastrune", nil, fn fx ->
       Enum.reduce(mine, %{fx | shake: true}, fn rune, fx ->
         fx = add_segment(fx, [{rune.x, rune.y}, {rune.x, rune.y}], 0, "blastrune", 13, true)
-        blast(%{fx | at: 1}, owner, {rune.x, rune.y}, spell)
+        blast(Fx.at(fx, 1), owner, {rune.x, rune.y}, spell)
       end)
     end)
   end

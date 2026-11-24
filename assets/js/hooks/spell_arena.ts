@@ -50,21 +50,40 @@ type BotAim = { spell: string; angle?: number; power?: number; x?: number; y?: n
 
 type Segment = { path: [number, number][]; start: number; spell: string; radius: number; hit: boolean };
 
-type Hit = { id: string; at: number; hp: number };
+// One thing a timeline does at a moment: `at` is its step, `ms` when it plays after the
+// timeline starts. Each that changes a unit carries the health it leaves.
+type TimelineEvent = {
+  kind: "hit" | "land" | "ko" | "crate" | "tide";
+  at: number;
+  ms: number;
+  id?: string | null;
+  hp?: number;
+  sea?: boolean;
+  crate?: string;
+  level?: number;
+};
 
+// A unit moving along a path (unit cells) from step `start`.
+type Move = { id: string; kind: "knock" | "fall" | "jump" | "blink"; start: number; path: [number, number][] };
+
+// Everything one action does, in order, as the server worked it out: a cast, a step or
+// jump that drops, the end of a turn. Clients play it as given; the server waits
+// `duration_ms` before anything follows.
 type Cast = {
   id: number;
   caster_id: string | null;
-  spell: string;
+  spell: string | null;
   segments: Segment[];
-  // Each unit struck, at the step it is struck, with the health it is left with.
-  hits?: Hit[];
-  knocks: { id: string; path: [number, number][] }[];
+  moves: Move[];
+  events: TimelineEvent[];
   shake: boolean;
   grand?: boolean;
   auras: { id: string; kind: string }[];
-  ko: string[];
   flight_steps: number;
+  // A knockout slows the timeline from `slow_at`; the Hallowed Orb holds still for a beat.
+  slow_at: number | null;
+  beat: { at: number; ms: number } | null;
+  lead_ms: number;
   duration_ms: number;
 };
 
@@ -87,13 +106,11 @@ type ArenaState = {
   // After a cast the wizard may still move for a few seconds, but not cast.
   retreat?: boolean;
   bot_aim?: BotAim | null;
-  last_cast: Cast | null;
+  timeline: Cast | null;
   players: Record<string, { name: string; color: string }>;
   spells: Spell[];
   my_spells: string[];
   selected_spell: string;
-  // The latest jump, numbered so each one plays once; its path is in unit cells.
-  last_jump: { n: number; id: string; path: [number, number][] } | null;
   physics: { dt: number; gravity: number; max_speed: number; wind_accel: number; playback_speed: number; place_range: number; grand_intro_ms?: number; intro_step_ms?: number; max_climb?: number; egg_radius?: number };
   // Steps left this turn, for walking ahead of the server.
   walk_left?: number;
@@ -123,15 +140,15 @@ type Smoke = { x: number; y: number; r: number; vx: number; vy: number; life: nu
 
 type Animation = {
   cast: Cast;
+  // When the timeline started playing; its events' `ms` count from here.
   start: number;
-  // Segments that have already burst on impact.
+  // Segments that have already burst on impact, and moves already begun.
   landed: Set<number>;
-  // When the projectiles finished and the post-cast state took over.
-  aftermathAt: number | null;
-  // Hits not yet shown, soonest first.
-  hits: Hit[];
-  // Knocked-out wizards already shown falling, and when the first one fell.
-  koShown: Set<string>;
+  begun: Set<number>;
+  // Whether the projectiles have all landed, and the next event to play.
+  aftermath: boolean;
+  next: number;
+  // When the first knockout of the timeline played, for its banner.
   koAt: number | null;
 };
 
@@ -403,7 +420,7 @@ const SpellArena = {
     // When each unit was last hurt, so it flinches.
     const hurtAt = new Map<string, number>();
     let terrainKey = "";
-    let seenCastId = -1;
+    let seenTimelineId = -1;
     let animation: Animation | null = null;
     let particles: Particle[] = [];
     let floaters: Floater[] = [];
@@ -421,17 +438,12 @@ const SpellArena = {
     let heldDir = 0;
     let heldV = 0;
     let nextStepAt = 0;
-    let predicted: { x: number; y: number; at: number } | null = null;
+    // `drop` marks a step off an edge: the server's timeline plays the fall from there.
+    let predicted: { x: number; y: number; at: number; drop?: boolean } | null = null;
     let stepsLeft = 0;
     let crouchAt = -1e9;
     // Which way the viewer's wizard faces: the last way it walked or aimed. Jumps go this way.
     let facing = 0;
-    let seenJump = -1;
-    let jumping: { id: string; path: [number, number][]; start: number } | null = null;
-    // Fall damage the server has dealt that shows once the flamingo lands, by id, and
-    // flamingos whose drop ends in the sea: they fall all the way before the KO.
-    const fallHurt = new Map<string, number>();
-    const fallKO = new Set<string>();
     let lastBlockedHint = 0;
     let frame = 0;
     let shakeUntil = 0;
@@ -611,32 +623,8 @@ const SpellArena = {
       if (summoned) sounds.summoned();
     };
 
-    const show = (state: ArenaState, skip?: Set<string>) => {
-      const jump = state.last_jump;
-      const newJump = !!shown && !!jump && jump.n !== seenJump;
-      // Fall damage shows when the flamingo lands, not as it leaves the top: a jumper,
-      // or one still above the spot it drops to (off a ledge, or its ground blasted away).
-      if (shown && shown.units !== state.units) {
-        const old = new Map(shown.units.map((u) => [u.id, u]));
-        for (const after of state.units) {
-          const before = old.get(after.id);
-          if (!before || before.dead || skip?.has(after.id) || after.hp >= before.hp || (after.float ?? 0) > 0) continue;
-          const at = drawn.get(after.id) ?? [before.x, before.y];
-          const dropping = falls.has(after.id) || (after.y - at[1] > 2 && Math.abs(after.x - at[0]) <= 2);
-          if (!(newJump && jump!.id === after.id) && !dropping) continue;
-          fallHurt.set(after.id, (fallHurt.get(after.id) ?? 0) + after.hp - before.hp);
-          if (after.dead) fallKO.add(after.id);
-          skip = new Set([...(skip ?? []), after.id]);
-        }
-        announceChanges(shown, state, skip);
-      }
-      if (jump && jump.n !== seenJump) {
-        seenJump = jump.n;
-        if (newJump) {
-          jumping = { id: jump.id, path: jump.path, start: performance.now() };
-          sounds.jump();
-        }
-      }
+    const show = (state: ArenaState) => {
+      if (shown && shown.units !== state.units) announceChanges(shown, state);
       const key = state.terrain + state.map_id;
       // A new turn brings a fresh step budget; within a turn, steps already taken
       // here and not yet confirmed stay spent, and steps the server adds (a broomstick's
@@ -649,7 +637,7 @@ const SpellArena = {
         edgeArmed = false;
       }
       // A rematch starts on a fresh island with no casts yet: old scorch marks go.
-      if (shown?.last_cast && !state.last_cast) scorches = [];
+      if (shown?.timeline && !state.timeline) scorches = [];
       // A new duel waits for this page again, and plays its intro again.
       if (state.phase === "arena_loading" && shown?.phase !== "arena_loading") {
         reported = false;
@@ -671,43 +659,42 @@ const SpellArena = {
         ceiling = top > state.width / 2;
         if (!same) landDirty = true;
       }
-      if (state.last_cast) seenCastId = state.last_cast.id;
+      if (state.timeline) seenTimelineId = state.timeline.id;
       castLocked = false;
       // A charge belongs to the turn it started in.
       if (state.phase !== "arena_aim" || state.current_id !== state.viewer_id) charge = null;
     };
 
+    // A timeline that moves something, flies something or is a cast holds the controls
+    // while it plays; one that only hands over a crate doesn't stop a walk.
+    const blocking = (cast: Cast) => !!cast.spell || cast.segments.length > 0 || cast.moves.length > 0;
+
     const receive = (state: ArenaState) => {
-      const cast = state.last_cast;
+      const cast = state.timeline;
 
       if (animation) {
         if (cast?.id === animation.cast.id) pending = state;
         else backlog.push(state);
-      } else if (shown && cast && cast.id !== seenCastId) {
-        seenCastId = cast.id;
-        // A grand spell holds its flight back while the title card plays.
-        const intro = cast.grand ? shown.physics.grand_intro_ms ?? 1300 : 0;
+      } else if (shown && cast && cast.id !== seenTimelineId) {
+        seenTimelineId = cast.id;
         const at = performance.now();
-        animation = {
-          cast,
-          start: at + intro,
-          landed: new Set(),
-          aftermathAt: null,
-          hits: [...(cast.hits ?? [])].sort((a, b) => a.at - b.at),
-          koShown: new Set(),
-          koAt: null,
-        };
+        animation = { cast, start: at, landed: new Set(), begun: new Set(), aftermath: false, next: 0, koAt: null };
+        pending = state;
+        // The HUD plays the same timeline's health and lines from now.
+        this.pushEvent("timeline_started", { id: cast.id });
+        if (blocking(cast)) castLocked = true;
+        if (!cast.spell) return;
+        // A grand spell holds its flight back while the title card plays.
+        const intro = cast.lead_ms;
         if (cast.grand) {
           const def = spellById(cast.spell);
           grand = { start: at, name: def?.name ?? "Grand spell", color: def?.color ?? "#fb923c" };
         }
-        pending = state;
-        castLocked = true;
         edgeArmed = false;
-        sounds.cast(cast, (shown.physics.dt * 1000) / shown.physics.playback_speed);
+        sounds.cast({ ...cast, spell: cast.spell }, (shown.physics.dt * 1000) / shown.physics.playback_speed);
         // The staff flares as the spell leaves it.
         const caster = shown.units.find((u) => u.id === cast.caster_id);
-        if (caster) {
+        if (caster && cast.segments.length) {
           const s = scale();
           const [cx, cy] = drawn.get(caster.id) ?? [caster.x, caster.y];
           const color = colorOf(cast.spell, "#facc15");
@@ -736,9 +723,8 @@ const SpellArena = {
       lifted &&
       shown.phase === "arena_aim" &&
       shown.current_id === shown.viewer_id &&
-      !animation &&
+      !(animation && blocking(animation.cast)) &&
       !castLocked &&
-      !jumping &&
       !!myWizard();
     // During the retreat after a cast the wizard still moves, but casts nothing more.
     const canCast = () => canAct() && !shown!.retreat;
@@ -933,13 +919,8 @@ const SpellArena = {
     const walked = new Map<string, number>();
     const faced = new Map<string, number>();
     const landedAt = new Map<string, number>();
-    // Each dropping flamingo: how fast it falls, in cells per ms, and when it went over.
-    const falls = new Map<string, { v: number; at: number }>();
-    // A flamingo drops slower than a spell flies: its wings catch the air. It falls at
-    // under half the spells' gravity up to a top speed, and every FLAP_EVERY ms it beats
-    // its wings for FLAP_MS, braking. A 30-cell ledge takes about 1.4 s, over twice as long.
-    const FALL_GRAVITY = 0.55;
-    const FALL_TOP = 0.034;
+    // A dropping flamingo beats its wings for FLAP_MS every FLAP_EVERY ms from FLAP_FIRST,
+    // braking; the server's fall paths (`Physics.fall`) brake on the same beat.
     const FLAP_FIRST = 300;
     const FLAP_EVERY = 600;
     const FLAP_MS = 170;
@@ -1086,7 +1067,7 @@ const SpellArena = {
         case "cast": {
           // Flings the wing, then overbalances after it.
           // The wing whips through to the way the spell left.
-          const el = animation ? t - animation.start : 0;
+          const el = animation ? t - animation.start - animation.cast.lead_ms : 0;
           frameAt = el < 170 ? WIZARD.release : WIZARD.follow;
           const path = animation?.cast.segments[0]?.path;
           const k = path ? Math.min(3, path.length - 1) : 0;
@@ -1097,10 +1078,10 @@ const SpellArena = {
         }
         case "jump": {
           frameAt = WIZARD.rise;
-          if (jumping?.id === unit.id) {
-            const p = shown.physics;
-            const path = jumping.path;
-            const step = ((t - jumping.start) / 1000) * (p.playback_speed / p.dt);
+          const going = activeMove(unit.id, t);
+          if (going?.move.kind === "jump") {
+            const path = going.move.path;
+            const step = going.local;
             const i = Math.max(0, Math.min(path.length - 2, Math.floor(step)));
             const vx = path[i + 1][0] - path[i][0];
             const vy = path[i + 1][1] - path[i][1];
@@ -1112,7 +1093,7 @@ const SpellArena = {
             if (step < 1.2) frameAt = WIZARD.crouch;
             else if (left < 2.5 && vy > 0) frameAt = WIZARD.fall;
             else if (long) {
-              const flap = Math.floor((t - jumping.start) / 85) % 2;
+              const flap = Math.floor(going.since / 85) % 2;
               frameAt = flap ? WIZARD.flapDown : WIZARD.flapUp;
               squash = flap ? -0.03 : 0.03;
               if (frame % 9 === 0) burst(cx - facing * 12, feet - h * 0.45, "#f9a8d4", 1, 18);
@@ -1132,7 +1113,7 @@ const SpellArena = {
         }
         case "drop": {
           // Legs dangling on the way down, with the odd beat of the wings to slow it.
-          const since = t - (falls.get(unit.id)?.at ?? t);
+          const since = activeMove(unit.id, t)?.since ?? 0;
           if (flapping(since)) {
             const flap = Math.floor((since - FLAP_FIRST) / 90) % 2;
             frameAt = flap ? WIZARD.flapUp : WIZARD.flapDown;
@@ -1416,8 +1397,7 @@ const SpellArena = {
       }
 
       const w = 26;
-      // Fall damage still to show leaves the bar full until the flamingo lands.
-      const hp = unit.hp - (fallHurt.get(unit.id) ?? 0);
+      const hp = unit.hp;
       const ratio = hp / unit.max_hp;
       const now = performance.now();
       let bar = bars.get(unit.id);
@@ -1723,22 +1703,66 @@ const SpellArena = {
       shakeUntil = Math.max(shakeUntil, performance.now() + ms);
     };
 
-    // Steps elapsed in the server's simulation timeline.
-    const castStep = (now: number, since: number) => {
-      const p = shown!.physics;
-      return ((now - since) / 1000) * (p.playback_speed / p.dt);
-    };
-
-    // Steps of knockback played since `since`. A knockout opens its knockback in slow
-    // motion, a third of the speed for KO_SLOW ms, then eases back to full speed over
-    // the next KO_SLOW ms, so the hit lands hard without the whole flight crawling.
+    // The timeline's clock, as the server works it out (`Timeline.ms`): how many ms after
+    // it starts step `at` plays, and the step playing `elapsed` ms in.
     const KO_SLOW = 250;
-    const knockStep = (now: number, since: number, cast: Cast) => {
-      const t = now - since;
-      if (!cast.ko?.length) return castStep(now, since);
-      const u = Math.min(Math.max(0, t - KO_SLOW), KO_SLOW);
-      const played = 0.35 * Math.min(t, KO_SLOW) + 0.35 * u + (0.65 * u * u) / (2 * KO_SLOW) + Math.max(0, t - 2 * KO_SLOW);
-      return castStep(since + played, since);
+    const stepMs = () => (shown!.physics.dt * 1000) / shown!.physics.playback_speed;
+    const unwarp = (played: number) => {
+      const k = KO_SLOW;
+      if (played <= 0.35 * k) return played / 0.35;
+      if (played <= 1.025 * k) {
+        const a = 0.65 / (2 * k);
+        const c = 0.35 * k - played;
+        return k + (-0.35 + Math.sqrt(0.35 * 0.35 - 4 * a * c)) / (2 * a);
+      }
+      return played + 0.975 * k;
+    };
+    const msAt = (cast: Cast, at: number) => {
+      const sm = stepMs();
+      const beat = cast.beat && at > cast.beat.at ? cast.beat.ms : 0;
+      if (cast.slow_at !== null && at > cast.slow_at) return cast.lead_ms + cast.slow_at * sm + beat + unwarp((at - cast.slow_at) * sm);
+      return cast.lead_ms + at * sm + beat;
+    };
+    const lastStep = (cast: Cast) =>
+      Math.max(cast.flight_steps, ...cast.segments.map((g) => g.start + g.path.length - 1), ...cast.moves.map((m) => m.start + m.path.length - 1), ...cast.events.map((e) => e.at));
+    const stepAt = (cast: Cast, elapsed: number) => {
+      if (elapsed < cast.lead_ms) return (elapsed - cast.lead_ms) / stepMs();
+      // The Hallowed Orb's beat holds still on its impact step.
+      if (cast.beat && elapsed >= msAt(cast, cast.beat.at) && elapsed < msAt(cast, cast.beat.at) + cast.beat.ms) return cast.beat.at;
+      let lo = 0;
+      let hi = lastStep(cast) + 1;
+      if (msAt(cast, hi) <= elapsed) return hi + (elapsed - msAt(cast, hi)) / stepMs();
+      for (let i = 0; i < 32; i++) {
+        const mid = (lo + hi) / 2;
+        if (msAt(cast, mid) <= elapsed) lo = mid;
+        else hi = mid;
+      }
+      return lo;
+    };
+    const stepNow = (now: number) => (animation ? stepAt(animation.cast, now - animation.start) : 0);
+
+    // The move a unit is part way along right now, with how far along it is and how
+    // long since it began, or nil.
+    const activeMove = (id: string, now: number) => {
+      if (!animation) return null;
+      const step = stepNow(now);
+      for (const move of animation.cast.moves) {
+        if (move.id !== id || step < move.start || step >= move.start + move.path.length - 1) continue;
+        return { move, local: step - move.start, since: now - animation.start - msAt(animation.cast, move.start) };
+      }
+      return null;
+    };
+    // Where a unit is along its moves: at the end of the last it has begun (so it holds
+    // there until the timeline ends), or nil before its first.
+    const movePosition = (id: string, now: number) => {
+      if (!animation) return null;
+      const step = stepNow(now);
+      let at: [number, number] | null = null;
+      for (const move of animation.cast.moves) {
+        if (move.id !== id || step < move.start) continue;
+        at = pointAt(move.path, Math.min(step - move.start, move.path.length - 1)) as [number, number];
+      }
+      return at;
     };
 
     const pointAt = (path: [number, number][], index: number) => {
@@ -1750,29 +1774,63 @@ const SpellArena = {
       return [x0 + (x1 - x0) * f, y0 + (y1 - y0) * f];
     };
 
-    // Shows the hits the flight has reached on the board still on screen, so health
-    // drops and damage numbers pop as each wizard is struck.
-    const applyHits = (step: number) => {
+    // Plays the timeline's events it has reached on the board still on screen: health,
+    // knockouts, landings, crates and the tide, each as the animation gets there.
+    const applyEvents = (now: number) => {
       if (!animation || !shown) return;
-      const due = new Map<string, Hit>();
-      while (animation.hits.length && animation.hits[0].at <= step) {
-        const hit = animation.hits.shift()!;
-        due.set(hit.id, hit);
+      const { cast } = animation;
+      const elapsed = now - animation.start;
+      const due: TimelineEvent[] = [];
+      while (animation.next < cast.events.length && cast.events[animation.next].ms <= elapsed) due.push(cast.events[animation.next++]);
+      if (!due.length) return;
+      const s = scale();
+      let units = shown.units;
+      let crates = shown.crates;
+      let water = shown.water_level;
+      let worst = 0;
+      let healed = false;
+      let knockout = false;
+      for (const e of due) {
+        const unit = units.find((u) => u.id === e.id);
+        const [x, y] = (unit && drawn.get(unit.id)) ?? [unit?.x ?? 0, unit?.y ?? 0];
+        if (e.kind === "crate") crates = crates.filter((c) => c.id !== e.crate);
+        if (e.kind === "tide" && e.level !== undefined) water = e.level;
+        if (!unit || e.hp === undefined) continue;
+        const delta = e.hp - unit.hp;
+        units = units.map((u) => (u.id === unit.id ? { ...u, hp: e.hp!, dead: u.dead || e.kind === "ko" } : u));
+        if (e.kind === "land") {
+          // Feet on the ground: dust, a thump, a squash.
+          landedAt.set(unit.id, now);
+          burst((x + 0.5) * s, (y + 1) * s, "#a8a29e", 10, 50);
+          sounds.landed();
+          if (delta < 0) shake(Math.min(8, -delta / 8), 300);
+        }
+        if (e.kind === "ko") {
+          if (e.sea) {
+            burst((x + 0.5) * s, (y + 0.5) * s, "#e0f2fe", 26, 110);
+            burst((x + 0.5) * s, (y + 0.5) * s, "#f9a8d4", 8, 60);
+          }
+          floatText(unit, "KO!", "#dc2626", 30);
+          knockout = true;
+          continue;
+        }
+        if (delta < 0) {
+          floatText(unit, `${delta}`, "#ef4444", delta <= -30 ? 24 : 18);
+          hurtAt.set(unit.id, now);
+          worst = Math.max(worst, -delta);
+        } else if (delta > 0) {
+          floatText(unit, `+${delta}`, "#16a34a", 18);
+          healed = true;
+        }
       }
-      if (!due.size) return;
-      // The health bars along the bottom drop with it too, once the explosion has
-      // played out: the page update they need costs a frame, a hitch in mid-blast.
-      const shownHits = { cast: animation.cast.id, hits: [...due.values()].map(({ id, hp }) => ({ id, hp })) };
-      setTimeout(() => this.pushEvent("arena_hits_shown", shownHits), BOOM_MS * BOOM_FRAMES + 40);
-      const next = {
-        ...shown,
-        units: shown.units.map((u) => {
-          const hit = due.get(u.id);
-          return hit ? { ...u, hp: hit.hp } : u;
-        }),
-      };
-      announceChanges(shown, next);
-      shown = next;
+      if (worst) sounds.hurt(worst);
+      if (healed) sounds.heal();
+      if (knockout) {
+        animation.koAt ??= now;
+        shake(10, 900);
+        sounds.knockout();
+      }
+      shown = { ...shown, units, crates, water_level: water };
     };
 
     // Carves a blast's crater into the land on screen the moment it lands, by the server's
@@ -2067,8 +2125,7 @@ const SpellArena = {
       if (!animation || !shown) return;
       const { cast } = animation;
       const s = scale();
-      const step = castStep(now, animation.start);
-      applyHits(step);
+      const step = stepNow(now);
 
       // A grand spell marks where it will land while its title card plays.
       const first = cast.segments[0];
@@ -2101,7 +2158,6 @@ const SpellArena = {
           if (segment.hit && segment.radius > 0 && segment.spell === "holyorb") {
             // The grand impact: a white flash, a beat of stillness, then the blast and a glowing scar.
             flashUntil = now + 220;
-            animation!.start += 140;
             burst(x * s, y * s, "#fff", 40, 320);
             burst(x * s, y * s, "#fde047", 90, 300);
             burst(x * s, y * s, color, 70, 260);
@@ -2120,10 +2176,10 @@ const SpellArena = {
         }
       });
 
-      if (step >= cast.flight_steps) {
-        animation.aftermathAt = now;
+      if (!animation.aftermath && step >= cast.flight_steps) {
+        animation.aftermath = true;
         if (cast.shake) shake(6, 700);
-        sounds.aftermath(cast);
+        if (cast.spell) sounds.aftermath({ ...cast, spell: cast.spell });
         for (const aura of cast.auras ?? []) {
           const unit = (pending ?? shown)?.units.find((u) => u.id === aura.id);
           if (unit) {
@@ -2132,84 +2188,56 @@ const SpellArena = {
             burst((unit.x + 0.5) * s, (unit.y + 1) * s, "#fde68a", 14, 50);
           }
         }
-        if (pending) {
-          show(pending, new Set(cast.ko ?? []));
-          pending = null;
-          castLocked = true;
-        }
       }
     };
 
-    // Where each knocked unit is right now while the aftermath plays. One whose knockback
-    // is over stays where it stopped (against a wall, say) until the cast ends, then drops
-    // from there like any fall.
-    const knockedPositions = (now: number, flying = false) => {
-      const positions = new Map<string, [number, number]>();
-      if (!animation || animation.aftermathAt === null) return positions;
-      const step = knockStep(now, animation.aftermathAt, animation.cast);
-      for (const knock of animation.cast.knocks) {
-        const last = knock.path.length - 1;
-        if (step < last || (!flying && last >= 0)) positions.set(knock.id, pointAt(knock.path, Math.min(step, last)) as [number, number]);
-      }
-      return positions;
-    };
-
+    // Plays the rest of the timeline: units moving along their paths, its events as it
+    // reaches them, and once it has run its length, the board as the server left it.
     const drawAftermath = (now: number) => {
-      if (!animation || animation.aftermathAt === null || !shown) return;
+      if (!animation || !shown) return;
       const { cast } = animation;
-      const elapsed = now - animation.aftermathAt;
-      const step = knockStep(now, animation.aftermathAt, cast);
+      const step = stepNow(now);
+      const s = scale();
+
+      cast.moves.forEach((move, n) => {
+        if (step < move.start || animation!.begun.has(n)) return;
+        animation!.begun.add(n);
+        // Migrating: a flash where it left and where it arrives.
+        if (move.kind === "blink") {
+          const from = drawn.get(move.id);
+          const [x, y] = move.path[0];
+          const color = colorOf("blink", "#a855f7");
+          sounds.teleport();
+          if (from) burst((from[0] + 0.5) * s, (from[1] - 1) * s, color, 30, 90);
+          burst((x + 0.5) * s, (y - 1) * s, color, 40, 120);
+          burst((x + 0.5) * s, (y - 1) * s, "#fff", 16, 60);
+        }
+        if (move.kind === "jump") sounds.jump();
+      });
 
       // A tempted flamingo lunges after the shrimp on its line until it lands.
       if (cast.spell === "hook") {
-        const s = scale();
         const caster = shown.units.find((u) => u.id === cast.caster_id);
-        for (const knock of cast.knocks) {
-          if (!caster || step >= knock.path.length - 1) continue;
-          const [kx, ky] = pointAt(knock.path, step);
+        for (const move of cast.moves) {
+          const local = step - move.start;
+          if (!caster || move.kind !== "knock" || local < 0 || local >= move.path.length - 1) continue;
+          const [kx, ky] = pointAt(move.path, local);
           const [cx, cy] = drawn.get(caster.id) ?? [caster.x, caster.y];
           chain((cx + 0.5) * s, (cy - 1) * s, (kx + 0.5) * s, (ky - 1.5) * s);
           sprite("hook", (kx + 0.5) * s, (ky - 1.5) * s, 22, Math.sin(now / 90) * 0.3);
         }
       }
 
-      // A knocked-out wizard falls when their knockback ends, or at once if nothing knocked them.
-      let fell = false;
-      for (const id of cast.ko ?? []) {
-        const knock = cast.knocks.find((k) => k.id === id);
-        if (animation.koShown.has(id) || (knock && step < knock.path.length - 1)) continue;
-        animation.koShown.add(id);
-        animation.koAt ??= now;
-        const unit = shown.units.find((u) => u.id === id);
-        // Stopped by a wall above where it ends up: the KO waits until it lands there.
-        const end = knock?.path[knock.path.length - 1];
-        const final = pending?.units.find((u) => u.id === id);
-        if (unit && end && final && final.y - end[1] > 2 && Math.abs(final.x - end[0]) <= 2) {
-          fallKO.add(id);
-          fallHurt.set(id, final.hp - unit.hp);
-          continue;
-        }
-        if (unit) floatText(unit, "KO!", "#dc2626", 30);
-        fell = true;
-      }
-      if (fell) {
-        shake(10, 900);
-        sounds.knockout();
-      }
+      applyEvents(now);
 
-      const knockSteps = Math.max(0, ...cast.knocks.map((k) => k.path.length));
-      const done =
-        step >= knockSteps &&
-        (animation.koAt !== null ? now - animation.koAt > 700 : elapsed > 400);
-
-      if (done) {
+      if (now - animation.start >= cast.duration_ms) {
+        // Where each unit was drawn last is where the server left it, so nothing glides.
+        for (const move of cast.moves) drawn.set(move.id, move.path[move.path.length - 1]);
         animation = null;
         castLocked = false;
-        if (pending) {
-          const next = pending;
-          pending = null;
-          receive(next);
-        }
+        const next = pending;
+        pending = null;
+        if (next) show(next);
         while (!animation && backlog.length) receive(backlog.shift()!);
       }
     };
@@ -2276,8 +2304,8 @@ const SpellArena = {
         const unit = shown.units.find((u) => u.id === order[i]);
         if (unit) return [unit.x + 0.5, unit.y - 4];
       }
-      if (animation && animation.aftermathAt === null) {
-        const step = castStep(now, animation.start);
+      if (animation) {
+        const step = stepNow(now);
         // While a grand spell's title card plays, look at where it will land.
         const first = animation.cast.segments[0];
         if (step < 0 && animation.cast.grand && first) return first.path[first.path.length - 1];
@@ -2286,10 +2314,16 @@ const SpellArena = {
           if (local >= 0 && local < segment.path.length) return pointAt(segment.path, local) as [number, number];
         }
       }
-      if (animation && animation.aftermathAt !== null) {
-        const knocked = [...knockedPositions(now, true).values()];
-        if (knocked.length) return knocked[0];
-        // Nobody flew: hold on where the spell ended so the blast is seen before
+      if (animation) {
+        // Then whoever is flying or falling, until they land.
+        for (const move of animation.cast.moves) {
+          const going = activeMove(move.id, now);
+          if (going) {
+            const [x, y] = pointAt(going.move.path, going.local);
+            return [x + 0.5, y - 4];
+          }
+        }
+        // Nobody moving: hold on where the spell ended so the blast is seen before
         // the camera heads back.
         const last = animation.cast.segments.reduce<(typeof animation.cast.segments)[number] | null>(
           (a, b) => (!a || b.start + b.path.length > a.start + a.path.length ? b : a),
@@ -2298,11 +2332,6 @@ const SpellArena = {
         if (last?.path.length) return last.path[last.path.length - 1] as [number, number];
       }
       if (now < freeLookUntil && !animation) return null;
-      // A flamingo falling (its broom spent as the turn ends, say) is watched until it lands.
-      for (const id of falls.keys()) {
-        const at = drawn.get(id);
-        if (at) return [at[0] + 0.5, at[1] - 4];
-      }
       const unit = shown.units.find((u) => u.id === shown!.current_id && !u.dead);
       // As drawn, so the camera rides along a jump instead of waiting where it lands.
       const at = unit && (drawn.get(unit.id) ?? [unit.x, unit.y]);
@@ -2350,55 +2379,16 @@ const SpellArena = {
       clampCam();
     };
 
-    // Where a jumping wizard is along its arc; it kicks up dust where it lands.
-    const jumpPosition = (unit: Unit, now: number) => {
-      if (!jumping || jumping.id !== unit.id || !shown) return null;
-      const { path } = jumping;
-      const p = shown.physics;
-      const step = ((now - jumping.start) / 1000) * (p.playback_speed / p.dt);
-      if (step < path.length - 1) return pointAt(path, step) as [number, number];
-      jumping = null;
-      drawn.set(unit.id, [unit.x, unit.y]);
-      touchDown(unit, unit.x, now);
-      return null;
-    };
-
-    // Feet on the ground after a jump or a drop: dust, a thump, a squash, and the fall
-    // damage held back until now.
-    const touchDown = (unit: Unit, x: number, now: number) => {
-      landedAt.set(unit.id, now);
-      const s = scale();
-      if (fallKO.delete(unit.id)) {
-        // Into the sea: a splash, then the KO.
-        fallHurt.delete(unit.id);
-        burst((x + 0.5) * s, (unit.y + 0.5) * s, "#e0f2fe", 26, 110);
-        burst((x + 0.5) * s, (unit.y + 0.5) * s, "#f9a8d4", 8, 60);
-        floatText(unit, "KO!", "#dc2626", 30);
-        sounds.knockout();
-        shake(10, 600);
-        return;
-      }
-      burst((x + 0.5) * s, (unit.y + 1) * s, "#a8a29e", 10, 50);
-      sounds.landed();
-      const hurt = fallHurt.get(unit.id);
-      if (hurt === undefined) return;
-      fallHurt.delete(unit.id);
-      hurtAt.set(unit.id, now);
-      floatText(unit, `${hurt}`, "#ef4444", hurt <= -30 ? 24 : 18);
-      sounds.hurt(-hurt);
-      shake(Math.min(8, -hurt / 8), 300);
-    };
-
     const glide = (unit: Unit, dt: number) => {
       const s = scale();
       const prev = drawn.get(unit.id);
-      if (!prev || (unit.dead && !fallKO.has(unit.id))) {
+      if (!prev || unit.dead) {
         drawn.set(unit.id, [unit.x, unit.y]);
         return { x: unit.x, y: unit.y };
       }
-      // A long jump is a teleport, unless it is straight down: that is a fall.
-      const drop = unit.y > prev[1] && Math.abs(unit.x - prev[0]) <= 2;
-      if (!drop && Math.hypot(unit.x - prev[0], unit.y - prev[1]) > 6) {
+      // Anything further than a step that no timeline moved (a board shown as it is after
+      // a reload, say) is simply there.
+      if (Math.hypot(unit.x - prev[0], unit.y - prev[1]) > 6) {
         sounds.teleport();
         const color = colorOf("blink", "#a855f7");
         burst((prev[0] + 0.5) * s, (prev[1] - 1) * s, color, 30, 90);
@@ -2418,28 +2408,7 @@ const SpellArena = {
         return from + Math.sign(to - from) * move;
       };
       const x = chase(prev[0], unit.x);
-      let y = chase(prev[1], unit.y);
-      // A drop (off a ledge, or the ground blasted away) speeds up to the flamingo's top
-      // speed, braking at each flap, and lands with a squash and any fall damage.
-      const now = performance.now();
-      const fall = falls.get(unit.id);
-      if ((unit.float ?? 0) <= 0 && unit.y > prev[1] && (fall || unit.y - prev[1] > 2)) {
-        const p = shown!.physics;
-        const f = fall ?? { v: 0, at: now };
-        f.v = flapping(now - f.at)
-          ? f.v * Math.exp(-dt / 150)
-          : Math.min(FALL_TOP, f.v + ((FALL_GRAVITY * p.gravity * p.playback_speed ** 2) / 1e6) * dt);
-        y = Math.min(unit.y, prev[1] + f.v * dt);
-        if (y < unit.y) falls.set(unit.id, f);
-        else {
-          falls.delete(unit.id);
-          touchDown(unit, x, now);
-        }
-      } else {
-        falls.delete(unit.id);
-        // Held damage whose drop never played (the flamingo was moved instead) shows now.
-        if (fallHurt.has(unit.id) && jumping?.id !== unit.id) touchDown(unit, x, now);
-      }
+      const y = chase(prev[1], unit.y);
       if ((unit.float ?? 0) > 0) {
         drawn.set(unit.id, [x, y]);
         return { x, y };
@@ -2626,13 +2595,16 @@ const SpellArena = {
         }
       }
       if (y === null) return null;
+      const top: number = y;
       if (!floating) while (y + 1 < shown.height && y < shown.water_level && !solidAt(x, y + 1)) y++;
+      // More than a climb's height down is a drop: it waits at the edge for the server.
+      if (y - top > (shown.physics.max_climb ?? 2)) return { x, y: top, drop: true };
       return { x, y };
     };
 
     const walkStep = (now: number) => {
       const wizard = myWizard();
-      if (!wizard || !canAct() || jumping || falls.has(wizard.id)) return;
+      if (!wizard || !canAct() || predicted?.drop) return;
       nextStepAt = now + STEP_MS;
       if (stepsLeft <= 0) return;
       const from = predicted ?? wizard;
@@ -2648,6 +2620,7 @@ const SpellArena = {
       predicted = { ...to, at: now };
       stepsLeft -= 1;
       this.pushEvent("walk", { dir: heldDir });
+      if (to.drop) heldDir = 0;
     };
 
     // One cell of broom flight, by the server's rules: sideways it climbs over a bump of
@@ -2758,13 +2731,14 @@ const SpellArena = {
         return el < SPAWN_DROP_MS ? "spawn" : el < SPAWN_DROP_MS + 170 ? "land" : "greet";
       }
       if (knocked) return "tumble";
-      if (jumping?.id === unit.id) return "jump";
+      const going = activeMove(unit.id, now)?.move.kind;
+      if (going === "jump") return "jump";
       if ((unit.float ?? 0) > 0) return "fly";
-      if (falls.has(unit.id)) return "drop";
+      if (going === "fall") return "drop";
       if (unit.id === shown.viewer_id && now - crouchAt < 300) return "crouch";
       if (now - (hurtAt.get(unit.id) ?? -1e9) < 650) return "hurt";
       if (now - (landedAt.get(unit.id) ?? -1e9) < 170) return "land";
-      if (animation && animation.cast.caster_id === unit.id && now < animation.start + 420) return "cast";
+      if (animation && animation.cast.segments.length && animation.cast.caster_id === unit.id && now < animation.start + animation.cast.lead_ms + 420) return "cast";
       if (moving) return "walk";
       const def = spellDef();
       if (unit.id === shown.viewer_id && canCast() && aim && def && def.input !== "instant") return "aim";
@@ -2938,14 +2912,12 @@ const SpellArena = {
         const caster = animation?.cast.caster_id;
         const first = animation?.cast.segments[0]?.path;
         const throwDir = first && first.length > 1 ? Math.sign(first[first.length - 1][0] - first[0][0]) : 0;
-        const knocked = knockedPositions(now);
-        const tumbling = knockedPositions(now, true);
         const moving = new Set<string>();
         const units = shown.units.map((u) => {
-          const at = knocked.get(u.id) ?? jumpPosition(u, now);
+          const at = movePosition(u.id, now);
           if (at) {
             drawn.set(u.id, [at[0], at[1]]);
-            return { ...u, x: at[0], y: at[1], dead: false };
+            return { ...u, x: at[0], y: at[1] };
           }
           const target = predicted && u.id === shown!.viewer_id && !u.dead ? { ...u, x: predicted.x, y: predicted.y } : u;
           const from = drawn.get(u.id);
@@ -2959,8 +2931,7 @@ const SpellArena = {
             return { ...u, ...to, y: to.y - SPAWN_HEIGHT * (1 - k * k) };
           }
           if (drop !== null && !spawned.has(u.id)) land(u, now);
-          // A flamingo dropping to its death is drawn alive until it hits the water.
-          return { ...u, ...to, dead: u.dead && !fallKO.has(u.id) };
+          return { ...u, ...to };
         }).filter((u) => !unspawned(u.id, now));
 
         drawScars(now);
@@ -2968,7 +2939,8 @@ const SpellArena = {
         for (const crate of shown.crates) drawCrate(crate, now);
 
         for (const unit of units) {
-          const path = jumping?.id === unit.id ? jumping.path : null;
+          const going = activeMove(unit.id, now);
+          const path = going?.move.kind === "jump" ? going.move.path : null;
           // Faces where it aims, else where it is going, else where it last faced.
           const vx = velocity.get(unit.id)?.[0] ?? 0;
           if (moving.has(unit.id)) walked.set(unit.id, (walked.get(unit.id) ?? 0) + Math.abs(vx) * dt);
@@ -2995,7 +2967,7 @@ const SpellArena = {
             ctx.rotate(leanOf(unit.id, faces, dt));
             ctx.translate(-px, -py);
           }
-          drawWizard(unit, now, faces, poseOf(unit, now, moving.has(unit.id), tumbling.has(unit.id)));
+          drawWizard(unit, now, faces, poseOf(unit, now, moving.has(unit.id), going?.move.kind === "knock"));
           if (flying) ctx.restore();
         }
         drawWater(now);
@@ -3003,7 +2975,7 @@ const SpellArena = {
         drawTurnMarker(now);
         drawAim(now);
         drawBotAim(now);
-        if (animation && animation.aftermathAt === null) drawFlight(now);
+        drawFlight(now);
         drawAftermath(now);
       } else {
         ctx.fillStyle = "#111827";
@@ -3140,7 +3112,7 @@ const SpellArena = {
     const jump = (kind: "high" | "long") => {
       const wizard = myWizard();
       const now = performance.now();
-      if (!shown || !wizard || !canAct() || jumping || falls.has(wizard.id) || now < crouchAt + 90) return;
+      if (!shown || !wizard || !canAct() || now < crouchAt + 90) return;
       // The wizard crouches at once; the server's arc follows a moment later.
       crouchAt = now;
       heldDir = 0;
@@ -3382,20 +3354,29 @@ const SpellArena = {
         selected = update.selected_spell || selected;
       }
       if (full || document.hidden) {
-        // A jump that happened while we were away is already over.
-        seenJump = latest.last_jump?.n ?? -1;
-        jumping = null;
-        fallHurt.clear();
-        fallKO.clear();
-        animation = null;
-        pending = null;
-        backlog.length = 0;
         charge = null;
-        show(latest);
+        skipToLatest();
       } else {
         receive(latest);
       }
     });
+    // A timeline that played while we were away is already over: the board shows as it
+    // is, and so does the HUD.
+    const skipToLatest = () => {
+      if (!latest) return;
+      seenTimelineId = latest.timeline?.id ?? -1;
+      animation = null;
+      pending = null;
+      backlog.length = 0;
+      show(latest);
+      if (latest.timeline) this.pushEvent("timeline_skipped", { id: latest.timeline.id });
+    };
+    // Leaving the tab mid-timeline skips the rest of it, rather than playing what was
+    // missed on coming back.
+    const onVisibility = () => {
+      if (document.hidden && (animation || backlog.length)) skipToLatest();
+    };
+    document.addEventListener("visibilitychange", onVisibility);
     // Walking into a slope too steep to climb teaches the jump.
     // A jump with nowhere to go is refused (and costs nothing), with its own hint.
     this.handleEvent<{ jump?: boolean }>("arena_blocked", ({ jump }) => {
@@ -3422,6 +3403,7 @@ const SpellArena = {
       canvas.removeEventListener("pointerdown", onPointerDown);
       window.removeEventListener("keydown", onKeyDown);
       window.removeEventListener("keyup", onKeyUp);
+      document.removeEventListener("visibilitychange", onVisibility);
       window.removeEventListener("pointerup", onPointerUp);
       canvas.removeEventListener("pointerleave", onPointerLeave);
       canvas.removeEventListener("pointercancel", dropCharge);

@@ -3,7 +3,7 @@ defmodule Flamingo.GameModes.Spellslingers.Units do
 
   use Flamingo.GameModes.Spellslingers.Rules
 
-  alias Flamingo.GameModes.Spellslingers.Terrain
+  alias Flamingo.GameModes.Spellslingers.{Crates, Physics, Terrain, Timeline}
 
   def damage(state, id, amount, source) do
     case state.units[id] do
@@ -156,31 +156,98 @@ defmodule Flamingo.GameModes.Spellslingers.Units do
     {%{unit | y: min(unit.y + fall, @height)}, fall}
   end
 
-  def settle_all(state) do
-    state =
-      Enum.reduce(Enum.sort(Map.keys(state.units)), unbury_all(state), fn id, state ->
-        unit = state.units[id]
-
-        if alive_unit?(unit) do
-          {unit, fall} = settle(state, unit)
-          state |> put_unit(unit) |> fall_damage(id, fall)
-        else
-          state
-        end
-      end)
+  @doc """
+  Brings everyone down after something moved them or took their ground away. Each unit
+  drops to the ground from where its own movement ended, given in `flights` as
+  id => {the step it ended, the row it took off from}, or else from step `start`. Then,
+  in the order it happens, each lands (hurt by how far it ended up below where it took
+  off), picks up any crate there, and is knocked out if that finished it or it is in
+  the sea. Units a hit has already left with no health are knocked out where that hit
+  struck them, and only their body falls.
+  """
+  def come_down(state, start, flights \\ %{}) do
+    state = state |> unbury_all() |> defeat_struck(start)
 
     crates =
       state.crates
       |> Enum.map(&elem(settle(state, &1), 0))
       |> Enum.reject(&(&1.y >= state.water_level))
 
-    %{state | crates: crates}
+    state = %{state | crates: crates}
+
+    state.units
+    |> Map.values()
+    |> Enum.reject(&(&1.dead and not Map.has_key?(struck_at(state), &1.id)))
+    |> Enum.sort_by(& &1.id)
+    |> Enum.reduce({state, []}, fn unit, {state, arrivals} ->
+      {from, top} = Map.get(flights, unit.id, {start, unit.y})
+      {settled, fall} = settle(state, unit)
+
+      # A step or two down is walking down a slope, not a drop.
+      dropped? = fall > @max_climb or (fall > 0 and Map.has_key?(flights, unit.id))
+
+      {state, at} =
+        if dropped? do
+          path = Physics.fall(state, {unit.x, unit.y}, settled.y)
+          {Timeline.move(state, unit.id, "fall", from, path), from + length(path) - 1}
+        else
+          {state, from}
+        end
+
+      moved? = dropped? or Map.has_key?(flights, unit.id)
+      {state, [{at, unit.id, settled, moved?, settled.y - top} | arrivals]}
+    end)
+    |> then(fn {state, arrivals} ->
+      arrivals
+      |> Enum.sort_by(fn {at, id, _, _, _} -> {at, id} end)
+      |> Enum.reduce(state, fn {at, id, settled, moved?, drop}, state ->
+        state =
+          state |> Timeline.at(at) |> put_unit(%{state.units[id] | x: settled.x, y: settled.y})
+
+        cond do
+          state.units[id].dead ->
+            state
+
+          # Walking down a slope only lands when it is far enough to hurt.
+          (moved? or drop > state.tuning.fall_safe) and settled.y < state.water_level ->
+            state |> land(id, drop) |> Crates.collect_crates([id]) |> resolve_death(id)
+
+          true ->
+            state |> Crates.collect_crates([id]) |> resolve_death(id)
+        end
+      end)
+    end)
+  end
+
+  # Knocks out every wizard left with no health, at the step the hit that did it struck
+  # (or `start`), before anyone falls.
+  defp defeat_struck(state, start) do
+    state.units
+    |> Map.values()
+    |> Enum.filter(&(not &1.dead and &1.hp <= 0))
+    |> Enum.sort_by(& &1.id)
+    |> Enum.reduce(state, fn unit, state ->
+      at = Map.get(struck_at(state), unit.id, start)
+      clock = state.clock
+      state |> Timeline.at(at) |> kill(unit, :defeated) |> Map.put(:clock, clock)
+    end)
+  end
+
+  # The step of each unit's latest hit in the timeline being recorded.
+  defp struck_at(%{clock: nil}), do: %{}
+
+  defp struck_at(state) do
+    state.timeline.events
+    |> Enum.reverse()
+    |> Enum.filter(&(&1.kind == "hit" and &1[:id]))
+    |> Map.new(&{&1.id, &1.at})
   end
 
   def unbury_all(state) do
     state.units
     |> Map.values()
-    |> Enum.filter(&alive_unit?/1)
+    # One in the sea is going under, not lifted onto the nearest cliff.
+    |> Enum.filter(&(alive_unit?(&1) and &1.y < state.water_level))
     |> Enum.reduce(state, fn unit, state ->
       lifted =
         Enum.find_value(0..30, fn dy ->
@@ -201,49 +268,41 @@ defmodule Flamingo.GameModes.Spellslingers.Units do
     end)
   end
 
-  # A long drop hurts, a point for each cell past the safe height, and the chronicle
-  # says so, since nothing else explains the hit.
-  def fall_damage(state, id, fall) do
+  # Touching down: a drop of more than the safe height hurts, a point for each cell past
+  # it, and the chronicle says so, since nothing else explains the hit.
+  defp land(state, id, drop) do
+    unit = state.units[id]
     safe = state.tuning.fall_safe
+    state = if drop > safe, do: damage(state, id, drop - safe, nil), else: state
+    lost = unit.hp - state.units[id].hp
+
+    state =
+      if lost > 0,
+        do: log(state, "#{player_name(state, id)} falls hard and loses #{lost} HP."),
+        else: state
+
+    Timeline.event(state, %{kind: "land", id: id, hp: state.units[id].hp})
+  end
+
+  defp resolve_death(state, id) do
     unit = state.units[id]
 
-    if fall > safe and unit do
-      hurt = damage(state, id, fall - safe, nil)
-      lost = unit.hp - hurt.units[id].hp
-
-      if lost > 0,
-        do: log(hurt, "#{player_name(state, id)} falls hard and loses #{lost} HP."),
-        else: hurt
-    else
-      state
+    cond do
+      unit.dead -> state
+      unit.y >= state.water_level -> state |> put_unit(%{unit | hp: 0}) |> kill(unit, :sea)
+      unit.hp <= 0 -> kill(state, unit, :defeated)
+      true -> state
     end
   end
 
-  def resolve_deaths(state) do
-    Enum.reduce(Enum.sort(Map.keys(state.units)), state, fn id, state ->
-      unit = state.units[id]
-
-      cond do
-        is_nil(unit) or unit.dead ->
-          state
-
-        unit.y >= state.water_level ->
-          state |> put_unit(%{unit | hp: 0}) |> kill(unit, "sinks beneath the waves")
-
-        unit.hp <= 0 ->
-          kill(state, unit, "is defeated")
-
-        true ->
-          state
-      end
-    end)
-  end
-
   defp kill(state, %{kind: :wizard} = unit, how) do
+    words = if how == :sea, do: "sinks beneath the waves", else: "is defeated"
+
     state
     |> put_unit(%{unit | hp: 0, dead: true, y: min(unit.y, @height - 1)})
     |> Map.update!(:eliminated, &[unit.id | &1])
-    |> log("#{player_name(state, unit.id)} #{how}!")
+    |> log("#{player_name(state, unit.id)} #{words}!")
+    |> Timeline.event(%{kind: "ko", id: unit.id, hp: 0, sea: how == :sea})
   end
 
   def alive?(state, id), do: alive_unit?(state.units[id])
@@ -257,5 +316,14 @@ defmodule Flamingo.GameModes.Spellslingers.Units do
     end
   end
 
-  def log(state, message), do: %{state | events: Enum.take([message | state.events], 10)}
+  @doc """
+  Adds a line to the chronicle. A line logged while a timeline is recorded belongs to
+  the step it reached, so clients show it as the animation gets there.
+  """
+  def log(state, message) do
+    n = state.log_count + 1
+    timeline = if state.clock, do: state.timeline_count
+    line = %{n: n, text: message, timeline: timeline, at: state.clock}
+    %{state | log: Enum.take([line | state.log], 10), log_count: n}
+  end
 end

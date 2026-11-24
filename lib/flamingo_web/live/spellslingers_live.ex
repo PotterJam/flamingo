@@ -27,8 +27,8 @@ defmodule FlamingoWeb.SpellslingersLive do
        jump_cost: 0,
        units: [],
        locked: %{},
-       events: [],
        log: [],
+       # The chronicle line handled last, by number.
        log_seq: 0,
        final_result: nil,
        my_spells: [],
@@ -39,8 +39,14 @@ defmodule FlamingoWeb.SpellslingersLive do
        quick_used: false,
        retreat?: false,
        sudden_death?: false,
-       last_cast_id: nil,
-       pending_board: nil,
+       # The latest timeline this page has taken; those its arena has still to finish
+       # playing, by id, with what each still has to show; health the HUD holds back until
+       # each event plays; and snapshots that change the turn or end the duel, held until
+       # the arena has played what came before them.
+       timeline_id: nil,
+       playing: %{},
+       held: %{},
+       queued: [],
        sent: %{},
        tuning: %{},
        tuned?: false,
@@ -1273,22 +1279,6 @@ defmodule FlamingoWeb.SpellslingersLive do
     {:noreply, socket}
   end
 
-  # The arena reports each hit as it shows it, so the health bars drop with the bomb
-  # that strikes rather than once the whole cast has played. Only the cast still held
-  # back is touched, health only goes down, and its reveal sets every bar for certain.
-  def handle_event(
-        "arena_hits_shown",
-        %{"cast" => id, "hits" => hits},
-        %{assigns: %{pending_board: %{id: id}}} = socket
-      )
-      when is_list(hits) do
-    shown = for %{"id" => unit, "hp" => hp} when is_integer(hp) <- hits, into: %{}, do: {unit, hp}
-    units = Enum.map(socket.assigns.units, &%{&1 | hp: min(&1.hp, Map.get(shown, &1.id, &1.hp))})
-    {:noreply, assign(socket, units: units)}
-  end
-
-  def handle_event("arena_hits_shown", _params, socket), do: {:noreply, socket}
-
   # The arena's art is in: the duel need not wait on this page, and the music, held
   # back so it didn't compete with the art, can start.
   def handle_event("arena_loaded", _params, socket) do
@@ -1329,6 +1319,23 @@ defmodule FlamingoWeb.SpellslingersLive do
     end
   end
 
+  # The arena has begun playing a timeline: its health and lines show as it plays here,
+  # however late this page got to it.
+  def handle_event("timeline_started", %{"id" => id}, socket) when is_integer(id),
+    do: {:noreply, start_timeline(socket, id)}
+
+  # The arena showed the board as it is instead (a hidden tab): so does the HUD.
+  def handle_event("timeline_skipped", %{"id" => id}, socket) when is_integer(id) do
+    {skipped, playing} = Map.split_with(socket.assigns.playing, fn {t, _} -> t <= id end)
+    lines = skipped |> Map.values() |> Enum.flat_map(& &1.lines) |> Enum.sort_by(& &1.n)
+
+    {:noreply,
+     socket
+     |> assign(playing: playing, held: %{})
+     |> add_lines(lines)
+     |> release_queued()}
+  end
+
   def handle_event("rise", %{"dir" => dir}, socket) when dir in @dirs do
     Rooms.command(socket.assigns.room_id, {:rise, parse_dir(dir)})
     {:noreply, socket}
@@ -1340,7 +1347,7 @@ defmodule FlamingoWeb.SpellslingersLive do
       {:error, :blocked} ->
         {:noreply, push_event(socket, "arena_blocked", %{})}
 
-      {:error, reason} when reason not in [:no_steps_left, :not_your_turn] ->
+      {:error, reason} when reason not in [:no_steps_left, :not_your_turn, :settling] ->
         {:noreply, put_flash(socket, :error, command_error(reason))}
 
       _ ->
@@ -1357,7 +1364,8 @@ defmodule FlamingoWeb.SpellslingersLive do
       {:error, :blocked} ->
         {:noreply, push_event(socket, "arena_blocked", %{jump: true})}
 
-      {:error, reason} when reason not in [:no_steps_left, :floating, :not_your_turn] ->
+      {:error, reason}
+      when reason not in [:no_steps_left, :floating, :not_your_turn, :settling] ->
         {:noreply, put_flash(socket, :error, command_error(reason))}
 
       _ ->
@@ -1418,17 +1426,41 @@ defmodule FlamingoWeb.SpellslingersLive do
   def handle_info({:room_snapshot, snapshot}, socket),
     do: {:noreply, route_snapshot(socket, snapshot)}
 
-  # The sidebar catches up once the cast's projectiles have landed on screen.
-  def handle_info({:reveal_board, id}, %{assigns: %{pending_board: %{id: id} = board}} = socket),
-    do:
-      {:noreply,
-       socket |> assign(units: board.units, pending_board: nil) |> assign_events(board.events)}
+  # A timeline's moments, each for a timeline this page is still playing: one skipped or
+  # left behind by a rematch shows nothing more.
+  def handle_info({:timeline, id, message}, socket) do
+    if Map.has_key?(socket.assigns.playing, id),
+      do: {:noreply, timeline_moment(socket, id, message)},
+      else: {:noreply, socket}
+  end
 
   def handle_info(_message, socket), do: {:noreply, socket}
 
   defp route_snapshot(socket, snapshot), do: RoomRoute.route(socket, snapshot, &apply_snapshot/2)
 
+  # A snapshot that moves the turn on or ends the duel waits until this page's arena has
+  # played the timelines before it, and so does every snapshot after it.
   defp apply_snapshot(socket, snapshot) do
+    %{viewer_id: viewer, playing: playing, queued: queued, current_id: current} = socket.assigns
+
+    if viewer != nil and
+         (queued != [] or
+            (playing != %{} and
+               (snapshot.current_id != current or
+                  (snapshot.phase == :game_ended and socket.assigns.phase != :game_ended)))),
+       do: assign(socket, queued: queued ++ [snapshot]),
+       else: show_snapshot(socket, snapshot)
+  end
+
+  defp release_queued(%{assigns: %{playing: playing, queued: queued}} = socket)
+       when playing == %{} and queued != [] do
+    socket = assign(socket, queued: [])
+    Enum.reduce(queued, socket, &apply_snapshot(&2, &1))
+  end
+
+  defp release_queued(socket), do: socket
+
+  defp show_snapshot(socket, snapshot) do
     initial? = is_nil(socket.assigns.viewer_id)
     old_phase = socket.assigns.phase
 
@@ -1457,7 +1489,7 @@ defmodule FlamingoWeb.SpellslingersLive do
         online: snapshot.online,
         current_id: snapshot.current_id,
         loading: snapshot.loading,
-        surging?: match?(%{caster_id: nil}, snapshot.last_cast),
+        surging?: match?(%{spell: "surge"}, snapshot.timeline),
         retreat?: snapshot.retreat,
         sudden_death?: snapshot.sudden_death,
         wind: snapshot.wind,
@@ -1476,10 +1508,10 @@ defmodule FlamingoWeb.SpellslingersLive do
         selected_spell: selected
       )
 
-    # A rematch starts a fresh chronicle.
+    # A rematch starts a fresh chronicle, with nothing left to play from the last duel.
     socket =
       if old_phase == :game_ended and snapshot.phase != :game_ended,
-        do: assign(socket, events: [], log: []),
+        do: assign(socket, log: [], playing: %{}, held: %{}),
         else: socket
 
     socket = defer_board(socket, snapshot, initial?)
@@ -1530,13 +1562,12 @@ defmodule FlamingoWeb.SpellslingersLive do
           :height,
           :water_level,
           :units,
-          :last_cast,
+          :timeline,
           :participation,
           :crates,
           :my_spells,
           :map_id,
           :quick_used,
-          :last_jump,
           :runes,
           :retreat,
           :bot_aim,
@@ -1551,62 +1582,116 @@ defmodule FlamingoWeb.SpellslingersLive do
     )
   end
 
-  # Holds back HP and chronicle updates from a new cast until its flight has played out,
-  # so health bars drop when spells visibly land rather than when they are cast. A
-  # knockout waits for its slow-motion knockback (0.35x on the canvas) to land too. The
-  # last blast's explosion (680 ms on the canvas) plays out first as well: the page update
-  # costs a frame, a hitch in the middle of it.
+  # A timeline's health and lines show this long after their moment, so the HUD
+  # never runs ahead of the arena's frame.
+  @hud_lag_ms 100
+  @unplayed_ms 5000
+
+  # Health and chronicle lines from a new timeline show as it plays, at each event's time,
+  # counted from when this page's arena says it began playing it (`timeline_started`).
+  # The first snapshot (a mount or a reload) shows the board as it is.
   defp defer_board(socket, snapshot, initial?) do
-    cast = snapshot.last_cast
-    cast_id = cast && cast.id
-    board = %{units: snapshot.units, events: snapshot.events}
-    pending = socket.assigns.pending_board
+    timeline = snapshot.timeline
+    # Health a new timeline touches holds at what the HUD shows now, before this snapshot.
+    held = if timeline, do: hold(socket, timeline), else: socket.assigns.held
+    socket = assign(socket, units: snapshot.units)
+    new_lines = Enum.filter(snapshot.log, &(&1.n > socket.assigns.log_seq)) |> Enum.reverse()
 
     cond do
-      not initial? and cast_id != nil and cast_id != socket.assigns.last_cast_id ->
-        p = snapshot.physics
-
-        knock =
-          if cast.ko == [],
-            do: 0,
-            else: Enum.max(Enum.map(cast.knocks, &length(&1.path)), fn -> 0 end) / 0.35
-
-        # A grand spell's title card plays before anything flies.
-        intro = if Map.get(cast, :grand), do: p.grand_intro_ms, else: 0
-        delay = round((cast.flight_steps + knock) * p.dt * 1000 / p.playback_speed) + intro + 720
-        Process.send_after(self(), {:reveal_board, cast_id}, delay)
-        assign(socket, last_cast_id: cast_id, pending_board: Map.put(board, :id, cast_id))
-
-      pending && pending.id == cast_id ->
-        assign(socket, pending_board: Map.put(board, :id, cast_id))
+      initial? or timeline == nil or timeline.id == socket.assigns.timeline_id ->
+        socket
+        |> assign(timeline_id: timeline && timeline.id)
+        |> add_lines(new_lines)
 
       true ->
-        socket
-        |> assign(units: board.units, last_cast_id: cast_id)
-        |> assign_events(board.events)
+        {played, rest} = Enum.split_with(new_lines, &(&1.timeline == timeline.id))
+        entry = %{timeline: timeline, lines: played, started: false}
+        playing = Map.put(socket.assigns.playing, timeline.id, entry)
+
+        # A page whose arena never says (no script, a broken hook) still catches up.
+        waiting = playing |> Map.values() |> Enum.map(& &1.timeline.duration_ms) |> Enum.sum()
+
+        Process.send_after(
+          self(),
+          {:timeline, timeline.id, :unplayed},
+          waiting + @unplayed_ms
+        )
+
+        # Lines from before the timeline (the cast itself) show now.
+        socket = add_lines(socket, rest)
+
+        assign(socket,
+          timeline_id: timeline.id,
+          playing: playing,
+          held: held,
+          log_seq: Enum.max([socket.assigns.log_seq | Enum.map(played, & &1.n)])
+        )
     end
   end
 
-  # The game keeps its last ten lines; the chronicle keeps a longer log here, numbering
-  # each line so the ticker can animate only the ones that are new.
-  defp assign_events(socket, events) do
-    %{events: old, log: log, log_seq: seq} = socket.assigns
+  defp start_timeline(socket, id) do
+    case socket.assigns.playing do
+      %{^id => %{started: false, timeline: timeline, lines: lines} = entry} ->
+        moments =
+          for(
+            event <- timeline.events,
+            event[:id] && Map.has_key?(event, :hp),
+            do: {event.ms, {:event, event}}
+          ) ++
+            for(line <- lines, do: {Map.get(line, :ms, 0), {:line, line}}) ++
+            [{timeline.duration_ms, :done}]
 
-    count =
-      Enum.find(
-        0..length(events),
-        &(Enum.drop(events, &1) == Enum.take(old, length(events) - &1))
-      )
+        for {ms, moment} <- moments,
+            do: Process.send_after(self(), {:timeline, id, moment}, ms + @hud_lag_ms)
 
-    fresh =
-      events
-      |> Enum.take(count)
-      |> Enum.reverse()
-      |> Enum.with_index(seq + 1)
-      |> Enum.map(fn {text, n} -> %{seq: n, text: text} end)
-      |> Enum.reverse()
+        assign(socket, playing: Map.put(socket.assigns.playing, id, %{entry | started: true}))
 
-    assign(socket, events: events, log: Enum.take(fresh ++ log, 100), log_seq: seq + count)
+      _ ->
+        socket
+    end
+  end
+
+  # A timeline's event plays: its health shows in the HUD.
+  defp timeline_moment(socket, _id, {:event, %{id: unit} = event}) do
+    shown = %{hp: event.hp, dead: event.kind == "ko"}
+    update(socket, :held, &Map.put(&1, unit, shown))
+  end
+
+  defp timeline_moment(socket, id, {:line, line}) do
+    socket
+    |> update(:playing, fn playing ->
+      Map.update!(playing, id, &%{&1 | lines: List.delete(&1.lines, line)})
+    end)
+    |> add_lines([line])
+  end
+
+  defp timeline_moment(socket, id, :unplayed), do: start_timeline(socket, id)
+
+  # Once every timeline has played here, the HUD shows the board as it is, and any turn
+  # change or result waiting on them follows.
+  defp timeline_moment(socket, id, :done) do
+    playing = Map.delete(socket.assigns.playing, id)
+    held = if playing == %{}, do: %{}, else: socket.assigns.held
+    socket |> assign(playing: playing, held: held) |> release_queued()
+  end
+
+  # Every unit the timeline touches keeps the health it shows now until its events play.
+  defp hold(socket, timeline) do
+    shown = Map.new(wizards(socket.assigns), &{&1.id, %{hp: &1.hp, dead: &1.dead}})
+
+    Enum.reduce(timeline.events, socket.assigns.held, fn event, held ->
+      id = event[:id]
+      if id && shown[id], do: Map.put_new(held, id, shown[id]), else: held
+    end)
+  end
+
+  # The chronicle keeps a longer log here than the game's last ten lines.
+  defp add_lines(socket, lines) do
+    lines = Enum.reject(lines, &(&1.n <= socket.assigns.log_seq and &1.timeline == nil))
+    fresh = lines |> Enum.map(&%{seq: &1.n, text: &1.text}) |> Enum.reverse()
+    seq = Enum.max([socket.assigns.log_seq | Enum.map(lines, & &1.n)])
+    log = (fresh ++ socket.assigns.log) |> Enum.uniq_by(& &1.seq) |> Enum.sort_by(& &1.seq, :desc)
+    assign(socket, log: Enum.take(log, 100), log_seq: seq)
   end
 
   defp floating?(assigns) do
@@ -1639,9 +1724,13 @@ defmodule FlamingoWeb.SpellslingersLive do
   defp my_turn?(assigns),
     do: assigns.viewer_id != nil and assigns.viewer_id == assigns.current_id
 
+  # Each wizard as the HUD shows it: with the health its timeline has reached.
   defp wizards(assigns) do
     by_id = Map.new(assigns.units, &{&1.id, &1})
-    for id <- assigns.player_order, wizard = by_id[id], do: wizard
+
+    for id <- assigns.player_order,
+        wizard = by_id[id],
+        do: Map.merge(wizard, Map.get(assigns.held, id, %{}))
   end
 
   defp player_name(players, id), do: get_in(players, [id, :name]) || "Someone"
@@ -1672,5 +1761,6 @@ defmodule FlamingoWeb.SpellslingersLive do
   defp command_error(:not_host), do: "Only the host can do that."
   defp command_error(:out_of_range), do: "That's too far away."
   defp command_error(:place_only), do: "Point where it should go."
+  defp command_error(:settling), do: "Wait until you land."
   defp command_error(reason), do: "That didn't work (#{reason})."
 end

@@ -4,7 +4,7 @@ defmodule Flamingo.GameModes.Spellslingers.Crates do
   crate heals; a spell crate (`:mana`) holds ammo for one of the arsenal's limited spells.
   """
 
-  alias Flamingo.GameModes.Spellslingers.{Catalog, Rng, Units}
+  alias Flamingo.GameModes.Spellslingers.{Catalog, Rng, Timeline, Units}
 
   def maybe_drop_crate(state) do
     {chance, rng} = :rand.uniform_s(state.rng)
@@ -31,14 +31,15 @@ defmodule Flamingo.GameModes.Spellslingers.Crates do
     end
   end
 
-  def collect_crates(state) do
+  @doc "Gives each crate to a wizard standing on it, of `ids` when given."
+  def collect_crates(state, ids \\ nil) do
     Enum.reduce(state.crates, state, fn crate, state ->
       taker =
         state.units
         |> Map.values()
         |> Enum.find(fn unit ->
-          unit.kind == :wizard and Units.alive_unit?(unit) and abs(unit.x - crate.x) <= 2 and
-            abs(unit.y - crate.y) <= 3
+          unit.kind == :wizard and Units.alive_unit?(unit) and (ids == nil or unit.id in ids) and
+            abs(unit.x - crate.x) <= 2 and abs(unit.y - crate.y) <= 3
         end)
 
       case taker do
@@ -47,11 +48,14 @@ defmodule Flamingo.GameModes.Spellslingers.Crates do
 
         wizard ->
           state = %{state | crates: Enum.reject(state.crates, &(&1.id == crate.id))}
+          heal = if crate.type == :health, do: min(wizard.hp + 30, wizard.max_hp), else: wizard.hp
+          event = %{kind: "crate", crate: crate.id, id: wizard.id, hp: heal}
+          state = Timeline.event(state, event)
 
           case crate.type do
             :health ->
               state
-              |> Units.put_unit(%{wizard | hp: min(wizard.hp + 30, wizard.max_hp)})
+              |> Units.put_unit(%{wizard | hp: heal})
               |> Units.log("#{Units.player_name(state, wizard.id)} grabs a health crate (+30).")
 
             :mana ->
@@ -76,12 +80,13 @@ defmodule Flamingo.GameModes.Spellslingers.Crates do
   end
 
   def destroy_crates(state, x, y, radius) do
-    %{
-      state
-      | crates:
-          Enum.reject(state.crates, fn c ->
-            (c.x + 0.5 - x) ** 2 + (c.y + 0.5 - y) ** 2 <= radius ** 2
-          end)
-    }
+    {gone, kept} =
+      Enum.split_with(state.crates, fn c ->
+        (c.x + 0.5 - x) ** 2 + (c.y + 0.5 - y) ** 2 <= radius ** 2
+      end)
+
+    Enum.reduce(gone, %{state | crates: kept}, fn c, state ->
+      Timeline.event(state, %{kind: "crate", crate: c.id, id: nil})
+    end)
   end
 end

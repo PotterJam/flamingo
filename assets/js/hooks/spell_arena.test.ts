@@ -49,7 +49,7 @@ function mount(aimMode: "hold" | "drag" | "classic" = "hold") {
     hidden: false,
     getElementById: (id: string) => (id === "spellslingers-game" ? { classList: { contains: () => false } } : null),
     body: { classList: { add: noop, remove: noop, toggle: noop } },
-    addEventListener: noop,
+    addEventListener: (name: string, f: (event: unknown) => void) => listeners.set(`document:${name}`, f),
     removeEventListener: noop,
     createElement: () => canvas,
   } as never;
@@ -90,6 +90,10 @@ function mount(aimMode: "hold" | "drag" | "classic" = "hold") {
     key: (key: string) =>
       listeners.get("window:keydown")!({ key, repeat: false, target: null, metaKey: false, ctrlKey: false, preventDefault: noop }),
     keyUp: (key: string) => listeners.get("window:keyup")!({ key }),
+    visibility: (hidden: boolean) => {
+      Object.assign(document, { hidden });
+      listeners.get("document:visibilitychange")!({});
+    },
   };
 }
 
@@ -118,7 +122,7 @@ const state = (extra: Record<string, unknown> = {}) => ({
   terrain: ground,
   units: [{ id: "me", kind: "wizard", owner: "me", x: 100, y: 60, hp: 150, max_hp: 150, dead: false }],
   crates: [],
-  last_cast: null,
+  timeline: null,
   players: { me: { name: "Me", color: "#fff" } },
   spells: [spell("firebolt"), spell("fuserune"), spell("slab", { input: "place", gravity: 0 })],
   my_spells: ["firebolt", "fuserune", "slab"],
@@ -128,8 +132,8 @@ const state = (extra: Record<string, unknown> = {}) => ({
 });
 
 const cast = (id: number) => ({
-  id, caster_id: "me", spell: "broom", segments: [], knocks: [], shake: false, auras: [], ko: [],
-  flight_steps: 20, duration_ms: 900,
+  id, caster_id: "me", spell: "broom", segments: [], moves: [], events: [], shake: false, auras: [],
+  flight_steps: 20, slow_at: null, beat: null, lead_ms: 0, duration_ms: 900,
 });
 
 const casts = (sent: Record<string, unknown>[]) => sent.filter((e) => e.name === "cast" || e.name === "place");
@@ -148,7 +152,7 @@ test("a charged cast names the spell that was selected when the charge began", (
 test("a selection made while a cast plays survives the cast's older snapshot", () => {
   const a = mount();
   a.server("arena_state", state());
-  a.server("arena_state", state({ last_cast: cast(1) }));
+  a.server("arena_state", state({ timeline: cast(1) }));
   a.server("arena_select", { spell: "fuserune" });
   a.tick(1);
   a.tick(5000);
@@ -188,9 +192,9 @@ test("after casting a picked spell that then cools down, the selection falls bac
 function unlockAfter(castIds: number[]) {
   const a = mount();
   a.server("arena_state", state());
-  a.server("arena_state", state({ last_cast: cast(castIds[0]) }));
+  a.server("arena_state", state({ timeline: cast(castIds[0]) }));
   a.tick(1);
-  for (const id of castIds.slice(1)) a.server("arena_state", state({ last_cast: cast(id) }));
+  for (const id of castIds.slice(1)) a.server("arena_state", state({ timeline: cast(id) }));
   for (let t = 10; t < 20000; t += 10) {
     a.tick(t);
     a.down();
@@ -206,6 +210,26 @@ test("a cast arriving while another plays is played too, keeping controls locked
   expect(unlockAfter([1, 2])).toBeGreaterThan(one + 200);
   // A refreshed snapshot of the same cast is not a second cast.
   expect(unlockAfter([1, 1])).toBe(one);
+});
+
+test("a fall holds the controls until it has played; a crate grabbed in passing does not", () => {
+  const timeline = (id: number, extra: Record<string, unknown>) => ({ ...cast(id), spell: null, flight_steps: 0, duration_ms: 1500, ...extra });
+  const firstCast = (extra: Record<string, unknown>) => {
+    const a = mount();
+    a.server("arena_state", state());
+    a.tick(1);
+    a.server("arena_state", state({ timeline: timeline(1, extra) }));
+    for (let t = 10; t < 5000; t += 10) {
+      a.tick(t);
+      a.down();
+      a.up();
+      if (casts(a.sent).length) return t;
+    }
+    return Infinity;
+  };
+  const fall = { id: "me", kind: "fall", start: 0, path: [[100, 60], [100, 70], [100, 80]] };
+  expect(firstCast({ moves: [fall], events: [{ kind: "land", id: "me", at: 2, ms: 1200, hp: 140 }] })).toBeGreaterThanOrEqual(1500);
+  expect(firstCast({ events: [{ kind: "crate", crate: "c1", id: "me", at: 0, ms: 0, hp: 150 }] })).toBeLessThan(100);
 });
 
 test("a cancelled pointer drops the charge instead of firing at full power", () => {
@@ -255,7 +279,7 @@ test("a rejoin shows the board as it is instead of replaying a cast it missed", 
   a.tick(1);
   // After a reconnect the LiveView remounts and sends a full snapshot, catalog
   // included, whose last cast already resolved and whose turn is now ours.
-  a.server("arena_state", { ...state({ last_cast: { ...cast(7), flight_steps: 451, duration_ms: 12000 } }), full: true });
+  a.server("arena_state", { ...state({ timeline: { ...cast(7), flight_steps: 451, duration_ms: 12000 } }), full: true });
   a.tick(100);
   a.down();
   now = 500;
@@ -270,14 +294,33 @@ test("casts that land while the tab is hidden are not replayed on coming back", 
   // A hidden tab draws no frames, so nothing plays until it is shown again.
   Object.assign(document, { hidden: true });
   const theirs = (id: number) => ({ ...cast(id), caster_id: "other" });
-  a.server("arena_state", state({ phase: "arena_resolve", current_id: "other", last_cast: theirs(1) }));
-  a.server("arena_state", state({ phase: "arena_resolve", current_id: "other", last_cast: theirs(2) }));
-  a.server("arena_state", state({ last_cast: theirs(2) }));
+  a.server("arena_state", state({ phase: "arena_resolve", current_id: "other", timeline: theirs(1) }));
+  a.server("arena_state", state({ phase: "arena_resolve", current_id: "other", timeline: theirs(2) }));
+  a.server("arena_state", state({ timeline: theirs(2) }));
   Object.assign(document, { hidden: false });
   // Back on the tab a minute later, it is our turn and the arena answers at once.
   a.tick(60000);
   a.down();
   now = 60400;
+  a.up();
+  expect(casts(a.sent)).toHaveLength(1);
+});
+
+test("leaving the tab mid-cast skips the rest of it, here and in the HUD", () => {
+  const a = mount();
+  a.server("arena_state", state({ current_id: "other" }));
+  a.tick(1);
+  a.server("arena_state", state({ phase: "arena_resolve", current_id: "other", timeline: { ...cast(3), caster_id: "other", duration_ms: 8000 } }));
+  a.tick(100);
+  expect(a.sent.filter((e) => e.name === "timeline_started")).toEqual([{ name: "timeline_started", id: 3 }]);
+  a.server("arena_state", state({ timeline: { ...cast(3), caster_id: "other", duration_ms: 8000 } }));
+  a.visibility(true);
+  expect(a.sent.filter((e) => e.name === "timeline_skipped")).toEqual([{ name: "timeline_skipped", id: 3 }]);
+  // Back a moment later, long before the cast would have ended: it is our turn at once.
+  a.visibility(false);
+  a.tick(600);
+  a.down();
+  now = 1000;
   a.up();
   expect(casts(a.sent)).toHaveLength(1);
 });

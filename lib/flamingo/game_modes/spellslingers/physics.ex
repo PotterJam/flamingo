@@ -204,6 +204,44 @@ defmodule Flamingo.GameModes.Spellslingers.Physics do
     end
   end
 
+  # A flamingo drops slower than a spell flies: its wings catch the air. It falls at
+  # @fall_gravity of the spells' gravity up to @fall_top cells a millisecond (as played),
+  # and every @flap_every ms from @flap_first it beats its wings for @flap_ms, braking.
+  # A 30-cell ledge takes about 1.5 s.
+  @fall_gravity 0.55
+  @fall_top 0.034
+  @flap_first 300
+  @flap_every 600
+  @flap_ms 170
+  @step_ms @dt * 1000 / @playback_speed
+
+  def flapping?(since),
+    do: since > @flap_first and rem(trunc(since - @flap_first), @flap_every) < @flap_ms
+
+  @doc """
+  The path of a unit standing at {x, y} dropping straight down to row `to`, a point a
+  step, ending exactly there.
+  """
+  def fall(state, {x, y}, to) do
+    accel = @fall_gravity * state.tuning.gravity * @playback_speed ** 2 / 1.0e6
+    fall_step({x * 1.0, y * 1.0}, to * 1.0, 0.0, 0.0, accel, [{x * 1.0, y * 1.0}])
+  end
+
+  defp fall_step({x, y}, to, _v, _t, _a, path) when y >= to,
+    do: Enum.reverse([{x, to} | tl(path)])
+
+  defp fall_step({x, y}, to, v, t, accel, path) do
+    h = @step_ms / 4
+
+    {y, v, t} =
+      Enum.reduce(1..4, {y, v, t}, fn _, {y, v, t} ->
+        v = if flapping?(t), do: v * :math.exp(-h / 150), else: min(@fall_top, v + accel * h)
+        {y + v * h, v, t + h}
+      end)
+
+    fall_step({x, min(y, to)}, to, v, t, accel, [{x, min(y, to)} | path])
+  end
+
   def apply_knocks(state, impulses) do
     impulses
     |> Enum.sort()

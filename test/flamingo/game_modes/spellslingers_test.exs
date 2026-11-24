@@ -302,7 +302,13 @@ defmodule Flamingo.GameModes.SpellslingersTest do
     {:ok, %{state: cast}} = Spellslingers.command(state, first, {:cast, "firebolt", 90, 20}, ctx)
     assert cast.phase == :arena_resolve
 
-    {:ok, %{state: theirs}} = Spellslingers.command(state, first, :pass, ctx)
+    # The turn passes once the rider has fluttered down and landed.
+    {:ok, %{state: landing}} = Spellslingers.command(state, first, :pass, ctx)
+    assert landing.phase == :arena_resolve
+    assert [%{kind: "fall", id: ^first}] = landing.timeline.moves
+    assert [%{kind: "land", id: ^first, ms: ms}] = landing.timeline.events
+    assert landing.timeline.duration_ms > ms and ms > 300
+    theirs = play_out(landing, r)
     assert theirs.current_id == second
     assert theirs.units[first].y == ground
     # Coming down 12 cells hurts like any 12-cell fall, a point a cell past the safe 8.
@@ -339,7 +345,7 @@ defmodule Flamingo.GameModes.SpellslingersTest do
     assert x > 151
     assert high.walk_left == 32
     assert high.units[first].hp == 150
-    assert %{id: ^first, n: 1, path: [_, _ | _]} = high.last_jump
+    assert [%{id: ^first, kind: "jump", path: [_, _ | _]}] = high.timeline.moves
 
     {:ok, %{state: long}} = Spellslingers.command(state, first, {:jump, :long, -1}, ctx)
     {:ok, %{state: hop}} = Spellslingers.command(state, first, {:jump, :high, -1}, ctx)
@@ -370,7 +376,11 @@ defmodule Flamingo.GameModes.SpellslingersTest do
     {:ok, %{state: fell}} = Spellslingers.command(perched, first, {:jump, :long, 1}, ctx)
     lost = 150 - fell.units[first].hp
     assert fell.units[first].y == 80 and lost == 30 - 8
-    assert Enum.any?(fell.events, &(&1 =~ "falls hard and loses #{lost} HP"))
+    assert Enum.any?(texts(fell), &(&1 =~ "falls hard and loses #{lost} HP"))
+    # The damage shows as the arc comes down.
+    assert [%{kind: "jump", path: arc}] = fell.timeline.moves
+    landing = length(arc) - 1
+    assert [%{kind: "land", at: ^landing, hp: 128}] = fell.timeline.events
   end
 
   test "an explosion knocks a nearby wizard away from the blast" do
@@ -385,7 +395,7 @@ defmodule Flamingo.GameModes.SpellslingersTest do
     moved = cast.units[second]
     direction = if before.x > state.units[first].x, do: 1, else: -1
     assert (moved.x - before.x) * direction > 0 or moved.dead
-    assert Enum.any?(cast.last_cast.knocks, &(&1.id == second))
+    assert Enum.any?(cast.timeline.moves, &(&1.id == second and &1.kind == "knock"))
   end
 
   test "the pick hook yanks the first miner along the aim to land in front of the thrower" do
@@ -411,12 +421,17 @@ defmodule Flamingo.GameModes.SpellslingersTest do
     state = put_in(state.units[third].y, state.water_level)
 
     {:ok, result} = Spellslingers.command(state, first, :pass, context(r, first))
+    result = %{result | state: play_out(result.state, r)}
     assert result.state.units[third].dead
     refute result.state.units[second].dead
     assert result.state.current_id == second
 
     state = put_in(result.state.units[second].y, result.state.water_level).state
-    {:ok, result} = Spellslingers.command(state, second, :pass, context(r, second))
+    {:ok, %{state: sinking}} = Spellslingers.command(state, second, :pass, context(r, second))
+    # The results wait for the splash.
+    assert sinking.phase == :arena_resolve
+    assert [%{kind: "ko", id: ^second, sea: true}] = sinking.timeline.events
+    {:ok, result} = Spellslingers.timeout(sinking, :arena_turn_end, context(r))
 
     assert {:finished, %{winner_id: ^first, standings: standings}} = result.status
     assert Enum.map(standings, & &1.id) == [first, second, third]
@@ -449,7 +464,7 @@ defmodule Flamingo.GameModes.SpellslingersTest do
     {:ok, %{state: cast}} =
       Spellslingers.command(state, first, {:cast, "hexhare", 45, 30}, context(r, first))
 
-    segments = cast.last_cast.segments
+    segments = cast.timeline.segments
     assert length(segments) >= 2
     assert [%{radius: 12, hit: true}] = Enum.filter(segments, &(&1.radius > 0))
     assert cast.units[second].hp < 150
@@ -498,7 +513,7 @@ defmodule Flamingo.GameModes.SpellslingersTest do
     assert_in_delta y, 81 - Physics.egg_radius(), 0.1
 
     assert [[_, landed] | _] =
-             cast.last_cast.segments |> hd() |> Map.fetch!(:path) |> Enum.reverse()
+             cast.timeline.segments |> hd() |> Map.fetch!(:path) |> Enum.reverse()
 
     assert_in_delta landed, y, 0.01
 
@@ -568,8 +583,8 @@ defmodule Flamingo.GameModes.SpellslingersTest do
     {:ok, %{state: cast}} =
       Spellslingers.command(state, first, {:place, "anvil", 150.5, 20}, context(r, first))
 
-    assert cast.last_cast.grand
-    assert Enum.count(cast.last_cast.segments, &(&1.radius > 0)) >= 3
+    assert cast.timeline.grand
+    assert Enum.count(cast.timeline.segments, &(&1.radius > 0)) >= 3
     refute Terrain.solid?(cast.terrain, 150, 92)
     assert cast.units[second].hp < 150 or cast.units[second].dead
   end
@@ -579,11 +594,21 @@ defmodule Flamingo.GameModes.SpellslingersTest do
     sea = state.water_level
     state = calm(%{state | sudden_after: 0})
 
-    state = next_turn(state, r)
+    # It strikes as a timeline of its own, before the next turn's clock starts.
+    {:ok, %{state: struck, timers: timers}} =
+      Spellslingers.command(state, state.current_id, :pass, context(r, state.current_id))
+
+    assert struck.phase == :arena_resolve
+    assert Enum.all?(struck.timeline.events, &match?(%{kind: "sudden", hp: 1}, &1))
+    assert length(struck.timeline.events) == 2
+    assert Enum.any?(timers, &match?({:schedule_phase_timeout, :arena_sudden, _}, &1))
+
+    state = play_out(struck, r)
+    assert state.phase == :arena_aim and state.current_id == struck.current_id
     assert state.sudden_death
     assert Enum.all?(Map.values(state.units), &(&1.hp == 1))
     assert state.water_level == sea
-    assert Enum.any?(state.events, &(&1 =~ "SUDDEN DEATH"))
+    assert Enum.any?(texts(state), &(&1 =~ "SUDDEN DEATH"))
 
     state = next_turn(state, r)
     assert state.water_level == sea - 3
@@ -625,9 +650,9 @@ defmodule Flamingo.GameModes.SpellslingersTest do
       end)
 
     assert state.phase == :arena_resolve
-    assert state.last_cast.caster_id == bot
+    assert state.timeline.caster_id == bot
     assert [%{spell: spell}] = aims
-    assert state.last_cast.spell == spell
+    assert state.timeline.spell == spell
   end
 
   test "a shot through a wizard's hat counts as a hit" do
@@ -715,7 +740,9 @@ defmodule Flamingo.GameModes.SpellslingersTest do
         {:ok, %{state: next, timers: timers}} =
           Spellslingers.command(state, state.current_id, :pass, context(r, state.current_id))
 
-        if match?(%{caster_id: nil}, next.last_cast),
+        next = play_out(next, r)
+
+        if match?(%{spell: "surge"}, next.timeline),
           do: {:halt, {next, timers}},
           else: {:cont, {next, timers}}
       end)
@@ -788,13 +815,14 @@ defmodule Flamingo.GameModes.SpellslingersTest do
         fx
         |> Spells.meteor(b.x + 0.5, 0, "surge")
         |> Spells.meteor(a.x + 0.5, 40, "surge")
-      end).last_cast
+      end).timeline
 
     [late, early] = cast.segments |> Enum.sort_by(& &1.start, :desc)
     landing = fn segment -> segment.start + length(segment.path) - 1 end
 
-    assert [%{id: ^second, at: at_b}] = Enum.filter(cast.hits, &(&1.id == second))
-    assert [%{id: ^first, at: at_a}] = Enum.filter(cast.hits, &(&1.id == first))
+    hits = Enum.filter(cast.events, &(&1.kind == "hit"))
+    assert [%{id: ^second, at: at_b}] = Enum.filter(hits, &(&1.id == second))
+    assert [%{id: ^first, at: at_a}] = Enum.filter(hits, &(&1.id == first))
     assert at_b == landing.(early)
     assert at_a == landing.(late)
     assert at_a > at_b
@@ -815,17 +843,175 @@ defmodule Flamingo.GameModes.SpellslingersTest do
         |> Spells.meteor(a.x + 0.5, 0, "surge")
       end)
 
-    hits = Enum.filter(cast.last_cast.hits, &(&1.id == first))
+    hits = Enum.filter(cast.timeline.events, &(&1.id == first and &1.kind == "hit"))
     assert [early, late] = hits
     assert early.at < late.at
     assert a.hp > early.hp and early.hp > late.hp
     assert late.hp == cast.units[first].hp
+
+    # Hits on the same step play in the order they were dealt.
+    same =
+      Spells.run(state, nil, "surge", nil, fn fx ->
+        fx |> Spellslingers.Fx.hit(first, 10, nil) |> Spellslingers.Fx.hit(first, 10, nil)
+      end)
+
+    assert [140, 130] = for(%{kind: "hit", hp: hp} <- same.timeline.events, do: hp)
+  end
+
+  test "a knock off a cliff hurts on landing, and a walk into the sea ends things only after the splash" do
+    {state, r} = started()
+    [first, second] = state.turn_order
+    {width, height} = Spellslingers.dimensions()
+
+    # A cliff top at row 50 left of column 150, the sea below it, flat ground beyond.
+    terrain =
+      for y <- 0..(height - 1), x <- 0..(width - 1), into: <<>> do
+        if (x < 150 and y > 50) or (x > 170 and y > 80), do: <<1>>, else: <<0>>
+      end
+
+    units = %{
+      first => %{state.units[first] | x: 60, y: 50},
+      second => %{state.units[second] | x: 146, y: 50}
+    }
+
+    state = %{calm(state) | terrain: terrain, units: units}
+
+    knocked =
+      Spells.run(state, first, "surge", nil, &Spellslingers.Fx.push(&1, second, {26.0, -12.0}))
+
+    assert %{y: 80, hp: 128} = knocked.units[second]
+    assert [%{kind: "knock", path: flight} | _] = knocked.timeline.moves
+    assert [%{kind: "land", id: ^second, at: at, hp: 128}] = knocked.timeline.events
+    assert at >= length(flight) - 1
+    assert knocked.timeline.duration_ms > Enum.at(knocked.timeline.events, 0).ms
+
+    {:ok, %{state: sinking, timers: timers}} =
+      Spellslingers.command(
+        %{state | units: %{units | first => %{units[first] | x: 149}}},
+        first,
+        {:walk, 1},
+        context(r, first)
+      )
+
+    assert sinking.phase == :arena_resolve
+    assert [%{kind: "fall", id: ^first}] = sinking.timeline.moves
+    assert [%{kind: "ko", id: ^first, sea: true, ms: ms}] = sinking.timeline.events
+    assert ms > 500
+    assert Enum.any?(timers, &match?({:schedule_phase_timeout, :arena_fallen, d} when d > ms, &1))
+
+    {:ok, %{state: over}} = Spellslingers.timeout(sinking, :arena_fallen, context(r))
+    assert over.phase == :game_ended and over.final_result.winner_id == second
+  end
+
+  test "a wizard's own drop plays out before its turn can move on" do
+    {state, r} = started()
+    [first, _second] = state.turn_order
+    {width, height} = Spellslingers.dimensions()
+
+    # A ledge at row 50 left of column 150, firm ground 20 rows lower beyond it.
+    terrain =
+      for y <- 0..(height - 1), x <- 0..(width - 1), into: <<>> do
+        if (x < 150 and y > 50) or (x >= 150 and y > 70), do: <<1>>, else: <<0>>
+      end
+
+    state = %{
+      calm(state)
+      | terrain: terrain,
+        current_id: first,
+        units: %{state.units | first => %{state.units[first] | x: 149, y: 50}}
+    }
+
+    now = ~U[2026-01-01 00:00:00.000Z]
+    at = fn ms -> Map.put(context(r, first), :now, DateTime.add(now, ms, :millisecond)) end
+
+    {:ok, %{state: falling}} = Spellslingers.command(state, first, {:walk, 1}, at.(0))
+    assert falling.phase == :arena_aim
+    lands = falling.timeline.duration_ms
+    assert lands > 300
+
+    # Nothing moves the turn on mid-fall: not a pass, not the clock running out.
+    assert {:error, :settling} = Spellslingers.command(falling, first, :pass, at.(lands - 50))
+    assert {:error, :settling} = Spellslingers.command(falling, first, {:walk, 1}, at.(100))
+
+    assert {:ok, %{state: %{phase: :arena_aim, current_id: ^first}, timers: [timer]}} =
+             Spellslingers.timeout(falling, :arena_turn, at.(lands - 200))
+
+    assert {:schedule_phase_timeout, :arena_turn, 200} = timer
+
+    {:ok, %{state: passed}} = Spellslingers.command(falling, first, :pass, at.(lands))
+    assert passed.current_id != first
+  end
+
+  test "a hit that finishes a wizard knocks it out there, even with the sea below" do
+    {state, _r} = started()
+    [first, second] = state.turn_order
+    {width, height} = Spellslingers.dimensions()
+
+    # Ground under the caster only; the victim stands on a pillar the blast takes away.
+    terrain =
+      for y <- 0..(height - 1), x <- 0..(width - 1), into: <<>> do
+        if x < 100 and y > 50, do: <<1>>, else: <<0>>
+      end
+
+    units = %{
+      first => %{state.units[first] | x: 60, y: 50},
+      second => %{state.units[second] | x: 150, y: 50, hp: 20}
+    }
+
+    state = %{calm(state) | terrain: terrain, units: units}
+
+    struck =
+      Spells.run(state, first, "surge", nil, fn fx ->
+        fx |> Spellslingers.Fx.at(6) |> Spellslingers.Fx.hit(second, 30, first)
+      end)
+
+    assert %{dead: true, hp: 0} = struck.units[second]
+
+    assert [%{kind: "hit", at: 6}, %{kind: "ko", id: ^second, at: 6, sea: false}] =
+             Enum.filter(struck.timeline.events, &(&1[:id] == second))
+
+    assert Enum.any?(Enum.map(struck.log, & &1.text), &(&1 =~ "is defeated"))
+  end
+
+  test "a drop short enough to walk down still hurts once it passes the safe height" do
+    {state, r} = started()
+    [first, _second] = state.turn_order
+    {width, height} = Spellslingers.dimensions()
+
+    terrain =
+      for y <- 0..(height - 1), x <- 0..(width - 1), into: <<>> do
+        if (x <= 100 and y > 50) or (x > 100 and y > 52), do: <<1>>, else: <<0>>
+      end
+
+    state = %{
+      calm(state)
+      | terrain: terrain,
+        current_id: first,
+        tuning: %{state.tuning | fall_safe: 0},
+        units: %{state.units | first => %{state.units[first] | x: 100, y: 50}}
+    }
+
+    {:ok, %{state: stepped}} = Spellslingers.command(state, first, {:walk, 1}, context(r, first))
+    assert %{y: 52, hp: 148} = stepped.units[first]
+    assert [] = stepped.timeline.moves
+    assert [%{kind: "land", hp: 148}] = stepped.timeline.events
   end
 
   defp pass(state, r) do
     {:ok, %{state: state}} = Spellslingers.command(state, "a", :pass, context(r, "a"))
-    state
+    play_out(state, r)
   end
+
+  # Lets whatever the turn's end set off (a spent broom, the tide, sudden death) play out.
+  defp play_out(%{phase: :arena_resolve, timeline: %{spell: nil} = t} = state, r) do
+    key = if Enum.any?(t.events, &(&1.kind == "sudden")), do: :arena_sudden, else: :arena_turn_end
+    {:ok, %{state: state}} = Spellslingers.timeout(state, key, context(r))
+    play_out(state, r)
+  end
+
+  defp play_out(state, _r), do: state
+
+  defp texts(state), do: Enum.map(state.log, & &1.text)
 
   # Wild magic and crates off, so turns run the same every time.
   defp calm(state),
@@ -835,7 +1021,7 @@ defmodule Flamingo.GameModes.SpellslingersTest do
     {:ok, %{state: state}} =
       Spellslingers.command(state, state.current_id, :pass, context(r, state.current_id))
 
-    state
+    play_out(state, r)
   end
 
   test "a seeker wisp thrown straight up comes down on the enemy, not on its caster" do
@@ -846,7 +1032,7 @@ defmodule Flamingo.GameModes.SpellslingersTest do
     {:ok, %{state: cast}} =
       Spellslingers.command(state, first, {:cast, "seeker", 90, 75}, context(r, first))
 
-    [x, _] = cast.last_cast.segments |> hd() |> Map.fetch!(:path) |> List.last()
+    [x, _] = cast.timeline.segments |> hd() |> Map.fetch!(:path) |> List.last()
     assert abs(x - state.units[second].x) < abs(x - state.units[first].x)
   end
 
@@ -859,7 +1045,7 @@ defmodule Flamingo.GameModes.SpellslingersTest do
     {:ok, %{state: cast}} =
       Spellslingers.command(state, first, {:cast, "fuserune", toward, 60}, context(r, first))
 
-    [first_hop | _] = segments = cast.last_cast.segments
+    [first_hop | _] = segments = cast.timeline.segments
     assert length(segments) > 1
     assert first_hop.hit and first_hop.radius == 0
     # Each hop starts where the last one stopped.

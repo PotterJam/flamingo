@@ -4,8 +4,8 @@ defmodule Flamingo.GameModes.Spellslingers.Fx do
   change, the flights clients replay, the hits clients reveal as each
   one lands, and the knockback each unit will take once the effects finish.
 
-  `at` is the step of the cast's flight timeline the effects have reached, so a
-  hit records the moment clients should show it.
+  The state's `clock` is the step of the cast's timeline the effects have reached
+  (see `Timeline`), so a hit records the moment clients should show it.
   """
 
   alias Flamingo.GameModes.Spellslingers.Units
@@ -13,7 +13,6 @@ defmodule Flamingo.GameModes.Spellslingers.Fx do
   defstruct [
     :state,
     :target,
-    at: 0,
     segments: [],
     auras: [],
     hits: [],
@@ -24,6 +23,9 @@ defmodule Flamingo.GameModes.Spellslingers.Fx do
 
   def new(state, target), do: %__MODULE__{state: state, target: target}
 
+  @doc "Moves the effects on (or back) to step `at` of the cast."
+  def at(fx, at), do: %{fx | state: %{fx.state | clock: at}}
+
   @doc """
   Damages a unit and records the hit at the current step. Effects can record a hit
   that lands earlier than one already recorded (an ember with a shorter flight), so
@@ -32,7 +34,7 @@ defmodule Flamingo.GameModes.Spellslingers.Fx do
   def hit(fx, id, amount, source) do
     before = fx.state.units[id].hp
     state = Units.damage(fx.state, id, amount, source)
-    hit = %{id: id, at: fx.at, dealt: before - state.units[id].hp}
+    hit = %{id: id, at: fx.state.clock || 0, dealt: before - state.units[id].hp}
     %{fx | state: state, hits: [hit | fx.hits]}
   end
 

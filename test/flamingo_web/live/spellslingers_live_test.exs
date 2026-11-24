@@ -87,7 +87,7 @@ defmodule FlamingoWeb.SpellslingersLiveTest do
     render_hook(waiting, "select_spell", %{"spell" => "broom"})
     assert has_element?(waiting, "#arena-selected-spell", "Take Flight")
     refute has_element?(waiting, "#flash-error")
-    assert %{current_id: ^first, quick_used: false, cast_count: 0} = game.()
+    assert %{current_id: ^first, quick_used: false, timeline_count: 0} = game.()
 
     render_hook(playing, "pass", %{})
     refute game.().current_id == first
@@ -95,7 +95,7 @@ defmodule FlamingoWeb.SpellslingersLiveTest do
 
     # Casting off your turn is still refused.
     render_hook(playing, "cast", %{"spell" => "firebolt", "angle" => 45, "power" => 50})
-    assert %{cast_count: 0} = game.()
+    assert %{timeline_count: 0} = game.()
 
     # On your turn it goes off, and the used-up quick spell lets go of the selection.
     render_hook(waiting, "select_spell", %{"spell" => "broom"})
@@ -154,5 +154,89 @@ defmodule FlamingoWeb.SpellslingersLiveTest do
 
     assert tuning.().gravity == 9.0
     assert has_element?(dev, "#arena-tuned")
+  end
+
+  # Re-renders until `check` holds, for up to `ms`.
+  defp eventually(view, check, ms \\ 3_000) do
+    cond do
+      check.(render(view)) -> true
+      ms <= 0 -> false
+      true -> receive(after: (50 -> eventually(view, check, ms - 50)))
+    end
+  end
+
+  test "the HUD and chronicle show a fall's damage when the flamingo lands, not when it steps off",
+       %{conn: conn} do
+    room_id = "spellslingers-fall-#{System.unique_integer([:positive])}"
+    {:ok, ^room_id} = RoomSupervisor.start_room(room_id)
+    tokens = [join_connected(room_id, "Alice"), join_connected(room_id, "Bob")]
+    {:ok, lobby, _html} = live(conn, ~p"/game/#{room_id}?resume_token=#{hd(tokens)}")
+    lobby |> element("#game-mode-spellslingers") |> render_click()
+    lobby |> form("#settings-form") |> render_submit()
+
+    views =
+      for token <- tokens do
+        {:ok, view, _html} = live(conn, ~p"/game/#{room_id}/spellslingers?resume_token=#{token}")
+        render_hook(view, "arena_loaded", %{})
+        view
+      end
+
+    room = :global.whereis_name({:flamingo_room, room_id})
+    %{phase_timer: %{key: :arena_intro, generation: intro}} = :sys.get_state(room)
+    send(room, {:game_timeout, :phase, :arena_intro, intro})
+    %{current_id: first} = :sys.get_state(room).game
+    {width, height} = Flamingo.GameModes.Spellslingers.dimensions()
+
+    # The wizard whose turn it is stands at the edge of a ledge 20 cells up.
+    :sys.replace_state(room, fn room ->
+      terrain =
+        for y <- 0..(height - 1), x <- 0..(width - 1), into: <<>> do
+          if y > 80 or (x < 150 and y > 60), do: <<1>>, else: <<0>>
+        end
+
+      units = Map.new(room.game.units, fn {id, u} -> {id, %{u | x: 40, y: 80}} end)
+      units = Map.update!(units, first, &%{&1 | x: 149, y: 60})
+
+      %{
+        room
+        | game: %{
+            room.game
+            | terrain: terrain,
+              units: units,
+              tuning: %{room.game.tuning | crate_chance: 0}
+          }
+      }
+    end)
+
+    {[playing], [watching]} =
+      Enum.split_with(views, &(not has_element?(&1, "#arena-pass[disabled]")))
+
+    render_hook(playing, "walk", %{"dir" => 1})
+    %{units: %{^first => %{hp: 138}}} = :sys.get_state(room).game
+
+    %{timeline: %{id: fall}} = :sys.get_state(room).game
+
+    for view <- [playing, watching] do
+      assert has_element?(view, "#wizard-#{first}", "150")
+      refute render(view) =~ "falls hard"
+    end
+
+    # The HUD follows each page's own arena: the landing shows as this one plays it...
+    render_hook(playing, "timeline_started", %{"id" => fall})
+    assert eventually(playing, &(&1 =~ "falls hard and loses 12 HP"))
+    assert has_element?(playing, "#wizard-#{first}", "138")
+
+    # ...while a page that hasn't started it yet still holds, even when the turn has
+    # moved on by then, and one that skipped it (a hidden tab) shows the board as it is.
+    :sys.replace_state(room, &%{&1 | game: %{&1.game | busy_until: nil}})
+    render_hook(playing, "pass", %{})
+    refute :sys.get_state(room).game.current_id == first
+    assert has_element?(watching, "#wizard-#{first}", "150")
+    refute has_element?(watching, "#wizard-#{first} span.invisible")
+
+    render_hook(watching, "timeline_skipped", %{"id" => fall})
+    assert render(watching) =~ "falls hard and loses 12 HP"
+    assert has_element?(watching, "#wizard-#{first}", "138")
+    assert has_element?(watching, "#wizard-#{first} span.invisible")
   end
 end
