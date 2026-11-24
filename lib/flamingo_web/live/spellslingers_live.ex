@@ -454,9 +454,10 @@ defmodule FlamingoWeb.SpellslingersLive do
             {player_name(@players, wizard.id)}
           </span>
           <span class="h-3.5 overflow-hidden rounded-full border-2 border-border bg-gray-100">
+            <%!-- Scaled rather than resized, so the drop animates without page layout --%>
             <span
-              class="block h-full transition-[width] duration-700 ease-out"
-              style={"width: #{round(wizard.hp * 100 / wizard.max_hp)}%; background: #{player_color(@players, wizard.id)}"}
+              class="block h-full origin-left transition-transform duration-700 ease-out"
+              style={"transform: scaleX(#{wizard.hp / wizard.max_hp}); background: #{player_color(@players, wizard.id)}"}
             />
           </span>
           <span class="text-right tabular-nums">{wizard.hp}</span>
@@ -1454,7 +1455,9 @@ defmodule FlamingoWeb.SpellslingersLive do
 
   # Holds back HP and chronicle updates from a new cast until its flight has played out,
   # so health bars drop when spells visibly land rather than when they are cast. A
-  # knockout waits for its slow-motion knockback (0.35x on the canvas) to land too.
+  # knockout waits for its slow-motion knockback (0.35x on the canvas) to land too. The
+  # last blast's explosion (680 ms on the canvas) plays out first as well: the page update
+  # costs a frame, a hitch in the middle of it.
   defp defer_board(socket, snapshot, initial?) do
     cast = snapshot.last_cast
     cast_id = cast && cast.id
@@ -1472,7 +1475,7 @@ defmodule FlamingoWeb.SpellslingersLive do
 
         # A grand spell's title card plays before anything flies.
         intro = if Map.get(cast, :grand), do: p.grand_intro_ms, else: 0
-        delay = round((cast.flight_steps + knock) * p.dt * 1000 / p.playback_speed) + intro + 250
+        delay = round((cast.flight_steps + knock) * p.dt * 1000 / p.playback_speed) + intro + 720
         Process.send_after(self(), {:reveal_board, cast_id}, delay)
         assign(socket, last_cast_id: cast_id, pending_board: Map.put(board, :id, cast_id))
 

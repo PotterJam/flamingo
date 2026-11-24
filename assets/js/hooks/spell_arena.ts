@@ -409,8 +409,22 @@ const SpellArena = {
     let smokes: Smoke[] = [];
     // Where blasts have scorched the land, burned into it each time it is repainted.
     let scorches: { x: number; y: number; r: number }[] = [];
-    // A quick zoom punch on impact, decaying back to nothing.
-    let punch = 0;
+    // A quick zoom punch on impact, decaying back to nothing. It eases up to its size over
+    // PUNCH_RISE ms rather than jumping there in one frame, and a second impact while one
+    // is still showing only tops it up to the bigger of the two instead of stacking.
+    const PUNCH_RISE = 90;
+    let punch = { from: 0, to: 0, at: -1e9 };
+    const punchAt = (now: number) => {
+      const t = Math.max(0, now - punch.at);
+      if (t >= PUNCH_RISE) return punch.to * Math.exp(-(t - PUNCH_RISE) / 110);
+      const k = t / PUNCH_RISE;
+      return punch.from + (punch.to - punch.from) * k * k * (3 - 2 * k);
+    };
+    const kick = (size: number) => {
+      const now = performance.now();
+      const level = punchAt(now);
+      if (size > level) punch = { from: level, to: size, at: now };
+    };
     // Health bars over units drain to the new value a beat after a hit.
     const bars = new Map<string, { v: number; since: number }>();
     const sounds = createSpellSounds(() => (Number.isFinite(window.__soundVolume) ? window.__soundVolume : 100) / 100);
@@ -1412,9 +1426,10 @@ const SpellArena = {
         due.set(hit.id, hit);
       }
       if (!due.size) return;
-      // The health bars along the bottom drop with it too.
+      // The health bars along the bottom drop with it too, once the explosion has
+      // played out: the page update they need costs a frame, a hitch in mid-blast.
       const shownHits = { cast: animation.cast.id, hits: [...due.values()].map(({ id, hp }) => ({ id, hp })) };
-      setTimeout(() => this.pushEvent("arena_hits_shown", shownHits), 450);
+      setTimeout(() => this.pushEvent("arena_hits_shown", shownHits), BOOM_MS * BOOM_FRAMES + 40);
       const next = {
         ...shown,
         units: shown.units.map((u) => {
@@ -1450,7 +1465,7 @@ const SpellArena = {
       const s = scale();
       rings.push({ x: x * s, y: y * s, r: (radius + 2) * s * 1.5, born: performance.now(), color });
       booms.push({ x: x * s, y: y * s, size: (radius + 3) * s * 2.6, born: performance.now(), flip: Math.random() < 0.5 ? -1 : 1 });
-      punch = Math.min(0.09, punch + 0.015 + radius * 0.006);
+      kick(Math.min(0.09, 0.015 + radius * 0.006));
       const pal = palette();
       const land = [...pal.grass.slice(0, 2), ...pal.soil, ...pal.rock.slice(0, 2)];
       // Clods of the land itself, a cell or two across, thrown out of the hole. They
@@ -1483,29 +1498,39 @@ const SpellArena = {
     };
 
     // The painted explosion plays through its frames: a flash, the fireball swelling to
-    // its peak, then breaking up into smoke that drifts off.
+    // its peak, then breaking up into smoke that drifts off. The frames are very different
+    // drawings 85 ms apart, so each one is mixed into the next on a scratch canvas (added
+    // together, weighted, so the blend stays solid where both are) while the cloud keeps
+    // swelling: one motion instead of a cut every frame.
     const BOOM_MS = 85;
+    let boomMix: HTMLCanvasElement | null = null;
     const drawBooms = (now: number) => {
       booms = booms.filter((b) => now - b.born < BOOM_MS * BOOM_FRAMES);
       const img = art.boom;
       if (!ready(img)) return;
+      boomMix ??= Object.assign(document.createElement("canvas"), { width: BOOM_CELL, height: BOOM_CELL });
+      const mix = boomMix.getContext("2d")!;
       for (const b of booms) {
-        const age = now - b.born;
+        const age = Math.max(0, now - b.born);
         const at = age / BOOM_MS;
         const n = Math.min(BOOM_FRAMES - 1, Math.floor(at));
-        const f = at - n;
-        const grow = 0.7 + (1 - (1 - Math.min(1, age / (BOOM_MS * 3))) ** 3) * 0.42;
+        const f = n + 1 < BOOM_FRAMES ? at - n : 0;
+        const grow = 0.7 + (1 - (1 - Math.min(1, age / (BOOM_MS * 3))) ** 3) * 0.42 + (0.1 * at) / BOOM_FRAMES;
         const size = b.size * grow;
         const fade = at >= 5 ? Math.max(0, 1 - (age - BOOM_MS * 5) / (BOOM_MS * 3)) : 1;
+        mix.globalCompositeOperation = "copy";
+        mix.globalAlpha = 1 - f;
+        mix.drawImage(img, n * BOOM_CELL, 0, BOOM_CELL, BOOM_CELL, 0, 0, BOOM_CELL, BOOM_CELL);
+        if (f > 0) {
+          mix.globalCompositeOperation = "lighter";
+          mix.globalAlpha = f;
+          mix.drawImage(img, (n + 1) * BOOM_CELL, 0, BOOM_CELL, BOOM_CELL, 0, 0, BOOM_CELL, BOOM_CELL);
+        }
         ctx.save();
         ctx.translate(b.x, b.y - size * 0.12 * (at / BOOM_FRAMES));
         ctx.scale(b.flip, 1);
         ctx.globalAlpha = fade;
-        ctx.drawImage(img, n * BOOM_CELL, 0, BOOM_CELL, BOOM_CELL, -size / 2, -size / 2, size, size);
-        if (n + 1 < BOOM_FRAMES) {
-          ctx.globalAlpha = fade * f;
-          ctx.drawImage(img, (n + 1) * BOOM_CELL, 0, BOOM_CELL, BOOM_CELL, -size / 2, -size / 2, size, size);
-        }
+        ctx.drawImage(boomMix, -size / 2, -size / 2, size, size);
         ctx.restore();
       }
       ctx.globalAlpha = 1;
@@ -1685,7 +1710,7 @@ const SpellArena = {
         burst(ex * s, ey * s, "#fff", 18, 120);
         rings.push({ x: ex * s, y: ey * s, r: 20, born: performance.now(), color });
         floaters.push({ x: ex * s, y: (ey - 4) * s, text: "CAN'T RESIST!", color: "#fde047", size: 22, life: 900, max: 900 });
-        punch = Math.min(0.09, punch + 0.04);
+        kick(0.04);
         shake(5, 200);
         return;
       }
@@ -2416,17 +2441,19 @@ const SpellArena = {
       if (now < shakeUntil) {
         const k = Math.min(1, (shakeUntil - now) / 450);
         const amp = shakePower * k * k * 0.75;
-        ctx.translate((Math.sin(now / 21) + Math.sin(now / 13.7) * 0.6) * amp, (Math.cos(now / 19) + Math.sin(now / 11.3) * 0.6) * amp);
+        // Slow enough (4 to 7 shakes a second) that 60 frames a second still show it as
+        // a shake rather than the view jumping about.
+        ctx.translate((Math.sin(now / 42) + Math.sin(now / 29) * 0.6) * amp, (Math.cos(now / 37) + Math.sin(now / 23) * 0.6) * amp);
       } else {
         shakePower = 0;
       }
 
       drawBackground(now);
       moveCamera(now, dt);
-      punch *= Math.exp(-dt / 110);
+      const zoomPunch = punchAt(now);
       ctx.save();
       ctx.translate(W / 2, H / 2);
-      ctx.scale(1 + punch, 1 + punch);
+      ctx.scale(1 + zoomPunch, 1 + zoomPunch);
       ctx.translate(-W / 2, -H / 2);
       ctx.scale(zoom, zoom);
       ctx.translate(-cam.x * CELL, -cam.y * CELL);
