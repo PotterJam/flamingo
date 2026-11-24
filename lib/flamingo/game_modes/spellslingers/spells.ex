@@ -54,11 +54,9 @@ defmodule Flamingo.GameModes.Spellslingers.Spells do
           Units.alive_unit?(unit) and not Units.alive?(state, id),
           do: id
 
-    # Knockouts replay in slow motion on clients, so the turn waits for them.
-    slow_mo =
-      if knocked_out != [],
-        do: round(knock * @dt * 1000 / @playback_speed * 1.9) + 1100,
-        else: 0
+    # A knockout's knockback opens in slow motion on clients (about 250 ms lost) and the
+    # KO banner holds a moment after, so the turn waits for both.
+    slow_mo = if knocked_out != [], do: 950, else: 0
 
     # Grand spells open with a title card before anything flies.
     extra =
@@ -82,7 +80,7 @@ defmodule Flamingo.GameModes.Spellslingers.Spells do
           auras: Enum.reverse(fx.auras),
           ko: knocked_out,
           flight_steps: flight,
-          duration_ms: round((flight + knock) * @dt * 1000 / @playback_speed) + extra + 450
+          duration_ms: round((flight + knock) * @dt * 1000 / @playback_speed) + extra + 300
         }
     }
   end

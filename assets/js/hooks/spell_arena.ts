@@ -801,6 +801,8 @@ const SpellArena = {
     const walked = new Map<string, number>();
     const faced = new Map<string, number>();
     const landedAt = new Map<string, number>();
+    // How fast each falling flamingo is dropping, in cells per ms.
+    const falls = new Map<string, number>();
     // When each flamingo last moved along the ground, so a pause between steps isn't a stop.
     const movedAt = new Map<string, number>();
     // The last frame's length, for the springs below.
@@ -1454,13 +1456,22 @@ const SpellArena = {
     };
 
     // Steps elapsed in the server's simulation timeline.
-    const castStep = (now: number, since: number, speed = 1) => {
+    const castStep = (now: number, since: number) => {
       const p = shown!.physics;
-      return ((now - since) / 1000) * (p.playback_speed / p.dt) * speed;
+      return ((now - since) / 1000) * (p.playback_speed / p.dt);
     };
 
-    // Knockouts replay their knockback in slow motion.
-    const knockSpeed = (cast: Cast) => (cast.ko?.length ? 0.35 : 1);
+    // Steps of knockback played since `since`. A knockout opens its knockback in slow
+    // motion, a third of the speed for KO_SLOW ms, then eases back to full speed over
+    // the next KO_SLOW ms, so the hit lands hard without the whole flight crawling.
+    const KO_SLOW = 250;
+    const knockStep = (now: number, since: number, cast: Cast) => {
+      const t = now - since;
+      if (!cast.ko?.length) return castStep(now, since);
+      const u = Math.min(Math.max(0, t - KO_SLOW), KO_SLOW);
+      const played = 0.35 * Math.min(t, KO_SLOW) + 0.35 * u + (0.65 * u * u) / (2 * KO_SLOW) + Math.max(0, t - 2 * KO_SLOW);
+      return castStep(since + played, since);
+    };
 
     const pointAt = (path: [number, number][], index: number) => {
       const last = path.length - 1;
@@ -1859,7 +1870,7 @@ const SpellArena = {
     const knockedPositions = (now: number) => {
       const positions = new Map<string, [number, number]>();
       if (!animation || animation.aftermathAt === null) return positions;
-      const step = castStep(now, animation.aftermathAt, knockSpeed(animation.cast));
+      const step = knockStep(now, animation.aftermathAt, animation.cast);
       for (const knock of animation.cast.knocks) {
         if (step < knock.path.length - 1) positions.set(knock.id, pointAt(knock.path, step) as [number, number]);
       }
@@ -1870,7 +1881,7 @@ const SpellArena = {
       if (!animation || animation.aftermathAt === null || !shown) return;
       const { cast } = animation;
       const elapsed = now - animation.aftermathAt;
-      const step = castStep(now, animation.aftermathAt, knockSpeed(cast));
+      const step = knockStep(now, animation.aftermathAt, cast);
 
       // A tempted flamingo lunges after the shrimp on its line until it lands.
       if (cast.spell === "hook") {
@@ -1904,7 +1915,7 @@ const SpellArena = {
       const knockSteps = Math.max(0, ...cast.knocks.map((k) => k.path.length));
       const done =
         step >= knockSteps &&
-        (animation.koAt !== null ? now - animation.koAt > 1300 : elapsed > 650);
+        (animation.koAt !== null ? now - animation.koAt > 700 : elapsed > 400);
 
       if (done) {
         animation = null;
@@ -2070,7 +2081,9 @@ const SpellArena = {
         drawn.set(unit.id, [unit.x, unit.y]);
         return { x: unit.x, y: unit.y };
       }
-      if (Math.hypot(unit.x - prev[0], unit.y - prev[1]) > 6) {
+      // A long jump is a teleport, unless it is straight down: that is a fall.
+      const drop = unit.y > prev[1] && Math.abs(unit.x - prev[0]) <= 2;
+      if (!drop && Math.hypot(unit.x - prev[0], unit.y - prev[1]) > 6) {
         sounds.teleport();
         const color = colorOf("blink", "#a855f7");
         burst((prev[0] + 0.5) * s, (prev[1] - 1) * s, color, 30, 90);
@@ -2082,7 +2095,7 @@ const SpellArena = {
       // Walking and flight both close on the next cell at a steady speed, a little
       // faster than the steps arrive, so the flamingo glides instead of lurching once a
       // cell. Each axis keeps its own pace, so a diagonal keeps up with its steps, and a
-      // long way behind (a drop off a ledge) closes faster.
+      // long way behind closes faster.
       const pace = (unit.float ?? 0) > 0 ? FLY_MS : STEP_MS;
       const chase = (from: number, to: number) => {
         const d = Math.abs(to - from);
@@ -2090,7 +2103,21 @@ const SpellArena = {
         return from + Math.sign(to - from) * move;
       };
       const x = chase(prev[0], unit.x);
-      const y = chase(prev[1], unit.y);
+      let y = chase(prev[1], unit.y);
+      // A drop (off a ledge, or the ground blasted away) falls under the server's
+      // gravity as played on screen, speeding up until it lands with a squash.
+      const fallV = falls.get(unit.id);
+      if ((unit.float ?? 0) <= 0 && unit.y > prev[1] && (fallV !== undefined || unit.y - prev[1] > 2)) {
+        const p = shown!.physics;
+        const v = (fallV ?? 0) + ((p.gravity * p.playback_speed ** 2) / 1e6) * dt;
+        y = Math.min(unit.y, prev[1] + v * dt);
+        if (y < unit.y) falls.set(unit.id, v);
+        else {
+          falls.delete(unit.id);
+          landedAt.set(unit.id, performance.now());
+          burst((x + 0.5) * s, (unit.y + 1) * s, "#a8a29e", 10, 50);
+        }
+      } else falls.delete(unit.id);
       if ((unit.float ?? 0) > 0) {
         drawn.set(unit.id, [x, y]);
         return { x, y };

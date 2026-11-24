@@ -54,7 +54,10 @@ defmodule Flamingo.GameModes.Spellslingers.Rules do
       @dt 0.04
       @max_speed 78.0
       @max_steps 450
-      @playback_speed 1.6
+      # How much faster than the simulation's own clock clients play it. Gravity on screen
+      # grows with its square: at 2.2 a flamingo falls about as many of its own heights a
+      # second as a worm does in Worms.
+      @playback_speed 2.2
       # How long a grand spell's title card plays before its effects.
       @grand_intro_ms 1300
       @max_bots 5

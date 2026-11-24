@@ -773,7 +773,7 @@ defmodule Flamingo.GameModes.Spellslingers do
       ok(%{state | quick_used: true})
     else
       ok(%{state | phase: :arena_resolve}, [
-        {:schedule_phase_timeout, :arena_resolve, cast.duration_ms + 1200}
+        {:schedule_phase_timeout, :arena_resolve, cast.duration_ms + 700}
       ])
     end
   end
