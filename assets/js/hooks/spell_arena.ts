@@ -483,12 +483,12 @@ const SpellArena = {
       !!shown && !!cells && x >= 0 && x < shown.width && y >= 0 && y < shown.height && cells[y * shown.width + x] === 1;
 
     // Cells of the world's edges the camera may show past each side, and how far the
-    // land is drawn on past them, fading out.
+    // land is drawn on past them before it meets the sea.
     const EDGE_VIEW = 14;
     const EDGE_FADE = 22;
     const clampCam = () => {
       if (!shown) return;
-      // A little past the left and right edges shows the land fading into the distance,
+      // A little past the left and right edges shows the land running down into the sea,
       // so the world never stops dead at the screen's edge.
       const lo = -EDGE_VIEW;
       const hi = shown.width + EDGE_VIEW - VIEW_W;
@@ -2274,44 +2274,84 @@ const SpellArena = {
     const floating = () => (myWizard()?.float ?? 0) > 0;
     const moveStep = (now: number) => (floating() ? flyStep(now) : heldDir ? walkStep(now) : undefined);
 
-    // The land carries on past each edge as its own mirror image, fading into the
-    // backdrop, so the world's left and right ends don't look cut off; a cave's ceiling
-    // carries on above in the same way, fading into solid rock.
+    // The land carries on past each edge as its own mirror image, then slopes down into
+    // the sea as a headland, so the world's left and right ends don't look cut off; a
+    // cave's ceiling carries on above, fading into solid rock.
     let edges: { left: HTMLCanvasElement; right: HTMLCanvasElement; top: HTMLCanvasElement | null } | null = null;
     const buildEdges = () => {
       if (!shown || !terrainCanvas) return;
       const R = terrainRes;
       const n = EDGE_FADE * R;
       const h = shown.height * R;
-      const strip = (w: number, hh: number, paint: (c: CanvasRenderingContext2D) => void, fade: CanvasGradient | ((c: CanvasRenderingContext2D) => CanvasGradient)) => {
+      const strip = (w: number, hh: number, paint: (c: CanvasRenderingContext2D) => void, fade: (c: CanvasRenderingContext2D) => CanvasGradient) => {
         const canvas = document.createElement("canvas");
         canvas.width = w;
         canvas.height = hh;
         const c = canvas.getContext("2d")!;
         paint(c);
         c.globalCompositeOperation = "destination-in";
-        c.fillStyle = typeof fade === "function" ? fade(c) : fade;
+        c.fillStyle = fade(c);
         c.fillRect(0, 0, w, hh);
         return canvas;
       };
-      const across = (c: CanvasRenderingContext2D, from: number, to: number) => {
-        const g = c.createLinearGradient(from, 0, to, 0);
-        g.addColorStop(0, "rgba(0,0,0,1)");
-        g.addColorStop(0.35, "rgba(0,0,0,0.75)");
-        g.addColorStop(1, "rgba(0,0,0,0)");
-        return g;
-      };
       const land = terrainCanvas;
-      const left = strip(n, h, (c) => {
+      const mirror = (c: CanvasRenderingContext2D, from: number) => {
         c.translate(n, 0);
         c.scale(-1, 1);
-        c.drawImage(land, 0, 0, n, h, 0, 0, n, h);
-      }, (c) => across(c, n, 0));
-      const right = strip(n, h, (c) => {
-        c.translate(n, 0);
-        c.scale(-1, 1);
-        c.drawImage(land, land.width - n, 0, n, h, 0, 0, n, h);
-      }, (c) => across(c, 0, n));
+        c.drawImage(land, from, 0, n, h, 0, 0, n, h);
+        c.setTransform(1, 0, 0, 1, 0, 0);
+      };
+      // The mirrored land runs on at full strength, then slopes gently down into the sea,
+      // with a grass lip and outline along the slope so it reads as the island's own shore.
+      const shore = (side: "left" | "right") => {
+        const world = shown!;
+        const canvas = document.createElement("canvas");
+        canvas.width = n;
+        canvas.height = h;
+        const c = canvas.getContext("2d")!;
+        mirror(c, side === "left" ? 0 : land.width - n);
+        const water = world.water_level * R;
+        const run = 20 * R;
+        const col = side === "left" ? 0 : world.width - 1;
+        // The ground surface at the edge: below a cave's ceiling, the first land under air.
+        const solid = (y: number) => !!cells?.[y * world.width + col];
+        let top = 0;
+        if (ceiling) while (top < world.height && solid(top)) top++;
+        while (top < world.height && !solid(top)) top++;
+        // A little above it, so the slope starts in the air and meets the painted lip.
+        const y0 = Math.min((top - 1.5) * R, water);
+        const xOf = (u: number) => (side === "right" ? u : n - u);
+        const curve = () => {
+          c.beginPath();
+          for (let u = 0; u <= run; u += R / 2) {
+            const k = (1 - Math.cos(Math.PI * Math.min(1, u / run))) / 2;
+            c.lineTo(xOf(u), y0 + (water + 2 * R - y0) * k);
+          }
+        };
+        curve();
+        c.lineTo(xOf(run), h);
+        c.lineTo(xOf(0), h);
+        c.closePath();
+        c.globalCompositeOperation = "destination-in";
+        c.fill();
+        c.globalCompositeOperation = "source-atop";
+        c.lineJoin = "round";
+        const t = Math.max(2, Math.round(R * 0.35));
+        const grass = Math.max(2, Math.round(R * 1.15));
+        for (const [color, width] of [
+          [`rgb(${palette().grass[1].join(",")})`, (t + grass) * 2],
+          [`rgb(${palette().grass[0].join(",")})`, (t + 2) * 2],
+          ["#1c1917", t * 2],
+        ] as const) {
+          curve();
+          c.strokeStyle = color;
+          c.lineWidth = width;
+          c.stroke();
+        }
+        return canvas;
+      };
+      const left = shore("left");
+      const right = shore("right");
       let top: HTMLCanvasElement | null = null;
       if (ceiling) {
         const rows = 24 * R;
