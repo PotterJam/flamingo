@@ -1,5 +1,47 @@
 [
   {
+    "date": "2026-11-24",
+    "entries": [
+      {"type": "feature", "text": "Spellslingers now fills the screen with painted miners, a shared 18-item kit, and time to retreat after a throw."}
+    ]
+  },
+  {
+    "date": "2026-11-23",
+    "entries": [
+      {"type": "feature", "text": "Spellslingers now has high and long jumps to help you cross gaps and climb obstacles."}
+    ]
+  },
+  {
+    "date": "2026-11-22",
+    "entries": [
+      {"type": "feature", "text": "Saved lobbies now show lifetime win standings and game history, with results and drawing replays."},
+      {"type": "feature", "text": "Signed-in players' names are now remembered for future visits."},
+      {"type": "fix", "text": "Short custom word lists now repeat instead of ending Classic, Roulette and Teams games early."},
+      {"type": "fix", "text": "Drawings no longer build up static in browsers with canvas fingerprinting protection."},
+      {"type": "fix", "text": "Opening another tab while signed in now returns you to your existing seat instead of adding another player."}
+    ]
+  },
+  {
+    "date": "2026-11-21",
+    "entries": [
+      {"type": "new_mode", "text": "Spellslingers: take turns battling across destructible islands, with AI opponents available for solo play."},
+      {"type": "fix", "text": "Returning to the lobby now keeps the game mode you just played."}
+    ]
+  },
+  {
+    "date": "2026-11-19",
+    "entries": [
+      {"type": "fix", "text": "Empty guesses and guesses containing only spaces no longer appear in chat."}
+    ]
+  },
+  {
+    "date": "2026-11-17",
+    "entries": [
+      {"type": "feature", "text": "Mix and match penguin, dog, bear, pig and axolotl avatar parts."},
+      {"type": "feature", "text": "Find your saved lobbies on the home screen and see who's online in each one."}
+    ]
+  },
+  {
     "date": "2026-11-16",
     "entries": [
       {"type": "feature", "text": "New lobbies now start with 40-second turns."}
