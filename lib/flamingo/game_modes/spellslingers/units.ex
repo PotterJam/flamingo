@@ -201,13 +201,14 @@ defmodule Flamingo.GameModes.Spellslingers.Units do
     end)
   end
 
-  # A long drop hurts, and the chronicle says so, since nothing else explains the hit.
+  # A long drop hurts, a point for each cell past the safe height, and the chronicle
+  # says so, since nothing else explains the hit.
   def fall_damage(state, id, fall) do
     safe = state.tuning.fall_safe
     unit = state.units[id]
 
     if fall > safe and unit do
-      hurt = damage(state, id, (fall - safe) * 2, nil)
+      hurt = damage(state, id, fall - safe, nil)
       lost = unit.hp - hurt.units[id].hp
 
       if lost > 0,

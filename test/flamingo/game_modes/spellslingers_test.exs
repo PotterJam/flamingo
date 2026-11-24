@@ -276,7 +276,7 @@ defmodule Flamingo.GameModes.SpellslingersTest do
     assert refilled.ammo[first]["embers"] == 1
   end
 
-  test "a broomstick is quick: the wizard flies, can still cast, and glides down after" do
+  test "a broomstick is quick: the wizard flies, can still cast, and flutters down after" do
     {state, r} = started()
     [first, second] = state.turn_order
     state = calm(%{state | sudden_after: 99})
@@ -305,7 +305,8 @@ defmodule Flamingo.GameModes.SpellslingersTest do
     {:ok, %{state: theirs}} = Spellslingers.command(state, first, :pass, ctx)
     assert theirs.current_id == second
     assert theirs.units[first].y == ground
-    assert theirs.units[first].hp == 150
+    # Coming down 12 cells hurts like any 12-cell fall, a point a cell past the safe 8.
+    assert theirs.units[first].hp == 150 - (12 - 8)
   end
 
   test "a high jump clears a wall too steep to walk up, and a long jump goes further" do
@@ -357,7 +358,8 @@ defmodule Flamingo.GameModes.SpellslingersTest do
     cornered = %{state | terrain: boxed, units: Map.put(others, first, %{wizard | x: 0})}
     assert Spellslingers.command(cornered, first, {:jump, :high, -1}, ctx) == {:error, :blocked}
 
-    # A jump off a high ledge hurts on landing, and the chronicle says why.
+    # A jump off a high ledge hurts on landing, a point a cell past the safe 8, and the
+    # chronicle says why.
     ledge =
       for y <- 0..(height - 1), x <- 0..(width - 1), into: <<>> do
         if y > 80 or (x < 150 and y > 50), do: <<1>>, else: <<0>>
@@ -366,7 +368,7 @@ defmodule Flamingo.GameModes.SpellslingersTest do
     perched = %{state | terrain: ledge, units: Map.put(others, first, %{wizard | x: 147, y: 50})}
     {:ok, %{state: fell}} = Spellslingers.command(perched, first, {:jump, :long, 1}, ctx)
     lost = 150 - fell.units[first].hp
-    assert fell.units[first].y == 80 and lost > 0
+    assert fell.units[first].y == 80 and lost == 30 - 8
     assert Enum.any?(fell.events, &(&1 =~ "falls hard and loses #{lost} HP"))
   end
 

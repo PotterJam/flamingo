@@ -423,7 +423,11 @@ const SpellArena = {
     // Which way the viewer's wizard faces: the last way it walked or aimed. Jumps go this way.
     let facing = 0;
     let seenJump = -1;
-    let jumping: { id: string; path: [number, number][]; start: number; hurt: number } | null = null;
+    let jumping: { id: string; path: [number, number][]; start: number } | null = null;
+    // Fall damage the server has dealt that shows once the flamingo lands, by id, and
+    // flamingos whose drop ends in the sea: they fall all the way before the KO.
+    const fallHurt = new Map<string, number>();
+    const fallKO = new Set<string>();
     let lastBlockedHint = 0;
     let frame = 0;
     let shakeUntil = 0;
@@ -572,22 +576,26 @@ const SpellArena = {
     const show = (state: ArenaState, skip?: Set<string>) => {
       const jump = state.last_jump;
       const newJump = !!shown && !!jump && jump.n !== seenJump;
-      // A jump's fall damage shows when the jumper lands, not as it takes off.
-      let landing: Unit | null = null;
-      if (newJump && jump) {
-        const before = shown!.units.find((u) => u.id === jump.id);
-        const after = state.units.find((u) => u.id === jump.id);
-        if (before && after && after.hp < before.hp) {
-          landing = after;
-          skip = new Set([...(skip ?? []), jump.id]);
+      // Fall damage shows when the flamingo lands, not as it leaves the top: a jumper,
+      // or one still above the spot it drops to (off a ledge, or its ground blasted away).
+      if (shown && shown.units !== state.units) {
+        const old = new Map(shown.units.map((u) => [u.id, u]));
+        for (const after of state.units) {
+          const before = old.get(after.id);
+          if (!before || before.dead || skip?.has(after.id) || after.hp >= before.hp || (after.float ?? 0) > 0) continue;
+          const at = drawn.get(after.id) ?? [before.x, before.y];
+          const dropping = falls.has(after.id) || (after.y - at[1] > 2 && Math.abs(after.x - at[0]) <= 2);
+          if (!(newJump && jump!.id === after.id) && !dropping) continue;
+          fallHurt.set(after.id, (fallHurt.get(after.id) ?? 0) + after.hp - before.hp);
+          if (after.dead) fallKO.add(after.id);
+          skip = new Set([...(skip ?? []), after.id]);
         }
+        announceChanges(shown, state, skip);
       }
-      if (shown && shown.units !== state.units) announceChanges(shown, state, skip);
       if (jump && jump.n !== seenJump) {
         seenJump = jump.n;
         if (newJump) {
-          const before = shown!.units.find((u) => u.id === jump.id);
-          jumping = { id: jump.id, path: jump.path, start: performance.now(), hurt: landing && before ? landing.hp - before.hp : 0 };
+          jumping = { id: jump.id, path: jump.path, start: performance.now() };
           sounds.jump();
         }
       }
@@ -833,7 +841,7 @@ const SpellArena = {
     };
 
     // A flamingo's pose comes from what it is doing; the sheet is painted facing right.
-    type Pose = "idle" | "crouch" | "walk" | "aim" | "cast" | "jump" | "land" | "hurt" | "tumble" | "win" | "fly" | "spawn" | "greet";
+    type Pose = "idle" | "crouch" | "walk" | "aim" | "cast" | "jump" | "drop" | "land" | "hurt" | "tumble" | "win" | "fly" | "spawn" | "greet";
     // How tall the sheet's cell is drawn, in cells; a standing flamingo fills about 0.9 of
     // it. Nameplates sit LABEL_TALL cells above the feet, just over the head tuft.
     const SHEET_TALL = 8.8;
@@ -842,8 +850,17 @@ const SpellArena = {
     const walked = new Map<string, number>();
     const faced = new Map<string, number>();
     const landedAt = new Map<string, number>();
-    // How fast each falling flamingo is dropping, in cells per ms.
-    const falls = new Map<string, number>();
+    // Each dropping flamingo: how fast it falls, in cells per ms, and when it went over.
+    const falls = new Map<string, { v: number; at: number }>();
+    // A flamingo drops slower than a spell flies: its wings catch the air. It falls at
+    // under half the spells' gravity up to a top speed, and every FLAP_EVERY ms it beats
+    // its wings for FLAP_MS, braking. A 30-cell ledge takes about 1.4 s, over twice as long.
+    const FALL_GRAVITY = 0.55;
+    const FALL_TOP = 0.034;
+    const FLAP_FIRST = 300;
+    const FLAP_EVERY = 600;
+    const FLAP_MS = 170;
+    const flapping = (since: number) => since > FLAP_FIRST && (since - FLAP_FIRST) % FLAP_EVERY < FLAP_MS;
     // When each flamingo last moved along the ground, so a pause between steps isn't a stop.
     const movedAt = new Map<string, number>();
     // The last frame's length, for the springs below.
@@ -1028,6 +1045,20 @@ const SpellArena = {
           squash = frameAt === WIZARD.flapDown ? -0.03 : 0.03;
           lift = frameAt === WIZARD.flapDown ? 1.5 : 0;
           if (frame % 12 === 0) burst(cx - facing * 14, feet - h * 0.4, "#f9a8d4", 1, 16);
+          break;
+        }
+        case "drop": {
+          // Legs dangling on the way down, with the odd beat of the wings to slow it.
+          const since = t - (falls.get(unit.id)?.at ?? t);
+          if (flapping(since)) {
+            const flap = Math.floor((since - FLAP_FIRST) / 90) % 2;
+            frameAt = flap ? WIZARD.flapUp : WIZARD.flapDown;
+            squash = flap ? 0.03 : -0.03;
+            if (frame % 6 === 0) burst(cx - facing * 12, feet - h * 0.45, "#f9a8d4", 1, 18);
+          } else {
+            frameAt = WIZARD.fall;
+            squash = 0.06;
+          }
           break;
         }
         case "land":
@@ -1293,11 +1324,13 @@ const SpellArena = {
       }
 
       const w = 26;
-      const ratio = unit.hp / unit.max_hp;
+      // Fall damage still to show leaves the bar full until the flamingo lands.
+      const hp = unit.hp - (fallHurt.get(unit.id) ?? 0);
+      const ratio = hp / unit.max_hp;
       const now = performance.now();
       let bar = bars.get(unit.id);
-      if (!bar || unit.hp >= bar.v) bars.set(unit.id, (bar = { v: unit.hp, since: now }));
-      else if (now - bar.since > 380) bar.v = Math.max(unit.hp, bar.v - (unit.max_hp * 0.6 * 16) / 1000);
+      if (!bar || hp >= bar.v) bars.set(unit.id, (bar = { v: hp, since: now }));
+      else if (now - bar.since > 380) bar.v = Math.max(hp, bar.v - (unit.max_hp * 0.6 * 16) / 1000);
       ctx.fillStyle = "#111827";
       ctx.fillRect(cx - w / 2 - 1, top - 2, w + 2, 5);
       ctx.fillStyle = "#fde68a";
@@ -1920,13 +1953,16 @@ const SpellArena = {
       }
     };
 
-    // Where each knocked unit is right now while the aftermath plays.
-    const knockedPositions = (now: number) => {
+    // Where each knocked unit is right now while the aftermath plays. One whose knockback
+    // is over stays where it stopped (against a wall, say) until the cast ends, then drops
+    // from there like any fall.
+    const knockedPositions = (now: number, flying = false) => {
       const positions = new Map<string, [number, number]>();
       if (!animation || animation.aftermathAt === null) return positions;
       const step = knockStep(now, animation.aftermathAt, animation.cast);
       for (const knock of animation.cast.knocks) {
-        if (step < knock.path.length - 1) positions.set(knock.id, pointAt(knock.path, step) as [number, number]);
+        const last = knock.path.length - 1;
+        if (step < last || (!flying && last >= 0)) positions.set(knock.id, pointAt(knock.path, Math.min(step, last)) as [number, number]);
       }
       return positions;
     };
@@ -1958,6 +1994,14 @@ const SpellArena = {
         animation.koShown.add(id);
         animation.koAt ??= now;
         const unit = shown.units.find((u) => u.id === id);
+        // Stopped by a wall above where it ends up: the KO waits until it lands there.
+        const end = knock?.path[knock.path.length - 1];
+        const final = pending?.units.find((u) => u.id === id);
+        if (unit && end && final && final.y - end[1] > 2 && Math.abs(final.x - end[0]) <= 2) {
+          fallKO.add(id);
+          fallHurt.set(id, final.hp - unit.hp);
+          continue;
+        }
         if (unit) floatText(unit, "KO!", "#dc2626", 30);
         fell = true;
       }
@@ -2054,7 +2098,7 @@ const SpellArena = {
         }
       }
       if (animation && animation.aftermathAt !== null) {
-        const knocked = [...knockedPositions(now).values()];
+        const knocked = [...knockedPositions(now, true).values()];
         if (knocked.length) return knocked[0];
         // Nobody flew: hold on where the spell ended so the blast is seen before
         // the camera heads back.
@@ -2065,6 +2109,11 @@ const SpellArena = {
         if (last?.path.length) return last.path[last.path.length - 1] as [number, number];
       }
       if (now < freeLookUntil && !animation) return null;
+      // A flamingo falling (its broom spent as the turn ends, say) is watched until it lands.
+      for (const id of falls.keys()) {
+        const at = drawn.get(id);
+        if (at) return [at[0] + 0.5, at[1] - 4];
+      }
       const unit = shown.units.find((u) => u.id === shown!.current_id && !u.dead);
       // As drawn, so the camera rides along a jump instead of waiting where it lands.
       const at = unit && (drawn.get(unit.id) ?? [unit.x, unit.y]);
@@ -2119,26 +2168,42 @@ const SpellArena = {
       const p = shown.physics;
       const step = ((now - jumping.start) / 1000) * (p.playback_speed / p.dt);
       if (step < path.length - 1) return pointAt(path, step) as [number, number];
-      const hurt = jumping.hurt;
       jumping = null;
+      drawn.set(unit.id, [unit.x, unit.y]);
+      touchDown(unit, unit.x, now);
+      return null;
+    };
+
+    // Feet on the ground after a jump or a drop: dust, a thump, a squash, and the fall
+    // damage held back until now.
+    const touchDown = (unit: Unit, x: number, now: number) => {
       landedAt.set(unit.id, now);
       const s = scale();
-      burst((unit.x + 0.5) * s, (unit.y + 1) * s, "#a8a29e", 10, 50);
-      sounds.landed();
-      if (hurt < 0) {
-        drawn.set(unit.id, [unit.x, unit.y]);
-        hurtAt.set(unit.id, performance.now());
-        floatText(unit, `${hurt}`, "#ef4444", hurt <= -30 ? 24 : 18);
-        sounds.hurt(-hurt);
-        shake(Math.min(8, -hurt / 8), 300);
+      if (fallKO.delete(unit.id)) {
+        // Into the sea: a splash, then the KO.
+        fallHurt.delete(unit.id);
+        burst((x + 0.5) * s, (unit.y + 0.5) * s, "#e0f2fe", 26, 110);
+        burst((x + 0.5) * s, (unit.y + 0.5) * s, "#f9a8d4", 8, 60);
+        floatText(unit, "KO!", "#dc2626", 30);
+        sounds.knockout();
+        shake(10, 600);
+        return;
       }
-      return null;
+      burst((x + 0.5) * s, (unit.y + 1) * s, "#a8a29e", 10, 50);
+      sounds.landed();
+      const hurt = fallHurt.get(unit.id);
+      if (hurt === undefined) return;
+      fallHurt.delete(unit.id);
+      hurtAt.set(unit.id, now);
+      floatText(unit, `${hurt}`, "#ef4444", hurt <= -30 ? 24 : 18);
+      sounds.hurt(-hurt);
+      shake(Math.min(8, -hurt / 8), 300);
     };
 
     const glide = (unit: Unit, dt: number) => {
       const s = scale();
       const prev = drawn.get(unit.id);
-      if (!prev || unit.dead) {
+      if (!prev || (unit.dead && !fallKO.has(unit.id))) {
         drawn.set(unit.id, [unit.x, unit.y]);
         return { x: unit.x, y: unit.y };
       }
@@ -2165,20 +2230,27 @@ const SpellArena = {
       };
       const x = chase(prev[0], unit.x);
       let y = chase(prev[1], unit.y);
-      // A drop (off a ledge, or the ground blasted away) falls under the server's
-      // gravity as played on screen, speeding up until it lands with a squash.
-      const fallV = falls.get(unit.id);
-      if ((unit.float ?? 0) <= 0 && unit.y > prev[1] && (fallV !== undefined || unit.y - prev[1] > 2)) {
+      // A drop (off a ledge, or the ground blasted away) speeds up to the flamingo's top
+      // speed, braking at each flap, and lands with a squash and any fall damage.
+      const now = performance.now();
+      const fall = falls.get(unit.id);
+      if ((unit.float ?? 0) <= 0 && unit.y > prev[1] && (fall || unit.y - prev[1] > 2)) {
         const p = shown!.physics;
-        const v = (fallV ?? 0) + ((p.gravity * p.playback_speed ** 2) / 1e6) * dt;
-        y = Math.min(unit.y, prev[1] + v * dt);
-        if (y < unit.y) falls.set(unit.id, v);
+        const f = fall ?? { v: 0, at: now };
+        f.v = flapping(now - f.at)
+          ? f.v * Math.exp(-dt / 150)
+          : Math.min(FALL_TOP, f.v + ((FALL_GRAVITY * p.gravity * p.playback_speed ** 2) / 1e6) * dt);
+        y = Math.min(unit.y, prev[1] + f.v * dt);
+        if (y < unit.y) falls.set(unit.id, f);
         else {
           falls.delete(unit.id);
-          landedAt.set(unit.id, performance.now());
-          burst((x + 0.5) * s, (unit.y + 1) * s, "#a8a29e", 10, 50);
+          touchDown(unit, x, now);
         }
-      } else falls.delete(unit.id);
+      } else {
+        falls.delete(unit.id);
+        // Held damage whose drop never played (the flamingo was moved instead) shows now.
+        if (fallHurt.has(unit.id) && jumping?.id !== unit.id) touchDown(unit, x, now);
+      }
       if ((unit.float ?? 0) > 0) {
         drawn.set(unit.id, [x, y]);
         return { x, y };
@@ -2369,7 +2441,7 @@ const SpellArena = {
 
     const walkStep = (now: number) => {
       const wizard = myWizard();
-      if (!wizard || !canAct() || jumping) return;
+      if (!wizard || !canAct() || jumping || falls.has(wizard.id)) return;
       nextStepAt = now + STEP_MS;
       if (stepsLeft <= 0) return;
       const from = predicted ?? wizard;
@@ -2537,6 +2609,7 @@ const SpellArena = {
       if (knocked) return "tumble";
       if (jumping?.id === unit.id) return "jump";
       if ((unit.float ?? 0) > 0) return "fly";
+      if (falls.has(unit.id)) return "drop";
       if (unit.id === shown.viewer_id && now - crouchAt < 300) return "crouch";
       if (now - (hurtAt.get(unit.id) ?? -1e9) < 650) return "hurt";
       if (now - (landedAt.get(unit.id) ?? -1e9) < 170) return "land";
@@ -2706,6 +2779,7 @@ const SpellArena = {
         const first = animation?.cast.segments[0]?.path;
         const throwDir = first && first.length > 1 ? Math.sign(first[first.length - 1][0] - first[0][0]) : 0;
         const knocked = knockedPositions(now);
+        const tumbling = knockedPositions(now, true);
         const moving = new Set<string>();
         const units = shown.units.map((u) => {
           const at = knocked.get(u.id) ?? jumpPosition(u, now);
@@ -2725,7 +2799,8 @@ const SpellArena = {
             return { ...u, ...to, y: to.y - SPAWN_HEIGHT * (1 - k * k) };
           }
           if (drop !== null && !spawned.has(u.id)) land(u, now);
-          return { ...u, ...to };
+          // A flamingo dropping to its death is drawn alive until it hits the water.
+          return { ...u, ...to, dead: u.dead && !fallKO.has(u.id) };
         }).filter((u) => !unspawned(u.id, now));
 
         drawScars(now);
@@ -2760,7 +2835,7 @@ const SpellArena = {
             ctx.rotate(leanOf(unit.id, faces, dt));
             ctx.translate(-px, -py);
           }
-          drawWizard(unit, now, faces, poseOf(unit, now, moving.has(unit.id), knocked.has(unit.id)));
+          drawWizard(unit, now, faces, poseOf(unit, now, moving.has(unit.id), tumbling.has(unit.id)));
           if (flying) ctx.restore();
         }
         drawWater(now);
@@ -2865,7 +2940,7 @@ const SpellArena = {
     const jump = (kind: "high" | "long") => {
       const wizard = myWizard();
       const now = performance.now();
-      if (!shown || !wizard || !canAct() || jumping || now < crouchAt + 90) return;
+      if (!shown || !wizard || !canAct() || jumping || falls.has(wizard.id) || now < crouchAt + 90) return;
       // The wizard crouches at once; the server's arc follows a moment later.
       crouchAt = now;
       heldDir = 0;
@@ -3066,6 +3141,8 @@ const SpellArena = {
         // A jump that happened while we were away is already over.
         seenJump = latest.last_jump?.n ?? -1;
         jumping = null;
+        fallHurt.clear();
+        fallKO.clear();
         animation = null;
         pending = null;
         backlog.length = 0;

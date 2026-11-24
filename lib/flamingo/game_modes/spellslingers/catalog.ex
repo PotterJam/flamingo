@@ -181,7 +181,7 @@ defmodule Flamingo.GameModes.Spellslingers.Catalog do
               quick: true,
               name: "Take Flight",
               blurb:
-                "Quick: spread your wings and fly with WASD for 40 cells, then throw from the air. You flutter down when the turn ends.",
+                "Quick: spread your wings and fly with WASD for 40 cells, then throw from the air. You flutter down when the turn ends, hurt by a long drop.",
               effect: :broom,
               color: "#f472b6",
               sprite: 10

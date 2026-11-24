@@ -475,9 +475,14 @@ defmodule Flamingo.GameModes.Spellslingers do
       %{float: float} = unit when float > 0 ->
         unit = %{unit | float: float - 1}
 
-        # The broom sets its rider down gently, never with fall damage.
-        unit = if unit.float == 0, do: elem(Units.do_settle(state, unit), 0), else: unit
-        Units.put_unit(state, unit)
+        # When the broom runs out the rider flutters down like any other fall, hurt by
+        # a long drop, and into the sea if it is over the sea.
+        if unit.float == 0 do
+          {unit, fall} = Units.do_settle(state, unit)
+          state |> Units.put_unit(unit) |> Units.fall_damage(unit.id, fall)
+        else
+          Units.put_unit(state, unit)
+        end
 
       _ ->
         state
