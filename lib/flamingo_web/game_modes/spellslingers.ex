@@ -57,6 +57,15 @@ defmodule FlamingoWeb.GameModes.Spellslingers do
     """
   end
 
+  # The flamingos, and the arena's backdrop and ground once the host has picked one.
+  def prefetch(params) do
+    arena =
+      if params["arena_map"] in Enum.map(Engine.maps(), &elem(&1, 0)), do: params["arena_map"]
+
+    images = ["wizard" | if(arena, do: ["bg_#{arena}", "tex_#{arena}"], else: [])]
+    Enum.map(images, &~p"/images/spellslingers/#{&1 <> ".webp"}")
+  end
+
   defp arena_options, do: @arena_options
   defp bot_options, do: [{"None", "0"} | Enum.map(@bot_range, &{"#{&1}", "#{&1}"})]
 

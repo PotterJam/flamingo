@@ -1,6 +1,7 @@
 type SoundKey = "join" | "correct" | "gameMusic" | "wrongGuess" | "correctGuess" | "otherPlayerCorrect" | "countdown";
 
 interface SoundManagerHook {
+  el: HTMLElement;
   sounds: Record<SoundKey, HTMLAudioElement>;
   fadeTimers: Partial<Record<SoundKey, number>>;
   countdownTimer: number | null;
@@ -170,7 +171,7 @@ const SoundManager = {
     const keys = ["join", "correct", "gameMusic", "wrongGuess", "correctGuess", "otherPlayerCorrect", "countdown"] as SoundKey[];
     for (const key of keys) {
       const audio = new Audio(SOUND_FILES[key]);
-      audio.preload = "auto";
+      audio.preload = this.el.dataset.preload === "false" ? "none" : "auto";
       this.sounds[key] = audio;
     }
 

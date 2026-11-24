@@ -43,6 +43,7 @@ defmodule FlamingoWeb.LobbyLive do
       background={["grid-background transition-colors duration-300", @mode.theme().lobby]}
       changelog
     >
+      <link :for={href <- @mode.prefetch(@settings_form.params)} rel="prefetch" href={href} />
       <div class="flex h-screen w-full items-center justify-center px-4 py-8">
         <div class="flex h-full w-full max-w-3xl flex-col items-center justify-center gap-4">
           <%= if @player_id == @host_id do %>

@@ -27,8 +27,23 @@ defmodule Flamingo.GameModes.SpellslingersTest do
     {:ok, %{state: state}} =
       Spellslingers.start(state, %{seed: 42, turn_length: 30, arena_map: "isles"}, context(r))
 
+    {begin(state, r), r}
+  end
+
+  # Every arena reports it has loaded, then the intro plays out.
+  defp begin(state, r) do
+    state =
+      Enum.reduce(r.player_order, state, fn id, state ->
+        case Spellslingers.command(state, id, :arena_loaded, context(r, id)) do
+          {:ok, %{state: state}} -> state
+          :ignored -> state
+        end
+      end)
+
+    assert state.phase == :arena_intro
+    {:ok, %{state: state}} = Spellslingers.timeout(state, :arena_intro, context(r))
     assert state.phase == :arena_aim
-    {state, r}
+    state
   end
 
   defp sign(n) when n < 0, do: -1
@@ -86,6 +101,60 @@ defmodule Flamingo.GameModes.SpellslingersTest do
 
     assert {:error, :not_host} =
              Spellslingers.start(state, %{seed: 42}, context(roster(["a", "b"]), "b"))
+  end
+
+  test "the first turn's clock waits for everyone's arena to load and the intro to play" do
+    r = roster(["a", "b", "c"])
+
+    state =
+      Enum.reduce(r.player_order, Spellslingers.new(), fn id, state ->
+        {:ok, %{state: state}} = Spellslingers.admit_member(state, r.players[id], context(r))
+        state
+      end)
+
+    {:ok, %{state: state, timers: timers}} =
+      Spellslingers.start(state, %{seed: 42, arena_map: "isles"}, context(r))
+
+    assert state.phase == :arena_loading
+    assert {:schedule_phase_timeout, :arena_loading, _} = List.last(timers)
+    assert Enum.sort(Spellslingers.view(state, "a", r).loading) == ["a", "b", "c"]
+    assert {:error, :not_your_turn} = Spellslingers.command(state, "a", :pass, context(r))
+
+    {:ok, %{state: state}} = Spellslingers.command(state, "a", :arena_loaded, context(r, "a"))
+    assert :ignored = Spellslingers.command(state, "a", :arena_loaded, context(r, "a"))
+    {:ok, %{state: state}} = Spellslingers.command(state, "b", :arena_loaded, context(r, "b"))
+    assert state.phase == :arena_loading
+    assert Spellslingers.view(state, "a", r).loading == ["c"]
+
+    # The last one dropping out is no reason to wait any longer.
+    offline = roster(["a", "b", "c"], ["c"])
+
+    {:ok, %{state: state, timers: timers}} =
+      Spellslingers.connection_changed(state, "c", :offline, context(offline))
+
+    assert state.phase == :arena_intro
+    # A step per flamingo, then the tail.
+    assert timers == [{:schedule_phase_timeout, :arena_intro, 900 * 3 + 700}]
+
+    {:ok, %{state: state, timers: timers}} =
+      Spellslingers.timeout(state, :arena_intro, context(offline))
+
+    assert state.phase == :arena_aim
+    assert {:schedule_phase_timeout, :arena_turn, 40_000} in timers
+  end
+
+  test "a duel starts anyway once the loading wait runs out" do
+    r = roster(["a", "b"])
+
+    state =
+      Enum.reduce(r.player_order, Spellslingers.new(), fn id, state ->
+        {:ok, %{state: state}} = Spellslingers.admit_member(state, r.players[id], context(r))
+        state
+      end)
+
+    {:ok, %{state: state}} = Spellslingers.start(state, %{seed: 42}, context(r))
+    {:ok, %{state: state}} = Spellslingers.timeout(state, :arena_loading, context(r))
+    assert state.phase == :arena_intro
   end
 
   test "wizards spawn standing on terrain, above the water, and only the current wizard may act" do
@@ -353,7 +422,7 @@ defmodule Flamingo.GameModes.SpellslingersTest do
     over = result.state
     assert {:error, :not_host} = Spellslingers.command(over, "b", :rematch, context(r, "b"))
     {:ok, %{state: again}} = Spellslingers.command(over, "a", :rematch, context(r, "a"))
-    assert again.phase == :arena_aim
+    assert again.phase == :arena_loading
     assert again.map_id == "isles" and again.turn_length == 30
     assert Enum.all?(Map.values(again.units), &(&1.hp == 150 and not &1.dead))
   end
@@ -462,7 +531,7 @@ defmodule Flamingo.GameModes.SpellslingersTest do
 
     assert length(state.turn_order) == 3
 
-    assert state.phase == :arena_aim
+    state = begin(state, r)
     state = if state.current_id == "a", do: pass(state, r), else: state
     bot = state.current_id
     assert "bot-" <> _ = bot

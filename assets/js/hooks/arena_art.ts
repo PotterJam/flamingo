@@ -188,25 +188,77 @@ export type ArtPalette = {
 };
 
 // Images load in the background; until one has, the renderer draws its older look.
+// An arena asks only for its own map's backdrop and ground (`need`), and those and the
+// flamingos come first, at high priority, with their progress for the loading veil.
+// The effects sheets wait until they are in, so they never share the line with them.
+// Each image is decoded before it counts as loaded, so its first frame costs nothing.
 // Without a browser (the hook's tests) nothing loads at all.
 export function loadArt(onLoad: (name: string) => void) {
-  const load = (name: string) => {
+  // Bytes in and expected for each image started; expected is 0 until known.
+  const progress = new Map<string, { got: number; total: number; done: boolean }>();
+  const load = (name: string, priority: "high" | "low") => {
     if (typeof Image === "undefined") return null;
     const img = new Image();
-    img.decoding = "async";
-    img.onload = () => onLoad(name);
-    img.src = `${BASE}/${name}.webp`;
+    const p = { got: 0, total: 0, done: false };
+    progress.set(name, p);
+    const url = `${BASE}/${name}.webp`;
+    const finish = () => {
+      p.done = true;
+      onLoad(name);
+    };
+    (async () => {
+      try {
+        const res = await fetch(url, { priority } as RequestInit);
+        if (!res.ok || !res.body) throw new Error(`${res.status}`);
+        p.total = Number(res.headers.get("content-length")) || 0;
+        const reader = res.body.getReader();
+        const chunks: Uint8Array[] = [];
+        for (let part = await reader.read(); !part.done; part = await reader.read()) {
+          chunks.push(part.value);
+          p.got += part.value.length;
+        }
+        img.src = URL.createObjectURL(new Blob(chunks as BlobPart[], { type: "image/webp" }));
+      } catch {
+        img.src = url;
+      }
+      // One that fails to load still counts, so the veil lifts on the older look.
+      img.decode().then(finish, finish).finally(() => img.src.startsWith("blob:") && URL.revokeObjectURL(img.src));
+    })();
     return img;
   };
-  const maps = ["isles", "flamingo", "castles", "cavern", "archipelago"];
-  return {
-    wizard: load("wizard"),
-    crates: load("crates"),
-    spells: load("spells"),
-    boom: load("boom"),
-    backdrops: Object.fromEntries(maps.map((m) => [m, load(`bg_${m}`)])) as Record<string, HTMLImageElement | null>,
-    textures: Object.fromEntries(maps.map((m) => [m, load(`tex_${m}`)])) as Record<string, HTMLImageElement | null>,
+  const art = {
+    wizard: load("wizard", "high"),
+    crates: null as HTMLImageElement | null,
+    spells: null as HTMLImageElement | null,
+    boom: null as HTMLImageElement | null,
+    backdrops: {} as Record<string, HTMLImageElement | null>,
+    textures: {} as Record<string, HTMLImageElement | null>,
+    // Starts loading what an arena on `map` needs before it is shown, and says how much
+    // of it is in, from 0 to 1.
+    need(map: string) {
+      if (!(map in art.backdrops)) {
+        art.backdrops[map] = load(`bg_${map}`, "high");
+        art.textures[map] = load(`tex_${map}`, "high");
+      }
+      const parts = ["wizard", `bg_${map}`, `tex_${map}`].flatMap((n) => progress.get(n) ?? []);
+      if (parts.every((p) => p.done)) {
+        if (!art.crates) {
+          art.crates = load("crates", "low");
+          art.spells = load("spells", "low");
+          art.boom = load("boom", "low");
+        }
+        return 1;
+      }
+      // By bytes once every size is known; before that, by how many are in. Short of 1
+      // until all are decoded too.
+      if (parts.every((p) => p.total > 0)) {
+        const total = parts.reduce((n, p) => n + p.total, 0);
+        return Math.min(0.99, parts.reduce((n, p) => n + (p.done ? p.total : Math.min(p.got, p.total)), 0) / total);
+      }
+      return parts.filter((p) => p.done).length / parts.length;
+    },
   };
+  return art;
 }
 
 export const ready = (img: HTMLImageElement | null | undefined): img is HTMLImageElement =>
@@ -271,9 +323,40 @@ export function wizardSheet(img: HTMLImageElement, color: string) {
     px[i + 2] = out[2];
   }
   c.putImageData(data, 0, 0);
-  tinted.set(color, canvas);
-  return canvas;
+
+  // A dark rim around the silhouette, as the land and the HUD have, so the pale bird
+  // holds its shape against a pink sky. Stamped frame by frame, so no frame's rim
+  // spills into its neighbour's cell.
+  const silhouette = document.createElement("canvas");
+  silhouette.width = canvas.width;
+  silhouette.height = canvas.height;
+  const sc = silhouette.getContext("2d")!;
+  sc.drawImage(canvas, 0, 0);
+  sc.globalCompositeOperation = "source-in";
+  sc.fillStyle = "rgba(28,25,23,0.9)";
+  sc.fillRect(0, 0, canvas.width, canvas.height);
+  const sheet = document.createElement("canvas");
+  sheet.width = canvas.width;
+  sheet.height = canvas.height;
+  const out = sheet.getContext("2d")!;
+  for (let x = 0; x < canvas.width; x += WIZARD_W) {
+    out.save();
+    out.beginPath();
+    out.rect(x, 0, WIZARD_W, canvas.height);
+    out.clip();
+    for (let a = 0; a < 8; a++) {
+      const k = (a * Math.PI) / 4;
+      out.drawImage(silhouette, Math.round(Math.cos(k) * RIM), Math.round(Math.sin(k) * RIM));
+    }
+    out.restore();
+  }
+  out.drawImage(canvas, 0, 0);
+  tinted.set(color, sheet);
+  return sheet;
 }
+// The rim's width in the sheet's pixels: drawn about a third of size, it is about 1.5
+// screen pixels.
+const RIM = 5;
 
 // Pixels per cell in the painted land. The view shows about 10 to 20 screen pixels per
 // cell, so 8 keeps the outline crisp without a huge canvas.

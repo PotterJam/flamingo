@@ -71,6 +71,8 @@ type ArenaState = {
   phase: string;
   viewer_id: string;
   current_id: string | null;
+  // Everyone in the duel, in turn order.
+  player_order?: string[];
   participation: string;
   map_id: string;
   wind: number;
@@ -91,7 +93,7 @@ type ArenaState = {
   selected_spell: string;
   // The latest jump, numbered so each one plays once; its path is in unit cells.
   last_jump: { n: number; id: string; path: [number, number][] } | null;
-  physics: { dt: number; gravity: number; max_speed: number; wind_accel: number; playback_speed: number; place_range: number; grand_intro_ms?: number; max_climb?: number };
+  physics: { dt: number; gravity: number; max_speed: number; wind_accel: number; playback_speed: number; place_range: number; grand_intro_ms?: number; intro_step_ms?: number; max_climb?: number };
   // Steps left this turn, for walking ahead of the server.
   walk_left?: number;
 };
@@ -364,8 +366,36 @@ const SpellArena = {
     let terrainRes = 1;
     let landDirty = false;
     const art = loadArt((name) => {
-      if (name.startsWith("tex_")) landDirty = true;
+      // Only this arena's own ground changes how its land is painted.
+      if (name === `tex_${shown?.map_id}`) landDirty = true;
     });
+    // A veil covers the arena until its art is in (or VEIL_MAX_MS passes, for art that
+    // never arrives), and the server hears once per duel that this page is ready.
+    const veil = document.getElementById("arena-veil");
+    const veilFill = veil?.querySelector<HTMLElement>("[data-veil-fill]");
+    const VEIL_MAX_MS = 20000;
+    let veilSince = performance.now();
+    let veilMap: string | null = null;
+    let lifted = false;
+    let reported = false;
+    // A new duel's intro, from when this page started it: each flamingo drops in, in turn
+    // order, while the camera visits it. Until it has dropped in, it isn't drawn at all.
+    let introAt: number | null = null;
+    const spawned = new Set<string>();
+    const SPAWN_DROP_MS = 420;
+    const SPAWN_HEIGHT = 34;
+    const introStep = () => shown?.physics.intro_step_ms ?? 900;
+    const introOrder = () =>
+      (shown?.player_order ?? []).filter((id) => shown!.units.some((u) => u.id === id && !u.dead));
+    const spawnAt = (id: string) => {
+      const i = introOrder().indexOf(id);
+      return shown?.phase !== "arena_intro" || introAt === null || i < 0 ? null : introAt + i * introStep() + 150;
+    };
+    const unspawned = (id: string, now: number) => {
+      if (shown?.phase === "arena_loading") return true;
+      const at = spawnAt(id);
+      return at !== null && now < at;
+    };
     // When each unit was last hurt, so it flinches.
     const hurtAt = new Map<string, number>();
     let terrainKey = "";
@@ -574,6 +604,12 @@ const SpellArena = {
       }
       // A rematch starts on a fresh island with no casts yet: old scorch marks go.
       if (shown?.last_cast && !state.last_cast) scorches = [];
+      // A new duel waits for this page again, and plays its intro again.
+      if (state.phase === "arena_loading" && shown?.phase !== "arena_loading") {
+        reported = false;
+        introAt = null;
+        spawned.clear();
+      }
       shown = state;
       // Full view shows open sky above the 2:1 map, in the sky's top colour.
       if (sky) sky.style.background = palette().sky[0];
@@ -651,6 +687,7 @@ const SpellArena = {
 
     const canAct = () =>
       !!shown &&
+      lifted &&
       shown.phase === "arena_aim" &&
       shown.current_id === shown.viewer_id &&
       !animation &&
@@ -792,7 +829,7 @@ const SpellArena = {
     };
 
     // A flamingo's pose comes from what it is doing; the sheet is painted facing right.
-    type Pose = "idle" | "crouch" | "walk" | "aim" | "cast" | "jump" | "land" | "hurt" | "tumble" | "win" | "fly";
+    type Pose = "idle" | "crouch" | "walk" | "aim" | "cast" | "jump" | "land" | "hurt" | "tumble" | "win" | "fly" | "spawn" | "greet";
     // How tall the sheet's cell is drawn, in cells; a standing flamingo fills about 0.9 of
     // it. Nameplates sit LABEL_TALL cells above the feet, just over the head tuft.
     const SHEET_TALL = 8.8;
@@ -831,12 +868,13 @@ const SpellArena = {
     const anims = new Map<string, Anim>();
     const animOf = (id: string, t: number) => {
       let a = anims.get(id);
-      if (!a) anims.set(id, (a = { pose: "idle", since: t, sq: 0, v: 0, tilt: 0, frame: WIZARD.idle, prev: WIZARD.idle, swapAt: -1e9, wing: 0, head: 0, face: 0, shot: null, from: null }));
+      // Long since settled, so a flamingo first seen standing doesn't shift its feet.
+      if (!a) anims.set(id, (a = { pose: "idle", since: -1e9, sq: 0, v: 0, tilt: 0, frame: WIZARD.idle, prev: WIZARD.idle, swapAt: -1e9, wing: 0, head: 0, face: 0, shot: null, from: null }));
       return a;
     };
     // The kick each pose gives the spring as it starts: a stretch on take-off and on a
     // throw, a squash on landing and on being hit. It rings out with a little overshoot.
-    const POP: Partial<Record<Pose, number>> = { jump: 2.6, land: -3.6, hurt: -2.4, cast: 2, crouch: -1.6, aim: 0.7, walk: 0.5, idle: -0.6, fly: 1.6, win: 1.6, tumble: 1.2 };
+    const POP: Partial<Record<Pose, number>> = { jump: 2.6, land: -3.6, hurt: -2.4, cast: 2, crouch: -1.6, aim: 0.7, walk: 0.5, idle: -0.6, fly: 1.6, win: 1.6, tumble: 1.2, spawn: 1.4, greet: 0.8 };
     const BLEND_MS = 90;
     // The way a flamingo is aiming, in degrees above its facing (negative is down).
     const aimLift = (unit: Unit, facing: number) => {
@@ -991,6 +1029,15 @@ const SpellArena = {
         case "land":
           frameAt = WIZARD.land;
           break;
+        case "spawn":
+          // Dropping into the arena, stretched by the fall.
+          frameAt = WIZARD.fall;
+          squash = 0.08;
+          break;
+        case "greet":
+          // Looks out at everyone, then turns to the duel.
+          frameAt = t - (spawnAt(unit.id) ?? t) < SPAWN_DROP_MS + 820 ? WIZARD.front : WIZARD.recover;
+          break;
         case "hurt": {
           const el = t - (hurtAt.get(unit.id) ?? t);
           if (el < 320) {
@@ -1056,7 +1103,7 @@ const SpellArena = {
       const sx = 1 - sq * 0.55;
 
       // A soft shadow on the ground, smaller as the flamingo leaves it.
-      if (pose !== "jump" && pose !== "tumble" && pose !== "fly") {
+      if (pose !== "jump" && pose !== "tumble" && pose !== "fly" && pose !== "spawn") {
         ctx.fillStyle = "rgba(0,0,0,0.22)";
         ctx.beginPath();
         ctx.ellipse(cx, feet, Math.max(2, h * 0.16 * sx - lift * 0.4), 2, 0, 0, Math.PI * 2);
@@ -1229,7 +1276,8 @@ const SpellArena = {
       const tall = LABEL_TALL * s + 3;
       const top = (unit.y + 1) * s - tall;
 
-      {
+      // In the intro each name is called out big as its flamingo lands instead.
+      if (shown.phase !== "arena_intro") {
         const label = shown.players[unit.id]?.name ?? "?";
         ctx.font = "bold 11px ui-sans-serif, system-ui";
         ctx.textAlign = "center";
@@ -1982,6 +2030,13 @@ const SpellArena = {
     // then the wizard whose turn it is. Free look pauses following between casts.
     const cameraFocus = (now: number): [number, number] | null => {
       if (!shown) return null;
+      // The intro visits each flamingo as it drops in, starting where the first will.
+      if (shown.phase === "arena_loading" || shown.phase === "arena_intro") {
+        const order = introOrder();
+        const i = introAt === null ? 0 : Math.min(order.length - 1, Math.floor((now - introAt) / introStep()));
+        const unit = shown.units.find((u) => u.id === order[i]);
+        if (unit) return [unit.x + 0.5, unit.y - 4];
+      }
       if (animation && animation.aftermathAt === null) {
         const step = castStep(now, animation.start);
         // While a grand spell's title card plays, look at where it will land.
@@ -2043,7 +2098,7 @@ const SpellArena = {
           camReady = true;
         } else {
           // Eased enough to follow a spell without whipping from caster to impact and back.
-          const k = 1 - Math.exp(-dt / (animation ? 260 : 380));
+          const k = 1 - Math.exp(-dt / (animation || shown.phase === "arena_intro" ? 260 : 380));
           cam.x += (tx - cam.x) * k;
           cam.y += (ty - cam.y) * k;
         }
@@ -2203,7 +2258,7 @@ const SpellArena = {
       // On-screen wizards (body and name), which markers must not cover.
       const visible: { x: number; top: number; bottom: number }[] = [];
       for (const unit of shown.units) {
-        if (unit.dead || unit.kind !== "wizard") continue;
+        if (unit.dead || unit.kind !== "wizard" || unspawned(unit.id, performance.now())) continue;
         const px = CELL * zoom;
         const sx = (unit.x + 0.5 - cam.x) * px;
         if (sx >= 0 && sx <= W) {
@@ -2468,6 +2523,11 @@ const SpellArena = {
     const poseOf = (unit: Unit, now: number, moving: boolean, knocked: boolean): Pose => {
       if (!shown) return "idle";
       if (shown.phase === "game_ended") return "win";
+      const at = spawnAt(unit.id);
+      if (at !== null && now - at < SPAWN_DROP_MS + 950) {
+        const el = now - at;
+        return el < SPAWN_DROP_MS ? "spawn" : el < SPAWN_DROP_MS + 170 ? "land" : "greet";
+      }
       if (knocked) return "tumble";
       if (jumping?.id === unit.id) return "jump";
       if ((unit.float ?? 0) > 0) return "fly";
@@ -2548,8 +2608,47 @@ const SpellArena = {
       ctx.globalAlpha = 1;
     };
 
+    // A flamingo touching down in the intro: a puff of dust and feathers, a thump, and its
+    // name, so everyone knows who is who.
+    const land = (unit: Unit, now: number) => {
+      spawned.add(unit.id);
+      landedAt.set(unit.id, now);
+      const s = scale();
+      const color = shown?.players[unit.id]?.color ?? "#f9a8d4";
+      burst((unit.x + 0.5) * s, (unit.y + 1) * s, "#a8a29e", 10, 60);
+      burst((unit.x + 0.5) * s, (unit.y - 2) * s, "#f9a8d4", 8, 50);
+      kick(0.03);
+      sounds.landed();
+      floatText(unit, shown?.players[unit.id]?.name ?? "", color, 24, 11);
+    };
+
+    const syncVeil = (now: number) => {
+      if (!shown) return;
+      const progress = art.need(shown.map_id);
+      if (veilFill) veilFill.style.width = `${Math.max(4, progress * 100)}%`;
+      if (veilMap !== shown.map_id && (progress >= 1 || now - veilSince > VEIL_MAX_MS)) {
+        veilMap = shown.map_id;
+        // Every flamingo's coloured sheet is made now, behind the veil, not on its first frame.
+        if (ready(art.wizard)) for (const p of Object.values(shown.players)) wizardSheet(art.wizard, p.color);
+        if (landDirty) buildLand();
+      }
+      const lift = veilMap === shown.map_id;
+      if (lift !== lifted) {
+        lifted = lift;
+        veil?.classList.toggle("is-lifted", lifted);
+        if (!lifted) veilSince = now;
+      }
+      if (!lifted) return;
+      if (!reported) {
+        reported = true;
+        this.pushEvent("arena_loaded", {});
+      }
+      if (shown.phase === "arena_intro" && introAt === null) introAt = now;
+    };
+
     const render = (now: number) => {
       frame++;
+      syncVeil(now);
       if (landDirty) buildLand();
       if ((heldDir || heldV) && now >= nextStepAt) moveStep(now);
       // The server has had long enough to confirm the last step; its word stands.
@@ -2613,8 +2712,14 @@ const SpellArena = {
           if (from && dt > 0) velocity.set(u.id, [(to.x - from[0]) / dt, (to.y - from[1]) / dt]);
           if (Math.abs(to.x - target.x) > 0.03 && !((u.float ?? 0) > 0)) movedAt.set(u.id, now);
           if (now - (movedAt.get(u.id) ?? -1e9) < 140) moving.add(u.id);
+          const drop = spawnAt(u.id);
+          if (drop !== null && now < drop + SPAWN_DROP_MS) {
+            const k = Math.max(0, (now - drop) / SPAWN_DROP_MS);
+            return { ...u, ...to, y: to.y - SPAWN_HEIGHT * (1 - k * k) };
+          }
+          if (drop !== null && !spawned.has(u.id)) land(u, now);
           return { ...u, ...to };
-        });
+        }).filter((u) => !unspawned(u.id, now));
 
         drawScars(now);
         drawRunes(now);

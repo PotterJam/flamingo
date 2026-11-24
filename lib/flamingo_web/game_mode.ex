@@ -61,14 +61,21 @@ defmodule FlamingoWeb.GameMode do
   """
   @callback parse_settings(params :: map()) :: {:ok, map()} | {:error, keyword()}
 
+  @doc """
+  Static files the game will need straight away, which the lobby fetches ahead while
+  the host sets up, given the host's draft params (empty for everyone else).
+  """
+  @callback prefetch(params :: map()) :: [String.t()]
+
   defmacro __using__(_opts) do
     quote do
       @behaviour FlamingoWeb.GameMode
       use FlamingoWeb, :html
 
       def min_players, do: 2
+      def prefetch(_params), do: []
 
-      defoverridable min_players: 0
+      defoverridable min_players: 0, prefetch: 1
     end
   end
 end

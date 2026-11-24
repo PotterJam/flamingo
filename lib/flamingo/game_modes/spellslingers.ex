@@ -75,6 +75,8 @@ defmodule Flamingo.GameModes.Spellslingers do
       bot_plan: nil,
       # The shot a bot is lining up, shown to everyone before it fires.
       bot_aim: nil,
+      # Players whose arena has loaded, while a new duel waits for them.
+      loaded: [],
       last_cast: nil,
       cast_count: 0,
       events: [],
@@ -100,18 +102,24 @@ defmodule Flamingo.GameModes.Spellslingers do
     })
   end
 
+  # A player who drops while the arena loads no longer holds the duel up.
+  def connection_changed(%{phase: :arena_loading} = state, _id, _status, context),
+    do: maybe_begin_intro(state, context)
+
   def connection_changed(state, _id, _status, _context), do: ok(state)
 
   def remove_member(state, id, _removed, context) do
     host_id = if state.host_id == id, do: context.roster.host_id, else: state.host_id
     state = %{state | participants: Map.delete(state.participants, id), host_id: host_id}
 
-    if state.phase in [:arena_aim, :arena_resolve] and Units.alive?(state, id) do
+    if state.phase in [:arena_loading, :arena_intro, :arena_aim, :arena_resolve] and
+         Units.alive?(state, id) do
       state = %{state | forfeited: [id | state.forfeited]}
       state = state |> forfeit(id) |> Units.log("#{Units.player_name(state, id)} left the arena.")
 
       cond do
         winner_decided?(state) -> finish(state)
+        state.phase == :arena_loading -> maybe_begin_intro(state, context)
         state.current_id == id and state.phase == :arena_aim -> end_turn(state, context)
         true -> ok(state)
       end
@@ -172,7 +180,7 @@ defmodule Flamingo.GameModes.Spellslingers do
 
       state = %{
         new()
-        | phase: :arena_aim,
+        | phase: :arena_loading,
           turn_length: turn_length,
           map_id: map_id,
           participants:
@@ -182,7 +190,6 @@ defmodule Flamingo.GameModes.Spellslingers do
           host_id: roster.host_id,
           terrain: terrain,
           turn_order: turn_order,
-          current_id: hd(turn_order),
           turn_number: 0,
           sudden_after: length(turn_order) * 8,
           wind: wind,
@@ -195,9 +202,19 @@ defmodule Flamingo.GameModes.Spellslingers do
       state
       |> Units.place_wizards()
       |> Units.log("The arena is #{map_name(map_id)}.")
-      |> begin_duel(context)
+      |> ok([:cancel_hint_timeout, {:schedule_phase_timeout, :arena_loading, @load_wait_ms}])
     end
   end
+
+  # Each player's arena says when its art has loaded; once everyone's has, the intro plays.
+  def command(%{phase: :arena_loading} = state, actor, :arena_loaded, context) do
+    if actor in state.turn_order and actor not in state.loaded,
+      do: maybe_begin_intro(%{state | loaded: [actor | state.loaded]}, context),
+      else: :ignored
+  end
+
+  # Arenas also report loading mid-duel, after a reload; nothing waits on them then.
+  def command(_state, _actor, :arena_loaded, _context), do: :ignored
 
   # Dev tuning: the LiveView only sends these for allowlisted players. Values
   # are clamped to each number's range and apply from the next use onwards.
@@ -297,6 +314,13 @@ defmodule Flamingo.GameModes.Spellslingers do
 
   def command(_state, _actor, _command, _context), do: {:error, :invalid_command}
 
+  # Whoever is still loading joins the duel late rather than holding everyone up.
+  def timeout(%{phase: :arena_loading} = state, :arena_loading, _context),
+    do: begin_intro(state)
+
+  def timeout(%{phase: :arena_intro} = state, :arena_intro, context),
+    do: begin_duel(state, context)
+
   def timeout(%{phase: :arena_aim} = state, :arena_turn, context) do
     state
     |> Units.log("#{Units.player_name(state, state.current_id)} ran out of time.")
@@ -366,6 +390,7 @@ defmodule Flamingo.GameModes.Spellslingers do
       turn_length: state.turn_length,
       current_id: state.current_id,
       turn_number: state.turn_number,
+      loading: if(state.phase == :arena_loading, do: still_loading(state, roster), else: []),
       map_id: state.map_id,
       map_name: map_name(state.map_id),
       wind: state.wind,
@@ -399,6 +424,7 @@ defmodule Flamingo.GameModes.Spellslingers do
         wind_accel: state.tuning.wind_accel,
         playback_speed: @playback_speed,
         grand_intro_ms: @grand_intro_ms,
+        intro_step_ms: @intro_step_ms,
         place_range: state.tuning.place_range,
         max_climb: @max_climb
       },
@@ -407,6 +433,23 @@ defmodule Flamingo.GameModes.Spellslingers do
   end
 
   ## Turns
+
+  # The players the duel still waits on: those here whose arena has not loaded yet.
+  defp still_loading(state, roster) do
+    Enum.filter(state.turn_order, fn id ->
+      id not in state.loaded and not Bots.bot?(state, id) and Units.alive?(state, id) and
+        match?(%{connected: true}, roster.players[id])
+    end)
+  end
+
+  defp maybe_begin_intro(state, context) do
+    if still_loading(state, context.roster) == [], do: begin_intro(state), else: ok(state)
+  end
+
+  defp begin_intro(state) do
+    intro_ms = @intro_step_ms * length(state.turn_order) + @intro_tail_ms
+    ok(%{state | phase: :arena_intro}, [{:schedule_phase_timeout, :arena_intro, intro_ms}])
+  end
 
   defp begin_duel(state, context) do
     # The same rule as every later turn: the first wizard who is still here.

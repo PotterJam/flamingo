@@ -523,6 +523,22 @@
 .arena-charging #arena-meter { display: flex; }
 .arena-thrown:not(.arena-charging) #arena-thrown { display: block; }
 
+/* Until the arena's art has loaded, a dusk sky with a summoning card covers it. The
+   hook lifts it with `is-lifted`: the card sinks away and the sky fades out. */
+.arena-veil {
+  background: linear-gradient(#a77a9e, #e3948c 62%, #f4bd8c);
+  transition: opacity 0.5s ease-out, visibility 0s linear 0.5s;
+}
+.arena-veil-card { transition: transform 0.35s ease-in, opacity 0.35s ease-in; }
+.arena-veil.is-lifted { opacity: 0; visibility: hidden; pointer-events: none; }
+.arena-veil.is-lifted .arena-veil-card { opacity: 0; transform: translateY(16px) scale(0.96); }
+
+/* The HUD rises into place when the first turn starts rather than popping in. */
+@keyframes arena-hud-in {
+  from { opacity: 0; transform: translateY(24px); }
+}
+.arena-hud-in { animation: arena-hud-in 0.45s cubic-bezier(0.2, 0.9, 0.3, 1.15) backwards; }
+
 @keyframes spell-card-pop {
   from { opacity: 0; transform: translateY(4px); }
   to { opacity: 1; transform: none; }
@@ -625,7 +641,10 @@
   .spell-card-pop,
   .kit-panel,
   .kit-slot,
-  .arena-tour-hole { animation: none; }
+  .arena-tour-hole,
+  .arena-hud-in { animation: none; }
+  .arena-veil,
+  .arena-veil-card { transition: none; }
   .kit-slot[data-grand]:enabled:hover::after { content: none; }
   .arena-banner { animation: arena-banner 2.4s steps(1, end) forwards; }
 }

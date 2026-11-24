@@ -12,6 +12,9 @@ defmodule FlamingoWeb.SpellslingersLive do
        resume_token: nil,
        viewer_id: nil,
        phase: nil,
+       # Whether this page's arena has loaded its art, and who the duel still waits on.
+       arena_loaded?: false,
+       loading: [],
        participation: :spectator,
        players: %{},
        player_order: [],
@@ -81,7 +84,13 @@ defmodule FlamingoWeb.SpellslingersLive do
       )
 
     ~H"""
-    <Layouts.app flash={@flash} background="" show_sound_controls={false} show_logo={false}>
+    <Layouts.app
+      flash={@flash}
+      background=""
+      show_sound_controls={false}
+      show_logo={false}
+      preload_sounds={false}
+    >
       <%!-- The arena is the whole window; everything else floats over it --%>
       <main id="spellslingers-game" class="fixed inset-0 overflow-hidden bg-indigo-950">
         <div id="arena-wrap" phx-hook="SpellCards" class="absolute inset-0">
@@ -97,11 +106,34 @@ defmodule FlamingoWeb.SpellslingersLive do
               class="absolute inset-0 block size-full cursor-crosshair touch-none outline-none"
               aria-label="Spellslingers arena"
             />
+            <%!-- Covers the arena until its art has loaded, so nothing pops in; the
+                 SpellArena hook fills the bar and lifts it --%>
+            <div
+              id="arena-veil"
+              phx-update="ignore"
+              role="status"
+              class="arena-veil absolute inset-0 z-50 grid place-items-center"
+            >
+              <div class="arena-veil-card w-72 rounded-base border-2 border-border bg-paper px-6 py-5 text-center shadow-[0_4px_0_#111827]">
+                <p class="text-xs font-black tracking-[0.3em] text-rose-700 uppercase">
+                  Spellslingers
+                </p>
+                <p class="mt-1 text-lg font-black">Summoning the arena…</p>
+                <div class="mt-3 h-3 overflow-hidden rounded-full border-2 border-border bg-white">
+                  <div
+                    data-veil-fill
+                    class="h-full w-[4%] bg-[linear-gradient(90deg,#f472b6,#fb923c)] transition-[width] duration-300 ease-out"
+                  >
+                  </div>
+                </div>
+              </div>
+            </div>
 
             <.chronicle_ticker log={@log} players={@players} />
             <.turn_banner
               can_act?={@can_act?}
               current_id={@current_id}
+              loading={@loading -- [@viewer_id]}
               retreat?={@retreat?}
               sudden_death?={@sudden_death?}
               participation={@participation}
@@ -174,6 +206,7 @@ defmodule FlamingoWeb.SpellslingersLive do
 
   attr :can_act?, :any, required: true
   attr :current_id, :any, required: true
+  attr :loading, :list, required: true
   attr :retreat?, :any, required: true
   attr :sudden_death?, :any, required: true
   attr :participation, :any, required: true
@@ -199,6 +232,13 @@ defmodule FlamingoWeb.SpellslingersLive do
       >
         {if @can_act?, do: "Your turn!", else: "#{player_name(@players, @current_id)}'s turn"}
       </div>
+      <p
+        :if={@phase == :arena_loading and @loading != []}
+        id="arena-loading"
+        class="rounded-base border-2 border-border bg-paper px-3 py-1 text-sm font-bold"
+      >
+        Waiting for {Enum.map_join(@loading, " and ", &player_name(@players, &1))} to arrive…
+      </p>
       <p
         :if={@phase == :arena_resolve and @surging?}
         id="arena-status-line"
@@ -340,7 +380,7 @@ defmodule FlamingoWeb.SpellslingersLive do
     <div
       :if={@phase in [:arena_aim, :arena_resolve]}
       id="arena-hud"
-      class="pointer-events-none absolute inset-x-3 bottom-3 z-20 flex items-end justify-between gap-3"
+      class="arena-hud-in pointer-events-none absolute inset-x-3 bottom-3 z-20 flex items-end justify-between gap-3"
     >
       <div class="flex min-w-0 flex-1 basis-0 items-end gap-2.5">
         <.starburst_timer
@@ -755,6 +795,7 @@ defmodule FlamingoWeb.SpellslingersLive do
       <img
         src={"/images/spellslingers/guide/#{@image}.webp"}
         alt=""
+        loading="lazy"
         width="640"
         height="400"
         class="block aspect-[16/10] w-full border-b-2 border-border object-cover"
@@ -1226,6 +1267,14 @@ defmodule FlamingoWeb.SpellslingersLive do
 
   def handle_event("arena_hits_shown", _params, socket), do: {:noreply, socket}
 
+  # The arena's art is in: the duel need not wait on this page, and the music, held
+  # back so it didn't compete with the art, can start.
+  def handle_event("arena_loaded", _params, socket) do
+    Rooms.command(socket.assigns.room_id, :arena_loaded)
+    socket = assign(socket, :arena_loaded?, true)
+    {:noreply, push_event(socket, "sync_round_audio", round_audio(socket.assigns.phase, true))}
+  end
+
   def handle_event("select_spell", %{"spell" => spell}, socket) do
     # Quick spells and aimless ones (Earthquake) need no aim: picking one casts it.
     quick? = Enum.any?(Spellslingers.spells(), &(&1.id == spell and &1.input == "instant"))
@@ -1367,6 +1416,7 @@ defmodule FlamingoWeb.SpellslingersLive do
         host_id: snapshot.host_id,
         online: snapshot.online,
         current_id: snapshot.current_id,
+        loading: snapshot.loading,
         surging?: match?(%{caster_id: nil}, snapshot.last_cast),
         retreat?: snapshot.retreat,
         sudden_death?: snapshot.sudden_death,
@@ -1404,13 +1454,20 @@ defmodule FlamingoWeb.SpellslingersLive do
 
     if initial? or old_phase != snapshot.phase,
       do:
-        push_event(socket, "sync_round_audio", %{
-          music: snapshot.phase in [:arena_aim, :arena_resolve],
-          track: ~p"/sounds/spellslingers-theme.mp3",
-          countdown_end: nil
-        }),
+        push_event(
+          socket,
+          "sync_round_audio",
+          round_audio(snapshot.phase, socket.assigns.arena_loaded?)
+        ),
       else: socket
   end
+
+  defp round_audio(phase, loaded?),
+    do: %{
+      music: loaded? and phase in [:arena_loading, :arena_intro, :arena_aim, :arena_resolve],
+      track: ~p"/sounds/spellslingers-theme.mp3",
+      countdown_end: nil
+    }
 
   # The hook keeps what it already has, so the spell catalog goes out once per
   # mount, and terrain and physics (which dev tuning changes) only on change.
@@ -1427,6 +1484,7 @@ defmodule FlamingoWeb.SpellslingersLive do
           :phase,
           :viewer_id,
           :current_id,
+          :player_order,
           :wind,
           :width,
           :height,

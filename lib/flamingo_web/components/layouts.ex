@@ -76,6 +76,9 @@ defmodule FlamingoWeb.Layouts do
   attr :background, :any, default: "grid-background"
   attr :show_sound_controls, :boolean, default: true
   attr :show_logo, :boolean, default: true
+  # Screens that play none of the shared sounds leave them unfetched until one plays,
+  # so they don't compete with what the screen does need.
+  attr :preload_sounds, :boolean, default: true
   attr :changelog, :boolean, default: false
   slot :inner_block, required: true
 
@@ -94,7 +97,13 @@ defmodule FlamingoWeb.Layouts do
     </main>
     <FlamingoWeb.Changelog.feed :if={@changelog} />
     <.flash_group flash={@flash} />
-    <div id="sound-manager" phx-hook="SoundManager" phx-update="ignore"></div>
+    <div
+      id="sound-manager"
+      phx-hook="SoundManager"
+      phx-update="ignore"
+      data-preload={to_string(@preload_sounds)}
+    >
+    </div>
     <.sound_volume :if={@show_sound_controls} />
     """
   end
