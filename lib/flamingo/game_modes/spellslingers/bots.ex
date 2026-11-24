@@ -99,7 +99,7 @@ defmodule Flamingo.GameModes.Spellslingers.Bots do
 
     crate =
       if Enum.any?(state.crates, &(abs(&1.x - unit.x) <= 2 and abs(&1.y - unit.y) <= 3)),
-        do: if(unit.hp < 70, do: 30, else: 12),
+        do: if(unit.hp < unit.max_hp * 0.7, do: 30, else: 12),
         else: 0
 
     miss + water - crate + steps * 0.15 - (state.water_level - unit.y) * 0.05

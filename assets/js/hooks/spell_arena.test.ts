@@ -109,7 +109,7 @@ const state = (extra: Record<string, unknown> = {}) => ({
   water_level: 95,
   walk_left: 40,
   terrain: ground,
-  units: [{ id: "me", kind: "wizard", owner: "me", x: 100, y: 60, hp: 100, max_hp: 100, dead: false }],
+  units: [{ id: "me", kind: "wizard", owner: "me", x: 100, y: 60, hp: 150, max_hp: 150, dead: false }],
   crates: [],
   last_cast: null,
   players: { me: { name: "Me", color: "#fff" } },

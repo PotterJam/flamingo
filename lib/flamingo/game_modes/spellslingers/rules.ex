@@ -37,7 +37,7 @@ defmodule Flamingo.GameModes.Spellslingers.Rules do
       # @margin cells of open land either side, and @sky rows of open air sit above.
       @margin div(@width - 200, 2)
       @sky @height - 100
-      @wizard_hp 100
+      @wizard_hp 150
       @max_climb 2
       # Jumps, as in Arcanists: a high jump goes up and a little forward, a long jump
       # low and far. Each is {apex height, distance over flat ground} in cells, and

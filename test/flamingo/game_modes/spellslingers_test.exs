@@ -117,8 +117,8 @@ defmodule Flamingo.GameModes.SpellslingersTest do
       Spellslingers.command(state, first, {:cast, "lance", angle, 100}, context(r, first))
 
     assert cast.phase == :arena_resolve
-    assert cast.units[second].hp < 100
-    assert cast.damage_dealt[first] == 100 - cast.units[second].hp
+    assert cast.units[second].hp < 150
+    assert cast.damage_dealt[first] == 150 - cast.units[second].hp
     assert cast.terrain != state.terrain
     assert {:error, :not_your_turn} = Spellslingers.command(cast, first, :pass, context(r, first))
 
@@ -151,7 +151,7 @@ defmodule Flamingo.GameModes.SpellslingersTest do
       {:ok, %{state: cast}} =
         Spellslingers.command(state, first, lance_at(state, first, second), ctx)
 
-      100 - cast.units[second].hp
+      150 - cast.units[second].hp
     end
 
     {:ok, %{state: tuned}} = Spellslingers.command(state, second, {:tune, "damage_pct", 50}, ctx)
@@ -236,7 +236,7 @@ defmodule Flamingo.GameModes.SpellslingersTest do
     {:ok, %{state: theirs}} = Spellslingers.command(state, first, :pass, ctx)
     assert theirs.current_id == second
     assert theirs.units[first].y == ground
-    assert theirs.units[first].hp == 100
+    assert theirs.units[first].hp == 150
   end
 
   test "a high jump clears a wall too steep to walk up, and a long jump goes further" do
@@ -268,7 +268,7 @@ defmodule Flamingo.GameModes.SpellslingersTest do
     assert %{x: x, y: 74} = high.units[first]
     assert x > 151
     assert high.walk_left == 32
-    assert high.units[first].hp == 100
+    assert high.units[first].hp == 150
     assert %{id: ^first, n: 1, path: [_, _ | _]} = high.last_jump
 
     {:ok, %{state: long}} = Spellslingers.command(state, first, {:jump, :long, -1}, ctx)
@@ -296,7 +296,7 @@ defmodule Flamingo.GameModes.SpellslingersTest do
 
     perched = %{state | terrain: ledge, units: Map.put(others, first, %{wizard | x: 147, y: 50})}
     {:ok, %{state: fell}} = Spellslingers.command(perched, first, {:jump, :long, 1}, ctx)
-    lost = 100 - fell.units[first].hp
+    lost = 150 - fell.units[first].hp
     assert fell.units[first].y == 80 and lost > 0
     assert Enum.any?(fell.events, &(&1 =~ "falls hard and loses #{lost} HP"))
   end
@@ -355,7 +355,7 @@ defmodule Flamingo.GameModes.SpellslingersTest do
     {:ok, %{state: again}} = Spellslingers.command(over, "a", :rematch, context(r, "a"))
     assert again.phase == :arena_aim
     assert again.map_id == "isles" and again.turn_length == 30
-    assert Enum.all?(Map.values(again.units), &(&1.hp == 100 and not &1.dead))
+    assert Enum.all?(Map.values(again.units), &(&1.hp == 150 and not &1.dead))
   end
 
   test "leaving mid-duel forfeits, and the remaining wizard wins" do
@@ -380,8 +380,8 @@ defmodule Flamingo.GameModes.SpellslingersTest do
     segments = cast.last_cast.segments
     assert length(segments) >= 2
     assert [%{radius: 12, hit: true}] = Enum.filter(segments, &(&1.radius > 0))
-    assert cast.units[second].hp < 100
-    assert cast.units[first].hp == 100
+    assert cast.units[second].hp < 150
+    assert cast.units[first].hp == 150
   end
 
   test "a blast rune goes off at the caster's feet when their turn ends" do
@@ -393,7 +393,7 @@ defmodule Flamingo.GameModes.SpellslingersTest do
       Spellslingers.command(state, first, {:cast, "blastrune", 0, 0}, context(r, first))
 
     assert [%{owner: ^first}] = cast.runes
-    assert cast.units[second].hp == 100
+    assert cast.units[second].hp == 150
 
     # The caster runs clear during the retreat; the rune waits for the turn to end.
     {:ok, %{state: running}} = Spellslingers.timeout(cast, :arena_resolve, context(r))
@@ -404,8 +404,8 @@ defmodule Flamingo.GameModes.SpellslingersTest do
 
     assert boom.phase == :arena_resolve and boom.runes == []
     assert Enum.any?(timers, &match?({:schedule_phase_timeout, :arena_runes, _}, &1))
-    assert boom.units[second].hp < 60
-    assert boom.units[first].hp == 100
+    assert boom.units[second].hp < 110
+    assert boom.units[first].hp == 150
 
     {:ok, %{state: next}} = Spellslingers.timeout(boom, :arena_runes, context(r))
     assert next.current_id == second
@@ -422,7 +422,7 @@ defmodule Flamingo.GameModes.SpellslingersTest do
     assert cast.last_cast.grand
     assert Enum.count(cast.last_cast.segments, &(&1.radius > 0)) >= 3
     refute Terrain.solid?(cast.terrain, 150, 92)
-    assert cast.units[second].hp < 100 or cast.units[second].dead
+    assert cast.units[second].hp < 150 or cast.units[second].dead
   end
 
   test "sudden death drops everyone to one health, then the sea rises every turn" do
@@ -529,7 +529,7 @@ defmodule Flamingo.GameModes.SpellslingersTest do
     {:ok, %{state: cast}} =
       Spellslingers.command(state, first, {:cast, "quake", 0, 0}, context(r, first))
 
-    assert cast.units[second].hp < 100
+    assert cast.units[second].hp < 150
     assert cast.damage_dealt[first] > 0
   end
 
