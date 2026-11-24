@@ -482,20 +482,65 @@ defmodule Flamingo.GameModes.SpellslingersTest do
     assert next.current_id == second
   end
 
-  test "an egg laid in flight falls to the ground below" do
+  test "an egg laid in flight falls to the ground below, or into the sea" do
     {state, r} = started()
     [first, second] = state.turn_order
     state = calm(%{state | sudden_after: 99}) |> flat(%{first => 100, second => 140})
-    state = put_in(state.units[first], %{state.units[first] | y: 60, float: 1})
+    flying = put_in(state.units[first], %{state.units[first] | y: 60, float: 1})
+
+    {:ok, %{state: cast}} =
+      Spellslingers.command(flying, first, {:cast, "blastrune", 0, 0}, context(r, first))
+
+    # It rests on the ground (row 81 is the top of the rock), straight below.
+    assert [%{owner: ^first, x: x, y: y}] = cast.runes
+    assert_in_delta x, 100.5, 0.01
+    assert_in_delta y, 81 - Physics.egg_radius(), 0.1
+
+    assert [[_, landed] | _] =
+             cast.last_cast.segments |> hd() |> Map.fetch!(:path) |> Enum.reverse()
+
+    assert_in_delta landed, y, 0.01
+
+    {width, height} = Spellslingers.dimensions()
+    open_sea = %{flying | terrain: :binary.copy(<<0>>, width * height)}
+
+    {:ok, %{state: lost}} =
+      Spellslingers.command(open_sea, first, {:cast, "blastrune", 0, 0}, context(r, first))
+
+    assert lost.runes == []
+  end
+
+  test "a Nest Egg rolls down a steep slope and stops on the flat below" do
+    {state, r} = started()
+    [first, second] = state.turn_order
+    {width, height} = Spellslingers.dimensions()
+
+    # A plateau at row 60 runs down a 45 degree slope to flat ground at row 80.
+    surface = fn x -> 60 + clamp(x - 100, 0, 20) end
+
+    terrain =
+      for y <- 0..(height - 1),
+          x <- 0..(width - 1),
+          into: <<>>,
+          do: <<if(y > surface.(x), do: 1, else: 0)>>
+
+    units = %{
+      first => %{state.units[first] | x: 104, y: 64},
+      second => %{state.units[second] | x: 160, y: 80}
+    }
+
+    state = calm(%{state | terrain: terrain, units: Map.merge(state.units, units)})
 
     {:ok, %{state: cast}} =
       Spellslingers.command(state, first, {:cast, "blastrune", 0, 0}, context(r, first))
 
-    assert [%{owner: ^first, x: 100.5, y: 80.5}] = cast.runes
-
-    assert [[100.5, 80.5] | _] =
-             cast.last_cast.segments |> hd() |> Map.fetch!(:path) |> Enum.reverse()
+    assert [%{x: x, y: y, spin: spin}] = cast.runes
+    assert x > 121
+    assert_in_delta y, 81 - Physics.egg_radius(), 0.1
+    assert spin > 0
   end
+
+  defp clamp(n, low, high), do: n |> max(low) |> min(high)
 
   test "shots and blasts reach the flamingo as drawn, head to feet" do
     {state, _r} = started()

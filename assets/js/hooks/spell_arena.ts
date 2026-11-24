@@ -41,8 +41,9 @@ type Spell = {
   range?: number | null;
 };
 
-// A blast rune waiting at its caster's feet for their turn to end.
-type Rune = { owner: string; x: number; y: number };
+// A Nest Egg waiting where it rolled to for its caster's turn to end: (x, y) is its
+// middle, and `spin` how far it turned rolling there.
+type Rune = { owner: string; x: number; y: number; spin?: number };
 
 // The shot a bot is lining up, shown before it fires.
 type BotAim = { spell: string; angle?: number; power?: number; x?: number; y?: number };
@@ -93,7 +94,7 @@ type ArenaState = {
   selected_spell: string;
   // The latest jump, numbered so each one plays once; its path is in unit cells.
   last_jump: { n: number; id: string; path: [number, number][] } | null;
-  physics: { dt: number; gravity: number; max_speed: number; wind_accel: number; playback_speed: number; place_range: number; grand_intro_ms?: number; intro_step_ms?: number; max_climb?: number };
+  physics: { dt: number; gravity: number; max_speed: number; wind_accel: number; playback_speed: number; place_range: number; grand_intro_ms?: number; intro_step_ms?: number; max_climb?: number; egg_radius?: number };
   // Steps left this turn, for walking ahead of the server.
   walk_left?: number;
 };
@@ -1233,13 +1234,23 @@ const SpellArena = {
       ctx.stroke();
     };
 
-    // Blast runes fizz at their caster's feet until the turn ends, then go off.
+    // Nest Eggs fizz where they rolled to until the turn ends, then go off. The egg rolls
+    // on the server as a circle of radius eggR() cells; the sprite's egg is about 0.73 of
+    // its cell wide, so this size makes the drawn egg a little wider than that circle.
+    const eggR = () => shown?.physics.egg_radius ?? 1;
+    const eggSize = () => (eggR() * 2.1 * scale()) / 0.73;
+    const drawEgg = (x: number, y: number, spin: number, size: number) => {
+      sprite("blastrune", x, y, size, spin);
+      // Sparks fly from the fuse at the top of its crack, wherever that has rolled to.
+      const [fx, fy] = [0.3 * size, -0.34 * size];
+      if (frame % 3 === 0) burst(x + fx * Math.cos(spin) - fy * Math.sin(spin), y + fx * Math.sin(spin) + fy * Math.cos(spin), "#fde047", 1, 25);
+    };
     const drawRunes = (t: number) => {
       if (!shown) return;
       const s = scale();
       for (const rune of shown.runes ?? []) {
         const x = rune.x * s;
-        const y = rune.y * s - 8;
+        const y = rune.y * s;
         const pulse = 0.5 + 0.5 * Math.sin(t / 90);
         const glow = ctx.createRadialGradient(x, y, 2, x, y, 26);
         glow.addColorStop(0, `rgba(217, 70, 239, ${0.35 + pulse * 0.35})`);
@@ -1248,8 +1259,7 @@ const SpellArena = {
         ctx.beginPath();
         ctx.arc(x, y, 26, 0, Math.PI * 2);
         ctx.fill();
-        sprite("blastrune", x, y, 18 + pulse * 2);
-        if (frame % 3 === 0) burst(x + 4, y - 10, "#fde047", 1, 25);
+        drawEgg(x, y, rune.spin ?? 0, eggSize() * (1 + pulse * 0.06));
       }
     };
 
@@ -1797,6 +1807,12 @@ const SpellArena = {
         const [ox, oy] = segment.path[0];
         chain(ox * s, oy * s, x * s, y * s);
         sprite("hook", x * s, y * s, 26, Math.sin(now() / 90) * 0.3);
+        return;
+      }
+      if (id === "blastrune") {
+        // The egg rolls without a trail, turning as far as it has rolled. When it goes
+        // off it is already drawn where it lies.
+        if (segment.radius === 0) drawEgg(x * s, y * s, (x - segment.path[0][0]) / eggR(), eggSize());
         return;
       }
       if (id === "blink") {

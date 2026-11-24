@@ -426,7 +426,8 @@ defmodule Flamingo.GameModes.Spellslingers do
         grand_intro_ms: @grand_intro_ms,
         intro_step_ms: @intro_step_ms,
         place_range: state.tuning.place_range,
-        max_climb: @max_climb
+        max_climb: @max_climb,
+        egg_radius: Physics.egg_radius()
       },
       final_result: state.final_result
     }

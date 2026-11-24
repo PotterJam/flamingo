@@ -146,7 +146,7 @@ defmodule Flamingo.GameModes.Spellslingers.Catalog do
               aimless: true,
               name: "Nest Egg",
               blurb:
-                "Lays a speckled egg at your feet. It hatches with a bang when your turn ends, so lay it next to someone and run.",
+                "Lays a speckled egg at your feet. It rolls downhill and drops off ledges, then hatches with a bang when your turn ends, so lay it above someone and run.",
               effect: :blastrune,
               color: "#d946ef",
               sprite: 6,

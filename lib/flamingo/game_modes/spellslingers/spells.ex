@@ -303,28 +303,22 @@ defmodule Flamingo.GameModes.Spellslingers.Spells do
     %{fx | state: Units.unbury_all(fx.state)}
   end
 
-  # The egg drops from under the caster, falling to the ground when they are in the air,
-  # and waits there for the end of their turn. Flamingos don't catch it on the way down.
+  # The egg drops from under the caster, bounces and rolls down whatever slope it lands
+  # on, falling off ledges, and waits wherever it stops for the end of their turn.
+  # `spin` is how far it has rolled, so clients show it lying the way it stopped.
   def effect(:blastrune, fx, actor, _spell, _angle, _power) do
     wizard = fx.state.units[actor]
-    {x, y} = {wizard.x + 0.5, wizard.y + 0.5}
-    drop = %{gravity: 1.0, wind: 0.0}
-    {fall, {kind, {_, at}}} = Physics.fly(%{fx.state | units: %{}}, {x, y}, {0.0, 0.0}, drop, nil)
-    # It rests on top of the cell it lands on.
-    landed = if kind == :terrain, do: floor(at) - 0.5, else: at
-    path = [{x, y - 3}, {x, y - 1.5} | Enum.drop(fall, -1)] ++ [{x, landed}]
-    fx = add_segment(fx, path, 0, "blastrune", 0, kind == :terrain)
+    start = {wizard.x + 0.5, wizard.y - 0.5}
+    {where, {x, y}, path} = Physics.roll_egg(fx.state, start, {0.0, 0.0})
+    fx = add_segment(fx, path, 0, "blastrune", 0, where == :rest)
     who = Units.player_name(fx.state, actor)
 
-    cond do
-      kind != :terrain ->
-        %{fx | state: Units.log(fx.state, "…and the egg drops into the sea.")}
-
-      landed > y ->
-        lay(fx, %{owner: actor, x: x, y: landed}, "#{who} drops an egg from the sky. Run!")
-
-      true ->
-        lay(fx, %{owner: actor, x: x, y: landed}, "An egg fizzes at #{who}'s feet. Run!")
+    if where == :rest do
+      rune = %{owner: actor, x: x, y: y, spin: (x - elem(start, 0)) / Physics.egg_radius()}
+      rolled = if abs(y - elem(start, 1)) > 4, do: "drops an egg", else: "lays an egg"
+      lay(fx, rune, "#{who} #{rolled}. It fizzes. Run!")
+    else
+      %{fx | state: Units.log(fx.state, "…and the egg rolls into the sea.")}
     end
   end
 

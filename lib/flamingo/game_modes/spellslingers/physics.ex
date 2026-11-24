@@ -83,6 +83,127 @@ defmodule Flamingo.GameModes.Spellslingers.Physics do
     end)
   end
 
+  @egg_radius 1.0
+  @egg_steps 200
+
+  def egg_radius, do: @egg_radius
+
+  @doc """
+  Lets an egg go at `pos` (its middle) with the given velocity: it falls, bounces off
+  the land and rolls down slopes until it comes to rest. Flamingos don't stop it.
+  Returns {:rest, pos, path}, or {:sea, pos, path} when it ends up in the water or off
+  the map's side.
+  """
+  def roll_egg(state, pos, velocity) do
+    egg_step(state, pos, velocity, [pos], 0, 0)
+  end
+
+  defp egg_step(_state, pos, _v, path, @egg_steps, _still), do: {:rest, pos, Enum.reverse(path)}
+
+  defp egg_step(state, {x, y}, {vx, vy}, path, n, still) do
+    g = state.tuning.gravity
+    vy = vy + g * @dt
+    substeps = max(1, ceil(:math.sqrt(vx * vx + vy * vy) * @dt / 0.25))
+
+    {pos, v, normal} =
+      Enum.reduce(1..substeps, {{x, y}, {vx, vy}, nil}, fn _, {{px, py}, {vx, vy}, touched} ->
+        next = {px + vx * @dt / substeps, py + vy * @dt / substeps}
+
+        case egg_contact(state, next) do
+          nil ->
+            {next, {vx, vy}, touched}
+
+          {{nx, ny} = normal, depth} ->
+            # A hard landing bounces; a soft one just stops going into the land.
+            vn = vx * nx + vy * ny
+            bounce = if vn < -6, do: 0.35, else: 0.0
+
+            v =
+              if vn < 0,
+                do: {vx - (1 + bounce) * vn * nx, vy - (1 + bounce) * vn * ny},
+                else: {vx, vy}
+
+            {{elem(next, 0) + nx * depth, elem(next, 1) + ny * depth}, v, normal}
+        end
+      end)
+
+    # On the ground it rolls: gravity along the slope speeds it up and the ground slows it
+    # a little, so it rolls down a steep slope but stops on a gentle one.
+    v = if normal, do: roll_friction(v, normal, g), else: v
+    {vx, vy} = v
+    still = if normal && vx * vx + vy * vy < 0.25, do: still + 1, else: 0
+    {px, py} = pos
+    path = [pos | path]
+
+    cond do
+      py >= state.water_level or px < 0 or px >= @width -> {:sea, pos, Enum.reverse(path)}
+      still >= 4 -> {:rest, pos, Enum.reverse(path)}
+      true -> egg_step(state, pos, v, path, n + 1, still)
+    end
+  end
+
+  defp roll_friction({vx, vy}, {nx, ny}, g) do
+    vn = vx * nx + vy * ny
+    {tx, ty} = {vx - vn * nx, vy - vn * ny}
+    speed = :math.sqrt(tx * tx + ty * ty)
+    slow = if speed > 0, do: max(speed * (1 - 1.5 * @dt) - g * 0.2 * @dt, 0) / speed, else: 0
+    {vn * nx + tx * slow, vn * ny + ty * slow}
+  end
+
+  # How the egg, a circle at `pos`, overlaps the land: the direction out of it and how
+  # deep it is in, or nil when it touches nothing. The direction comes from the land
+  # around the egg, not the cell it touches, so it rolls over the smooth ground clients
+  # draw instead of resting on each step of the cells, and tips off a ledge's edge.
+  defp egg_contact(state, pos) do
+    with {normal, depth} <- egg_overlap(state, pos),
+         do: {land_normal(state, pos) || normal, depth}
+  end
+
+  defp land_normal(state, {x, y}) do
+    reach = 2.5
+
+    {sx, sy} =
+      for cx <- floor(x - reach)..floor(x + reach),
+          cy <- floor(y - reach)..floor(y + reach),
+          (x - cx - 0.5) ** 2 + (y - cy - 0.5) ** 2 <= reach * reach,
+          Terrain.solid?(state.terrain, cx, cy),
+          reduce: {0.0, 0.0},
+          do: ({sx, sy} -> {sx + x - cx - 0.5, sy + y - cy - 0.5})
+
+    length = :math.sqrt(sx * sx + sy * sy)
+    if length > 0.5, do: {sx / length, sy / length}
+  end
+
+  defp egg_overlap(state, {x, y}) do
+    r = @egg_radius
+
+    pushes =
+      for cx <- floor(x - r)..floor(x + r),
+          cy <- floor(y - r)..floor(y + r),
+          Terrain.solid?(state.terrain, cx, cy),
+          {qx, qy} = {clamp(x, cx, cx + 1), clamp(y, cy, cy + 1)},
+          d = :math.sqrt((x - qx) ** 2 + (y - qy) ** 2),
+          d < r,
+          do:
+            if(d == 0,
+              do: {0.0, -r, r},
+              else: {(x - qx) / d * (r - d), (y - qy) / d * (r - d), r - d}
+            )
+
+    case pushes do
+      [] ->
+        nil
+
+      _ ->
+        {sx, sy} =
+          Enum.reduce(pushes, {0.0, 0.0}, fn {px, py, _}, {sx, sy} -> {sx + px, sy + py} end)
+
+        length = :math.sqrt(sx * sx + sy * sy)
+        normal = if length > 0, do: {sx / length, sy / length}, else: {0.0, -1.0}
+        {normal, pushes |> Enum.map(&elem(&1, 2)) |> Enum.max()}
+    end
+  end
+
   def apply_knocks(state, impulses) do
     impulses
     |> Enum.sort()
