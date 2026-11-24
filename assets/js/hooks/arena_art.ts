@@ -37,15 +37,141 @@ export const WIZARD = {
 // Where the wing tip is in the aiming and throwing frames, as fractions of the cell's
 // height: across from the feet, and up from them. Spells glow and leave from there.
 export const WINGTIP: Record<number, [number, number]> = {
-  11: [0.423, 0.83],
   12: [0.57, 0.487],
-  13: [0.51, 0.177],
-  14: [-0.07, 0.627],
   15: [0.607, 0.507],
   25: [0.543, 0.563],
 };
 export const WIZARD_W = 400;
 export const WIZARD_H = 300;
+
+// The aiming and throwing frames come apart into layers, so the wing and head follow the
+// aim exactly instead of snapping between painted angles: the wing turns about its
+// shoulder and the head and neck about the neck's base. Each joint keeps a disc of the
+// body painted over it, so a turned piece never opens a gap there. In pixels of the
+// frame's cell; `cut` outlines the piece and `angle` is how far above level the painted
+// wing points.
+type Joint = { pivot: [number, number]; r: number; cut: number[] };
+type Rig = { wing: Joint & { angle: number }; head: Joint };
+export const RIG: Record<number, Rig> = {
+  [WIZARD.aim]: {
+    wing: {
+      pivot: [256, 172],
+      r: 24,
+      angle: 11,
+      cut: [250, 150, 275, 146, 300, 136, 330, 126, 365, 124, 398, 136, 398, 165, 370, 182, 330, 193, 300, 198, 270, 198, 250, 198],
+    },
+    head: { pivot: [251, 149], r: 11, cut: [225, 55, 345, 55, 345, 132, 300, 136, 266, 144, 260, 150, 238, 150, 230, 135, 225, 115] },
+  },
+  [WIZARD.release]: {
+    wing: {
+      pivot: [268, 174],
+      r: 24,
+      angle: 22,
+      cut: [272, 152, 285, 150, 320, 136, 355, 120, 398, 118, 398, 150, 370, 172, 340, 184, 300, 196, 272, 202],
+    },
+    head: { pivot: [255, 153], r: 11, cut: [230, 48, 345, 48, 345, 120, 320, 128, 300, 136, 270, 146, 263, 154, 242, 154, 236, 140, 230, 120] },
+  },
+};
+
+type Layers = { body: HTMLCanvasElement; wing: HTMLCanvasElement; head: HTMLCanvasElement };
+const rigged = new WeakMap<HTMLCanvasElement, Map<number, Layers>>();
+const cell = (paint: (c: CanvasRenderingContext2D) => void) => {
+  const canvas = document.createElement("canvas");
+  canvas.width = WIZARD_W;
+  canvas.height = WIZARD_H;
+  paint(canvas.getContext("2d")!);
+  return canvas;
+};
+const outline = (c: CanvasRenderingContext2D, pts: number[]) => {
+  c.beginPath();
+  for (let i = 0; i < pts.length; i += 2) c.lineTo(pts[i], pts[i + 1]);
+  c.closePath();
+};
+
+// A rigged frame's layers, cut once per tinted sheet.
+function layersOf(sheet: HTMLCanvasElement, frame: number) {
+  let byFrame = rigged.get(sheet);
+  if (!byFrame) rigged.set(sheet, (byFrame = new Map()));
+  const cached = byFrame.get(frame);
+  if (cached) return cached;
+  const rig = RIG[frame];
+  const art = (c: CanvasRenderingContext2D) => c.drawImage(sheet, frame * WIZARD_W, 0, WIZARD_W, WIZARD_H, 0, 0, WIZARD_W, WIZARD_H);
+  const piece = (j: Joint) =>
+    cell((c) => {
+      outline(c, j.cut);
+      c.fill();
+      // Its own share of the joint stays inside where the body's disc is solid, so the
+      // kerchief and chest painted there never peek out from behind it as it turns.
+      c.beginPath();
+      c.arc(j.pivot[0], j.pivot[1], j.r * 0.8, 0, Math.PI * 2);
+      c.fill();
+      c.globalCompositeOperation = "source-in";
+      art(c);
+    });
+  // The joint's disc fades out at its rim, so the still body melts into the turned piece.
+  const disc = (j: Joint) =>
+    cell((c) => {
+      const [x, y] = j.pivot;
+      const g = c.createRadialGradient(x, y, 0, x, y, j.r);
+      g.addColorStop(0.85, "#000");
+      g.addColorStop(1, "rgba(0,0,0,0)");
+      c.fillStyle = g;
+      c.fillRect(0, 0, WIZARD_W, WIZARD_H);
+      c.globalCompositeOperation = "source-in";
+      art(c);
+    });
+  const body = cell((c) => {
+    art(c);
+    c.globalCompositeOperation = "destination-out";
+    for (const j of [rig.wing, rig.head]) {
+      outline(c, j.cut);
+      c.fill();
+    }
+    c.globalCompositeOperation = "source-over";
+    c.drawImage(disc(rig.wing), 0, 0);
+    c.drawImage(disc(rig.head), 0, 0);
+  });
+  const layers = { body, wing: piece(rig.wing), head: piece(rig.head) };
+  byFrame.set(frame, layers);
+  return layers;
+}
+
+// Paints a rigged frame into `out` (a WIZARD_W x WIZARD_H canvas) with the wing pointing
+// `wing` degrees above level and the head turned `head` degrees up, both from its facing.
+export function poseRig(out: HTMLCanvasElement, sheet: HTMLCanvasElement, frame: number, wing: number, head: number) {
+  const rig = RIG[frame];
+  const layers = layersOf(sheet, frame);
+  const c = out.getContext("2d")!;
+  c.clearRect(0, 0, WIZARD_W, WIZARD_H);
+  const turn = (img: HTMLCanvasElement, j: Joint, deg: number) => {
+    const [x, y] = j.pivot;
+    c.save();
+    c.translate(x, y);
+    c.rotate((-deg * Math.PI) / 180);
+    c.translate(-x, -y);
+    c.drawImage(img, 0, 0);
+    c.restore();
+  };
+  // Behind the body, so a wing swung low passes behind the legs and the neck tucks into
+  // the neckerchief.
+  turn(layers.wing, rig.wing, wing - rig.wing.angle);
+  turn(layers.head, rig.head, head);
+  c.drawImage(layers.body, 0, 0);
+  return out;
+}
+
+// Where the wing tip is in a rigged frame with its wing at `wing` degrees, as WINGTIP gives
+// it: across from the feet and up from them, as fractions of the cell's height.
+export function rigTip(frame: number, wing: number): [number, number] {
+  const { pivot, angle } = RIG[frame].wing;
+  const [tx, ty] = WINGTIP[frame];
+  const dx = tx * WIZARD_H + WIZARD_W / 2 - pivot[0];
+  const dy = WIZARD_H - ty * WIZARD_H - pivot[1];
+  const r = ((angle - wing) * Math.PI) / 180;
+  const x = pivot[0] + dx * Math.cos(r) - dy * Math.sin(r);
+  const y = pivot[1] + dx * Math.sin(r) + dy * Math.cos(r);
+  return [(x - WIZARD_W / 2) / WIZARD_H, (WIZARD_H - y) / WIZARD_H];
+}
 // Crate sheet frames, each CRATE_SIZE square, standing on the bottom edge.
 export const CRATE_FRAME: Record<string, number> = { health: 0, mana: 1 };
 export const CRATE_SIZE = 200;

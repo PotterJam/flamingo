@@ -1,5 +1,5 @@
 import { createSpellSounds } from "./spell_sounds";
-import { BOOM_CELL, BOOM_FRAMES, CRATE_FRAME, CRATE_SIZE, LAND_RES, SPELL_CELL, WINGTIP, WIZARD, WIZARD_H, WIZARD_W, carveLand, loadArt, paintLand, ready, wizardSheet } from "./arena_art";
+import { BOOM_CELL, BOOM_FRAMES, CRATE_FRAME, CRATE_SIZE, LAND_RES, SPELL_CELL, WINGTIP, WIZARD, WIZARD_H, WIZARD_W, carveLand, loadArt, paintLand, poseRig, ready, RIG, rigTip, wizardSheet } from "./arena_art";
 
 // Renders the Spellslingers arena: destructible terrain, wizards, crates, blast runes, aiming,
 // and the playback of each cast. The server owns every rule and all physics; this hook
@@ -629,7 +629,7 @@ const SpellArena = {
           const s = scale();
           const [cx, cy] = drawn.get(caster.id) ?? [caster.x, caster.y];
           const color = colorOf(cast.spell, "#facc15");
-          const [fx, fy] = WINGTIP[WIZARD.release];
+          const [fx, fy] = rigTip(WIZARD.release, anims.get(caster.id)?.wing ?? RIG[WIZARD.release].wing.angle);
           const ox = (cx + 0.5) * s + (faced.get(caster.id) ?? 1) * fx * SHEET_TALL * s;
           const oy = (cy + 1) * s - fy * SHEET_TALL * s;
           burst(ox, oy, color, 22, 110);
@@ -808,11 +808,28 @@ const SpellArena = {
     // Each flamingo's animation: its pose and since when, a squash-and-stretch spring (sq
     // above 0 stretches it tall, below 0 squashes it wide), an eased tilt, and the frame it
     // showed last, which fades out over the new one so poses blend instead of snapping.
-    type Anim = { pose: Pose; since: number; sq: number; v: number; tilt: number; frame: number; prev: number; swapAt: number };
+    // A rigged frame (see RIG) is drawn into `shot` with its wing and head eased toward
+    // the aim, and `from` keeps the last one to fade out. `face` eases between -1 and 1
+    // so turning around swings the flamingo through edge-on instead of flipping it.
+    type Anim = {
+      pose: Pose;
+      since: number;
+      sq: number;
+      v: number;
+      tilt: number;
+      frame: number;
+      prev: number;
+      swapAt: number;
+      wing: number;
+      head: number;
+      face: number;
+      shot: HTMLCanvasElement | null;
+      from: HTMLCanvasElement | null;
+    };
     const anims = new Map<string, Anim>();
     const animOf = (id: string, t: number) => {
       let a = anims.get(id);
-      if (!a) anims.set(id, (a = { pose: "idle", since: t, sq: 0, v: 0, tilt: 0, frame: WIZARD.idle, prev: WIZARD.idle, swapAt: -1e9 }));
+      if (!a) anims.set(id, (a = { pose: "idle", since: t, sq: 0, v: 0, tilt: 0, frame: WIZARD.idle, prev: WIZARD.idle, swapAt: -1e9, wing: 0, head: 0, face: 0, shot: null, from: null }));
       return a;
     };
     // The kick each pose gives the spring as it starts: a stretch on take-off and on a
@@ -874,6 +891,9 @@ const SpellArena = {
       let spin = 0;
       let jitter = 0;
       let tilt = 0;
+      // Where a rigged frame's wing and head turn to, in degrees above level.
+      let wingTo = 0;
+      let headTo = 0;
       // Each flamingo keeps its own rhythm, so a flock doesn't blink in step.
       const own = (unit.x * 0.37 + unit.id.length * 1.3) * 1000;
       const phase = (t + own) / 1000;
@@ -901,13 +921,18 @@ const SpellArena = {
           tilt = 0.05;
           break;
         case "aim": {
-          const up = aimLift(unit, facing);
-          frameAt = up > 32 ? WIZARD.aimUp : up < -28 ? WIZARD.aimDown : WIZARD.aim;
+          // The wing points along the aim and the head half follows it.
+          const up = Math.max(-75, Math.min(88, aimLift(unit, facing)));
+          frameAt = WIZARD.aim;
+          wingTo = up;
+          headTo = Math.max(-14, Math.min(20, up * 0.3));
           squash = Math.sin(phase * 3) * 0.01;
           if (charge && unit.id === shown.viewer_id) {
-            // Rears back and trembles more the harder it charges.
+            // Rears back, cocking the wing over its shoulder, and trembles more the
+            // harder it charges.
             const power = chargePower(t) / 100;
-            if (power > 0.45) frameAt = WIZARD.windup;
+            wingTo = Math.min(130, up + power * 45);
+            headTo -= power * 6;
             squash = -power * 0.06;
             jitter = Math.sin(t / 24) * power * 1.3;
             tilt = -power * 0.06;
@@ -916,8 +941,13 @@ const SpellArena = {
         }
         case "cast": {
           // Flings the wing, then overbalances after it.
+          // The wing whips through to the way the spell left.
           const el = animation ? t - animation.start : 0;
           frameAt = el < 170 ? WIZARD.release : WIZARD.follow;
+          const path = animation?.cast.segments[0]?.path;
+          const k = path ? Math.min(3, path.length - 1) : 0;
+          wingTo = path && k > 0 ? Math.max(-75, Math.min(88, (Math.atan2(path[0][1] - path[k][1], Math.abs(path[k][0] - path[0][0])) * 180) / Math.PI)) : a.wing;
+          headTo = Math.max(-14, Math.min(20, wingTo * 0.3));
           tilt = el < 170 ? 0.04 : 0.07;
           break;
         }
@@ -990,14 +1020,35 @@ const SpellArena = {
       a.v += (-340 * a.sq - 15 * a.v) * dt;
       a.sq += a.v * dt;
       a.tilt += (tilt - a.tilt) * (1 - Math.exp(-frameDt / 90));
+      const rigged = !!RIG[frameAt];
       if (frameAt !== a.frame) {
         // Walk frames follow each other; anything else blends from the frame before.
         if (frameAt >= WIZARD.idle || a.frame >= WIZARD.idle) {
           a.prev = a.frame;
           a.swapAt = t;
+          if (RIG[a.prev] && a.shot) {
+            a.from ??= document.createElement("canvas");
+            a.from.width = WIZARD_W;
+            a.from.height = WIZARD_H;
+            a.from.getContext("2d")!.drawImage(a.shot, 0, 0);
+          }
+        }
+        // Coming from an unrigged frame, the wing starts where it is painted.
+        if (rigged && !RIG[a.frame]) {
+          a.wing = RIG[frameAt].wing.angle;
+          a.head = 0;
         }
         a.frame = frameAt;
       }
+      // Quick enough to keep up with the pointer, slow enough to smooth its jitter.
+      const ease = 1 - Math.exp(-frameDt / 45);
+      a.wing += (wingTo - a.wing) * ease;
+      a.head += (headTo - a.head) * ease;
+      // Turning gives a little hop of the spring, and edge-on is never quite flat.
+      if (!a.face) a.face = facing;
+      if (Math.abs(a.face) === 1 && a.face !== facing) a.v += 0.6;
+      a.face += Math.max(-frameDt / 65, Math.min(frameDt / 65, facing - a.face));
+      const turnX = Math.sign(a.face || facing) * Math.max(0.3, Math.abs(a.face));
       const sq = Math.max(-0.3, Math.min(0.3, a.sq + squash));
       const sy = 1 + sq;
       const sx = 1 - sq * 0.55;
@@ -1022,12 +1073,16 @@ const SpellArena = {
         ctx.rotate(a.tilt * facing);
         ctx.translate(0, h * 0.4);
       }
-      ctx.scale(facing * sx, sy);
-      ctx.drawImage(sheet, frameAt * WIZARD_W, 0, WIZARD_W, WIZARD_H, -w / 2, -h, w, h);
+      ctx.scale(turnX * sx, sy);
+      if (rigged) {
+        a.shot ??= Object.assign(document.createElement("canvas"), { width: WIZARD_W, height: WIZARD_H });
+        ctx.drawImage(poseRig(a.shot, sheet, frameAt, a.wing, a.head), -w / 2, -h, w, h);
+      } else ctx.drawImage(sheet, frameAt * WIZARD_W, 0, WIZARD_W, WIZARD_H, -w / 2, -h, w, h);
       const blend = (t - a.swapAt) / BLEND_MS;
       if (blend < 1 && a.prev !== frameAt) {
         ctx.globalAlpha = 1 - blend;
-        ctx.drawImage(sheet, a.prev * WIZARD_W, 0, WIZARD_W, WIZARD_H, -w / 2, -h, w, h);
+        if (RIG[a.prev] && a.from) ctx.drawImage(a.from, -w / 2, -h, w, h);
+        else ctx.drawImage(sheet, a.prev * WIZARD_W, 0, WIZARD_W, WIZARD_H, -w / 2, -h, w, h);
         ctx.globalAlpha = 1;
       }
       ctx.restore();
@@ -1035,8 +1090,8 @@ const SpellArena = {
       // The wing tip swells with light while a throw charges.
       if (pose === "aim" && charge && unit.id === shown.viewer_id) {
         const power = chargePower(t) / 100;
-        const [fx, fy] = WINGTIP[frameAt] ?? WINGTIP[WIZARD.aim];
-        const ox = cx + jitter + facing * fx * h * sx;
+        const [fx, fy] = rigged ? rigTip(frameAt, a.wing) : (WINGTIP[frameAt] ?? WINGTIP[WIZARD.aim]);
+        const ox = cx + jitter + turnX * fx * h * sx;
         const oy = feet - fy * h * sy;
         const r = 4 + power * 10 + Math.sin(t / 60) * 1.2;
         const glow = ctx.createRadialGradient(ox, oy, 0, ox, oy, r);
