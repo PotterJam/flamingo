@@ -2790,7 +2790,8 @@ const SpellArena = {
     let latest: ArenaState | null = null;
     // The first snapshot after a (re)mount is the whole board. A cast it carries
     // already resolved while we were away, so the board is shown as it is rather
-    // than replayed over what may now be our turn.
+    // than replayed over what may now be our turn. A hidden tab draws no frames,
+    // so it does the same: casts queued there would all play on coming back.
     this.handleEvent<Partial<ArenaState> & { full?: boolean }>("arena_state", ({ full, ...update }) => {
       latest = { ...latest, ...update } as ArenaState;
       // The client owns the selection and follows the server only when the server
@@ -2800,7 +2801,7 @@ const SpellArena = {
         serverSelected = update.selected_spell;
         selected = update.selected_spell || selected;
       }
-      if (full) {
+      if (full || document.hidden) {
         // A jump that happened while we were away is already over.
         seenJump = latest.last_jump?.n ?? -1;
         jumping = null;

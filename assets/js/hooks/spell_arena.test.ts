@@ -41,6 +41,7 @@ function mount() {
     removeEventListener: noop,
   } as never;
   globalThis.document = {
+    hidden: false,
     getElementById: (id: string) => (id === "spellslingers-game" ? { classList: { contains: () => false } } : null),
     body: { classList: { add: noop, remove: noop, toggle: noop } },
     addEventListener: noop,
@@ -252,6 +253,25 @@ test("a rejoin shows the board as it is instead of replaying a cast it missed", 
   a.tick(100);
   a.down();
   now = 500;
+  a.up();
+  expect(casts(a.sent)).toHaveLength(1);
+});
+
+test("casts that land while the tab is hidden are not replayed on coming back", () => {
+  const a = mount();
+  a.server("arena_state", state({ current_id: "other" }));
+  a.tick(1);
+  // A hidden tab draws no frames, so nothing plays until it is shown again.
+  Object.assign(document, { hidden: true });
+  const theirs = (id: number) => ({ ...cast(id), caster_id: "other" });
+  a.server("arena_state", state({ phase: "arena_resolve", current_id: "other", last_cast: theirs(1) }));
+  a.server("arena_state", state({ phase: "arena_resolve", current_id: "other", last_cast: theirs(2) }));
+  a.server("arena_state", state({ last_cast: theirs(2) }));
+  Object.assign(document, { hidden: false });
+  // Back on the tab a minute later, it is our turn and the arena answers at once.
+  a.tick(60000);
+  a.down();
+  now = 60400;
   a.up();
   expect(casts(a.sent)).toHaveLength(1);
 });
