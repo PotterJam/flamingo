@@ -285,16 +285,22 @@ defmodule Flamingo.GameModes.Spellslingers.Physics do
         py = y + vy * @dt * i / substeps
 
         cond do
-          px < 0 or px >= @width -> {:halt, {:gone, {px, py}}}
-          py >= state.water_level -> {:halt, {:gone, {px, py}}}
-          Units.blocked?(state, unit, floor(px), floor(py)) -> {:halt, {:land, {x, y}}}
-          true -> {:cont, {px, py}}
+          py >= state.water_level ->
+            {:halt, {:gone, {px, py}}}
+
+          # Walking stops at the map's edges, but a knock carries a unit on past
+          # them, with nothing below until the sea.
+          px >= 0 and px < @width and Units.blocked?(state, unit, floor(px), floor(py)) ->
+            {:halt, {:land, {x, y}}}
+
+          true ->
+            {:cont, {px, py}}
         end
       end)
 
     case result do
       {:gone, {px, py}} ->
-        unit = %{unit | x: px |> floor() |> clamp(0, @width - 1), y: state.water_level}
+        unit = %{unit | x: floor(px), y: state.water_level}
         {unit, Enum.reverse([{px - 0.5, py - 0.5} | path])}
 
       {:land, pos} ->
@@ -308,7 +314,7 @@ defmodule Flamingo.GameModes.Spellslingers.Physics do
   defp land(_state, unit, {x, y}, path) do
     unit = %{
       unit
-      | x: floor(x) |> clamp(0, @width - 1),
+      | x: floor(x),
         y: floor(y) |> clamp(0, @height - 1)
     }
 

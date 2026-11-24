@@ -357,6 +357,7 @@ defmodule Flamingo.GameModes.SpellslingersTest do
 
     cornered = %{state | terrain: boxed, units: Map.put(others, first, %{wizard | x: 0})}
     assert Spellslingers.command(cornered, first, {:jump, :high, -1}, ctx) == {:error, :blocked}
+    assert Spellslingers.command(cornered, first, {:walk, -1}, ctx) == {:error, :blocked}
 
     # A jump off a high ledge hurts on landing, a point a cell past the safe 8, and the
     # chronicle says why.
@@ -724,6 +725,30 @@ defmodule Flamingo.GameModes.SpellslingersTest do
 
     {:ok, %{state: next}} = Spellslingers.timeout(state, :arena_surge, context(r))
     assert next.phase in [:arena_aim, :game_ended]
+  end
+
+  test "a knock carries a wizard on past the map's edge until it lands in the sea" do
+    {state, _r} = started()
+    [_first, second] = state.turn_order
+    {width, height} = Spellslingers.dimensions()
+    sea = state.water_level
+
+    # Ground right up to the edge; nothing past it.
+    terrain =
+      for y <- 0..(height - 1),
+          _x <- 0..(width - 1),
+          into: <<>>,
+          do: <<if(y > 80, do: 1, else: 0)>>
+
+    unit = %{state.units[second] | x: width - 3, y: 80}
+    state = %{state | terrain: terrain, units: %{second => unit}}
+
+    {knocked, [%{path: path}]} = Physics.apply_knocks(state, %{second => {40, -30}})
+
+    assert %{y: ^sea, x: x} = knocked.units[second]
+    assert x >= width + 10
+    # It was still in the air, not yet in the water, when it crossed the edge.
+    assert Enum.any?(path, fn {px, py} -> px >= width and py < sea - 10 end)
   end
 
   test "a wizard knocked into the sea beside a cliff is out, not lifted onto the cliff" do

@@ -517,14 +517,14 @@ const SpellArena = {
     const solidAt = (x: number, y: number) =>
       !!shown && !!cells && x >= 0 && x < shown.width && y >= 0 && y < shown.height && cells[y * shown.width + x] === 1;
 
-    // Cells of the world's edges the camera may show past each side, and how far the
-    // land is drawn on past them before it meets the sea.
+    // Cells past the world's left and right edges the camera may show, and how far the
+    // land is drawn on past them: further than any view reaches, so it never ends on screen.
     const EDGE_VIEW = 14;
     const EDGE_FADE = 22;
     const clampCam = () => {
       if (!shown) return;
-      // A little past the left and right edges shows the land running down into the sea,
-      // so the world never stops dead at the screen's edge.
+      // A little past the left and right edges shows the land carrying on beyond the
+      // dashed line, so the world never stops dead at the screen's edge.
       const lo = -EDGE_VIEW;
       const hi = shown.width + EDGE_VIEW - VIEW_W;
       cam.x = hi < lo ? (shown.width - VIEW_W) / 2 : Math.max(lo, Math.min(hi, cam.x));
@@ -805,6 +805,30 @@ const SpellArena = {
           ctx.fill();
         }
       }
+    };
+
+    // Dashed lines mark how far a wizard can walk. Only a knock carries anyone past
+    // them, and then nothing stops the fall until the sea.
+    const drawEdgeLines = () => {
+      if (!shown) return;
+      const top = (cam.y - 2) * CELL;
+      const bottom = shown.water_level * CELL;
+      ctx.save();
+      ctx.lineCap = "round";
+      for (const x of [0, shown.width * CELL]) {
+        // The same width and dashes on screen at any zoom.
+        for (const [color, width] of [["rgba(28,25,23,0.45)", 8], ["rgba(255,255,255,0.9)", 4]] as const) {
+          ctx.setLineDash([18 / zoom, 14 / zoom]);
+          ctx.lineDashOffset = -top;
+          ctx.strokeStyle = color;
+          ctx.lineWidth = width / zoom;
+          ctx.beginPath();
+          ctx.moveTo(x, top);
+          ctx.lineTo(x, bottom);
+          ctx.stroke();
+        }
+      }
+      ctx.restore();
     };
 
     const drawWater = (t: number) => {
@@ -2505,9 +2529,9 @@ const SpellArena = {
     const floating = () => (myWizard()?.float ?? 0) > 0;
     const moveStep = (now: number) => (floating() ? flyStep(now) : heldDir ? walkStep(now) : undefined);
 
-    // The land carries on past each edge as its own mirror image, then slopes down into
-    // the sea as a headland, so the world's left and right ends don't look cut off; a
-    // cave's ceiling carries on above, fading into solid rock.
+    // The land carries on past each edge as its own mirror image, so the world's left
+    // and right ends don't look cut off; a cave's ceiling carries on above, fading into
+    // solid rock.
     let edges: { left: HTMLCanvasElement; right: HTMLCanvasElement; top: HTMLCanvasElement | null } | null = null;
     const buildEdges = () => {
       if (!shown || !terrainCanvas) return;
@@ -2532,53 +2556,13 @@ const SpellArena = {
         c.drawImage(land, from, 0, n, h, 0, 0, n, h);
         c.setTransform(1, 0, 0, 1, 0, 0);
       };
-      // The mirrored land runs on at full strength, then slopes gently down into the sea,
-      // with a grass lip and outline along the slope so it reads as the island's own shore.
+      // The mirrored land runs on at full strength, so the edge column meets its own
+      // reflection and the ground and sea carry on seamlessly past the dashed line.
       const shore = (side: "left" | "right") => {
-        const world = shown!;
         const canvas = document.createElement("canvas");
         canvas.width = n;
         canvas.height = h;
-        const c = canvas.getContext("2d")!;
-        mirror(c, side === "left" ? 0 : land.width - n);
-        const water = world.water_level * R;
-        const run = 20 * R;
-        const col = side === "left" ? 0 : world.width - 1;
-        // The ground surface at the edge: below a cave's ceiling, the first land under air.
-        const solid = (y: number) => !!cells?.[y * world.width + col];
-        let top = 0;
-        if (ceiling) while (top < world.height && solid(top)) top++;
-        while (top < world.height && !solid(top)) top++;
-        // A little above it, so the slope starts in the air and meets the painted lip.
-        const y0 = Math.min((top - 1.5) * R, water);
-        const xOf = (u: number) => (side === "right" ? u : n - u);
-        const curve = () => {
-          c.beginPath();
-          for (let u = 0; u <= run; u += R / 2) {
-            const k = (1 - Math.cos(Math.PI * Math.min(1, u / run))) / 2;
-            c.lineTo(xOf(u), y0 + (water + 2 * R - y0) * k);
-          }
-        };
-        curve();
-        c.lineTo(xOf(run), h);
-        c.lineTo(xOf(0), h);
-        c.closePath();
-        c.globalCompositeOperation = "destination-in";
-        c.fill();
-        c.globalCompositeOperation = "source-atop";
-        c.lineJoin = "round";
-        const t = Math.max(2, Math.round(R * 0.35));
-        const grass = Math.max(2, Math.round(R * 1.15));
-        for (const [color, width] of [
-          [`rgb(${palette().grass[1].join(",")})`, (t + grass) * 2],
-          [`rgb(${palette().grass[0].join(",")})`, (t + 2) * 2],
-          ["#1c1917", t * 2],
-        ] as const) {
-          curve();
-          c.strokeStyle = color;
-          c.lineWidth = width;
-          c.stroke();
-        }
+        mirror(canvas.getContext("2d")!, side === "left" ? 0 : land.width - n);
         return canvas;
       };
       const left = shore("left");
@@ -2791,6 +2775,7 @@ const SpellArena = {
         }
         ctx.drawImage(terrainCanvas, 0, 0, shown.width * CELL, shown.height * CELL);
         ctx.imageSmoothingEnabled = true;
+        drawEdgeLines();
         const caster = animation?.cast.caster_id;
         const first = animation?.cast.segments[0]?.path;
         const throwDir = first && first.length > 1 ? Math.sign(first[first.length - 1][0] - first[0][0]) : 0;

@@ -9,14 +9,15 @@ A map is registered in five places, all keyed by the same id:
 
 ## Left and right edges
 
-The world stops at column 0 and column `width - 1`, but the camera can pan `EDGE_VIEW` (14) cells past each side, so players always see what lies beyond the edge. The client fills that space from the outer `EDGE_FADE` (22) columns of the map, mirrored, so whatever you put in those columns is what players see past the edge. Shape the outer columns with that in mind:
+The playable world stops at column 0 and column `width - 1`, marked on screen by a dashed line at each side (`drawEdgeLines` in `spell_arena.ts`). Walking, flying and jumping stop at the line as at a wall (`Units.blocked?/4`). A knock is the one thing that carries a wizard past it (`knock_step` in `physics.ex`). Past the line there is nothing to land on, so the wizard falls until the sea gets them; crossing the line itself does no harm.
 
-- **Land at an edge should be ground running down into the sea.** The edge treatment continues the ground surface it finds in the edge column (the first land under open air, or under the ceiling on a cave map) and brings it down into the water. Low, wide ground near the edges reads best. A tall cliff or tower right at the edge gives an abrupt drop.
-- **Keep floating platforms and overhangs at least about 6 cells inside each edge.** Anything above the ground surface in the edge strip is not continued, so a platform that touches the edge gets sliced off at the world boundary.
-- **Open sea at an edge is fine.** If the edge column has no land above `water_level`, the sea just carries on.
-- **Cave maps** (top row mostly rock, like `cavern`) also get their ceiling continued upward. A solid rock wall down the edge column is fine, and is how the cavern finishes its sides.
-- **Never let the continued land go translucent over the backdrop.** An earlier edge faded the mirrored land to partial opacity, which showed up as a pink, ghostly copy of the cliff hanging in the sky. Land past the edge is solid and finished with a grass lip and outline like the rest of the land: every map's sides end as a headland, the edge's ground sloping gently (over about 20 cells) into the sea (`buildEdges` in `spell_arena.ts`).
+The map itself never visibly ends. The camera can pan `EDGE_VIEW` (14) cells past each side, and the client fills everything past the line with the outer `EDGE_FADE` (22) columns of the map, mirrored, so the ground and sea carry on seamlessly beyond the line and off the screen (`buildEdges`). Shape the outer columns with that in mind:
+
+- **Whatever is in the outer 22 columns is what players see past the edge.** Low, wide ground or open sea reads best. A tall cliff, tower or overhang at the edge is mirrored as a twin on the far side of the line.
+- **Remember that land past the line is scenery.** A wizard knocked over the line falls past it into the sea, so ground near an edge is where a good knock wins the duel.
+- **Cave maps** (top row mostly rock, like `cavern`) also get their ceiling continued upward. A solid rock wall down the edge columns is fine, and is how the cavern stops people walking off its sides.
+- **Never let the continued land go translucent over the backdrop.** An earlier edge faded the mirrored land to partial opacity, which showed up as a pink, ghostly copy of the cliff hanging in the sky. A later one sloped the land down into the sea as a headland just past the edge, which still looked like the map stopping. The mirrored land is drawn solid, at full strength, with no slope.
 
 ## Checking a new map
 
-Start a Spells match on the new arena with one AI flamingo (turn length at most 120 s, or Start does nothing), skip the tour, then pan to each edge (right-drag or sideways trackpad scroll) at the default zoom and zoomed out (scroll). Look at both edges, and blast land near an edge to check that the continuation updates with the crater. Check the backdrop's parallax at both extremes too: the painting should never run out.
+Start a Spells match on the new arena with one AI flamingo (turn length at most 120 s, or Start does nothing), skip the tour, then pan to each edge (right-drag or sideways trackpad scroll) at the default zoom and zoomed out (scroll). Look at both edges: the land should run on past the dashed line to the screen's edge. Blast land near an edge to check that the continuation updates with the crater. Check the backdrop's parallax at both extremes too: the painting should never run out.
