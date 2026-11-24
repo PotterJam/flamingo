@@ -405,9 +405,24 @@ defmodule Flamingo.RoomServer do
       end
 
     state =
-      if match?({:finished, _}, lifecycle) and not match?({:finished, _}, state.lifecycle),
-        do: record_game(state, elem(lifecycle, 1), now),
-        else: state
+      cond do
+        match?({:finished, _}, lifecycle) and not match?({:finished, _}, state.lifecycle) ->
+          record_game(state, elem(lifecycle, 1), now)
+
+        # A finished game that plays on again (a rematch) is a new game to record.
+        lifecycle == :playing and match?({:finished, _}, state.lifecycle) ->
+          %{
+            state
+            | game_seats:
+                Map.new(Members.ordered_ids(state.members), &{&1, game_seat(state, &1)}),
+              recording:
+                state.saved_lobby &&
+                  %{saved_lobby: state.saved_lobby, mode: state.game_mode, started_at: now}
+          }
+
+        true ->
+          state
+      end
 
     %{state | game: result.state, lifecycle: lifecycle} |> apply_timers(result.timers, now)
   end

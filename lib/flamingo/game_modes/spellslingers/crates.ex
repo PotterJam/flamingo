@@ -1,7 +1,10 @@
 defmodule Flamingo.GameModes.Spellslingers.Crates do
-  @moduledoc "Supply crates: dropping them, wizards collecting them, blasts destroying them."
+  @moduledoc """
+  Supply crates: dropping them, wizards collecting them, blasts destroying them. A health
+  crate heals; a spell crate (`:mana`) holds ammo for one of the arsenal's limited spells.
+  """
 
-  alias Flamingo.GameModes.Spellslingers.{Rng, Units}
+  alias Flamingo.GameModes.Spellslingers.{Catalog, Rng, Units}
 
   def maybe_drop_crate(state) do
     {chance, rng} = :rand.uniform_s(state.rng)
@@ -13,13 +16,14 @@ defmodule Flamingo.GameModes.Spellslingers.Crates do
     case Units.standable_spots(state, 1) do
       spots when spots != [] and length(state.crates) < state.tuning.max_crates ->
         {{x, y}, rng} = Rng.pick(spots, state.rng)
-        {kind, rng} = Rng.pick([:health, :health, :mana], rng)
+        {kind, rng} = Rng.pick([:health, :mana, :mana], rng)
+        {spell, rng} = Rng.pick(Map.keys(Catalog.starting_ammo()), rng)
         id = "c#{state.crate_count + 1}"
-        crate = %{id: id, kind: :crate, type: kind, x: x, y: y}
+        crate = %{id: id, kind: :crate, type: kind, spell: spell, x: x, y: y}
 
         %{state | crates: [crate | state.crates], crate_count: state.crate_count + 1, rng: rng}
         |> Units.log(
-          if kind == :health, do: "A health crate drops in!", else: "A mana crate drops in!"
+          if kind == :health, do: "A health crate drops in!", else: "A supply crate drops in!"
         )
 
       _ ->
@@ -51,9 +55,20 @@ defmodule Flamingo.GameModes.Spellslingers.Crates do
               |> Units.log("#{Units.player_name(state, wizard.id)} grabs a health crate (+30).")
 
             :mana ->
-              %{state | cooldowns: Map.put(state.cooldowns, wizard.id, %{})}
+              spell = Map.get(crate, :spell, "embers")
+
+              %{
+                state
+                | ammo:
+                    Map.update(
+                      state.ammo,
+                      wizard.id,
+                      %{spell => 1},
+                      &Map.update(&1, spell, 1, fn n -> n + 1 end)
+                    )
+              }
               |> Units.log(
-                "#{Units.player_name(state, wizard.id)} grabs a mana crate: spells recharged!"
+                "#{Units.player_name(state, wizard.id)} grabs a supply crate: +1 #{Catalog.spell(spell).name}!"
               )
           end
       end

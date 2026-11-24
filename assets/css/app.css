@@ -506,10 +506,18 @@
    turn banner becomes the power meter. Body classes, so LiveView patches keep them. */
 .arena-ov { transition: opacity 0.2s ease-out; }
 .arena-charging .arena-ov { opacity: 0.22; pointer-events: none; }
-.arena-near-rail #arena-rail,
-.arena-near-ticker #arena-ticker,
-.arena-near-dock #arena-controls,
-.arena-near-tuning #arena-tuning-button { opacity: 0.45; }
+.arena-near-teams #arena-teams,
+.arena-near-ticker #arena-ticker { opacity: 0.45; }
+
+/* Whose turn it is slams in at the top, holds, then gets out of the way. */
+@keyframes arena-banner {
+  0% { opacity: 0; transform: scale(1.7) rotate(-2deg); }
+  12% { opacity: 1; transform: scale(0.95) rotate(-2deg); }
+  18% { transform: scale(1) rotate(-2deg); }
+  75% { opacity: 1; transform: scale(1) rotate(-2deg); }
+  100% { opacity: 0; transform: translateY(-12px) rotate(-2deg); }
+}
+.arena-banner { animation: arena-banner 2.4s ease-out forwards; }
 .arena-charging #arena-turn,
 .arena-thrown #arena-turn { display: none; }
 .arena-charging #arena-meter { display: flex; }
@@ -521,13 +529,20 @@
 }
 .spell-card-pop { animation: spell-card-pop 0.16s ease-out; }
 
+/* The tour rings what it points at and leaves the arena undimmed, so the turn being
+   watched stays visible behind it. */
+@keyframes arena-tour-ring {
+  50% { outline-offset: 7px; }
+}
 .arena-tour-hole {
   position: fixed;
   z-index: 80;
   outline: 3px solid #fcd34d;
   outline-offset: 3px;
-  box-shadow: 0 0 0 9999px rgba(0, 0, 0, 0.45);
+  box-shadow: 0 0 0 3px #000;
+  border-radius: 4px;
   pointer-events: none;
+  animation: arena-tour-ring 1.2s ease-in-out infinite;
 }
 .arena-tour-coach {
   position: fixed;
@@ -554,7 +569,16 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .spell-card-pop { animation: none; }
+  .spell-card-pop,
+  .arena-tour-hole { animation: none; }
+  .arena-banner { animation: arena-banner 2.4s steps(1, end) forwards; }
 }
 .arena-tour-hole[hidden],
 .arena-tour-coach[hidden] { display: none; }
+
+/* Spellslingers panels are grimy paper: a pale stained tile, a touch darker than white. */
+@utility bg-paper {
+  background-color: #ede2c8;
+  background-image: url("/images/spellslingers/paper.webp");
+  background-size: 320px;
+}

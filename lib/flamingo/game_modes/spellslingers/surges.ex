@@ -22,24 +22,30 @@ defmodule Flamingo.GameModes.Spellslingers.Surges do
 
   def surge_before(state, :meteors) do
     state
-    |> Units.log("Wild magic! Meteors fall from the sky!")
+    |> Units.log("Rockfall! Boulders come down from above!")
     |> Spells.run(nil, "surge", nil, fn fx ->
       Enum.reduce(0..3, %{fx | shake: true}, fn i, fx ->
         {r, rng} = :rand.uniform_s(fx.state.rng)
         fx = %{fx | state: %{fx.state | rng: rng}}
-        Spells.fx_with_meteor(fx, 10 + r * (@width - 20), i * 6, "surge")
+        Spells.meteor(fx, 10 + r * (@width - 20), i * 6, "surge")
       end)
     end)
   end
 
   def surge_before(state, :mana) do
-    %{state | cooldowns: Map.new(state.cooldowns, fn {id, _} -> {id, %{}} end)}
-    |> Units.log("Wild magic! A mana storm recharges every spell.")
+    # Every limited spell gets one more charge.
+    ammo =
+      Map.new(state.ammo, fn {id, spells} ->
+        {id, Map.new(spells, fn {s, n} -> {s, n + 1} end)}
+      end)
+
+    %{state | ammo: ammo}
+    |> Units.log("Lucky seam! Everyone finds one more of everything.")
   end
 
   def surge_before(state, :crates) do
     state
-    |> Units.log("Wild magic! Supplies rain from the sky.")
+    |> Units.log("Supplies come down the shaft.")
     |> Crates.drop_crate()
     |> Crates.drop_crate()
   end
@@ -50,7 +56,7 @@ defmodule Flamingo.GameModes.Spellslingers.Surges do
     {sign, rng} = Rng.pick([-1, 1], state.rng)
 
     %{state | wind: sign * 10, rng: rng}
-    |> Units.log("Wild magic! A howling gale sweeps the arena.")
+    |> Units.log("A howling draught sweeps the mine.")
   end
 
   def surge_after(state, _), do: state

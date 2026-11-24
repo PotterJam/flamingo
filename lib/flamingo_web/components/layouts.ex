@@ -95,12 +95,27 @@ defmodule FlamingoWeb.Layouts do
     <FlamingoWeb.Changelog.feed :if={@changelog} />
     <.flash_group flash={@flash} />
     <div id="sound-manager" phx-hook="SoundManager" phx-update="ignore"></div>
+    <.sound_volume :if={@show_sound_controls} />
+    """
+  end
+
+  attr :class, :any,
+    default:
+      "fixed bottom-4 left-4 z-50 rounded-full border-2 border-border bg-white px-4 py-2 shadow-shadow"
+
+  attr :slider_class, :any, default: "w-28"
+
+  @doc """
+  The mute button and volume slider. Pages with their own toolbar, such as the
+  Spellslingers arena, hide the floating one and place this in the toolbar instead.
+  """
+  def sound_volume(assigns) do
+    ~H"""
     <div
-      :if={@show_sound_controls}
       id="sound-volume-control"
       phx-hook=".SoundVolume"
       phx-update="ignore"
-      class="fixed bottom-4 left-4 z-50 rounded-full border-2 border-border bg-white px-4 py-2 shadow-shadow"
+      class={@class}
     >
       <div class="flex items-center gap-2">
         <button
@@ -137,7 +152,7 @@ defmodule FlamingoWeb.Layouts do
           step="1"
           value="100"
           aria-label="Sound volume"
-          class="w-28"
+          class={@slider_class}
         />
       </div>
     </div>

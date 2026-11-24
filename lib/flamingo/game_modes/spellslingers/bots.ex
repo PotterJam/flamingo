@@ -3,7 +3,7 @@ defmodule Flamingo.GameModes.Spellslingers.Bots do
 
   use Flamingo.GameModes.Spellslingers.Rules
 
-  alias Flamingo.GameModes.Spellslingers.{Catalog, Minions, Physics, Units}
+  alias Flamingo.GameModes.Spellslingers.{Catalog, Physics, Units}
 
   def bot?(state, id), do: match?(%{bot: true}, state.players[id])
 
@@ -26,40 +26,34 @@ defmodule Flamingo.GameModes.Spellslingers.Bots do
     })
   end
 
-  @bot_attacks ~w(inferno firerain clockbomb chain frostbolt seeker cluster decay skipstone boulder napalm bonespear lance gust updraft ember)
-  @bot_summons ~w(imp golem wisp thornling raisedead turret)
+  # Thrown spells a bot likes, best first; it uses the first one it has.
+  @bot_attacks ~w(thunderegg hexhare seeker embers lance fuserune firebolt)
   @bot_walk 16
 
-  # A bot's turn runs on the hint timer in stages: think (maybe raise a ward and pick a
-  # spot), walk one cell per tick toward that spot so everyone sees it move, then cast.
-  # Bots only decide; the engine applies each move through the same commands players
-  # use. `ready` lists the spell ids the bot may cast right now.
+  # A bot's turn runs on the hint timer in stages: think (pick a spot), walk one cell
+  # per tick toward that spot so everyone sees it move, then cast. Bots only decide;
+  # the engine applies each move through the same commands players use. `ready` lists
+  # the spell ids the bot may cast right now.
   #
   # Returns {move, state}, where state carries the updated plan and rng, and move is
-  # {:plan, ward?, delay_ms}, {:walk, dir}, {:cast, spell_id, angle, power},
+  # {:plan, delay_ms}, {:walk, dir}, {:cast, spell_id, angle, power},
   # {:place, spell_id, x, y} or :pass.
-  def next_move(%{bot_plan: nil} = state, ready), do: think(state, ready)
+  def next_move(%{bot_plan: nil} = state, _ready), do: think(state)
 
   def next_move(%{bot_plan: %{steps: [dir | rest]} = plan} = state, _ready),
     do: {{:walk, dir}, %{state | bot_plan: %{plan | steps: rest}}}
 
   def next_move(state, ready), do: act(%{state | bot_plan: nil}, ready)
 
-  defp think(state, ready) do
+  defp think(state) do
     me = state.units[state.current_id]
-    enemies = bot_enemies(state, me)
-    {roll, rng} = :rand.uniform_s(state.rng)
-    state = %{state | rng: rng}
 
-    if enemies == [] do
+    if bot_enemies(state, me) == [] do
       {:pass, state}
     else
-      nearest = Enum.min_by(enemies, &unit_distance(&1, me))
-      threatened? = me.hp < 75 or unit_distance(nearest, me) < 45
-      ward? = threatened? and roll < 0.6 and "ward" in ready and not state.quick_used
       steps = bot_route(state, me)
       delay = if steps == [], do: 300, else: 700
-      {{:plan, ward?, delay}, %{state | bot_plan: %{steps: steps}}}
+      {{:plan, delay}, %{state | bot_plan: %{steps: steps}}}
     end
   end
 
@@ -97,7 +91,9 @@ defmodule Flamingo.GameModes.Spellslingers.Bots do
     origin = {unit.x + 0.5, unit.y - 2.0}
 
     {_, _, miss} =
-      bot_aim(state, origin, unit.id, Units.center(target), Catalog.spell("ember"), coarse: true)
+      bot_aim(state, origin, unit.id, Units.center(target), Catalog.spell("firebolt"),
+        coarse: true
+      )
 
     water = if unit.y >= state.water_level - 6, do: 25, else: 0
 
@@ -113,8 +109,6 @@ defmodule Flamingo.GameModes.Spellslingers.Bots do
     me = state.units[state.current_id]
     enemies = bot_enemies(state, me)
 
-    ready = Enum.reject(ready, &Catalog.spell(&1).quick)
-
     {roll, rng} = :rand.uniform_s(state.rng)
     state = %{state | rng: rng}
 
@@ -122,64 +116,44 @@ defmodule Flamingo.GameModes.Spellslingers.Bots do
       {:pass, state}
     else
       target = Enum.min_by(enemies, &unit_distance(&1, me))
-      dir = if target.x > me.x, do: 1, else: -1
-      {mx, my} = Units.center(me)
-      summon = Enum.find(@bot_summons, &(&1 in ready))
+      point = Units.center(target)
+      grand = Enum.find(~w(holyorb anvil quake starfall), &(&1 in ready))
 
-      owned = Minions.count(state, me.id)
-      grand = Enum.find(ready, &Catalog.spell(&1).grand)
-
-      {spell_id, point, near_ok} =
+      spell_id =
         cond do
-          grand && roll < 0.6 ->
-            point =
-              if grand == "dragon", do: {mx + dir * 6, my - 2}, else: Units.center(target)
+          grand && roll < 0.5 ->
+            grand
 
-            {grand, point, true}
+          "hook" in ready and abs(target.x - me.x) >= 8 and abs(target.x - me.x) <= 28 and
+            abs(target.y - me.y) <= 4 and
+              roll < 0.4 ->
+            "hook"
 
-          "drain" in ready and me.hp < 80 and unit_distance(target, me) < 22 ->
-            {"drain", nil, true}
-
-          "nova" in ready and unit_distance(target, me) < 12 ->
-            {"nova", nil, true}
-
-          me.hp < 45 and "bloom" in ready ->
-            {"bloom", {mx, my + 1}, true}
-
-          me.hp < 60 and "rampart" in ready and roll < 0.6 ->
-            {"rampart", {mx + dir * 6, me.y + 1.0}, true}
-
-          summon && owned < state.tuning.max_minions && roll < 0.2 ->
-            {summon, Units.center(target), false}
-
-          "quake" in ready and roll > 0.9 ->
-            {"quake", Units.center(target), false}
-
-          "chaos" in ready and roll > 0.85 ->
-            {"chaos", Units.center(target), false}
+          "meteors" in ready and roll < 0.35 ->
+            "meteors"
 
           true ->
-            {Enum.find(@bot_attacks, "ember", &(&1 in ready)), Units.center(target), false}
+            Enum.find(@bot_attacks, "firebolt", &(&1 in ready))
         end
 
       spell = Catalog.spell(spell_id)
 
       cond do
-        spell.aimless ->
+        spell.input == "instant" ->
           {{:cast, spell_id, 0, 0}, state}
 
         spell.place ->
           {px, py} = point
+          {{:place, spell_id, Float.round(px * 1.0, 1), Float.round(py * 1.0, 1)}, state}
 
-          {x, y} =
-            if spell.sky,
-              do: {Float.round(px * 1.0, 1), Float.round(py * 1.0, 1)},
-              else: within_place_range(me, point, state.tuning.place_range)
-
-          {{:place, spell_id, x, y}, state}
+        spell_id == "hook" ->
+          {ox, oy} = Units.caster_origin(state, me.id)
+          {tx, ty} = point
+          angle = :math.atan2(-(ty - oy - 1.5), tx - ox) * 180 / :math.pi()
+          {{:cast, spell_id, Float.round(angle, 1), 100}, state}
 
         true ->
-          aim_and_cast(state, me, spell, spell_id, point, near_ok)
+          aim_and_cast(state, me, spell, spell_id, point, false)
       end
     end
   end
@@ -193,15 +167,6 @@ defmodule Flamingo.GameModes.Spellslingers.Bots do
     angle = clamp(angle + jitter_a * 1.5, -180, 360)
     power = clamp(power + jitter_p * 2.5, 5, 100)
     {{:cast, spell_id, angle, power}, %{state | rng: rng}}
-  end
-
-  # Pulls a point back toward the bot until it is inside the placement range,
-  # measured from the same spot the engine's range check uses.
-  defp within_place_range(me, {x, y}, range) do
-    {ox, oy} = {me.x + 0.5, me.y - 1.0}
-    distance = :math.sqrt((x - ox) ** 2 + (y - oy) ** 2)
-    k = min(1.0, (range - 2) / max(distance, 0.001))
-    {Float.round(ox + (x - ox) * k, 1), Float.round(oy + (y - oy) * k, 1)}
   end
 
   defp bot_enemies(state, me) do

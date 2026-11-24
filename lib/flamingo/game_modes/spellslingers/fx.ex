@@ -1,7 +1,7 @@
 defmodule Flamingo.GameModes.Spellslingers.Fx do
   @moduledoc """
   What one cast does, gathered while its effects run: the game state they
-  change, the flights and beams clients replay, the hits clients reveal as each
+  change, the flights clients replay, the hits clients reveal as each
   one lands, and the knockback each unit will take once the effects finish.
 
   `at` is the step of the cast's flight timeline the effects have reached, so a
@@ -15,7 +15,6 @@ defmodule Flamingo.GameModes.Spellslingers.Fx do
     :target,
     at: 0,
     segments: [],
-    beams: [],
     auras: [],
     hits: [],
     impulses: %{},
@@ -23,18 +22,33 @@ defmodule Flamingo.GameModes.Spellslingers.Fx do
     grand: false
   ]
 
-  @doc "The step after every flight recorded so far, where a follow-up flight starts."
-  def next_start(fx),
-    do: fx.segments |> Enum.map(&(&1.start + length(&1.path))) |> Enum.max(fn -> 0 end)
-
   def new(state, target), do: %__MODULE__{state: state, target: target}
 
-  @doc "Damages a unit and records the hit, with the health it leaves, at the current step."
+  @doc """
+  Damages a unit and records the hit at the current step. Effects can record a hit
+  that lands earlier than one already recorded (an ember with a shorter flight), so
+  each hit keeps the damage it dealt and `reveal/2` works out the health clients show.
+  """
   def hit(fx, id, amount, source) do
+    before = fx.state.units[id].hp
     state = Units.damage(fx.state, id, amount, source)
-    unit = state.units[id]
-    hit = %{id: id, at: fx.at, hp: unit.hp, ward: Map.get(unit, :ward, 0)}
+    hit = %{id: id, at: fx.at, dealt: before - state.units[id].hp}
     %{fx | state: state, hits: [hit | fx.hits]}
+  end
+
+  @doc """
+  The hits in the order clients reveal them, as their flights land, each with the
+  health it leaves, so a wizard's health only ever goes down during a cast.
+  """
+  def reveal(fx, before) do
+    fx.hits
+    |> Enum.reverse()
+    |> Enum.sort_by(& &1.at)
+    |> Enum.map_reduce(%{}, fn hit, health ->
+      hp = Map.get_lazy(health, hit.id, fn -> before.units[hit.id].hp end) - hit.dealt
+      {%{id: hit.id, at: hit.at, hp: hp}, Map.put(health, hit.id, hp)}
+    end)
+    |> elem(0)
   end
 
   @doc "Adds a velocity to the knockback a unit will take."

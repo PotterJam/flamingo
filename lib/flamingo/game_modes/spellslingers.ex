@@ -3,13 +3,12 @@ defmodule Flamingo.GameModes.Spellslingers do
   Pure transitions for Spellslingers, a turn-based artillery duel on destructible
   terrain.
 
-  Each player is a wizard. A duel opens with every wizard choosing a spellbook,
-  which adds its spells to the core spells every wizard knows. On their turn a wizard may
-  walk a little, then casts one spell: bolts that blast craters and knock wizards
-  flying, spells that raise or tunnel through land, summoned minions that fight
-  for their owner, and wilder magic. Crates drop between turns, wild-magic surges
-  strike at random, and the sea rises late in the duel. The last wizard standing
-  wins.
+  Each player is a wizard, and every wizard carries the same arsenal, as in Worms:
+  each spell has its ammo and some unlock after a few turns. On their turn a wizard may
+  walk, jump or fly a little, then casts one spell, and gets a few seconds to retreat
+  before the turn passes. Crates drop between turns, wild-magic surges strike at
+  random, spell crates add ammo, and after a while sudden death drops everyone to one
+  health while the sea rises. The last wizard standing wins.
 
   The terrain is a grid of one byte per cell, sized in `Rules`. All physics runs
   on the server; clients receive the flight paths of each cast and animate them.
@@ -21,23 +20,18 @@ defmodule Flamingo.GameModes.Spellslingers do
     Bots,
     Catalog,
     Crates,
-    Minions,
     Physics,
     Rng,
     Rules,
     Spells,
     Surges,
     Terrain,
-    Units,
-    Zones
+    Units
   }
 
   alias Flamingo.GameSettings
 
-  @book_ids Catalog.book_ids()
-
   defdelegate spells, to: Catalog
-  defdelegate books, to: Catalog
   defdelegate maps, to: Catalog
   defdelegate spell(id), to: Catalog
 
@@ -59,34 +53,37 @@ defmodule Flamingo.GameModes.Spellslingers do
       units: %{},
       crates: [],
       crate_count: 0,
-      books: %{},
-      ready: [],
+      # Ammo left of each limited arsenal spell, by wizard.
+      ammo: %{},
       turn_order: [],
       current_id: nil,
       turn_number: 0,
-      rise_after: 0,
+      # The turn sudden death strikes, and whether it has.
+      sudden_after: 0,
+      sudden_death: false,
       wind: 0,
       walk_left: 0,
       last_jump: nil,
       tuning: Rules.default_tuning(),
-      cooldowns: %{},
-      # Turns each wizard has finished, which charges their grand spell, and the
-      # grand spells each has spent.
+      # Turns each wizard has finished, which unlocks the bigger spells.
       turns_taken: %{},
-      grand_used: %{},
-      zones: [],
-      zone_count: 0,
-      cast_this_turn: [],
       quick_used: false,
+      # After a cast the wizard may still move for a few seconds, but not cast.
+      retreat: false,
+      # Blast runes waiting for their caster's turn to end.
+      runes: [],
       bot_plan: nil,
+      # The shot a bot is lining up, shown to everyone before it fires.
+      bot_aim: nil,
       last_cast: nil,
       cast_count: 0,
-      minion_count: 0,
       events: [],
       eliminated: [],
       damage_dealt: %{},
       forfeited: [],
       rng: nil,
+      # What the duel was started with, so the host can call a rematch.
+      settings: nil,
       final_result: nil
     }
   end
@@ -103,22 +100,18 @@ defmodule Flamingo.GameModes.Spellslingers do
     })
   end
 
-  def connection_changed(%{phase: :arena_books} = state, _id, :offline, context),
-    do: maybe_begin_duel(state, context)
-
   def connection_changed(state, _id, _status, _context), do: ok(state)
 
   def remove_member(state, id, _removed, context) do
     host_id = if state.host_id == id, do: context.roster.host_id, else: state.host_id
     state = %{state | participants: Map.delete(state.participants, id), host_id: host_id}
 
-    if state.phase in [:arena_books, :arena_aim, :arena_resolve] and Units.alive?(state, id) do
+    if state.phase in [:arena_aim, :arena_resolve] and Units.alive?(state, id) do
       state = %{state | forfeited: [id | state.forfeited]}
       state = state |> forfeit(id) |> Units.log("#{Units.player_name(state, id)} left the arena.")
 
       cond do
         winner_decided?(state) -> finish(state)
-        state.phase == :arena_books -> maybe_begin_duel(state, context)
         state.current_id == id and state.phase == :arena_aim -> end_turn(state, context)
         true -> ok(state)
       end
@@ -179,7 +172,7 @@ defmodule Flamingo.GameModes.Spellslingers do
 
       state = %{
         new()
-        | phase: :arena_books,
+        | phase: :arena_aim,
           turn_length: turn_length,
           map_id: map_id,
           participants:
@@ -191,26 +184,18 @@ defmodule Flamingo.GameModes.Spellslingers do
           turn_order: turn_order,
           current_id: hd(turn_order),
           turn_number: 0,
-          rise_after: length(turn_order) * 7,
+          sudden_after: length(turn_order) * 8,
           wind: wind,
-          cooldowns: Map.new(turn_order, &{&1, %{}}),
+          ammo: Map.new(turn_order, &{&1, Catalog.starting_ammo()}),
           damage_dealt: Map.new(turn_order, &{&1, 0}),
-          rng: rng
+          rng: rng,
+          settings: Map.delete(settings, :seed)
       }
 
-      # Bots choose their books straight away, so players see them while picking.
-      {books, rng} =
-        Enum.reduce(bot_ids, {%{}, state.rng}, fn id, {books, rng} ->
-          {mine, rng} = fill_books([], rng)
-          {Map.put(books, id, mine), rng}
-        end)
-
-      state =
-        %{state | books: books, ready: bot_ids, rng: rng}
-        |> Units.place_wizards()
-        |> Units.log("The arena is #{map_name(map_id)}. Choose your spellbooks!")
-
-      ok(state, [{:schedule_phase_timeout, :arena_books, @book_ms}])
+      state
+      |> Units.place_wizards()
+      |> Units.log("The arena is #{map_name(map_id)}.")
+      |> begin_duel(context)
     end
   end
 
@@ -238,45 +223,6 @@ defmodule Flamingo.GameModes.Spellslingers do
     |> ok()
   end
 
-  def command(%{phase: :arena_books} = state, actor, {:choose_book, book}, _context)
-      when book in @book_ids do
-    if Map.get(state.participants, actor) == :active and Units.alive?(state, actor) do
-      mine = Map.get(state.books, actor, [])
-
-      mine =
-        cond do
-          book in mine -> List.delete(mine, book)
-          length(mine) >= 2 -> tl(mine) ++ [book]
-          true -> mine ++ [book]
-        end
-
-      # Changing a pick takes back a Ready.
-      %{state | books: Map.put(state.books, actor, mine), ready: List.delete(state.ready, actor)}
-      |> ok()
-    else
-      {:error, :spectator}
-    end
-  end
-
-  # Ready locks in two books; pressing it again goes back to choosing.
-  def command(%{phase: :arena_books} = state, actor, :toggle_ready, context) do
-    cond do
-      Map.get(state.participants, actor) != :active or not Units.alive?(state, actor) ->
-        {:error, :spectator}
-
-      actor in state.ready ->
-        ok(%{state | ready: List.delete(state.ready, actor)})
-
-      length(Map.get(state.books, actor, [])) < 2 ->
-        {:error, :choose_two_books}
-
-      true ->
-        maybe_begin_duel(%{state | ready: [actor | state.ready]}, context)
-    end
-  end
-
-  def command(_state, _actor, {:choose_book, _}, _context), do: {:error, :invalid_book}
-
   def command(%{phase: :arena_aim} = state, actor, {:walk, dir}, context) when dir in [-1, 1] do
     with :ok <- check_turn(state, actor), do: walk(state, actor, dir, context)
   end
@@ -302,12 +248,19 @@ defmodule Flamingo.GameModes.Spellslingers do
     end
   end
 
+  # Once the duel is over the host can go again straight away, with the same settings.
+  # Cast numbers carry on, so clients never mistake the new game's first cast for one seen.
+  def command(%{phase: :game_ended} = state, actor, :rematch, context) do
+    with {:ok, result} <- start(state, state.settings || %{}, Map.put(context, :actor_id, actor)),
+         do: {:ok, %{result | state: %{result.state | cast_count: state.cast_count}}}
+  end
+
   def command(%{phase: :arena_aim} = state, actor, {:cast, spell_id, angle, power}, _context)
       when is_binary(spell_id) and is_number(angle) and is_number(power) do
     with :ok <- check_turn(state, actor),
+         true <- not state.retreat || {:error, :retreating},
          {:ok, spell} <- Catalog.fetch_spell(spell_id),
-         true <- spell.id in spellbook(state, actor) || {:error, :unknown_spell},
-         true <- spell_ready?(state, actor, spell.id) || {:error, :spell_cooling_down},
+         :ok <- check_ready(state, actor, spell.id),
          true <- not spell.place || {:error, :place_only},
          true <- not (spell.quick and state.quick_used) || {:error, :quick_used},
          true <- (angle >= -180 and angle <= 360) || {:error, :invalid_aim},
@@ -320,10 +273,10 @@ defmodule Flamingo.GameModes.Spellslingers do
   def command(%{phase: :arena_aim} = state, actor, {:place, spell_id, x, y}, _context)
       when is_binary(spell_id) and is_number(x) and is_number(y) do
     with :ok <- check_turn(state, actor),
+         true <- not state.retreat || {:error, :retreating},
          {:ok, spell} <- Catalog.fetch_spell(spell_id),
          true <- spell.place || {:error, :unknown_spell},
-         true <- spell.id in spellbook(state, actor) || {:error, :unknown_spell},
-         true <- spell_ready?(state, actor, spell.id) || {:error, :spell_cooling_down},
+         :ok <- check_ready(state, actor, spell.id),
          true <- (x >= 0 and x < @width and y >= 0 and y < @height) || {:error, :invalid_aim},
          true <-
            spell.sky || Spells.in_place_range?(state, actor, x, y) || {:error, :out_of_range} do
@@ -344,39 +297,52 @@ defmodule Flamingo.GameModes.Spellslingers do
 
   def command(_state, _actor, _command, _context), do: {:error, :invalid_command}
 
-  def timeout(%{phase: :arena_books} = state, :arena_books, context),
-    do: begin_duel(state, context)
-
   def timeout(%{phase: :arena_aim} = state, :arena_turn, context) do
     state
     |> Units.log("#{Units.player_name(state, state.current_id)} ran out of time.")
     |> end_turn(context)
   end
 
-  def timeout(%{phase: :arena_resolve} = state, :arena_resolve, context),
+  # The cast has played out: the caster gets a few seconds to run before the turn passes.
+  def timeout(%{phase: :arena_resolve} = state, :arena_resolve, context) do
+    caster = state.current_id
+
+    if winner_decided?(state) or not Units.alive?(state, caster) do
+      end_turn(state, context)
+    else
+      ms = if Bots.bot?(state, caster), do: @bot_retreat_ms, else: @retreat_ms
+
+      %{state | phase: :arena_aim, retreat: true, walk_left: max(state.walk_left, 15)}
+      |> ok([:cancel_hint_timeout, {:schedule_phase_timeout, :arena_retreat, ms}])
+    end
+  end
+
+  def timeout(%{phase: :arena_aim, retreat: true} = state, :arena_retreat, context),
     do: end_turn(state, context)
+
+  # The caster's blast runes have gone off; the turn ends as usual from here.
+  def timeout(%{phase: :arena_resolve} = state, :arena_runes, context),
+    do: finish_turn(state, context)
 
   def timeout(%{phase: :arena_resolve} = state, :arena_surge, context),
     do: start_turn(state, state.current_id, nil, context)
 
-  # The new wizard's lasting spells have played out; their turn starts now.
-  def timeout(%{phase: :arena_resolve} = state, :arena_zones, context) do
-    cond do
-      winner_decided?(state) ->
-        finish(state)
+  # A bot that has shown its aim lets fly.
+  def timeout(%{phase: :arena_aim, bot_aim: %{} = aim} = state, :arena_bot, context) do
+    state = %{state | bot_aim: nil}
 
-      not Units.alive?(state, state.current_id) ->
-        end_turn(state, context)
+    command =
+      if Map.has_key?(aim, :x),
+        do: {:place, aim.spell, aim.x, aim.y},
+        else: {:cast, aim.spell, aim.angle, aim.power}
 
-      true ->
-        state = %{state | phase: :arena_aim}
-        ok(state, aim_timers(state))
-    end
+    with {:error, _} <- command(state, state.current_id, command, context),
+         do: end_turn(state, context)
   end
 
-  def timeout(%{phase: :arena_aim, current_id: bot} = state, :arena_bot, context) do
+  def timeout(%{phase: :arena_aim, retreat: false, current_id: bot} = state, :arena_bot, context) do
     if Bots.bot?(state, bot) and Units.alive?(state, bot) do
-      ready = Enum.filter(spellbook(state, bot), &spell_ready?(state, bot, &1))
+      ready = Enum.filter(Catalog.arsenal_ids(), &spell_ready?(state, bot, &1))
       state |> Bots.next_move(ready) |> apply_bot_move(bot, context)
     else
       :ignored
@@ -415,16 +381,15 @@ defmodule Flamingo.GameModes.Spellslingers do
       terrain: Terrain.encode_terrain(state.terrain),
       units: state.units |> Map.values() |> Enum.sort_by(& &1.id),
       crates: state.crates,
-      books: Catalog.books(),
-      chosen_books: state.books,
-      books_ready: state.ready,
-      my_spells: spellbook(state, viewer),
+      runes: state.runes,
+      my_spells: Catalog.arsenal_ids(),
+      ammo: Map.get(state.ammo, viewer, %{}),
       quick_used: state.quick_used,
-      cooldowns: view_cooldowns(state, viewer),
-      grand_spent: Map.get(state.grand_used, viewer, []),
-      grand_charge: Catalog.grand_charge(),
-      zones: state.zones,
-      spells: Enum.map(Catalog.spells(), &Map.drop(&1, [:icon])),
+      retreat: state.retreat,
+      bot_aim: state.bot_aim,
+      sudden_death: state.sudden_death,
+      locked: locked(state, viewer),
+      spells: Catalog.spells(),
       last_cast: state.last_cast,
       events: state.events,
       physics: %{
@@ -434,72 +399,32 @@ defmodule Flamingo.GameModes.Spellslingers do
         wind_accel: state.tuning.wind_accel,
         playback_speed: @playback_speed,
         grand_intro_ms: @grand_intro_ms,
-        place_range: state.tuning.place_range
+        place_range: state.tuning.place_range,
+        max_climb: @max_climb
       },
       final_result: state.final_result
     }
   end
 
-  ## Spellbooks and turns
-
-  @doc "The spell ids a player can cast: the core spells, then their book's."
-  def spellbook(state, id) do
-    chosen = Map.get(state.books, id, [])
-
-    Catalog.core() ++
-      Enum.flat_map(chosen, fn book -> Enum.find(Catalog.books(), &(&1.id == book)).spells end)
-  end
-
-  defp maybe_begin_duel(state, context) do
-    waiting =
-      Enum.filter(state.turn_order, fn id ->
-        Units.alive?(state, id) and id not in state.ready and
-          match?(%{connected: true}, context.roster.players[id])
-      end)
-
-    if waiting == [], do: begin_duel(state, context), else: ok(state)
-  end
+  ## Turns
 
   defp begin_duel(state, context) do
-    {books, rng} =
-      Enum.reduce(state.turn_order, {state.books, state.rng}, fn id, {books, rng} ->
-        {mine, rng} = fill_books(Map.get(books, id, []), rng)
-        {Map.put(books, id, mine), rng}
-      end)
-
     # The same rule as every later turn: the first wizard who is still here.
     first = next_turn(state, List.last(state.turn_order), context)
 
     state =
       %{
         state
-        | books: books,
-          rng: rng,
-          phase: :arena_aim,
+        | phase: :arena_aim,
           current_id: first,
           turn_number: 1,
           walk_left: state.tuning.walk_budget,
-          cast_this_turn: [],
           quick_used: false,
           bot_plan: nil
       }
-      |> Units.log("The duel begins! #{Units.player_name(state, first)} casts first.")
+      |> Units.log("The duel begins! #{Units.player_name(state, first)} goes first.")
 
     ok(state, aim_timers(state))
-  end
-
-  defp fill_books(mine, rng) when length(mine) >= 2, do: {mine, rng}
-
-  defp fill_books(mine, rng) do
-    {book, rng} = Rng.pick(Catalog.book_ids() -- mine, rng)
-    fill_books(mine ++ [book], rng)
-  end
-
-  defp clear_ward(state, id) do
-    case state.units[id] do
-      %{} = unit -> Units.put_unit(state, Map.put(unit, :ward, 0))
-      nil -> state
-    end
   end
 
   defp tick_float(state, owner) do
@@ -507,7 +432,7 @@ defmodule Flamingo.GameModes.Spellslingers do
       %{float: float} = unit when float > 0 ->
         unit = %{unit | float: float - 1}
 
-        # Levitation ends with a gentle landing, never fall damage.
+        # The broom sets its rider down gently, never with fall damage.
         unit = if unit.float == 0, do: elem(Units.do_settle(state, unit), 0), else: unit
         Units.put_unit(state, unit)
 
@@ -525,18 +450,33 @@ defmodule Flamingo.GameModes.Spellslingers do
     end
   end
 
-  # Ends the current wizard's turn. Each hazard stage can settle the duel, and a
-  # settled duel ends before any later hazard runs, so a winning shot stays a win.
+  # Ends the current wizard's turn: first their blast runes go off, played out like a
+  # cast, then the rest of the turn's end.
   defp end_turn(state, context) do
+    state = %{state | retreat: false, bot_aim: nil}
+
+    if Enum.any?(state.runes, &(&1.owner == state.current_id)) do
+      state = Spells.detonate_runes(state, state.current_id)
+
+      ok(%{state | phase: :arena_resolve}, [
+        :cancel_hint_timeout,
+        {:schedule_phase_timeout, :arena_runes, state.last_cast.duration_ms + 900}
+      ])
+    else
+      finish_turn(state, context)
+    end
+  end
+
+  # Each hazard stage can settle the duel, and a settled duel ends before any later
+  # hazard runs, so a winning shot stays a win.
+  defp finish_turn(state, context) do
     owner = state.current_id
 
     with {:cont, state} <- unless_won(state),
          {:cont, state} <-
-           state |> Minions.minions_act(owner) |> Units.resolve_deaths() |> unless_won(),
-         {:cont, state} <-
            state
            |> tick_float(owner)
-           |> tick_cooldowns(owner)
+           |> tick_turns(owner)
            |> rise_tide()
            |> Units.resolve_deaths()
            |> unless_won() do
@@ -574,39 +514,31 @@ defmodule Flamingo.GameModes.Spellslingers do
             wind: wind,
             rng: rng,
             walk_left: state.tuning.walk_budget,
-            cast_this_turn: [],
             quick_used: false,
             bot_plan: nil
         }
-        |> clear_ward(next)
         |> Surges.surge_after(surge)
         |> Crates.maybe_drop_crate()
+        |> sudden_death()
 
-      case state.units[next] do
-        # A frozen wizard thaws and loses this turn; they can't be refrozen before their next.
-        %{frozen: frozen} = wizard when frozen > 0 ->
-          state
-          |> Units.put_unit(%{wizard | frozen: 0} |> Map.put(:thawed, true))
-          |> Units.log("#{Units.player_name(state, next)} is frozen solid and loses the turn.")
-          |> end_turn(context)
-
-        wizard ->
-          state = Units.put_unit(state, Map.put(wizard, :thawed, false))
-
-          # Lasting spells act first, played out like a cast before the clock starts.
-          case Zones.tick(state, next) do
-            {false, state} ->
-              ok(state, aim_timers(state))
-
-            {true, state} ->
-              ok(%{state | phase: :arena_resolve}, [
-                :cancel_hint_timeout,
-                {:schedule_phase_timeout, :arena_zones, state.last_cast.duration_ms + 1200}
-              ])
-          end
-      end
+      ok(state, aim_timers(state))
     end
   end
+
+  # Sudden death, as in Worms: every wizard drops to one health, and from now on the
+  # sea rises each turn.
+  defp sudden_death(%{sudden_death: false} = state)
+       when state.turn_number >= state.sudden_after do
+    units =
+      Map.new(state.units, fn {id, unit} ->
+        {id, if(Units.alive_unit?(unit), do: %{unit | hp: 1}, else: unit)}
+      end)
+
+    %{state | units: units, sudden_death: true}
+    |> Units.log("SUDDEN DEATH! Everyone is down to 1 health, and the sea is rising.")
+  end
+
+  defp sudden_death(state), do: state
 
   defp next_turn(state, previous, context) do
     index = Enum.find_index(state.turn_order, &(&1 == previous)) || -1
@@ -622,30 +554,13 @@ defmodule Flamingo.GameModes.Spellslingers do
   defp online?(state, context, id),
     do: Bots.bot?(state, id) or match?(%{connected: true}, context.roster.players[id])
 
-  defp tick_cooldowns(state, owner) do
-    just_cast = state.cast_this_turn
+  defp tick_turns(state, owner),
+    do: %{state | turns_taken: Map.update(state.turns_taken, owner, 1, &(&1 + 1))}
 
-    cooldowns =
-      Map.update(state.cooldowns, owner, %{}, fn spells ->
-        Map.new(spells, fn {spell, turns} ->
-          if spell in just_cast, do: {spell, turns}, else: {spell, max(turns - 1, 0)}
-        end)
-      end)
+  defp rise_tide(%{sudden_death: true} = state),
+    do: %{state | water_level: max(state.water_level - 3, 10)} |> Units.log("The sea rises!")
 
-    %{
-      state
-      | cooldowns: cooldowns,
-        turns_taken: Map.update(state.turns_taken, owner, 1, &(&1 + 1))
-    }
-  end
-
-  defp rise_tide(state) do
-    if state.turn_number >= state.rise_after do
-      %{state | water_level: max(state.water_level - 2, 10)} |> Units.log("The tide rises!")
-    else
-      state
-    end
-  end
+  defp rise_tide(state), do: state
 
   defp aim_timers(state) do
     turn = [
@@ -672,13 +587,16 @@ defmodule Flamingo.GameModes.Spellslingers do
 
   # A jump spends a few steps and flies the wizard along an arc. Only a net drop
   # from where it took off can hurt, the same as walking off that ledge would.
+  # A jump that comes back down where it started went nowhere, so it is refused and
+  # costs nothing.
   defp jump(state, actor, kind, dir, context) do
     wizard = state.units[actor]
 
     with true <- state.walk_left >= @jump_cost || {:error, :no_steps_left},
-         true <- Map.get(wizard, :float, 0) == 0 || {:error, :floating} do
-      {flown, path} = Physics.jump(state, wizard, @jumps[kind], dir)
-      {landed, _} = Units.settle(state, flown)
+         true <- Map.get(wizard, :float, 0) == 0 || {:error, :floating},
+         {flown, path} = Physics.jump(state, wizard, @jumps[kind], dir),
+         {landed, _} = Units.settle(state, flown),
+         true <- {landed.x, landed.y} != {wizard.x, wizard.y} || {:error, :blocked} do
       path = if landed.y != flown.y, do: path ++ [{landed.x * 1.0, landed.y * 1.0}], else: path
       n = if state.last_jump, do: state.last_jump.n + 1, else: 1
 
@@ -710,15 +628,8 @@ defmodule Flamingo.GameModes.Spellslingers do
   ## Bots
 
   # Bots decide in `Bots`; their moves go through the same rules as a player's.
-  defp apply_bot_move({{:plan, ward?, delay}, state}, bot, context) do
-    state =
-      case ward? && command(state, bot, {:cast, "ward", 0, 0}, context) do
-        {:ok, %{state: warded}} -> warded
-        _ -> state
-      end
-
-    ok(state, [{:schedule_hint_timeout, :arena_bot, delay}])
-  end
+  defp apply_bot_move({{:plan, delay}, state}, _bot, _context),
+    do: ok(state, [{:schedule_hint_timeout, :arena_bot, delay}])
 
   defp apply_bot_move({{:walk, dir}, state}, bot, context) do
     case walk(state, bot, dir, context) do
@@ -733,41 +644,47 @@ defmodule Flamingo.GameModes.Spellslingers do
     end
   end
 
+  # Spells cast on picking go at once; anything aimed is shown first (see `timeout/3`).
   defp apply_bot_move({{:cast, spell, angle, power}, state}, bot, context) do
-    with {:error, _} <- command(state, bot, {:cast, spell, angle, power}, context),
-         do: end_turn(state, context)
+    if Catalog.spell(spell).input == "instant" do
+      with {:error, _} <- command(state, bot, {:cast, spell, angle, power}, context),
+           do: end_turn(state, context)
+    else
+      %{state | bot_aim: %{spell: spell, angle: angle, power: power}}
+      |> ok([{:schedule_hint_timeout, :arena_bot, @bot_aim_ms}])
+    end
   end
 
-  defp apply_bot_move({{:place, spell, x, y}, state}, bot, context) do
-    with {:error, _} <- command(state, bot, {:place, spell, x, y}, context),
-         do: end_turn(state, context)
+  defp apply_bot_move({{:place, spell, x, y}, state}, _bot, _context) do
+    %{state | bot_aim: %{spell: spell, x: x, y: y}}
+    |> ok([{:schedule_hint_timeout, :arena_bot, @bot_aim_ms}])
   end
 
   defp apply_bot_move({:pass, state}, _bot, context), do: end_turn(state, context)
 
-  defp spell_ready?(state, actor, spell_id) do
-    if Catalog.grand?(spell_id),
-      do:
-        grand_charge_left(state, actor) == 0 and
-          spell_id not in Map.get(state.grand_used, actor, []),
-      else: Map.get(Map.get(state.cooldowns, actor, %{}), spell_id, 0) == 0
+  # Spells are limited by ammo and by the turns before they unlock, nothing else.
+  defp check_ready(state, actor, spell_id) do
+    cond do
+      unlock_left(state, actor, spell_id) > 0 -> {:error, :spell_locked}
+      ammo_left(state, actor, spell_id) == 0 -> {:error, :no_ammo}
+      true -> :ok
+    end
   end
 
-  defp grand_charge_left(state, actor),
-    do: max(Catalog.grand_charge() - Map.get(state.turns_taken, actor, 0), 0)
+  defp unlock_left(state, actor, spell_id),
+    do: max(Catalog.unlock(spell_id) - Map.get(state.turns_taken, actor, 0), 0)
 
-  # Cooldowns as a player sees them: a charging grand spell counts down like one.
-  # Mana crates and storms refresh cooldowns but never a grand spell's charge.
-  defp view_cooldowns(state, viewer) do
-    left = grand_charge_left(state, viewer)
-    cooldowns = Map.get(state.cooldowns, viewer, %{})
+  defp ammo_left(state, actor, spell_id),
+    do: state.ammo |> Map.get(actor, %{}) |> Map.get(spell_id, :infinite)
 
-    if left > 0,
-      do:
-        spellbook(state, viewer)
-        |> Enum.filter(&Catalog.grand?/1)
-        |> Enum.reduce(cooldowns, &Map.put(&2, &1, left)),
-      else: cooldowns
+  defp spell_ready?(state, actor, spell_id), do: check_ready(state, actor, spell_id) == :ok
+
+  # Spells still locked for a player, with how many of their turns are left.
+  defp locked(state, viewer) do
+    for id <- Catalog.arsenal_ids(),
+        (n = unlock_left(state, viewer, id)) > 0,
+        into: %{},
+        do: {id, n}
   end
 
   defp winner_decided?(state), do: Enum.count(state.turn_order, &Units.alive?(state, &1)) <= 1
@@ -830,20 +747,14 @@ defmodule Flamingo.GameModes.Spellslingers do
   defp cast(state, actor, spell, angle, power, target \\ nil) do
     state = %{
       state
-      | cast_this_turn: [spell.id | state.cast_this_turn],
-        cooldowns:
-          if(spell.cooldown > 0,
-            do: put_in(state.cooldowns, [actor, spell.id], spell.cooldown),
-            else: state.cooldowns
-          ),
-        grand_used:
-          if(spell.grand,
-            do: Map.update(state.grand_used, actor, [spell.id], &[spell.id | &1]),
-            else: state.grand_used
+      | ammo:
+          if(is_integer(ammo_left(state, actor, spell.id)),
+            do: update_in(state.ammo, [actor, spell.id], &(&1 - 1)),
+            else: state.ammo
           )
     }
 
-    state = Units.log(state, "#{Units.player_name(state, actor)} casts #{spell.name}.")
+    state = Units.log(state, "#{Units.player_name(state, actor)} uses #{spell.name}.")
 
     state =
       Spells.run(
@@ -851,7 +762,8 @@ defmodule Flamingo.GameModes.Spellslingers do
         actor,
         spell.id,
         target,
-        &Spells.effect(spell.effect, &1, actor, spell, angle, power)
+        &Spells.effect(spell.effect, &1, actor, spell, angle, power),
+        spell.grand
       )
 
     %{last_cast: cast} = state
@@ -874,7 +786,6 @@ defmodule Flamingo.GameModes.Spellslingers do
         state
         |> Units.put_unit(%{unit | hp: 0, dead: true})
         |> Map.update!(:eliminated, &[id | &1])
-        |> Units.remove_minions(id)
 
       _ ->
         state

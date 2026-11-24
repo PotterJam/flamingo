@@ -3,7 +3,7 @@ defmodule Flamingo.GameModes.Spellslingers.Units do
 
   use Flamingo.GameModes.Spellslingers.Rules
 
-  alias Flamingo.GameModes.Spellslingers.{Catalog, Terrain}
+  alias Flamingo.GameModes.Spellslingers.Terrain
 
   def damage(state, id, amount, source) do
     case state.units[id] do
@@ -12,15 +12,8 @@ defmodule Flamingo.GameModes.Spellslingers.Units do
 
       unit ->
         amount = round(amount * state.tuning.damage_pct / 100)
-        ward = Map.get(unit, :ward, 0)
-        absorbed = min(ward, amount)
-        dealt = min(amount - absorbed, unit.hp)
-
-        state =
-          put_unit(
-            state,
-            unit |> Map.put(:ward, ward - absorbed) |> Map.put(:hp, unit.hp - dealt)
-          )
+        dealt = min(amount, unit.hp)
+        state = put_unit(state, %{unit | hp: unit.hp - dealt})
 
         if source && source != unit.owner && Map.has_key?(state.damage_dealt, source),
           do: %{state | damage_dealt: Map.update!(state.damage_dealt, source, &(&1 + dealt))},
@@ -53,7 +46,7 @@ defmodule Flamingo.GameModes.Spellslingers.Units do
           hp: @wizard_hp,
           max_hp: @wizard_hp,
           dead: false,
-          ward: 0,
+          # Turns left on a broomstick; a floating wizard hovers wherever it is.
           float: 0
         }
 
@@ -96,9 +89,7 @@ defmodule Flamingo.GameModes.Spellslingers.Units do
     {caster.x + 0.5, caster.y - 2.0}
   end
 
-  # Flies the spell's main projectile and records it as the first segment.
-
-  def unit_height(%{kind: kind}) when kind in [:wizard, :golem, :dragon, :zombie], do: 3
+  def unit_height(%{kind: :wizard}), do: 3
   def unit_height(%{kind: :crate}), do: 1
   def unit_height(_), do: 2
 
@@ -124,7 +115,7 @@ defmodule Flamingo.GameModes.Spellslingers.Units do
     end
   end
 
-  # Levitating units hover wherever they are.
+  # Wizards on a broomstick hover wherever they are.
   def settle(state, unit) do
     if Map.get(unit, :float, 0) > 0, do: {unit, 0}, else: do_settle(state, unit)
   end
@@ -188,9 +179,21 @@ defmodule Flamingo.GameModes.Spellslingers.Units do
     end)
   end
 
+  # A long drop hurts, and the chronicle says so, since nothing else explains the hit.
   def fall_damage(state, id, fall) do
     safe = state.tuning.fall_safe
-    if fall > safe, do: damage(state, id, (fall - safe) * 2, nil), else: state
+    unit = state.units[id]
+
+    if fall > safe and unit do
+      hurt = damage(state, id, (fall - safe) * 2, nil)
+      lost = unit.hp - hurt.units[id].hp
+
+      if lost > 0,
+        do: log(hurt, "#{player_name(state, id)} falls hard and loses #{lost} HP."),
+        else: hurt
+    else
+      state
+    end
   end
 
   def resolve_deaths(state) do
@@ -218,30 +221,11 @@ defmodule Flamingo.GameModes.Spellslingers.Units do
     |> put_unit(%{unit | hp: 0, dead: true, y: min(unit.y, @height - 1)})
     |> Map.update!(:eliminated, &[unit.id | &1])
     |> log("#{player_name(state, unit.id)} #{how}!")
-    |> remove_minions(unit.id)
-    # A fallen wizard's lasting spells end with them.
-    |> Map.update(:zones, [], fn zones -> Enum.reject(zones, &(&1.owner == unit.id)) end)
   end
-
-  defp kill(state, unit, how) do
-    %{state | units: Map.delete(state.units, unit.id)}
-    |> log("#{unit_name(state, unit)} #{how}.")
-  end
-
-  def remove_minions(state, owner),
-    do: %{
-      state
-      | units: Map.reject(state.units, fn {_, u} -> u.kind != :wizard and u.owner == owner end)
-    }
 
   def alive?(state, id), do: alive_unit?(state.units[id])
   def alive_unit?(nil), do: false
   def alive_unit?(unit), do: not unit.dead and unit.hp > 0
-
-  def unit_name(state, %{kind: :wizard, id: id}), do: player_name(state, id)
-
-  def unit_name(state, unit),
-    do: "#{player_name(state, unit.owner)}'s #{Catalog.minion(unit.kind).name}"
 
   def player_name(state, id) do
     case state.players[id] do

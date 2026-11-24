@@ -6,24 +6,18 @@
 type School = "fire" | "earth" | "storm" | "nature" | "arcane";
 
 const SCHOOLS: Record<string, School> = {
-  ember: "fire", inferno: "fire", firerain: "fire", surge: "fire", napalm: "fire", cataclysm: "fire", volcano: "fire", dragon: "fire",
-  skipstone: "earth", seeker: "storm", thunderhead: "storm", tide: "nature",
-  boulder: "earth", rampart: "earth", golem: "earth", quake: "earth", burrow: "earth", ledge: "earth",
-  lance: "storm", gust: "storm", chain: "storm", updraft: "storm",
-  bloom: "nature", thornling: "nature", wisp: "nature",
-  frostbolt: "storm", icefloe: "storm", blizzard: "storm", nova: "storm", iceage: "storm",
-  decay: "nature", raisedead: "earth", bonespear: "earth",
-  clockbomb: "earth", turret: "earth", tower: "earth", magnet: "storm", doomsday: "fire",
+  firebolt: "fire", embers: "fire", meteors: "fire", surge: "fire", blastrune: "fire",
+  fuserune: "earth", tunnel: "earth", slab: "earth", quake: "earth", anvil: "earth", hook: "earth",
+  lance: "storm", thunderegg: "storm", seeker: "storm", broom: "nature",
+  hexhare: "arcane", blink: "arcane", holyorb: "arcane", starfall: "arcane",
 };
 
 const schoolOf = (spell: string) => SCHOOLS[spell] ?? "arcane";
 
 // Spells that land with an explosion; the rest have their own landing sound or none.
-const EXPLODES = new Set(["ember", "inferno", "boulder", "lance", "cluster", "firerain", "surge", "chain", "chaos", "napalm", "skipstone", "seeker", "cataclysm", "volcano", "thunderhead", "dragon", "frostbolt", "decay", "bonespear", "clockbomb", "doomsday", "turret", "magnet"]);
-// Summons arrive with a puff; a turret's own shots (with a blast radius) explode instead.
-const SUMMONS = new Set(["imp", "golem", "wisp", "thornling", "raisedead", "turret"]);
-// Meteors: wild-magic surges and the falling half of Meteor Rain.
-const METEORS = new Set(["firerain", "surge", "cataclysm", "volcano"]);
+const EXPLODES = new Set(["firebolt", "fuserune", "embers", "thunderegg", "seeker", "hexhare", "lance", "blastrune", "meteors", "surge", "holyorb", "anvil", "starfall"]);
+// Meteors: wild-magic surges, Meteor Strike, Starfall and the falling anvil.
+const METEORS = new Set(["meteors", "surge", "starfall", "anvil"]);
 
 type Segment = { path: unknown[]; start: number; spell: string; radius: number; hit: boolean };
 type Cast = { spell: string; segments: Segment[]; auras?: { kind: string }[]; grand?: boolean };
@@ -216,25 +210,22 @@ export function createSpellSounds(volume: () => number, makeContext: () => BaseA
         hiss({ filter: "bandpass", from: 300, to: 3000, q: 1, dur: 1.3, gain: 0.15, attack: 0.9 });
         tone({ wave: "square", from: 55, dur: 0.3, gain: 0.25, at: 0.2 });
       }
-      if (spell === "tide") {
-        hiss({ from: 400, to: 1200, dur: 1.6, gain: 0.7, attack: 0.6 });
-        tone({ from: 70, to: 50, dur: 1.6, gain: 0.25, attack: 0.5, vibrato: 3 });
-      } else if (spell === "zones" || cast.grand) {
-        // Lasting spells and grand spells speak through their landings.
-      } else if (spell === "quake") {
-        rumble(2.8, 1);
-        for (const at of [0.35, 0.9, 1.5]) hiss({ filter: "bandpass", from: 1600, to: 250, q: 0.8, dur: 0.22, gain: 0.4, at });
-      } else if (spell === "gust") {
-        hiss({ filter: "bandpass", from: 300, to: 1800, q: 1.2, dur: 0.9, gain: 1, attack: 0.15 });
-      } else if (spell === "updraft") {
-        hiss({ filter: "bandpass", from: 400, to: 2600, q: 1.2, dur: 0.8, gain: 0.8, attack: 0.2 });
-        tone({ from: 300, to: 900, dur: 0.6, gain: 0.07, attack: 0.1 });
-      } else if (spell === "burrow") {
+      if (cast.grand) {
+        // Grand spells speak through their landings; the quake has none, so it rumbles.
+        if (spell === "quake") rumble(2.8, 1);
+      } else if (spell === "hook") {
+        // The chain paying out: a quick run of metal clinks under a whoosh.
+        hiss({ filter: "bandpass", from: 300, to: 1800, q: 1.2, dur: 0.3, gain: 0.7, attack: 0.05 });
+        for (let i = 0; i < 5; i++) tone({ wave: "square", from: 1900 + i * 140, dur: 0.03, gain: 0.05, at: i * 0.05 });
+      } else if (spell === "tunnel") {
         tone({ wave: "sawtooth", from: 70, to: 95, dur: 0.9, gain: 0.12, vibrato: 28 });
         hiss({ from: 500, to: 250, dur: 0.9, gain: 0.3 });
-      } else if (spell === "lance" || spell === "chain") {
+      } else if (spell === "lance") {
         tone({ wave: "sawtooth", from: 2000, to: 300, dur: 0.28, gain: 0.13 });
         hiss({ filter: "highpass", from: 4000, to: 1500, dur: 0.25, gain: 0.2 });
+      } else if (spell === "blastrune" && cast.segments.every((x) => x.radius === 0)) {
+        // The keg set down and its fuse starting to hiss.
+        hiss({ filter: "highpass", from: 3000, to: 5000, dur: 1.2, gain: 0.15 });
       } else if (spell !== "surge") {
         const school = schoolOf(spell);
         if (school === "fire") {
@@ -265,49 +256,25 @@ export function createSpellSounds(volume: () => number, makeContext: () => BaseA
     // One flight ending: a blast, a landing, or a fizzle where it fell out of the world.
     land(segment: Segment) {
       const { spell, hit, radius } = segment;
-      if (spell === "skipstone" && hit && radius === 0) {
-        // A stone skipping off the ground.
+      if ((spell === "fuserune" || spell === "hexhare") && hit && radius === 0) {
+        // A stone skipping, or a hare hopping, off the ground.
         tone({ wave: "triangle", from: 500, to: 260, dur: 0.1, gain: 0.25 });
         hiss({ filter: "bandpass", from: 1200, q: 2, dur: 0.08, gain: 0.3 });
-      } else if (spell === "cataclysm" && hit) {
+      } else if ((spell === "holyorb" || spell === "anvil") && hit && radius > 0) {
         tone({ from: 90, to: 28, dur: 1.6, gain: 0.9 });
         hiss({ from: 3000, to: 60, dur: 2.4, gain: 0.9 });
-        for (let i = 0; i < 6; i++) hiss({ filter: "bandpass", from: 700 + i * 200, to: 300, dur: 0.12, gain: 0.25, at: 0.5 + i * 0.18 });
-      } else if (spell === "doomsday" && hit && radius > 0) {
-        tone({ from: 70, to: 24, dur: 2, gain: 0.9 });
-        hiss({ from: 2500, to: 50, dur: 2.6, gain: 0.9 });
-        chime([1568, 1568, 1568], 0.12, 0.08, "square");
-      } else if (spell === "doomsday" || (spell === "clockbomb" && hit && radius === 0)) {
-        // The bomb landing and starting to tick.
-        for (let i = 0; i < 4; i++) tone({ wave: "square", from: 1800, dur: 0.03, gain: 0.08, at: i * 0.3 });
-      } else if ((spell === "icefloe" || spell === "blizzard") && hit) {
-        chime([1319, 1568, 2093], 0.05, 0.06, "triangle");
-        hiss({ filter: "highpass", from: 6000, dur: 0.4, gain: 0.12 });
-      } else if (SUMMONS.has(spell) && radius === 0) {
-        hiss({ filter: "bandpass", from: 1400, to: 300, q: 1, dur: 0.35, gain: 0.3 });
-      } else if (spell === "thunderhead" && hit) {
-        tone({ wave: "sawtooth", from: 2400, to: 120, dur: 0.35, gain: 0.2 });
-        hiss({ filter: "highpass", from: 5000, to: 800, dur: 0.5, gain: 0.5 });
-        rumble(1.2, 0.5);
+        if (spell === "holyorb") chime([1047, 1319, 1568, 2093], 0.09, 0.1, "sine");
+      } else if (spell === "hook" && hit) {
+        tone({ wave: "square", from: 180, to: 60, dur: 0.18, gain: 0.35 });
+        hiss({ from: 2000, to: 300, dur: 0.15, gain: 0.5 });
       } else if (!hit) {
         hiss({ filter: "bandpass", from: 1600, to: 350, q: 1.5, dur: 0.45, gain: 0.6 });
         tone({ from: 700, to: 220, dur: 0.18, gain: 0.16 });
       } else if (EXPLODES.has(spell)) {
         explosion(spell, radius);
-      } else if (spell === "rampart") {
-        rumble(0.8, 0.6);
-        tone({ from: 90, to: 160, dur: 0.6, gain: 0.2, attack: 0.1 });
-      } else if (spell === "ledge") {
+      } else if (spell === "slab") {
         tone({ from: 200, to: 90, dur: 0.15, gain: 0.35 });
         hiss({ from: 900, to: 200, dur: 0.15, gain: 0.25 });
-      } else if (spell === "bloom") {
-        chime([523, 659, 784, 1047], 0.07, 0.09, "sine");
-        hiss({ filter: "highpass", from: 6000, dur: 0.5, gain: 0.05, attack: 0.1 });
-      } else if (spell === "gust" || spell === "updraft") {
-        hiss({ filter: "bandpass", from: 1200, to: 300, q: 1, dur: 0.6, gain: 0.7 });
-      } else if (SUMMONS.has(spell)) {
-        // A puff of smoke; the minion's arrival chime plays when it appears on the board.
-        hiss({ filter: "bandpass", from: 1400, to: 300, q: 1, dur: 0.35, gain: 0.3 });
       }
     },
 
@@ -326,15 +293,7 @@ export function createSpellSounds(volume: () => number, makeContext: () => BaseA
     // What happens once the flights end: auras appearing.
     aftermath(cast: Cast) {
       for (const aura of cast.auras ?? []) {
-        if (aura.kind === "ward") chime([880, 1320, 1760], 0.05, 0.08, "sine");
-        else if (aura.kind === "nova" || aura.kind === "iceage") {
-          chime([2093, 1568, 1319, 1047], 0.04, 0.07, "triangle");
-          hiss({ filter: "highpass", from: 7000, to: 3000, dur: 0.6, gain: 0.2 });
-        } else if (aura.kind === "drain" || aura.kind === "lich") {
-          tone({ wave: "sawtooth", from: 220, to: 110, dur: 0.9, gain: 0.06, vibrato: 7 });
-          tone({ wave: "sine", from: 330, to: 165, dur: 0.9, gain: 0.05, at: 0.05 });
-        }
-        else if (aura.kind === "levitate") {
+        if (aura.kind === "broom") {
           hiss({ filter: "bandpass", from: 500, to: 2500, q: 1.5, dur: 0.7, gain: 0.5, attack: 0.15 });
           tone({ from: 400, to: 1000, dur: 0.6, gain: 0.07, attack: 0.1 });
         }

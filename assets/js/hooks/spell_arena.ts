@@ -1,26 +1,23 @@
 import { createSpellSounds } from "./spell_sounds";
+import { BOOM_CELL, BOOM_FRAMES, CRATE_FRAME, CRATE_SIZE, CRYSTAL, LAND_RES, SPELL_CELL, WIZARD, WIZARD_H, WIZARD_W, carveLand, loadArt, paintLand, ready, wizardSheet } from "./arena_art";
 
-// Renders the Spellslingers arena: destructible terrain, wizards, minions, crates, aiming,
+// Renders the Spellslingers arena: destructible terrain, wizards, crates, blast runes, aiming,
 // and the playback of each cast. The server owns every rule and all physics; this hook
 // only draws its snapshots, animates the flight and knockback paths the server computed,
 // and turns pointer and keyboard input into commands.
 
-type UnitKind = "wizard" | "thornling" | "imp" | "golem" | "wisp" | "dragon" | "zombie" | "turret";
 
 type Unit = {
   id: string;
-  kind: UnitKind;
+  kind: "wizard";
   owner: string;
   x: number;
   y: number;
   hp: number;
   max_hp: number;
   dead: boolean;
-  ward?: number;
+  // Turns left on a broomstick: a floating wizard hovers and flies.
   float?: number;
-  // Frozen units lose their next turn; decaying ones lose health on each of theirs.
-  frozen?: number;
-  decay?: number;
 };
 
 type Crate = { id: string; type: "health" | "mana"; x: number; y: number };
@@ -36,37 +33,30 @@ type Spell = {
   // How the player aims it, and the colour it is drawn in; both come from the server catalog.
   input: "charge" | "beam" | "place" | "instant";
   color: string;
-  // Grand spells are once-a-duel showpieces; sky spells strike anywhere from above.
+  // Grand spells are the big set pieces; sky spells strike anywhere from above.
   grand?: boolean;
   sky?: boolean;
+  // Its frame in the spells sheet, and how far a beam reaches (null: across the map).
+  sprite: number;
+  range?: number | null;
 };
 
-// Spells that outlast their cast, from the server: napalm on the ground, a volcano's
-// vent, a thunderhead's or blizzard's strip of sky, a rising tide, a ticking bomb, and a Lich.
-type Zone = {
-  id: string;
-  kind: "napalm" | "volcano" | "thunderhead" | "tide" | "blizzard" | "bomb" | "lich";
-  owner: string;
-  x?: number;
-  y?: number;
-  x0?: number;
-  x1?: number;
-  radius?: number;
-  turns: number;
-};
+// A blast rune waiting at its caster's feet for their turn to end.
+type Rune = { owner: string; x: number; y: number };
+
+// The shot a bot is lining up, shown before it fires.
+type BotAim = { spell: string; angle?: number; power?: number; x?: number; y?: number };
 
 type Segment = { path: [number, number][]; start: number; spell: string; radius: number; hit: boolean };
 
-type Hit = { id: string; at: number; hp: number; ward: number };
+type Hit = { id: string; at: number; hp: number };
 
 type Cast = {
   id: number;
   caster_id: string | null;
   spell: string;
   segments: Segment[];
-  // Lightning arcs, each striking at a step of the flight timeline.
-  beams: { line: [number, number, number, number]; at: number }[];
-  // Each unit struck, at the step it is struck, with the health and ward it is left with.
+  // Each unit struck, at the step it is struck, with the health it is left with.
   hits?: Hit[];
   knocks: { id: string; path: [number, number][] }[];
   shake: boolean;
@@ -90,7 +80,10 @@ type ArenaState = {
   terrain: string;
   units: Unit[];
   crates: Crate[];
-  zones?: Zone[];
+  runes?: Rune[];
+  // After a cast the wizard may still move for a few seconds, but not cast.
+  retreat?: boolean;
+  bot_aim?: BotAim | null;
   last_cast: Cast | null;
   players: Record<string, { name: string; color: string }>;
   spells: Spell[];
@@ -98,12 +91,32 @@ type ArenaState = {
   selected_spell: string;
   // The latest jump, numbered so each one plays once; its path is in unit cells.
   last_jump: { n: number; id: string; path: [number, number][] } | null;
-  physics: { dt: number; gravity: number; max_speed: number; wind_accel: number; playback_speed: number; place_range: number; grand_intro_ms?: number };
+  physics: { dt: number; gravity: number; max_speed: number; wind_accel: number; playback_speed: number; place_range: number; grand_intro_ms?: number; max_climb?: number };
+  // Steps left this turn, for walking ahead of the server.
+  walk_left?: number;
 };
 
 type Floater = { x: number; y: number; text: string; color: string; size: number; life: number; max: number };
 
-type Particle = { x: number; y: number; vx: number; vy: number; life: number; max: number; color: string; size: number };
+type Particle = {
+  x: number;
+  y: number;
+  vx: number;
+  vy: number;
+  life: number;
+  max: number;
+  color: string;
+  size: number;
+  chunk?: boolean;
+  // A clod's outline, as radii around it, and how often it has hit the ground.
+  shape?: number[];
+  bounces?: number;
+  rot?: number;
+};
+
+// The leftovers of a blast: a flash ring that races out, and smoke that drifts with the wind.
+type Ring = { x: number; y: number; r: number; born: number; color: string };
+type Smoke = { x: number; y: number; r: number; vx: number; vy: number; life: number; max: number };
 
 type Animation = {
   cast: Cast;
@@ -112,9 +125,8 @@ type Animation = {
   landed: Set<number>;
   // When the projectiles finished and the post-cast state took over.
   aftermathAt: number | null;
-  // Hits not yet shown, soonest first, and arcs already struck.
+  // Hits not yet shown, soonest first.
   hits: Hit[];
-  zapped: Set<number>;
   // Knocked-out wizards already shown falling, and when the first one fell.
   koShown: Set<string>;
   koAt: number | null;
@@ -124,8 +136,12 @@ interface SpellArenaHook {
   el: HTMLCanvasElement;
   pushEvent: (event: string, payload: object) => void;
   handleEvent: <T>(event: string, callback: (payload: T) => void) => void;
-  // LiveView's sticky JS commands, so classes survive server patches.
-  js: () => { addClass: (el: HTMLElement, names: string) => void; removeClass: (el: HTMLElement, names: string) => void };
+  // LiveView's sticky JS commands, so what they show and hide survives server patches.
+  js: () => {
+    show: (el: HTMLElement, opts?: { display?: string }) => void;
+    hide: (el: HTMLElement) => void;
+    toggle: (el: HTMLElement, opts?: { display?: string }) => void;
+  };
   cleanup?: () => void;
 }
 
@@ -141,46 +157,48 @@ type Palette = {
   rock: [number, number, number][];
 };
 
+// Each mine's colours: the sky above the painted backdrop, the crust along the top of
+// the land, the clods a blast throws, and its murky water.
 const PALETTES: Record<string, Palette> = {
   isles: {
-    sky: ["#7dd3fc", "#e0f2fe", "#fef3c7"],
-    hills: "#c7d2fe",
-    water: "rgba(37, 99, 235, 0.78)",
-    grass: [[74, 222, 128], [34, 197, 94], [22, 163, 74]],
-    soil: [[180, 120, 70], [161, 98, 52]],
-    rock: [[120, 113, 108], [133, 77, 40], [120, 68, 34]],
+    sky: ["#4a1f1a", "#8a3a24", "#d9822b"],
+    hills: "#5b3a2a",
+    water: "rgba(70, 86, 48, 0.84)",
+    grass: [[160, 136, 64], [118, 98, 44], [82, 66, 30]],
+    soil: [[74, 58, 44], [54, 44, 36]],
+    rock: [[116, 74, 40], [42, 38, 36], [92, 82, 72]],
   },
   flamingo: {
-    sky: ["#fbcfe8", "#fce7f3", "#fef9c3"],
-    hills: "#f9a8d4",
-    water: "rgba(14, 165, 233, 0.75)",
-    grass: [[253, 164, 175], [251, 113, 133], [244, 63, 94]],
-    soil: [[249, 168, 212], [244, 114, 182]],
-    rock: [[236, 72, 153], [219, 39, 119], [190, 24, 93]],
+    sky: ["#c9607e", "#e08aa0", "#f0b096"],
+    hills: "#b46a7a",
+    water: "rgba(110, 86, 104, 0.8)",
+    grass: [[222, 160, 158], [184, 116, 120], [140, 82, 90]],
+    soil: [[192, 132, 132], [160, 104, 108]],
+    rock: [[214, 160, 170], [120, 80, 84], [170, 120, 124]],
   },
   castles: {
-    sky: ["#fb923c", "#fdba74", "#fef3c7"],
-    hills: "#c2410c",
-    water: "rgba(30, 64, 175, 0.8)",
-    grass: [[163, 230, 53], [101, 163, 13], [77, 124, 15]],
-    soil: [[168, 162, 158], [156, 148, 140]],
-    rock: [[120, 113, 108], [87, 83, 78], [68, 64, 60]],
+    sky: ["#5a2412", "#c2531c", "#f29a3a"],
+    hills: "#6b3a26",
+    water: "rgba(58, 60, 66, 0.86)",
+    grass: [[156, 146, 124], [112, 104, 90], [78, 72, 62]],
+    soil: [[122, 102, 90], [96, 84, 76]],
+    rock: [[142, 72, 52], [70, 64, 60], [112, 100, 92]],
   },
   cavern: {
-    sky: ["#1e1b4b", "#312e81", "#4c1d95"],
-    hills: "#2e1065",
-    water: "rgba(45, 212, 191, 0.7)",
-    grass: [[167, 139, 250], [139, 92, 246], [103, 232, 249]],
-    soil: [[88, 80, 130], [76, 68, 115]],
-    rock: [[67, 56, 102], [55, 48, 90], [217, 249, 157]],
+    sky: ["#1a1434", "#2a2152", "#3b2c6b"],
+    hills: "#2a2152",
+    water: "rgba(40, 150, 140, 0.72)",
+    grass: [[132, 226, 214], [74, 164, 172], [52, 112, 132]],
+    soil: [[72, 62, 102], [56, 48, 84]],
+    rock: [[52, 44, 74], [40, 34, 60], [104, 222, 210]],
   },
   archipelago: {
-    sky: ["#38bdf8", "#bae6fd", "#ecfeff"],
-    hills: "#99f6e4",
-    water: "rgba(6, 182, 212, 0.75)",
-    grass: [[134, 239, 172], [74, 222, 128], [253, 230, 138]],
-    soil: [[253, 224, 71], [250, 204, 21]],
-    rock: [[214, 211, 209], [168, 162, 158], [120, 113, 108]],
+    sky: ["#6b857c", "#9fb0a2", "#c9cbb4"],
+    hills: "#7f8f7c",
+    water: "rgba(64, 112, 104, 0.82)",
+    grass: [[156, 150, 82], [116, 118, 58], [84, 90, 44]],
+    soil: [[178, 128, 60], [150, 106, 48]],
+    rock: [[122, 104, 84], [96, 70, 50], [152, 130, 100]],
   },
 };
 
@@ -243,31 +261,45 @@ const SpellArena = {
       if (Math.abs(k - pixelScale) < 0.05 && h === H) return;
       pixelScale = k;
       H = h;
-      VIEW_H = H / CELL;
+      fitView();
       canvas.width = Math.round(W * k);
       canvas.height = Math.round(H * k);
     };
     const resizeObserver = new ResizeObserver(fitResolution);
     resizeObserver.observe(canvas);
 
-    // Full view fills the browser window; tabs and the address bar stay.
-    const page = document.getElementById("spellslingers-game")!;
-    const setFull = (on: boolean) => {
-      if (on) this.js().addClass(page, "arena-full");
-      else this.js().removeClass(page, "arena-full");
-    };
-    const toggleFull = () => setFull(!page.classList.contains("arena-full"));
+    // The page already fills the window; F or the menu asks the browser for real
+    // fullscreen, and Esc leaves it the way it does everywhere else.
+    const root = document.documentElement;
+    const toggleFull = () =>
+      document.fullscreenElement ? document.exitFullscreen?.() : root?.requestFullscreen?.().catch(() => {});
     canvas.addEventListener("arena:fullscreen", toggleFull);
+
+    // Panels LiveView renders hidden; shown and hidden through LiveView's JS so a
+    // patch keeps them as they are.
+    const panel = (id: string) => document.getElementById(id);
+    const isOpen = (el: HTMLElement | null) => !!el && getComputedStyle(el).display !== "none";
+    const hidePanel = (id: string) => {
+      const el = panel(id);
+      if (!isOpen(el)) return false;
+      this.js().hide(el!);
+      return true;
+    };
+    const toggleSpells = () => {
+      const el = panel("arena-spells");
+      if (!el) return;
+      hidePanel("arena-menu");
+      this.js().toggle(el, { display: "block" });
+    };
+    canvas.addEventListener("arena:spells", toggleSpells);
 
     // The overlays drawn over the arena (wizard rail, chronicle, spell dock) stay out of
     // the way: they turn to ghosts while a spell charges and dim when the pointer comes
     // near without touching them. Body classes, so LiveView patches leave them alone.
     const body = document.body;
     const OVERLAYS: [string, string][] = [
-      ["rail", "arena-rail"],
+      ["teams", "arena-teams"],
       ["ticker", "arena-ticker"],
-      ["dock", "arena-controls"],
-      ["tuning", "arena-tuning-button"],
     ];
     const NEAR_PX = 36;
     const dimNear = (x: number, y: number) => {
@@ -284,13 +316,10 @@ const SpellArena = {
     };
     const undim = () => OVERLAYS.forEach(([key]) => body.classList.remove(`arena-near-${key}`));
 
-    // While charging, the turn banner (the top strip in full view) becomes the power meter.
-    const meter = document.getElementById("arena-meter");
-    const meterName = meter?.querySelector<HTMLElement>("[data-meter-name]");
-    const meterFill = meter?.querySelector<HTMLElement>("[data-meter-fill]");
-    const meterText = meter?.querySelector<HTMLElement>("[data-meter-text]");
-    const meterLast = meter?.querySelector<HTMLElement>("[data-meter-last]");
-    const thrown = document.getElementById("arena-thrown");
+    // While charging, the spell chip in the HUD becomes the power meter. The HUD only
+    // renders once the match starts, after this hook mounts, so look it up each time.
+    const meterPart = (name: string) =>
+      document.getElementById("arena-meter")?.querySelector<HTMLElement>(`[data-meter-${name}]`);
     let chargingShown = false;
     let lastThrow: number | null = null;
     let thrownUntil = 0;
@@ -303,6 +332,8 @@ const SpellArena = {
         stopChargeSound = charge ? sounds.charge(charge.spell, CHARGE_MS) : null;
         if (charge) {
           undim();
+          const meterName = meterPart("name");
+          const meterLast = meterPart("last");
           if (meterName) meterName.textContent = spellById(charge.spell)?.name ?? "";
           if (meterLast) {
             meterLast.hidden = lastThrow === null;
@@ -310,6 +341,8 @@ const SpellArena = {
           }
         }
       }
+      const meterFill = meterPart("fill");
+      const meterText = meterPart("text");
       if (charge && meterFill && meterText) {
         const power = chargePower(now);
         meterFill.style.width = `${power}%`;
@@ -318,10 +351,6 @@ const SpellArena = {
       body.classList.toggle("arena-thrown", now < thrownUntil);
     };
 
-    // A strip showing the whole world, every wizard and the view, in the top corner
-    // over the arena (just under the top strip in full view).
-    const mini = document.getElementById("arena-minimap") as HTMLCanvasElement | null;
-    const miniCtx = mini?.getContext("2d");
     const sky = document.getElementById("arena-sky");
 
     let shown: ArenaState | null = null;
@@ -330,20 +359,41 @@ const SpellArena = {
     let pending: ArenaState | null = null;
     const backlog: ArenaState[] = [];
     let terrainCanvas: HTMLCanvasElement | null = null;
+    // Pixels per cell in terrainCanvas: the painted land once its texture has loaded,
+    // one flat pixel per cell until then.
+    let terrainRes = 1;
+    let landDirty = false;
+    const art = loadArt((name) => {
+      if (name.startsWith("tex_")) landDirty = true;
+    });
+    // When each unit was last hurt, so it flinches.
+    const hurtAt = new Map<string, number>();
     let terrainKey = "";
     let seenCastId = -1;
     let animation: Animation | null = null;
     let particles: Particle[] = [];
     let floaters: Floater[] = [];
-    let selected = "ember";
+    let selected = "firebolt";
     let serverSelected: string | null = null;
     let aim: { angle: number; power: number } | null = null;
     let castLocked = false;
-    let lastWalk = 0;
+    // Walking runs here first: while A or D is held the wizard steps at a steady pace
+    // by the server's own rules (`Units.step` and `settle`), and each step is sent for
+    // the server to confirm. Until it has, the predicted spot is where the wizard is drawn.
+    const STEP_MS = 95;
+    // On a broomstick the wizard flies twice as fast, in any of eight directions while
+    // the keys are held: W and S set the climb, A and D the heading.
+    const FLY_MS = 50;
+    let heldDir = 0;
+    let heldV = 0;
+    let nextStepAt = 0;
+    let predicted: { x: number; y: number; at: number } | null = null;
+    let stepsLeft = 0;
+    let crouchAt = -1e9;
     // Which way the viewer's wizard faces: the last way it walked or aimed. Jumps go this way.
     let facing = 0;
     let seenJump = -1;
-    let jumping: { id: string; path: [number, number][]; start: number } | null = null;
+    let jumping: { id: string; path: [number, number][]; start: number; hurt: number } | null = null;
     let lastBlockedHint = 0;
     let frame = 0;
     let shakeUntil = 0;
@@ -353,19 +403,40 @@ const SpellArena = {
     let flashUntil = 0;
     // Glowing rims a grand blast leaves behind, cooling over a few seconds.
     let scars: { x: number; y: number; r: number; born: number }[] = [];
+    let rings: Ring[] = [];
+    // Painted explosions playing out, each its size across in screen pixels.
+    let booms: { x: number; y: number; size: number; born: number; flip: number }[] = [];
+    let smokes: Smoke[] = [];
+    // Where blasts have scorched the land, burned into it each time it is repainted.
+    let scorches: { x: number; y: number; r: number }[] = [];
+    // A quick zoom punch on impact, decaying back to nothing.
+    let punch = 0;
+    // Health bars over units drain to the new value a beat after a hit.
+    const bars = new Map<string, { v: number; since: number }>();
     const sounds = createSpellSounds(() => (Number.isFinite(window.__soundVolume) ? window.__soundVolume : 100) / 100);
     let stopChargeSound: (() => void) | null = null;
 
     // The canvas is a 200 x 100 cell window onto a wider world; the camera pans it.
+    // Zoom scales the whole world, wizards and text included; the wheel changes it and
+    // the view pulls back a little while a throw charges.
     const CELL = W / 200;
-    const VIEW_W = W / CELL;
-    let VIEW_H = H / CELL;
+    const ZOOM_MIN = 0.7;
+    const ZOOM_MAX = 2.6;
+    let zoomTarget = 1.6;
+    let zoom = zoomTarget;
+    let VIEW_W = 0;
+    let VIEW_H = 0;
+    const fitView = () => {
+      VIEW_W = W / (CELL * zoom);
+      VIEW_H = H / (CELL * zoom);
+    };
+    fitView();
     // World rows hidden behind the spell dock at the bottom of the arena. The camera
     // may scroll that far past the world's bottom (into the sea), so the lowest
     // ground can always be brought above the dock.
     let dockPad = 0;
     const measureDock = () => {
-      const dock = document.getElementById("arena-controls");
+      const dock = document.getElementById("arena-hud");
       if (!dock || !canvas.getBoundingClientRect) return 0;
       const c = canvas.getBoundingClientRect();
       const d = dock.getBoundingClientRect();
@@ -378,10 +449,17 @@ const SpellArena = {
     let camReady = false;
     // Free look: the player panned by hand, so the camera stops following for a while.
     let freeLookUntil = 0;
+    // Edge scrolling waits for the mouse to move after a cast or a new turn, so a
+    // pointer left near the side after a throw doesn't drag the camera away.
+    let edgeArmed = false;
     let pointer: { x: number; y: number } | null = null;
     // Lobbed spells charge while the button is held, like a power bar.
     let charge: { start: number; spell: string } | null = null;
     const CHARGE_MS = 1300;
+    // The hint under the wizard teaches the charge; after a few throws it is known.
+    const THROWS_KEY = "spellslingers_throws";
+    const store = globalThis.localStorage as Storage | undefined;
+    let throwsSeen = Number(store?.getItem(THROWS_KEY)) || 0;
     // Where each unit is drawn. Steps glide toward the server position; jumps of
     // more than a few cells are teleports and flash at both ends.
     const drawn = new Map<string, [number, number]>();
@@ -393,16 +471,21 @@ const SpellArena = {
     const clampCam = () => {
       if (!shown) return;
       cam.x = Math.max(0, Math.min(shown.width - VIEW_W, cam.x));
-      // A view taller than the world sits on its bottom, with sky or rock above.
+      // A view taller than the world sits on its bottom, with sky or rock above. The
+      // view may also rise a little past the top, so a broom flying at the ceiling
+      // keeps its rider and name on screen.
       const maxY = shown.height + dockPad - VIEW_H;
-      cam.y = Math.max(Math.min(0, maxY), Math.min(maxY, cam.y));
+      cam.y = Math.max(Math.min(-8, maxY), Math.min(maxY, cam.y));
     };
     const palette = () => PALETTES[shown?.map_id ?? "isles"] ?? PALETTES.isles;
 
-    const floatText = (unit: Unit, text: string, color: string, size: number) => {
+    // Numbers pop just over the unit; hints start higher (`above` cells), over its
+    // name and turn arrow, so they never print on top of them.
+    const floatText = (unit: Unit, text: string, color: string, size: number, above = 3) => {
       const s = scale();
       const max = size > 20 ? 1800 : 1300;
-      floaters.push({ x: (unit.x + 0.5) * s, y: (unit.y - 3) * s, text, color, size, life: max, max });
+      const [x, y] = drawn.get(unit.id) ?? [unit.x, unit.y];
+      floaters.push({ x: (x + 0.5) * s, y: (y - above) * s, text, color, size, life: max, max });
     };
 
     // Shows how much each unit's health changed between two states, where it stood.
@@ -413,7 +496,6 @@ const SpellArena = {
       const old = new Map(before.units.map((u) => [u.id, u]));
       let worstHit = 0;
       let healed = false;
-      let blocked = false;
       let summoned = false;
       for (const unit of after.units) {
         if (skip?.has(unit.id)) continue;
@@ -425,42 +507,65 @@ const SpellArena = {
         const delta = unit.hp - prev.hp;
         if (unit.dead && !prev.dead) floatText(prev, "KO!", "#dc2626", 30);
         else if (delta < 0) floatText(prev, `${delta}`, "#ef4444", delta <= -30 ? 24 : 18);
+        if (delta < 0) hurtAt.set(unit.id, performance.now());
         else if (delta > 0) floatText(prev, `+${delta}`, "#16a34a", 18);
         if (delta < 0) worstHit = Math.max(worstHit, -delta);
         if (delta > 0) healed = true;
-        if ((prev.ward ?? 0) > 0 && (unit.ward ?? 0) < (prev.ward ?? 0) && delta === 0 && !unit.dead) {
-          floatText(prev, "blocked", "#3b82f6", 15);
-          blocked = true;
-        }
       }
       if (worstHit) sounds.hurt(worstHit);
       if (healed) sounds.heal();
-      if (blocked) sounds.blocked();
       if (summoned) sounds.summoned();
     };
 
     const show = (state: ArenaState, skip?: Set<string>) => {
-      if (shown && shown.units !== state.units) announceChanges(shown, state, skip);
       const jump = state.last_jump;
+      const newJump = !!shown && !!jump && jump.n !== seenJump;
+      // A jump's fall damage shows when the jumper lands, not as it takes off.
+      let landing: Unit | null = null;
+      if (newJump && jump) {
+        const before = shown!.units.find((u) => u.id === jump.id);
+        const after = state.units.find((u) => u.id === jump.id);
+        if (before && after && after.hp < before.hp) {
+          landing = after;
+          skip = new Set([...(skip ?? []), jump.id]);
+        }
+      }
+      if (shown && shown.units !== state.units) announceChanges(shown, state, skip);
       if (jump && jump.n !== seenJump) {
         seenJump = jump.n;
-        if (shown) {
-          jumping = { id: jump.id, path: jump.path, start: performance.now() };
+        if (newJump) {
+          const before = shown!.units.find((u) => u.id === jump.id);
+          jumping = { id: jump.id, path: jump.path, start: performance.now(), hurt: landing && before ? landing.hp - before.hp : 0 };
           sounds.jump();
         }
       }
       const key = state.terrain + state.map_id;
+      // A new turn brings a fresh step budget; within a turn, steps already taken
+      // here and not yet confirmed stay spent, and steps the server adds (a broomstick's
+      // fuel) are added here too.
+      const newTurn = !shown || shown.current_id !== state.current_id || shown.phase !== state.phase;
+      const gained = Math.max(0, (state.walk_left ?? 0) - (shown?.walk_left ?? 0));
+      stepsLeft = newTurn ? state.walk_left ?? 0 : Math.min(stepsLeft + gained, state.walk_left ?? 0);
+      if (newTurn) {
+        predicted = null;
+        edgeArmed = false;
+      }
+      // A rematch starts on a fresh island with no casts yet: old scorch marks go.
+      if (shown?.last_cast && !state.last_cast) scorches = [];
       shown = state;
       // Full view shows open sky above the 2:1 map, in the sky's top colour.
       if (sky) sky.style.background = palette().sky[0];
       if (key !== terrainKey) {
         terrainKey = key;
-        cells = decodeTerrain(state.terrain, state.width, state.height);
+        const next = decodeTerrain(state.terrain, state.width, state.height);
+        // The craters a cast carved here already match the server's land: keep the paint.
+        const same = !!cells && cells.length === next.length && next.every((v, i) => v === cells![i]);
+        cells = next;
         // A world whose top row is mostly rock (the cavern) has a ceiling to continue upward.
         let top = 0;
         for (let x = 0; x < state.width; x++) top += cells[x];
         ceiling = top > state.width / 2;
-        terrainCanvas = terrainImage(cells, state.width, state.height, palette());
+        if (!same) landDirty = true;
       }
       if (state.last_cast) seenCastId = state.last_cast.id;
       castLocked = false;
@@ -485,7 +590,6 @@ const SpellArena = {
           landed: new Set(),
           aftermathAt: null,
           hits: [...(cast.hits ?? [])].sort((a, b) => a.at - b.at),
-          zapped: new Set(),
           koShown: new Set(),
           koAt: null,
         };
@@ -495,7 +599,18 @@ const SpellArena = {
         }
         pending = state;
         castLocked = true;
+        edgeArmed = false;
         sounds.cast(cast, (shown.physics.dt * 1000) / shown.physics.playback_speed);
+        // The staff flares as the spell leaves it.
+        const caster = shown.units.find((u) => u.id === cast.caster_id);
+        if (caster) {
+          const s = scale();
+          const [cx, cy] = drawn.get(caster.id) ?? [caster.x, caster.y];
+          const color = colorOf(cast.spell, "#facc15");
+          burst((cx + 0.5) * s, (cy - 5) * s, color, 22, 110);
+          burst((cx + 0.5) * s, (cy - 5) * s, "#fff", 10, 70);
+          rings.push({ x: (cx + 0.5) * s, y: (cy - 5) * s, r: 22, born: at + intro, color });
+        }
       } else {
         show(state);
       }
@@ -517,6 +632,8 @@ const SpellArena = {
       !castLocked &&
       !jumping &&
       !!myWizard();
+    // During the retreat after a cast the wizard still moves, but casts nothing more.
+    const canCast = () => canAct() && !shown!.retreat;
 
     // The server's flight step: wind and gravity change the velocity, then it moves.
     const previewPath = (power: number, steps: number) => {
@@ -547,6 +664,28 @@ const SpellArena = {
     // ---- Drawing ----
     const drawBackground = (t: number) => {
       const pal = palette();
+      const backdrop = art.backdrops[shown?.map_id ?? ""];
+      if (shown && ready(backdrop)) {
+        // The painting sits behind the world and slides a little as the camera pans,
+        // so the distance reads as distance.
+        const k = Math.max((W * 1.2) / backdrop.naturalWidth, (H * 1.08) / backdrop.naturalHeight);
+        const bw = backdrop.naturalWidth * k;
+        const bh = backdrop.naturalHeight * k;
+        const panX = Math.max(1, shown.width - VIEW_W);
+        const panY = Math.max(1, shown.height - VIEW_H);
+        const fx = Math.max(0, Math.min(1, cam.x / panX));
+        const fy = Math.max(0, Math.min(1, cam.y / panY));
+        ctx.drawImage(backdrop, -(bw - W) * fx, -(bh - H) * fy, bw, bh);
+        if (shown.map_id === "cavern") {
+          for (let i = 0; i < 40; i++) {
+            ctx.globalAlpha = 0.3 + 0.3 * Math.sin(t / 700 + i);
+            ctx.fillStyle = i % 3 === 0 ? "#67e8f9" : "#c4b5fd";
+            ctx.fillRect((i * 137) % W, (i * 89) % H, 2, 2);
+          }
+          ctx.globalAlpha = 1;
+        }
+        return;
+      }
       const sky = ctx.createLinearGradient(0, 0, 0, H);
       sky.addColorStop(0, pal.sky[0]);
       sky.addColorStop(0.7, pal.sky[1]);
@@ -605,402 +744,256 @@ const SpellArena = {
       for (let x = 0; x <= worldW; x += 10) ctx.lineTo(x, top + Math.sin(x * 0.04 + t / 400) * 3);
       ctx.lineTo(worldW, bottom);
       ctx.fill();
-      ctx.strokeStyle = "rgba(255,255,255,0.6)";
-      ctx.lineWidth = 2;
+      // Deeper down the sea turns opaque, so rock under it and open water read as one
+      // sea instead of lighter and darker blocks with hard seams between them.
+      const deep = ctx.createLinearGradient(0, top + 0.5 * s, 0, top + 4 * s);
+      deep.addColorStop(0, "rgba(0,0,0,0)");
+      deep.addColorStop(1, palette().water.replace(/[\d.]+\)$/, "1)"));
+      ctx.fillStyle = deep;
+      ctx.fillRect(0, top + 0.5 * s, worldW, bottom - top);
+      // A lighter band of rolling swell just under the surface.
+      ctx.fillStyle = "rgba(255,255,255,0.13)";
+      ctx.beginPath();
+      for (let x = 0; x <= worldW; x += 10) ctx.lineTo(x, top + 2 * s + Math.sin(x * 0.025 - t / 650) * 3);
+      for (let x = worldW; x >= 0; x -= 10) ctx.lineTo(x, top + 3.2 * s + Math.sin(x * 0.03 - t / 500) * 3);
+      ctx.fill();
+      ctx.strokeStyle = "rgba(255,255,255,0.85)";
+      ctx.lineWidth = 3;
       ctx.beginPath();
       for (let x = 0; x <= worldW; x += 10) ctx.lineTo(x, top + Math.sin(x * 0.04 + t / 400) * 3);
       ctx.stroke();
     };
 
-    const drawWizard = (unit: Unit, t: number, facing: number) => {
+    // A miner's pose comes from what it is doing; the sheet is painted facing right.
+    type Pose = "idle" | "crouch" | "walk" | "aim" | "cast" | "jump" | "land" | "hurt" | "tumble" | "win";
+    // How tall the sheet's cell is drawn, in cells; a standing miner fills about 0.75 of
+    // it. Nameplates sit LABEL_TALL cells above the boots, just over the hat.
+    const SHEET_TALL = 10;
+    const LABEL_TALL = 8.6;
+    // How far each miner has walked, which drives its stride so the boots never skate.
+    const walked = new Map<string, number>();
+    const faced = new Map<string, number>();
+    const landedAt = new Map<string, number>();
+    // The way a miner is aiming, in degrees above its facing (negative is down).
+    const aimLift = (unit: Unit, facing: number) => {
+      let deg: number | null = null;
+      if (unit.id === shown?.viewer_id && aim) deg = aim.angle;
+      else if (unit.id === shown?.current_id && shown?.bot_aim) {
+        const a = shown.bot_aim;
+        deg = a.x !== undefined && a.y !== undefined ? (Math.atan2(unit.y - 2 - a.y, a.x - unit.x) * 180) / Math.PI : (a.angle ?? 0);
+      }
+      if (deg === null) return 0;
+      const lift = facing > 0 ? deg : 180 - deg;
+      return ((lift + 540) % 360) - 180;
+    };
+    const drawWizard = (unit: Unit, t: number, facing: number, pose: Pose) => {
       if (!shown) return;
       const s = scale();
       const cx = (unit.x + 0.5) * s;
       const feet = (unit.y + 1) * s;
       const color = shown.players[unit.id]?.color ?? "#9ca3af";
 
-      ctx.lineWidth = 2;
-      ctx.strokeStyle = "#111827";
-
       if (unit.dead) {
-        ctx.fillStyle = "#9ca3af";
+        // A gravestone where the miner fell.
+        ctx.lineWidth = 2;
+        ctx.strokeStyle = "#111827";
+        ctx.fillStyle = "#a8a29e";
         ctx.beginPath();
-        ctx.roundRect(cx - 6, feet - 14, 12, 14, [6, 6, 0, 0]);
-        ctx.fill();
-        ctx.stroke();
-        ctx.fillStyle = "#4b5563";
-        ctx.fillRect(cx - 1, feet - 11, 2, 7);
-        ctx.fillRect(cx - 3.5, feet - 9, 7, 2);
-        return;
-      }
-
-      const bob = Math.sin(t / 300 + unit.x) * 0.8;
-
-      ctx.strokeStyle = "#78350f";
-      ctx.lineWidth = 2.5;
-      ctx.beginPath();
-      ctx.moveTo(cx + facing * 6, feet);
-      ctx.lineTo(cx + facing * 8, feet - 17 + bob);
-      ctx.stroke();
-      ctx.fillStyle = color;
-      ctx.beginPath();
-      ctx.arc(cx + facing * 8, feet - 18 + bob, 2.5, 0, Math.PI * 2);
-      ctx.fill();
-
-      ctx.strokeStyle = "#111827";
-      ctx.lineWidth = 2;
-      ctx.fillStyle = color;
-      ctx.beginPath();
-      ctx.moveTo(cx - 6, feet);
-      ctx.lineTo(cx + 6, feet);
-      ctx.lineTo(cx + 3, feet - 9 + bob);
-      ctx.lineTo(cx - 3, feet - 9 + bob);
-      ctx.closePath();
-      ctx.fill();
-      ctx.stroke();
-
-      ctx.fillStyle = "#fde2c8";
-      ctx.beginPath();
-      ctx.arc(cx, feet - 11 + bob, 3.6, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.stroke();
-      ctx.fillStyle = "#111827";
-      ctx.fillRect(cx + facing * 1.4 - 0.6, feet - 11.8 + bob, 1.3, 1.3);
-
-      ctx.fillStyle = color;
-      ctx.beginPath();
-      ctx.moveTo(cx - 6, feet - 13 + bob);
-      ctx.lineTo(cx + 6, feet - 13 + bob);
-      ctx.lineTo(cx - facing * 3, feet - 25 + bob);
-      ctx.closePath();
-      ctx.fill();
-      ctx.stroke();
-      ctx.fillStyle = "#fde047";
-      ctx.beginPath();
-      ctx.arc(cx - facing * 0.5, feet - 18 + bob, 1.2, 0, Math.PI * 2);
-      ctx.fill();
-    };
-
-    const eyes = (cx: number, y: number, color = "#fff") => {
-      ctx.fillStyle = color;
-      ctx.fillRect(cx - 3, y, 2.2, 2.2);
-      ctx.fillRect(cx + 1, y, 2.2, 2.2);
-    };
-
-    const drawMinion = (unit: Unit, t: number) => {
-      if (!shown) return;
-      const s = scale();
-      const cx = (unit.x + 0.5) * s;
-      const feet = (unit.y + 1) * s;
-      const wobble = Math.sin(t / 220 + unit.x) * 0.7;
-      const owner = shown.players[unit.owner]?.color ?? "#9ca3af";
-      ctx.lineWidth = 2;
-      ctx.strokeStyle = "#111827";
-
-      let top = feet - 14;
-
-      if (unit.kind === "thornling") {
-        ctx.fillStyle = "#16a34a";
-        ctx.beginPath();
-        for (let i = 0; i < 10; i++) {
-          const a = (i / 10) * Math.PI * 2;
-          const r = i % 2 === 0 ? 7.5 : 5.2;
-          ctx.lineTo(cx + Math.cos(a) * r, feet - 5.5 + wobble + Math.sin(a) * r * 0.85);
-        }
-        ctx.closePath();
-        ctx.fill();
-        ctx.stroke();
-        eyes(cx, feet - 7 + wobble);
-      } else if (unit.kind === "imp") {
-        const hop = Math.abs(Math.sin(t / 150 + unit.x)) * 2;
-        ctx.fillStyle = "#dc2626";
-        ctx.beginPath();
-        ctx.ellipse(cx, feet - 5 - hop, 5, 5.5, 0, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.stroke();
-        ctx.beginPath();
-        ctx.moveTo(cx - 4, feet - 9 - hop);
-        ctx.lineTo(cx - 6, feet - 14 - hop);
-        ctx.lineTo(cx - 1.5, feet - 10 - hop);
-        ctx.moveTo(cx + 4, feet - 9 - hop);
-        ctx.lineTo(cx + 6, feet - 14 - hop);
-        ctx.lineTo(cx + 1.5, feet - 10 - hop);
-        ctx.fill();
-        ctx.stroke();
-        eyes(cx, feet - 7 - hop, "#fde047");
-        top = feet - 18;
-      } else if (unit.kind === "golem") {
-        ctx.fillStyle = "#78716c";
-        ctx.beginPath();
-        ctx.roundRect(cx - 7, feet - 15, 14, 15, 3);
+        ctx.roundRect(cx - 8, feet - 20, 16, 20, [8, 8, 1, 1]);
         ctx.fill();
         ctx.stroke();
         ctx.fillStyle = "#57534e";
-        ctx.fillRect(cx - 10, feet - 12, 3, 8);
-        ctx.fillRect(cx + 7, feet - 12, 3, 8);
-        ctx.strokeStyle = "#44403c";
-        ctx.beginPath();
-        ctx.moveTo(cx - 3, feet - 4);
-        ctx.lineTo(cx + 2, feet - 8);
-        ctx.stroke();
-        eyes(cx, feet - 12, "#fbbf24");
-        top = feet - 19;
-      } else if (unit.kind === "dragon") {
-        // A purple dragon hovering on beating wings, facing its prey's side of the map.
-        const flap = Math.sin(t / 110 + unit.x);
-        const bob = Math.sin(t / 300 + unit.x) * 2;
-        const face = unit.x < (shown.width ?? 300) / 2 ? 1 : -1;
-        const y = feet - 9 + bob;
-        ctx.fillStyle = "#a78bfa";
-        for (const side of [-1, 1]) {
-          ctx.beginPath();
-          ctx.moveTo(cx + side * 3, y - 2);
-          ctx.lineTo(cx + side * 15, y - 10 - flap * 6);
-          ctx.lineTo(cx + side * 10, y + 1);
-          ctx.closePath();
-          ctx.fill();
-          ctx.stroke();
-        }
-        ctx.fillStyle = "#7c3aed";
-        ctx.beginPath();
-        ctx.ellipse(cx, y, 8, 5, 0, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.stroke();
-        ctx.beginPath();
-        ctx.moveTo(cx - face * 7, y);
-        ctx.lineTo(cx - face * 14, y + 4);
-        ctx.lineTo(cx - face * 7, y + 3);
-        ctx.fill();
-        ctx.stroke();
-        ctx.beginPath();
-        ctx.arc(cx + face * 9, y - 4, 4, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.stroke();
-        ctx.fillStyle = "#fde047";
-        ctx.fillRect(cx + face * 10 - 1, y - 6, 2, 2);
-        if (frame % 5 === 0) burst(cx + face * 13, y - 3, "#fb923c", 1, 12);
-        top = y - 16;
-      } else if (unit.kind === "zombie") {
-        // A hunched green zombie, arms reaching for its prey.
-        const lurch = Math.sin(t / 400 + unit.x) * 1.5;
-        const face = unit.x < (shown.width ?? 300) / 2 ? 1 : -1;
-        ctx.fillStyle = "#4d7c0f";
-        ctx.beginPath();
-        ctx.roundRect(cx - 5, feet - 13, 10, 13, 2);
-        ctx.fill();
-        ctx.stroke();
-        ctx.fillStyle = "#84cc16";
-        ctx.beginPath();
-        ctx.arc(cx + face * 1.5 + lurch * 0.3, feet - 16, 4.2, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.stroke();
-        ctx.strokeStyle = "#84cc16";
-        ctx.lineWidth = 2.5;
-        ctx.beginPath();
-        ctx.moveTo(cx + face * 3, feet - 10);
-        ctx.lineTo(cx + face * 10, feet - 11 + lurch);
-        ctx.stroke();
-        eyes(cx + face * 1.5, feet - 17, "#fef08a");
-        top = feet - 23;
-      } else if (unit.kind === "turret") {
-        // A riveted turret whose barrel tracks the nearest enemy.
-        const prey = shown.units
-          .filter((u) => !u.dead && u.owner !== unit.owner)
-          .sort((a, b) => Math.abs(a.x - unit.x) - Math.abs(b.x - unit.x))[0];
-        const angle = prey ? Math.atan2((prey.y - 1 - unit.y) * s, (prey.x - unit.x) * s) : -Math.PI / 2;
-        ctx.fillStyle = "#475569";
-        ctx.beginPath();
-        ctx.moveTo(cx - 7, feet);
-        ctx.lineTo(cx + 7, feet);
-        ctx.lineTo(cx + 4, feet - 6);
-        ctx.lineTo(cx - 4, feet - 6);
-        ctx.closePath();
-        ctx.fill();
-        ctx.stroke();
-        ctx.save();
-        ctx.translate(cx, feet - 9);
-        ctx.rotate(angle);
-        ctx.fillStyle = "#334155";
-        ctx.fillRect(0, -1.6, 10, 3.2);
-        ctx.strokeRect(0, -1.6, 10, 3.2);
-        ctx.restore();
-        ctx.fillStyle = "#94a3b8";
-        ctx.beginPath();
-        ctx.arc(cx, feet - 9, 4.5, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.stroke();
-        ctx.fillStyle = frame % 40 < 20 ? "#ef4444" : "#7f1d1d";
-        ctx.fillRect(cx - 1, feet - 10, 2, 2);
-        top = feet - 17;
-      } else {
-        const float = Math.sin(t / 260 + unit.x) * 2.5;
-        ctx.globalAlpha = 0.85;
-        ctx.fillStyle = "#cffafe";
-        ctx.beginPath();
-        ctx.arc(cx, feet - 8 + float, 5, Math.PI, 0);
-        ctx.lineTo(cx + 5, feet - 2 + float);
-        ctx.lineTo(cx + 2, feet - 4 + float);
-        ctx.lineTo(cx, feet - 1 + float);
-        ctx.lineTo(cx - 2, feet - 4 + float);
-        ctx.lineTo(cx - 5, feet - 2 + float);
-        ctx.closePath();
-        ctx.fill();
-        ctx.stroke();
-        ctx.globalAlpha = 1;
-        eyes(cx, feet - 9 + float, "#0e7490");
-        top = feet - 17;
+        ctx.fillRect(cx - 1.2, feet - 16, 2.4, 10);
+        ctx.fillRect(cx - 4.5, feet - 13, 9, 2.4);
+        ctx.fillStyle = color;
+        ctx.fillRect(cx - 8, feet - 3, 16, 3);
+        return;
       }
 
-      ctx.fillStyle = owner;
-      ctx.beginPath();
-      ctx.arc(cx, top + wobble, 2, 0, Math.PI * 2);
-      ctx.fill();
+      const img = art.wizard;
+      if (!ready(img)) return;
+      const sheet = wizardSheet(img, color);
+      const h = SHEET_TALL * s;
+      const w = (h * WIZARD_W) / WIZARD_H;
+      let frameAt: number = WIZARD.idle;
+      let sx = 1;
+      let sy = 1;
+      let lift = 0;
+      let spin = 0;
+      let jitter = 0;
+      // Each miner keeps its own rhythm, so a crowd doesn't blink in step.
+      const own = (unit.x * 0.37 + unit.id.length * 1.3) * 1000;
+      const phase = (t + own) / 1000;
+      switch (pose) {
+        case "idle": {
+          // Breathes, blinks now and then, and every so often scratches under the hat.
+          sy = 1 + Math.sin(phase * 2.6) * 0.018;
+          sx = 1 - Math.sin(phase * 2.6) * 0.01;
+          const blink = (t + own) % 3700;
+          const scratch = (t + own * 3) % 11000;
+          if (scratch < 1100) frameAt = WIZARD.scratch;
+          else if (blink < 130) frameAt = WIZARD.blink;
+          break;
+        }
+        case "crouch":
+          frameAt = WIZARD.crouch;
+          break;
+        case "walk":
+          frameAt = WIZARD.walk + (Math.floor((walked.get(unit.id) ?? 0) / 0.7) % 8);
+          break;
+        case "aim": {
+          const up = aimLift(unit, facing);
+          frameAt = up > 32 ? WIZARD.aimUp : up < -28 ? WIZARD.aimDown : WIZARD.aim;
+          // Winds the pick back over the shoulder as the throw charges past half.
+          if (charge && unit.id === shown.viewer_id && chargePower(t) > 55) frameAt = WIZARD.windup;
+          sy = 1 + Math.sin(phase * 3) * 0.01;
+          break;
+        }
+        case "cast":
+          frameAt = WIZARD.release;
+          break;
+        case "jump": {
+          // Crouched on take-off, then rising or falling with the arc.
+          frameAt = WIZARD.rise;
+          if (jumping?.id === unit.id && shown) {
+            const p = shown.physics;
+            const step = ((t - jumping.start) / 1000) * (p.playback_speed / p.dt);
+            const i = Math.max(0, Math.min(jumping.path.length - 2, Math.floor(step)));
+            const vy = jumping.path[i + 1][1] - jumping.path[i][1];
+            frameAt = step < 1.5 ? WIZARD.crouch : vy > 0.05 ? WIZARD.fall : WIZARD.rise;
+          }
+          break;
+        }
+        case "land":
+          frameAt = WIZARD.land;
+          break;
+        case "hurt":
+          frameAt = WIZARD.hurt;
+          jitter = Math.sin(t / 22) * 1.4;
+          break;
+        case "tumble":
+          // Curled into a ball and rolling the way it was thrown.
+          frameAt = WIZARD.tumble;
+          spin = (t / 90) * facing;
+          break;
+        case "win":
+          frameAt = Math.floor((t + own) / 320) % 2 ? WIZARD.cheer : WIZARD.jig;
+          lift = Math.abs(Math.sin((t + own) / 320 * Math.PI)) * 3;
+          break;
+      }
+
+      // A soft shadow on the ground, smaller as the miner leaves it.
+      if (pose !== "jump" && pose !== "tumble" && !((unit.float ?? 0) > 0)) {
+        ctx.fillStyle = "rgba(0,0,0,0.22)";
+        ctx.beginPath();
+        ctx.ellipse(cx, feet, h * 0.24 - lift * 0.4, 2, 0, 0, Math.PI * 2);
+        ctx.fill();
+      }
+
+      ctx.save();
+      ctx.translate(cx + jitter, feet - lift);
+      if (spin) {
+        // The ball sits low in its cell; it rolls about its own middle.
+        ctx.translate(0, -h * 0.3);
+        ctx.rotate(spin);
+        ctx.translate(0, h * 0.3);
+      }
+      ctx.scale(facing * sx, sy);
+      ctx.drawImage(sheet, frameAt * WIZARD_W, 0, WIZARD_W, WIZARD_H, -w / 2, -h, w, h);
+      ctx.restore();
+
+      // The crystal on the pick swells and glows while a throw charges.
+      if (pose === "aim" && charge && unit.id === shown.viewer_id) {
+        const power = chargePower(t) / 100;
+        const [fx, fy] = CRYSTAL[frameAt] ?? CRYSTAL[WIZARD.aim];
+        const ox = cx + facing * fx * h;
+        const oy = feet - fy * h;
+        const r = 4 + power * 10 + Math.sin(t / 60) * 1.2;
+        const glow = ctx.createRadialGradient(ox, oy, 0, ox, oy, r);
+        const tint = colorOf(charge.spell, "#facc15");
+        glow.addColorStop(0, "rgba(255,255,255,0.95)");
+        glow.addColorStop(0.35, tint);
+        glow.addColorStop(1, "rgba(255,255,255,0)");
+        ctx.fillStyle = glow;
+        ctx.beginPath();
+        ctx.arc(ox, oy, r, 0, Math.PI * 2);
+        ctx.fill();
+        if (frame % 4 === 0) burst(ox, oy, tint, 1, 14 + power * 30);
+      }
     };
 
     const drawCrate = (crate: Crate, t: number) => {
+      const img = art.crates;
+      if (!ready(img)) return;
       const s = scale();
       const cx = (crate.x + 0.5) * s;
       const feet = (crate.y + 1) * s;
+      const size = 13;
       const glow = 0.5 + 0.5 * Math.sin(t / 250 + crate.x);
-      ctx.fillStyle = crate.type === "health" ? "#fef2f2" : "#eff6ff";
-      ctx.strokeStyle = "#111827";
-      ctx.lineWidth = 2;
+      ctx.globalAlpha = 0.25 + glow * 0.25;
+      ctx.fillStyle = crate.type === "health" ? "#fecaca" : "#bfdbfe";
       ctx.beginPath();
-      ctx.roundRect(cx - 5, feet - 10, 10, 10, 2);
-      ctx.fill();
-      ctx.stroke();
-      ctx.fillStyle = crate.type === "health" ? "#ef4444" : "#3b82f6";
-      if (crate.type === "health") {
-        ctx.fillRect(cx - 1, feet - 8, 2, 6);
-        ctx.fillRect(cx - 3, feet - 6, 6, 2);
-      } else {
-        ctx.beginPath();
-        ctx.moveTo(cx, feet - 9);
-        ctx.lineTo(cx + 3, feet - 5);
-        ctx.lineTo(cx, feet - 1);
-        ctx.lineTo(cx - 3, feet - 5);
-        ctx.fill();
-      }
-      ctx.globalAlpha = glow * 0.5;
-      ctx.fillStyle = "#fef08a";
-      ctx.beginPath();
-      ctx.arc(cx, feet - 16 - glow * 2, 2, 0, Math.PI * 2);
+      ctx.arc(cx, feet - size / 2, size * 0.75, 0, Math.PI * 2);
       ctx.fill();
       ctx.globalAlpha = 1;
+      ctx.drawImage(img, CRATE_FRAME[crate.type] * CRATE_SIZE, 0, CRATE_SIZE, CRATE_SIZE, cx - size / 2, feet - size, size, size);
     };
 
-    // Lasting spells, drawn on the map until they wear off so everyone can play around them.
-    const drawZones = (t: number) => {
+    // A spell's painted sprite, centred on (x, y), `size` across, turned by `angle`.
+    const sprite = (id: string, x: number, y: number, size: number, angle = 0, flip = 1) => {
+      const img = art.spells;
+      const n = spellById(id)?.sprite;
+      if (!ready(img) || n === undefined) return false;
+      ctx.save();
+      ctx.translate(x, y);
+      ctx.scale(flip, 1);
+      ctx.rotate(angle);
+      ctx.drawImage(img, n * SPELL_CELL, 0, SPELL_CELL, SPELL_CELL, -size / 2, -size / 2, size, size);
+      ctx.restore();
+      return true;
+    };
+
+    // The pick hook's chain: iron links from (x0, y0) to (x1, y1), sagging a little.
+    const chain = (x0: number, y0: number, x1: number, y1: number) => {
+      const length = Math.hypot(x1 - x0, y1 - y0);
+      const links = Math.max(2, Math.floor(length / 5));
+      const sag = Math.min(14, length * 0.06);
+      const angle = Math.atan2(y1 - y0, x1 - x0);
+      ctx.lineWidth = 1.6;
+      for (let i = 0; i < links; i++) {
+        const k = (i + 0.5) / links;
+        const lx = x0 + (x1 - x0) * k;
+        const ly = y0 + (y1 - y0) * k + Math.sin(k * Math.PI) * sag;
+        ctx.strokeStyle = i % 2 ? "#57534e" : "#a8a29e";
+        ctx.beginPath();
+        ctx.ellipse(lx, ly, i % 2 ? 2.8 : 3.4, i % 2 ? 1.2 : 2, angle, 0, Math.PI * 2);
+        ctx.stroke();
+      }
+    };
+
+    // Blast runes fizz at their caster's feet until the turn ends, then go off.
+    const drawRunes = (t: number) => {
       if (!shown) return;
       const s = scale();
-      for (const zone of shown.zones ?? []) {
-        if (zone.kind === "napalm" && zone.x0 !== undefined && zone.x1 !== undefined && zone.y !== undefined) {
-          for (let x = zone.x0; x <= zone.x1; x++) {
-            const h = 7 + 6 * Math.abs(Math.sin(t / 120 + x * 1.7));
-            const base = (zone.y + 1) * s;
-            ctx.fillStyle = x % 2 ? "#f97316" : "#facc15";
-            ctx.beginPath();
-            ctx.moveTo(x * s, base);
-            ctx.lineTo((x + 0.5) * s, base - h);
-            ctx.lineTo((x + 1) * s, base);
-            ctx.fill();
-          }
-          if (frame % 4 === 0) burst((zone.x0 + Math.random() * (zone.x1 - zone.x0)) * s, (zone.y + 0.5) * s, "#fb923c", 1, 15);
-        } else if (zone.kind === "volcano" && zone.x !== undefined && zone.y !== undefined) {
-          const glow = 0.5 + 0.3 * Math.sin(t / 150);
-          ctx.fillStyle = `rgba(249, 115, 22, ${glow})`;
-          ctx.beginPath();
-          ctx.arc(zone.x * s, (zone.y + 2) * s, 7, 0, Math.PI * 2);
-          ctx.fill();
-          if (frame % 3 === 0) burst(zone.x * s, (zone.y + 1) * s, frame % 6 ? "#78716c" : "#f97316", 1, 25);
-          turnsBadge(zone.x * s, (zone.y - 4) * s, zone.turns, "#b91c1c");
-        } else if (zone.kind === "thunderhead" && zone.x0 !== undefined && zone.x1 !== undefined) {
-          const x0 = zone.x0 * s;
-          const w = (zone.x1 - zone.x0) * s;
-          const top = Math.max(cam.y * s + 30, 30);
-          const cx = x0 + w / 2 + Math.sin(t / 900) * 3;
-          ctx.fillStyle = "#475569";
-          ctx.strokeStyle = "#111827";
-          ctx.lineWidth = 2.5;
-          ctx.beginPath();
-          for (const [dx, dy, r] of [[-0.36, 6, 16], [-0.17, -5, 21], [0.05, -8, 23], [0.25, -2, 19], [0.4, 7, 14]]) {
-            ctx.moveTo(cx + dx * w + r, top + dy);
-            ctx.arc(cx + dx * w, top + dy, r, 0, Math.PI * 2);
-          }
-          ctx.fill();
-          ctx.stroke();
-          ctx.fillRect(cx - w * 0.42, top, w * 0.84, 16);
-          turnsBadge(cx, top - 2, zone.turns, "#ca8a04");
-        } else if (zone.kind === "blizzard" && zone.x0 !== undefined && zone.x1 !== undefined) {
-          const x0 = zone.x0 * s;
-          const w = (zone.x1 - zone.x0) * s;
-          // Low enough to stay clear of the wizard rail in the arena's top corner.
-          const top = Math.max(cam.y * s + 80, 80);
-          const cx = x0 + w / 2 + Math.sin(t / 700) * 3;
-          ctx.fillStyle = "#e2e8f0";
-          ctx.strokeStyle = "#111827";
-          ctx.lineWidth = 2;
-          ctx.beginPath();
-          for (const [dx, dy, r] of [[-0.3, 4, 13], [-0.1, -4, 17], [0.12, -5, 16], [0.32, 4, 12]]) {
-            ctx.moveTo(cx + dx * w + r, top + dy);
-            ctx.arc(cx + dx * w, top + dy, r, 0, Math.PI * 2);
-          }
-          ctx.fill();
-          ctx.stroke();
-          if (frame % 3 === 0) {
-            particles.push({
-              x: x0 + Math.random() * w, y: top + 10, vx: -20 + Math.random() * 10, vy: 60 + Math.random() * 30,
-              life: 1400, max: 1400, color: "#fff", size: 2,
-            });
-          }
-          turnsBadge(cx, top - 2, zone.turns, "#0891b2");
-        } else if (zone.kind === "bomb" && zone.x !== undefined && zone.y !== undefined) {
-          // A clockwork bomb, its hand ticking round; the Doomsday Clock is a giant one.
-          const big = (zone.radius ?? 0) >= 12;
-          const r = big ? 9 : 4;
-          const bx = zone.x * s;
-          const by = zone.y * s - r;
-          const urgent = zone.turns <= 1;
-          ctx.fillStyle = "#1f2937";
-          ctx.strokeStyle = "#111827";
-          ctx.lineWidth = 2;
-          ctx.beginPath();
-          ctx.arc(bx, by, r, 0, Math.PI * 2);
-          ctx.fill();
-          ctx.stroke();
-          ctx.fillStyle = urgent && frame % 20 < 10 ? "#fca5a5" : "#fef3c7";
-          ctx.beginPath();
-          ctx.arc(bx, by, r * 0.65, 0, Math.PI * 2);
-          ctx.fill();
-          const hand = t / (urgent ? 120 : 400);
-          ctx.strokeStyle = "#b91c1c";
-          ctx.lineWidth = big ? 2 : 1.2;
-          ctx.beginPath();
-          ctx.moveTo(bx, by);
-          ctx.lineTo(bx + Math.cos(hand) * r * 0.55, by + Math.sin(hand) * r * 0.55);
-          ctx.stroke();
-          ctx.fillStyle = "#f59e0b";
-          ctx.fillRect(bx - 1.5, by - r - 3, 3, 3);
-          if (frame % 6 === 0) burst(bx, by - r - 3, "#fde047", 1, 15);
-          if (big) turnsBadge(bx, by - r - 12, zone.turns, "#b91c1c");
-        } else if (zone.kind === "lich") {
-          // The Lich's sickly glow and how many more turns it hungers.
-          const lich = shown.units.find((u) => u.id === zone.owner && !u.dead);
-          if (lich) {
-            const lx = (lich.x + 0.5) * s;
-            const ly = (lich.y + 1) * s - 14;
-            const glow = ctx.createRadialGradient(lx, ly, 2, lx, ly, 20);
-            glow.addColorStop(0, `rgba(163, 230, 53, ${0.55 + 0.15 * Math.sin(t / 200)})`);
-            glow.addColorStop(1, "rgba(163, 230, 53, 0)");
-            ctx.fillStyle = glow;
-            ctx.beginPath();
-            ctx.arc(lx, ly, 20, 0, Math.PI * 2);
-            ctx.fill();
-            if (frame % 7 === 0) burst(lx + (Math.random() - 0.5) * 16, ly + 8, "#a3e635", 1, 18);
-            turnsBadge(lx + 16, ly + 6, zone.turns, "#4d7c0f");
-          }
-        }
+      for (const rune of shown.runes ?? []) {
+        const x = rune.x * s;
+        const y = rune.y * s - 8;
+        const pulse = 0.5 + 0.5 * Math.sin(t / 90);
+        const glow = ctx.createRadialGradient(x, y, 2, x, y, 26);
+        glow.addColorStop(0, `rgba(217, 70, 239, ${0.35 + pulse * 0.35})`);
+        glow.addColorStop(1, "rgba(217, 70, 239, 0)");
+        ctx.fillStyle = glow;
+        ctx.beginPath();
+        ctx.arc(x, y, 26, 0, Math.PI * 2);
+        ctx.fill();
+        sprite("blastrune", x, y, 18 + pulse * 2);
+        if (frame % 3 === 0) burst(x + 4, y - 10, "#fde047", 1, 25);
       }
+    };
+
+    // Glowing rims the biggest blasts leave behind, cooling over a few seconds.
+    const drawScars = (t: number) => {
+      const s = scale();
       for (const scar of scars) {
         const k = 1 - (t - scar.born) / 5000;
         if (k <= 0) continue;
@@ -1017,78 +1010,30 @@ const SpellArena = {
       scars = scars.filter((scar) => t - scar.born < 5000);
     };
 
-    // How many more turns a lasting spell has, on a coin over it.
-    const turnsBadge = (x: number, y: number, turns: number, color: string) => {
-      ctx.fillStyle = "#fde047";
-      ctx.strokeStyle = "#111827";
-      ctx.lineWidth = 2;
-      ctx.beginPath();
-      ctx.arc(x, y, 9, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.stroke();
-      ctx.fillStyle = color;
-      ctx.font = "900 11px ui-sans-serif, system-ui";
-      ctx.textAlign = "center";
-      ctx.fillText(String(turns), x, y + 4);
+    // How far a flying wizard leans, eased: forward into sideways flight, nose up when
+    // climbing and down when diving. Velocity is in cells per millisecond.
+    const velocity = new Map<string, [number, number]>();
+    const leans = new Map<string, number>();
+    const leanOf = (id: string, face: number, dt: number) => {
+      const [vx, vy] = velocity.get(id) ?? [0, 0];
+      const full = 1 / FLY_MS;
+      const clamp = (v: number) => Math.max(-1, Math.min(1, v / full));
+      const want = clamp(vx) * 0.16 + clamp(vy) * face * 0.14;
+      const lean = (leans.get(id) ?? 0) + (want - (leans.get(id) ?? 0)) * (1 - Math.exp(-dt / 120));
+      leans.set(id, lean);
+      return lean;
     };
 
-    const drawAuras = (unit: Unit, t: number) => {
-      if (unit.dead) return;
+    // A wizard on a broomstick rides it, with a trail of sparkles.
+    // The sheet paints it diagonally, bristles bottom left; a quarter turn lays it flat
+    // with the handle ahead of the rider.
+    const drawBroom = (unit: Unit, t: number, face: number) => {
+      if (unit.dead || (unit.float ?? 0) <= 0) return;
       const s = scale();
       const cx = (unit.x + 0.5) * s;
       const feet = (unit.y + 1) * s;
-
-      if ((unit.float ?? 0) > 0) {
-        ctx.globalAlpha = 0.5 + 0.2 * Math.sin(t / 200);
-        ctx.fillStyle = "#c4b5fd";
-        ctx.beginPath();
-        ctx.ellipse(cx, feet + 2, 9, 3, 0, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.globalAlpha = 1;
-        if (frame % 6 === 0) burst(cx + (Math.random() - 0.5) * 10, feet + 2, "#ddd6fe", 1, 15);
-      }
-
-      if ((unit.decay ?? 0) > 0) {
-        ctx.fillStyle = `rgba(132, 204, 22, ${0.25 + 0.1 * Math.sin(t / 220)})`;
-        ctx.beginPath();
-        ctx.ellipse(cx, feet - 1, 9, 3, 0, 0, Math.PI * 2);
-        ctx.fill();
-        if (frame % 8 === 0) burst(cx + (Math.random() - 0.5) * 10, feet - 6 - Math.random() * 10, "#84cc16", 1, 12);
-      }
-
-      if ((unit.frozen ?? 0) > 0) {
-        // Locked in a block of ice until their turn passes.
-        const tall = unit.kind === "wizard" ? 28 : 18;
-        ctx.fillStyle = "rgba(165, 243, 252, 0.55)";
-        ctx.strokeStyle = "#0891b2";
-        ctx.lineWidth = 1.5;
-        ctx.beginPath();
-        ctx.roundRect(cx - 9, feet - tall, 18, tall, 2);
-        ctx.fill();
-        ctx.stroke();
-        ctx.strokeStyle = "rgba(255, 255, 255, 0.85)";
-        ctx.beginPath();
-        ctx.moveTo(cx - 6, feet - tall + 4);
-        ctx.lineTo(cx - 2, feet - tall + 10);
-        ctx.moveTo(cx + 4, feet - 8);
-        ctx.lineTo(cx + 6, feet - 4);
-        ctx.stroke();
-      }
-
-      if ((unit.ward ?? 0) > 0) {
-        const r = unit.kind === "wizard" ? 17 : 12;
-        const cy = feet - r * 0.75;
-        const glow = ctx.createRadialGradient(cx, cy, r * 0.4, cx, cy, r);
-        glow.addColorStop(0, "rgba(147, 197, 253, 0)");
-        glow.addColorStop(1, "rgba(96, 165, 250, 0.35)");
-        ctx.fillStyle = glow;
-        ctx.strokeStyle = `rgba(59, 130, 246, ${0.6 + 0.3 * Math.sin(t / 180)})`;
-        ctx.lineWidth = 2;
-        ctx.beginPath();
-        ctx.arc(cx, cy, r, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.stroke();
-      }
+      sprite("broom", cx, feet - 2, 42, Math.PI / 4 + 0.1, face);
+      if (frame % 3 === 0) burst(cx - face * 16 + Math.random() * 4, feet, "#fde68a", 1, 16);
     };
 
     const drawFloaters = (dt: number) => {
@@ -1113,10 +1058,10 @@ const SpellArena = {
       if (!shown || unit.dead) return;
       const s = scale();
       const cx = (unit.x + 0.5) * s;
-      const tall = unit.kind === "wizard" ? 34 : unit.kind === "golem" || unit.kind === "dragon" || unit.kind === "zombie" ? 28 : 22;
+      const tall = LABEL_TALL * s + 3;
       const top = (unit.y + 1) * s - tall;
 
-      if (unit.kind === "wizard") {
+      {
         const label = shown.players[unit.id]?.name ?? "?";
         ctx.font = "bold 11px ui-sans-serif, system-ui";
         ctx.textAlign = "center";
@@ -1127,10 +1072,16 @@ const SpellArena = {
         ctx.fillText(label, cx, top - 6);
       }
 
-      const w = unit.kind === "wizard" ? 26 : 16;
+      const w = 26;
       const ratio = unit.hp / unit.max_hp;
+      const now = performance.now();
+      let bar = bars.get(unit.id);
+      if (!bar || unit.hp >= bar.v) bars.set(unit.id, (bar = { v: unit.hp, since: now }));
+      else if (now - bar.since > 380) bar.v = Math.max(unit.hp, bar.v - (unit.max_hp * 0.6 * 16) / 1000);
       ctx.fillStyle = "#111827";
       ctx.fillRect(cx - w / 2 - 1, top - 2, w + 2, 5);
+      ctx.fillStyle = "#fde68a";
+      ctx.fillRect(cx - w / 2, top - 1, (w * bar.v) / unit.max_hp, 3);
       ctx.fillStyle = ratio > 0.5 ? "#22c55e" : ratio > 0.25 ? "#f59e0b" : "#ef4444";
       ctx.fillRect(cx - w / 2, top - 1, w * ratio, 3);
     };
@@ -1139,23 +1090,18 @@ const SpellArena = {
     const placeTarget = () => {
       const wizard = myWizard();
       if (!shown || !wizard || !pointer) return null;
-      let x = pointer.x / CELL + cam.x;
-      let y = pointer.y / CELL + cam.y;
+      let x = pointer.x / (CELL * zoom) + cam.x;
+      let y = pointer.y / (CELL * zoom) + cam.y;
       x = Math.max(0, Math.min(shown.width - 1, x));
       while (y > 1 && solidAt(Math.floor(x), Math.floor(y))) y -= 1;
       const def = spellDef();
       const inRange = !!def?.sky || Math.hypot(x - wizard.x - 0.5, y - wizard.y + 1) <= shown.physics.place_range;
-      // Anything but a ledge drops to the ground below; over the sea it is wasted. Of the
-      // sky spells only the volcano needs ground under it.
-      // Ice floes form on the sea itself, so the sea is where they belong.
-      const drops = def?.sky
-        ? def.effect === "volcano" || def.effect === "doomsday"
-        : !["ledge", "icefloe"].includes(def?.effect ?? "") && def?.id !== "dragon";
-      const sinks = drops && dropTo(x, y) >= shown.water_level - 1;
+      // A blink lands you on the ground below the spot, so over the sea it drowns you.
+      const sinks = def?.effect === "blink" && dropTo(x, y) >= shown.water_level - 1;
       return { x, y, inRange, sinks };
     };
 
-    // Where a summon or wall would come to rest: straight down onto the ground.
+    // Where a wizard would come to rest: straight down onto the ground.
     const dropTo = (x: number, y: number) => {
       if (!shown) return y;
       let yy = y;
@@ -1166,7 +1112,7 @@ const SpellArena = {
     const drawAim = (t: number) => {
       const wizard = myWizard();
       const spell = spellDef();
-      if (!shown || !wizard || !aim || !canAct() || !spell || spell.input === "instant") return;
+      if (!shown || !wizard || !aim || !canCast() || !spell || spell.input === "instant") return;
       const s = scale();
       const color = spell.color;
       const ox = (wizard.x + 0.5) * s;
@@ -1193,10 +1139,43 @@ const SpellArena = {
         ctx.strokeStyle = "#111827";
         const px = target.x * s;
         const py = target.y * s;
-        if (spell.effect === "ledge") {
-          ctx.fillRect(px - 7.5 * s, py - 0.5 * s, 15 * s, 2 * s);
-          ctx.strokeRect(px - 7.5 * s, py - 0.5 * s, 15 * s, 2 * s);
-        } else {
+        if (spell.effect === "slab") {
+          // The slab as it will hang: a rounded rock ledge like the painted platforms.
+          ctx.fillStyle = ok ? "#d6a27a" : tint;
+          ctx.lineWidth = Math.max(2, 0.35 * s);
+          ctx.beginPath();
+          ctx.roundRect(px - 7.5 * s, py - 0.6 * s, 15 * s, 2.2 * s, 1.1 * s);
+          ctx.fill();
+          ctx.stroke();
+        } else if (spell.effect === "meteors") {
+          // Five meteors drop straight down these columns: show each streak and the
+          // blast ring where it first meets ground.
+          for (const [i, dx] of [-12, -6, 0, 6, 12].entries()) {
+            const mx = (Math.max(2, Math.min(shown.width - 3, target.x)) + dx + 0.5) * s;
+            const land = dropTo(mx / s, 0) * s;
+            ctx.globalAlpha = 0.35;
+            ctx.setLineDash([4, 6]);
+            ctx.lineDashOffset = t / 25;
+            ctx.beginPath();
+            ctx.moveTo(mx, 0);
+            ctx.lineTo(mx, land);
+            ctx.stroke();
+            ctx.setLineDash([]);
+            ctx.globalAlpha = 0.3 + 0.12 * Math.sin(t / 160 + i);
+            ctx.beginPath();
+            ctx.arc(mx, land, (spell.radius ?? 6) * s, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.globalAlpha = 0.4;
+            ctx.stroke();
+          }
+          ctx.globalAlpha = 1;
+          sprite("meteors", px, py, 7 * s, Math.PI / 6);
+        } else if (spell.effect === "anvil") {
+          ctx.fillRect(px - 4 * s, 0, 8 * s, py);
+          ctx.globalAlpha = 1;
+          sprite("anvil", px, py - 4 * s, 9 * s);
+        } else if (spell.effect === "blink") {
+          // A ghost of the wizard where it will land.
           const rest = dropTo(target.x, target.y);
           ctx.setLineDash([3, 4]);
           ctx.beginPath();
@@ -1204,37 +1183,12 @@ const SpellArena = {
           ctx.lineTo(px, rest * s);
           ctx.stroke();
           ctx.setLineDash([]);
-          if (spell.effect === "thunderhead" || spell.effect === "blizzard") {
-            const half = spell.effect === "blizzard" ? 13 : 16;
-            ctx.fillRect(px - half * s, py - 1 * s, half * 2 * s, 2 * s);
-          } else if (spell.effect === "icefloe") {
-            ctx.fillRect(px - 11 * s, (shown.water_level - 1) * s, 22 * s, 1.5 * s);
-            ctx.strokeRect(px - 11 * s, (shown.water_level - 1) * s, 22 * s, 1.5 * s);
-          } else if (spell.effect === "doomsday") {
-            ctx.beginPath();
-            ctx.arc(px, rest * s, spell.radius * s, 0, Math.PI * 2);
-            ctx.fill();
-            ctx.stroke();
-          } else if (spell.effect === "cataclysm") {
-            ctx.beginPath();
-            ctx.arc(px, py, spell.radius * s, 0, Math.PI * 2);
-            ctx.fill();
-            ctx.stroke();
-          } else if (spell.effect === "raise") {
-            const r = spell.radius * s;
-            ctx.fillRect(px - r * 0.45, (rest + 1) * s - r * 1.6, r * 0.9, r * 1.6);
-            ctx.strokeRect(px - r * 0.45, (rest + 1) * s - r * 1.6, r * 0.9, r * 1.6);
-          } else if (spell.effect === "heal") {
-            ctx.beginPath();
-            ctx.arc(px, rest * s, spell.radius * s, 0, Math.PI * 2);
-            ctx.fill();
-            ctx.stroke();
-          } else {
-            ctx.beginPath();
-            ctx.ellipse(px, (rest + 1) * s - 9, 7, 9, 0, 0, Math.PI * 2);
-            ctx.fill();
-            ctx.stroke();
-          }
+          ctx.beginPath();
+          ctx.ellipse(px, (rest + 1) * s - 3.8 * s, 2.2 * s, 3.8 * s, 0, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.stroke();
+          ctx.globalAlpha = 1;
+          sprite("blink", px, (rest - 2.8) * s, 8 * s, t / 300);
         }
         ctx.restore();
         if (!ok) {
@@ -1259,7 +1213,8 @@ const SpellArena = {
         ctx.globalAlpha = 0.8;
         ctx.beginPath();
         ctx.moveTo(ox, oy);
-        ctx.lineTo(ox + dir[0] * 45 * s, oy + dir[1] * 45 * s);
+        const reach = Math.min(spell.range ?? 45, 45);
+        ctx.lineTo(ox + dir[0] * reach * s, oy + dir[1] * reach * s);
         ctx.stroke();
         ctx.restore();
       } else {
@@ -1282,15 +1237,17 @@ const SpellArena = {
 
       // The banner meter shows power; the arc dots above take its colour. Full power
       // waits for the release rather than firing itself.
-      if (spell.input === "charge") {
+      // Just under the feet, for the first few throws only; the banner says it too.
+      if (spell.input === "charge" && throwsSeen < 3) {
         const text = charge ? "let go to throw · right-click cancels" : "hold to charge";
+        const y = (wizard.y + 1) * s + 14 + Math.sin(t / 200);
         ctx.font = "bold 11px ui-sans-serif, system-ui";
         ctx.textAlign = "center";
         ctx.lineWidth = 3;
         ctx.strokeStyle = "white";
-        ctx.strokeText(text, ox, oy + 46 + Math.sin(t / 200));
+        ctx.strokeText(text, ox, y);
         ctx.fillStyle = "#111827";
-        ctx.fillText(text, ox, oy + 46 + Math.sin(t / 200));
+        ctx.fillText(text, ox, y);
       }
     };
 
@@ -1302,7 +1259,8 @@ const SpellArena = {
       // Follows the wizard as drawn, so it rides along mid-jump.
       const [ux, uy] = drawn.get(unit.id) ?? [unit.x, unit.y];
       const cx = (ux + 0.5) * s;
-      const y = (uy + 1) * s - 58 + Math.sin(t / 180) * 4;
+      // Clear of the nameplate under it, even at the bottom of its bob.
+      const y = (uy + 1) * s - 66 + Math.sin(t / 180) * 3;
       ctx.fillStyle = shown.players[unit.id]?.color ?? "#111827";
       ctx.strokeStyle = "#111827";
       ctx.lineWidth = 2;
@@ -1373,30 +1331,266 @@ const SpellArena = {
         due.set(hit.id, hit);
       }
       if (!due.size) return;
+      // The health bars along the bottom drop with it too.
+      this.pushEvent("arena_hits_shown", { cast: animation.cast.id, hits: [...due.values()].map(({ id, hp }) => ({ id, hp })) });
       const next = {
         ...shown,
         units: shown.units.map((u) => {
           const hit = due.get(u.id);
-          return hit ? { ...u, hp: hit.hp, ward: hit.ward } : u;
+          return hit ? { ...u, hp: hit.hp } : u;
         }),
       };
       announceChanges(shown, next);
       shown = next;
     };
 
-    // Lightning arcs flash for a moment from the step each one strikes.
-    const drawBeams = (now: number) => {
-      if (!animation || !shown) return;
-      const s = scale();
-      const step = castStep(now, animation.start);
-      animation.cast.beams.forEach(({ line: [x0, y0, x1, y1], at }, n) => {
-        if (step < at || step > at + 20) return;
-        if (!animation!.zapped.has(n)) {
-          animation!.zapped.add(n);
-          sounds.zap();
+    // Carves a blast's crater into the land on screen the moment it lands, by the server's
+    // rule (a cell goes when its centre is inside the circle), instead of waiting for the
+    // whole cast to finish. The painted land is cut in place: repainting it all takes a
+    // few hundred milliseconds, a visible freeze right on the hit. When the server's land
+    // arrives it matches these cells, so it is not repainted either.
+    const carve = (cx: number, cy: number, r: number) => {
+      if (!shown || !cells) return;
+      for (let y = Math.max(0, Math.floor(cy - r)); y <= Math.min(shown.height - 1, Math.ceil(cy + r)); y++) {
+        for (let x = Math.max(0, Math.floor(cx - r)); x <= Math.min(shown.width - 1, Math.ceil(cx + r)); x++) {
+          if ((x + 0.5 - cx) ** 2 + (y + 0.5 - cy) ** 2 <= r * r) cells[y * shown.width + x] = 0;
         }
-        lightning(x0 * s, y0 * s, x1 * s, y1 * s, "#93c5fd");
-      });
+      }
+      if (terrainCanvas && terrainRes === LAND_RES) carveLand(terrainCanvas, cx, cy, r);
+      else landDirty = true;
+    };
+
+    // A blast lands, all on the same frame: the fireball and ring flash out, the crater
+    // opens with a scorched rim, chunks of the land and smoke fly, and the view punches in.
+    const impact = (x: number, y: number, radius: number, color: string) => {
+      const s = scale();
+      rings.push({ x: x * s, y: y * s, r: (radius + 2) * s * 1.5, born: performance.now(), color });
+      booms.push({ x: x * s, y: y * s, size: (radius + 3) * s * 2.6, born: performance.now(), flip: Math.random() < 0.5 ? -1 : 1 });
+      punch = Math.min(0.09, punch + 0.015 + radius * 0.006);
+      const pal = palette();
+      const land = [...pal.grass.slice(0, 2), ...pal.soil, ...pal.rock.slice(0, 2)];
+      // Clods of the land itself, a cell or two across, thrown out of the hole. They
+      // bounce where they come down and lie there a moment, so the ground visibly went somewhere.
+      for (let i = 0; i < 6 + radius * 2; i++) {
+        const a = -Math.PI * (0.08 + Math.random() * 0.84);
+        const v = 70 + Math.random() * (80 + radius * 20);
+        const [r, g, b] = land[i % land.length];
+        const max = 1800 + Math.random() * 1200;
+        const size = s * (i % 3 === 0 ? 1.4 + Math.random() * 1.2 : 0.6 + Math.random() * 0.7);
+        const shape = Array.from({ length: 6 }, () => 0.7 + Math.random() * 0.45);
+        particles.push({ x: x * s, y: y * s, vx: Math.cos(a) * v, vy: Math.sin(a) * v, life: max, max, color: `rgb(${r},${g},${b})`, size, chunk: true, shape, bounces: 0 });
+      }
+      const wind = shown?.wind ?? 0;
+      for (let i = 0; i < 4 + radius; i++) {
+        const max = 1600 + Math.random() * 1400;
+        smokes.push({
+          x: x * s + (Math.random() - 0.5) * radius * s,
+          y: y * s - Math.random() * radius * s * 0.6,
+          r: 4 + Math.random() * radius * 1.4,
+          vx: wind * 4 + (Math.random() - 0.5) * 10,
+          vy: -10 - Math.random() * 12,
+          life: max,
+          max,
+        });
+      }
+      scorches.push({ x, y, r: radius });
+      if (scorches.length > 80) scorches = scorches.slice(-80);
+      carve(x, y, radius);
+    };
+
+    // The painted explosion plays through its frames: a flash, the fireball swelling to
+    // its peak, then breaking up into smoke that drifts off.
+    const BOOM_MS = 75;
+    const drawBooms = (now: number) => {
+      booms = booms.filter((b) => now - b.born < BOOM_MS * BOOM_FRAMES);
+      const img = art.boom;
+      if (!ready(img)) return;
+      for (const b of booms) {
+        const age = now - b.born;
+        const n = Math.min(BOOM_FRAMES - 1, Math.floor(age / BOOM_MS));
+        const grow = 0.75 + Math.min(1, age / (BOOM_MS * 3)) * 0.35;
+        const size = b.size * grow;
+        ctx.globalAlpha = n >= 5 ? 1 - (age - BOOM_MS * 5) / (BOOM_MS * 3) : 1;
+        ctx.save();
+        ctx.translate(b.x, b.y - size * 0.12 * (n / BOOM_FRAMES));
+        ctx.scale(b.flip, 1);
+        ctx.drawImage(img, n * BOOM_CELL, 0, BOOM_CELL, BOOM_CELL, -size / 2, -size / 2, size, size);
+        ctx.restore();
+      }
+      ctx.globalAlpha = 1;
+    };
+
+    const drawRings = (now: number) => {
+      rings = rings.filter((ring) => now - ring.born < 320);
+      for (const ring of rings) {
+        const k = Math.max(0, (now - ring.born) / 320);
+        if (k === 0 && now < ring.born) {
+          // The frozen beat: a white-hot core where the blast is about to go off.
+          ctx.fillStyle = "rgba(255,255,255,0.9)";
+          ctx.beginPath();
+          ctx.arc(ring.x, ring.y, ring.r * 0.35, 0, Math.PI * 2);
+          ctx.fill();
+          continue;
+        }
+        // A fireball that swells and burns out, when the painted explosion isn't loaded.
+        if (k < 0.65 && !ready(art.boom)) {
+          const f = k / 0.65;
+          const fr = ring.r * (0.55 + f * 0.55);
+          const g = ctx.createRadialGradient(ring.x, ring.y, 0, ring.x, ring.y, fr);
+          g.addColorStop(0, "#fffbeb");
+          g.addColorStop(0.3, "#fde047");
+          g.addColorStop(0.65, "#f97316");
+          g.addColorStop(1, "rgba(234,88,12,0)");
+          ctx.globalAlpha = 1 - f * f;
+          ctx.fillStyle = g;
+          ctx.beginPath();
+          ctx.arc(ring.x, ring.y, fr, 0, Math.PI * 2);
+          ctx.fill();
+        }
+        ctx.globalAlpha = 1 - k;
+        ctx.fillStyle = "rgba(255,255,255,0.35)";
+        ctx.beginPath();
+        ctx.arc(ring.x, ring.y, ring.r * (0.3 + k * 0.7), 0, Math.PI * 2);
+        ctx.fill();
+        ctx.strokeStyle = "#fff";
+        ctx.lineWidth = 4 * (1 - k) + 1;
+        ctx.stroke();
+        ctx.strokeStyle = ring.color;
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.arc(ring.x, ring.y, ring.r * (0.2 + k * 0.85), 0, Math.PI * 2);
+        ctx.stroke();
+      }
+      ctx.globalAlpha = 1;
+    };
+
+    const drawSmoke = (dt: number) => {
+      smokes = smokes.filter((m) => (m.life -= dt) > 0);
+      for (const m of smokes) {
+        const k = 1 - m.life / m.max;
+        m.x += m.vx * (dt / 1000);
+        m.y += m.vy * (dt / 1000);
+        m.vy *= 0.995;
+        ctx.globalAlpha = 0.45 * (1 - k) * Math.min(1, k * 8);
+        ctx.fillStyle = k < 0.15 ? "#78716c" : "#a8a29e";
+        ctx.beginPath();
+        ctx.arc(m.x, m.y, m.r * (1 + k * 1.8), 0, Math.PI * 2);
+        ctx.fill();
+      }
+      ctx.globalAlpha = 1;
+    };
+
+    // How each spell looks in flight: its painted sprite, turned the way it flies (or
+    // spinning, or hopping), with a trail; beams and swings are drawn as what they are.
+    const ORIENT: Record<string, number> = { firebolt: 0, seeker: 0, embers: Math.PI / 2, meteors: (3 * Math.PI) / 4, surge: (3 * Math.PI) / 4, starfall: -Math.PI / 4 };
+    const SIZE: Record<string, number> = { firebolt: 22, fuserune: 18, embers: 14, thunderegg: 20, seeker: 22, hexhare: 24, holyorb: 28, anvil: 48, meteors: 26, starfall: 24, surge: 24, blastrune: 22, slab: 40 };
+    const drawProjectile = (segment: Segment, local: number, x: number, y: number, color: string, cast: Cast) => {
+      const s = scale();
+      const id = segment.spell === "surge" ? "meteors" : segment.spell;
+      const [px, py] = pointAt(segment.path, Math.max(0, local - 0.6));
+      const heading = Math.atan2(y - py, x - px);
+
+      if (id === "lance") {
+        const [sx, sy] = segment.path[0];
+        lightning(sx * s, sy * s, x * s, y * s, color);
+        burst(x * s, y * s, "#fff", 2, 40);
+        return;
+      }
+      if (id === "tunnel") {
+        const [tx, ty] = pointAt(segment.path, Math.max(0, local - 4));
+        ctx.strokeStyle = color;
+        ctx.lineWidth = 6;
+        ctx.lineCap = "round";
+        ctx.beginPath();
+        ctx.moveTo(tx * s, ty * s);
+        ctx.lineTo(x * s, y * s);
+        ctx.stroke();
+        sprite("tunnel", x * s, y * s, 22, heading);
+        if (frame % 2 === 0) burst(x * s, y * s, "#a16207", 3, 50);
+        return;
+      }
+      if (id === "hook") {
+        // The pick flies out on its chain, point first.
+        const [ox, oy] = segment.path[0];
+        chain(ox * s, oy * s, x * s, y * s);
+        sprite("hook", x * s, y * s, 28, heading + Math.PI / 4);
+        return;
+      }
+      if (id === "blink") {
+        const [fx0, fy0] = segment.path[0];
+        sprite("blink", fx0 * s, fy0 * s, 34, now() / 120);
+        sprite("blink", x * s, y * s, 34, -now() / 120);
+        return;
+      }
+
+      const size = SIZE[id] ?? 20;
+      // A tapering trail in the spell's colour, so even a small shot reads as it flies.
+      ctx.lineCap = "round";
+      for (let i = 1; i <= 7; i++) {
+        const [ax, ay] = pointAt(segment.path, Math.max(0, local - i * 0.8));
+        const [bx, by] = pointAt(segment.path, Math.max(0, local - (i - 1) * 0.8));
+        ctx.globalAlpha = 0.5 * (1 - i / 8);
+        ctx.strokeStyle = color;
+        ctx.lineWidth = size * 0.7 * (1 - i / 9);
+        ctx.beginPath();
+        ctx.moveTo(ax * s, ay * s);
+        ctx.lineTo(bx * s, by * s);
+        ctx.stroke();
+      }
+      ctx.globalAlpha = 1;
+      if (frame % 2 === 0) burst(x * s, y * s, color, 1, 20);
+
+      let angle = 0;
+      let flip = 1;
+      if (id in ORIENT) angle = heading - ORIENT[id];
+      else if (id === "hexhare") flip = x >= px ? 1 : -1;
+      else if (id === "fuserune" || id === "thunderegg") angle = local * 0.35 * (x >= px ? 1 : -1);
+      else if (id === "holyorb") {
+        // It sings as it flies: a halo of light around it.
+        const glow = ctx.createRadialGradient(x * s, y * s, 2, x * s, y * s, size * 1.3);
+        glow.addColorStop(0, "rgba(254, 240, 138, 0.8)");
+        glow.addColorStop(1, "rgba(254, 240, 138, 0)");
+        ctx.fillStyle = glow;
+        ctx.beginPath();
+        ctx.arc(x * s, y * s, size * 1.3, 0, Math.PI * 2);
+        ctx.fill();
+      }
+      if (!sprite(id, x * s, y * s, size, angle, flip)) {
+        ctx.fillStyle = color;
+        ctx.strokeStyle = "#111827";
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.arc(x * s, y * s, size / 3, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.stroke();
+      }
+      void cast;
+    };
+    const now = () => performance.now();
+
+    // A flight ending without a blast: a bounce, a hop, a slab or keg set down, a blink.
+    const landed = (segment: Segment, x: number, y: number, color: string, _cast: Cast) => {
+      const s = scale();
+      if (!segment.hit) {
+        burst(x * s, y * s, "#bfdbfe", 18, 80);
+        return;
+      }
+      if (segment.spell === "hook") {
+        const [ex, ey] = segment.path[segment.path.length - 1];
+        burst(ex * s, ey * s, "#fff", 18, 120);
+        rings.push({ x: ex * s, y: ey * s, r: 20, born: performance.now(), color });
+        floaters.push({ x: ex * s, y: (ey - 4) * s, text: "HOOKED!", color: "#fde047", size: 22, life: 900, max: 900 });
+        punch = Math.min(0.09, punch + 0.04);
+        shake(5, 200);
+        return;
+      }
+      if (segment.spell === "blink") {
+        burst(x * s, y * s, colorOf("blink", "#a855f7"), 40, 120);
+        return;
+      }
+      // A skip or hop: a puff of dust where it touched down.
+      burst(x * s, y * s, "#d6d3d1", 10, 60);
+      burst(x * s, y * s, color, 6, 40);
     };
 
     const drawFlight = (now: number) => {
@@ -1429,52 +1623,12 @@ const SpellArena = {
         if (local < last) {
           const [x, y] = pointAt(segment.path, local);
 
-          if (segment.spell === "thunderhead") {
-            const [sx, sy] = segment.path[0];
-            lightning(sx * s, sy * s, x * s, y * s, color);
-          } else if (segment.spell === "cataclysm") {
-            for (let i = 0; i < 3; i++) burst(x * s + (Math.random() - 0.5) * 20, y * s + (Math.random() - 0.5) * 20, i ? "#fb923c" : "#facc15", 1, 50);
-            ctx.fillStyle = "rgba(253, 224, 71, 0.35)";
-            ctx.beginPath();
-            ctx.arc(x * s, y * s, 30, 0, Math.PI * 2);
-            ctx.fill();
-            ctx.fillStyle = "#7c2d12";
-            ctx.strokeStyle = "#111827";
-            ctx.lineWidth = 3;
-            ctx.beginPath();
-            ctx.arc(x * s, y * s, 16, 0, Math.PI * 2);
-            ctx.fill();
-            ctx.stroke();
-            ctx.fillStyle = "#fb923c";
-            ctx.beginPath();
-            ctx.arc(x * s - 5, y * s + 3, 7, 0, Math.PI * 2);
-            ctx.fill();
-          } else if (isBeam(segment.spell)) {
-            const [tx, ty] = pointAt(segment.path, Math.max(0, local - 4));
-            ctx.strokeStyle = color;
-            ctx.lineWidth = segment.spell === "gust" ? 7 : 4;
-            ctx.lineCap = "round";
-            ctx.beginPath();
-            ctx.moveTo(tx * s, ty * s);
-            ctx.lineTo(x * s, y * s);
-            ctx.stroke();
-            if (segment.spell === "burrow" && frame % 2 === 0) burst(x * s, y * s, "#a16207", 2, 40);
-          } else {
-            if (frame % 2 === 0) burst(x * s, y * s, color, 1, 20);
-            const big = segment.spell === "inferno" ? 8 : segment.spell === "boulder" || segment.spell === "volcano" ? 6 : 4.5;
-            ctx.fillStyle = color;
-            ctx.strokeStyle = "#111827";
-            ctx.lineWidth = 2;
-            ctx.beginPath();
-            ctx.arc(x * s, y * s, big, 0, Math.PI * 2);
-            ctx.fill();
-            ctx.stroke();
-          }
+          drawProjectile(segment, local, x, y, color, cast);
         } else if (!animation!.landed.has(n)) {
           animation!.landed.add(n);
           sounds.land(segment);
           const [x, y] = segment.path[last];
-          if (segment.hit && segment.radius > 0 && ((cast.grand && segment.spell === "cataclysm") || segment.spell === "doomsday")) {
+          if (segment.hit && segment.radius > 0 && segment.spell === "holyorb") {
             // The grand impact: a white flash, a beat of stillness, then the blast and a glowing scar.
             flashUntil = now + 220;
             animation!.start += 140;
@@ -1483,12 +1637,15 @@ const SpellArena = {
             burst(x * s, y * s, color, 70, 260);
             shake(16, 1000);
             scars.push({ x, y, r: segment.radius + 1, born: now });
+            carve(x, y, segment.radius);
           } else if (segment.hit && segment.radius > 0) {
+            impact(x, y, segment.radius, color);
             burst(x * s, y * s, "#fde047", 20 + segment.radius * 4, 100 + segment.radius * 12);
             burst(x * s, y * s, color, 16 + segment.radius * 3, 80 + segment.radius * 10);
-            shake(Math.min(8, segment.radius * 0.8), 260);
+            const heavy = segment.spell === "anvil" || segment.spell === "blastrune" || segment.radius >= 10;
+            shake(heavy ? 14 : Math.min(10, segment.radius * 1.1), heavy ? 520 : 340);
           } else {
-            burst(x * s, y * s, segment.hit ? color : "#bfdbfe", 18, 80);
+            landed(segment, x, y, color, cast);
           }
         }
       });
@@ -1501,7 +1658,8 @@ const SpellArena = {
           const unit = (pending ?? shown)?.units.find((u) => u.id === aura.id);
           if (unit) {
             const s = scale();
-            burst((unit.x + 0.5) * s, (unit.y - 1) * s, colorOf(aura.kind, "#fff"), 26, 70);
+            burst((unit.x + 0.5) * s, (unit.y + 1) * s, colorOf(aura.kind, "#fff"), 26, 70);
+            burst((unit.x + 0.5) * s, (unit.y + 1) * s, "#fde68a", 14, 50);
           }
         }
         if (pending) {
@@ -1529,6 +1687,19 @@ const SpellArena = {
       const elapsed = now - animation.aftermathAt;
       const step = castStep(now, animation.aftermathAt, knockSpeed(cast));
 
+      // A hooked miner is reeled in on the chain until they land.
+      if (cast.spell === "hook") {
+        const s = scale();
+        const caster = shown.units.find((u) => u.id === cast.caster_id);
+        for (const knock of cast.knocks) {
+          if (!caster || step >= knock.path.length - 1) continue;
+          const [kx, ky] = pointAt(knock.path, step);
+          const [cx, cy] = drawn.get(caster.id) ?? [caster.x, caster.y];
+          chain((cx + 0.5) * s, (cy - 1) * s, (kx + 0.5) * s, (ky - 1.5) * s);
+          sprite("hook", (kx + 0.5) * s, (ky - 1.5) * s, 24, Math.PI / 4);
+        }
+      }
+
       // A knocked-out wizard falls when their knockback ends, or at once if nothing knocked them.
       let fell = false;
       for (const id of cast.ko ?? []) {
@@ -1548,7 +1719,7 @@ const SpellArena = {
       const knockSteps = Math.max(0, ...cast.knocks.map((k) => k.path.length));
       const done =
         step >= knockSteps &&
-        (animation.koAt !== null ? now - animation.koAt > 1300 : elapsed > (cast.beams.length ? 500 : 250));
+        (animation.koAt !== null ? now - animation.koAt > 1300 : elapsed > 650);
 
       if (done) {
         animation = null;
@@ -1564,13 +1735,49 @@ const SpellArena = {
 
     const drawParticles = (dt: number) => {
       particles = particles.filter((p) => (p.life -= dt) > 0);
+      const s = scale();
       for (const p of particles) {
-        p.vy += 220 * (dt / 1000);
-        p.x += p.vx * (dt / 1000);
-        p.y += p.vy * (dt / 1000);
-        ctx.globalAlpha = Math.max(0, p.life / p.max);
+        const resting = p.chunk && (p.bounces ?? 0) >= 3;
+        if (!resting) {
+          p.vy += (p.chunk ? 420 : 220) * (dt / 1000);
+          p.x += p.vx * (dt / 1000);
+          p.y += p.vy * (dt / 1000);
+          // Clods tumble with their sideways speed, so they stop turning as they settle.
+          p.rot = (p.rot ?? 0) + (p.vx * dt) / 3000;
+        }
+        // A clod that comes down on land bounces, loses most of its speed, and settles.
+        // Not in its first moments: the hole it flew out of may not be carved yet.
+        if (p.chunk && !resting && p.vy > 0 && p.max - p.life > 150) {
+          const foot = p.y + p.size * 0.4;
+          if (solidAt(Math.floor(p.x / s), Math.floor(foot / s))) {
+            p.y -= p.vy * (dt / 1000);
+            p.vy = -p.vy * 0.32;
+            p.vx *= 0.5;
+            p.bounces = Math.abs(p.vy) < 25 ? 3 : (p.bounces ?? 0) + 1;
+          }
+        }
+        // Clods stay solid until their last half second; sparks fade all along.
+        ctx.globalAlpha = p.chunk ? Math.min(1, p.life / 500) : Math.max(0, p.life / p.max);
         ctx.fillStyle = p.color;
-        ctx.fillRect(p.x - p.size / 2, p.y - p.size / 2, p.size, p.size);
+        if (p.chunk) {
+          ctx.save();
+          ctx.translate(p.x, p.y);
+          ctx.rotate(p.rot ?? 0);
+          const shape = p.shape ?? [1, 1, 1, 1, 1, 1];
+          ctx.beginPath();
+          shape.forEach((k, i) => {
+            const a = (i / shape.length) * Math.PI * 2;
+            ctx.lineTo(Math.cos(a) * k * p.size * 0.5, Math.sin(a) * k * p.size * 0.5);
+          });
+          ctx.closePath();
+          ctx.fill();
+          ctx.strokeStyle = "#1c1917";
+          ctx.lineWidth = Math.max(1, p.size * 0.14);
+          ctx.stroke();
+          ctx.restore();
+        } else {
+          ctx.fillRect(p.x - p.size / 2, p.y - p.size / 2, p.size, p.size);
+        }
       }
       ctx.globalAlpha = 1;
     };
@@ -1592,18 +1799,37 @@ const SpellArena = {
       if (animation && animation.aftermathAt !== null) {
         const knocked = [...knockedPositions(now).values()];
         if (knocked.length) return knocked[0];
+        // Nobody flew: hold on where the spell ended so the blast is seen before
+        // the camera heads back.
+        const last = animation.cast.segments.reduce<(typeof animation.cast.segments)[number] | null>(
+          (a, b) => (!a || b.start + b.path.length > a.start + a.path.length ? b : a),
+          null,
+        );
+        if (last?.path.length) return last.path[last.path.length - 1] as [number, number];
       }
       if (now < freeLookUntil && !animation) return null;
       const unit = shown.units.find((u) => u.id === shown!.current_id && !u.dead);
-      return unit ? [unit.x + 0.5, unit.y - 4] : null;
+      // As drawn, so the camera rides along a jump instead of waiting where it lands.
+      const at = unit && (drawn.get(unit.id) ?? [unit.x, unit.y]);
+      return at ? [at[0] + 0.5, at[1] - 4] : null;
     };
 
     const moveCamera = (now: number, dt: number) => {
       if (!shown) return;
+      // Ease the zoom, keeping the middle of the view where it was.
+      const want = zoomTarget * (charge ? 0.85 : 1);
+      if (Math.abs(want - zoom) > 0.001) {
+        const cx = cam.x + VIEW_W / 2;
+        const cy = cam.y + VIEW_H / 2;
+        zoom += (want - zoom) * (1 - Math.exp(-dt / 160));
+        fitView();
+        cam.x = cx - VIEW_W / 2;
+        cam.y = cy - VIEW_H / 2;
+      }
       dockPad = measureDock();
       // Pointer at the left or right edge pans the view, Worms style.
-      if (pointer && !charge && !animation) {
-        const edge = 40;
+      if (pointer && edgeArmed && !charge && !animation) {
+        const edge = 24;
         const dir = pointer.x < edge ? -1 : pointer.x > W - edge ? 1 : 0;
         if (dir !== 0) {
           cam.x += dir * dt * 0.06;
@@ -1620,7 +1846,8 @@ const SpellArena = {
           cam.y = ty;
           camReady = true;
         } else {
-          const k = 1 - Math.exp(-dt / (animation ? 140 : 260));
+          // Eased enough to follow a spell without whipping from caster to impact and back.
+          const k = 1 - Math.exp(-dt / (animation ? 260 : 380));
           cam.x += (tx - cam.x) * k;
           cam.y += (ty - cam.y) * k;
         }
@@ -1635,10 +1862,19 @@ const SpellArena = {
       const p = shown.physics;
       const step = ((now - jumping.start) / 1000) * (p.playback_speed / p.dt);
       if (step < path.length - 1) return pointAt(path, step) as [number, number];
+      const hurt = jumping.hurt;
       jumping = null;
+      landedAt.set(unit.id, now);
       const s = scale();
       burst((unit.x + 0.5) * s, (unit.y + 1) * s, "#a8a29e", 10, 50);
       sounds.landed();
+      if (hurt < 0) {
+        drawn.set(unit.id, [unit.x, unit.y]);
+        hurtAt.set(unit.id, performance.now());
+        floatText(unit, `${hurt}`, "#ef4444", hurt <= -30 ? 24 : 18);
+        sounds.hurt(-hurt);
+        shake(Math.min(8, -hurt / 8), 300);
+      }
       return null;
     };
 
@@ -1651,12 +1887,25 @@ const SpellArena = {
       }
       if (Math.hypot(unit.x - prev[0], unit.y - prev[1]) > 6) {
         sounds.teleport();
-        const color = colorOf("blink", "#c084fc");
+        const color = colorOf("blink", "#a855f7");
         burst((prev[0] + 0.5) * s, (prev[1] - 1) * s, color, 30, 90);
         burst((unit.x + 0.5) * s, (unit.y - 1) * s, color, 40, 120);
         burst((unit.x + 0.5) * s, (unit.y - 1) * s, "#fff", 16, 60);
         drawn.set(unit.id, [unit.x, unit.y]);
         return { x: unit.x, y: unit.y };
+      }
+      if ((unit.float ?? 0) > 0) {
+        // Flight closes on the broom's next cell at a steady speed, a little faster
+        // than the steps arrive, so it glides instead of lurching once a cell.
+        // Each axis keeps its own pace, so a diagonal keeps up with its steps.
+        const chase = (from: number, to: number) => {
+          const d = Math.abs(to - from);
+          const move = Math.min(d, Math.max((dt / FLY_MS) * 1.08, d * (1 - Math.exp(-dt / 140))));
+          return from + Math.sign(to - from) * move;
+        };
+        const at: [number, number] = [chase(prev[0], unit.x), chase(prev[1], unit.y)];
+        drawn.set(unit.id, at);
+        return { x: at[0], y: at[1] };
       }
       const k = 1 - Math.exp(-dt / 55);
       const x = prev[0] + (unit.x - prev[0]) * k;
@@ -1733,47 +1982,6 @@ const SpellArena = {
       ctx.restore();
     };
 
-    // The minimap is its own canvas over the arena, so in full view it can sit under the
-    // top strip rather than wherever the 2:1 map happens to start.
-    const drawMinimap = () => {
-      if (!shown || !terrainCanvas || !mini || !miniCtx) return;
-      const w = mini.clientWidth;
-      const h = (w * shown.height) / shown.width;
-      const dpr = window.devicePixelRatio || 1;
-      if (mini.width !== Math.round(w * dpr) || mini.height !== Math.round(h * dpr)) {
-        mini.width = Math.round(w * dpr);
-        mini.height = Math.round(h * dpr);
-      }
-      const c = miniCtx;
-      const k = w / shown.width;
-      c.setTransform(dpr, 0, 0, dpr, 0, 0);
-      c.clearRect(0, 0, w, h);
-      c.globalAlpha = 0.9;
-      c.fillStyle = "rgba(15, 23, 42, 0.55)";
-      c.fillRect(0, 0, w, h);
-      c.imageSmoothingEnabled = false;
-      c.drawImage(terrainCanvas, 0, 0, w, h);
-      c.fillStyle = palette().water;
-      c.fillRect(0, shown.water_level * k, w, h - shown.water_level * k);
-      for (const unit of shown.units) {
-        if (unit.dead || unit.kind !== "wizard") continue;
-        c.fillStyle = shown.players[unit.id]?.color ?? "#fff";
-        c.strokeStyle = "#111827";
-        c.lineWidth = 1;
-        c.beginPath();
-        c.arc((unit.x + 0.5) * k, (unit.y - 1) * k, unit.id === shown.current_id ? 3.5 : 2.5, 0, Math.PI * 2);
-        c.fill();
-        c.stroke();
-      }
-      c.globalAlpha = 1;
-      c.strokeStyle = "#fff";
-      c.lineWidth = 1.5;
-      c.strokeRect(cam.x * k, cam.y * k, VIEW_W * k, VIEW_H * k);
-      c.strokeStyle = "#111827";
-      c.lineWidth = 2;
-      c.strokeRect(1, 1, w - 2, h - 2);
-    };
-
     // Off-screen wizards get a labelled arrow at the edge; clicking one looks at them.
     let markers: { id: string; x: number; y: number; w: number; h: number }[] = [];
     const drawOffscreenMarkers = () => {
@@ -1784,12 +1992,13 @@ const SpellArena = {
       const visible: { x: number; top: number; bottom: number }[] = [];
       for (const unit of shown.units) {
         if (unit.dead || unit.kind !== "wizard") continue;
-        const sx = (unit.x + 0.5 - cam.x) * CELL;
+        const px = CELL * zoom;
+        const sx = (unit.x + 0.5 - cam.x) * px;
         if (sx >= 0 && sx <= W) {
-          visible.push({ x: sx, top: (unit.y - 4 - cam.y) * CELL - 28, bottom: (unit.y + 1 - cam.y) * CELL });
+          visible.push({ x: sx, top: (unit.y - 4 - cam.y) * px - 28 * zoom, bottom: (unit.y + 1 - cam.y) * px });
           continue;
         }
-        sides[sx < 0 ? "left" : "right"].push({ unit, y: Math.max(24, Math.min(H - 24, (unit.y - 1 - cam.y) * CELL)) });
+        sides[sx < 0 ? "left" : "right"].push({ unit, y: Math.max(24, Math.min(H - 24, (unit.y - 1 - cam.y) * px)) });
       }
       ctx.save();
       ctx.font = "bold 12px ui-sans-serif, system-ui";
@@ -1846,33 +2055,196 @@ const SpellArena = {
       clampCam();
       freeLookUntil = performance.now() + 5000;
     };
-    const onFocus = (event: Event) => lookAt((event as CustomEvent<{ id: string }>).detail?.id);
+    // Without an id (as from the tour), it looks at the viewer's own wizard.
+    const onFocus = (event: Event) => {
+      const id = (event as CustomEvent<{ id?: string } | null>).detail?.id ?? shown?.viewer_id;
+      if (id) lookAt(id);
+    };
 
     // Where the viewer's wizard is on screen, for the first-turn tour to point at.
     (canvas as HTMLCanvasElement & { viewerPoint?: () => { x: number; y: number; k: number } | null }).viewerPoint = () => {
       const unit = myWizard();
       if (!unit) return null;
       const r = canvas.getBoundingClientRect();
-      const k = (r.width / W) * CELL;
+      const k = (r.width / W) * CELL * zoom;
       const [x, y] = drawn.get(unit.id) ?? [unit.x, unit.y];
       return { x: r.left + (x + 0.5 - cam.x) * k, y: r.top + (y - cam.y) * k, k };
-    };
-
-    const minimapJump = (event: PointerEvent) => {
-      if (!shown || !mini || event.button !== 0) return;
-      const r = mini.getBoundingClientRect();
-      const k = r.width / shown.width;
-      cam.x = (event.clientX - r.left) / k - VIEW_W / 2;
-      cam.y = (event.clientY - r.top) / k - VIEW_H / 2;
-      clampCam();
-      freeLookUntil = performance.now() + 4000;
     };
 
     let lastTime = performance.now();
     let rafId = 0;
 
+    // The server's walking rules, mirrored: a wizard is 3 cells tall, climbs up to
+    // max_climb cells a step (6 on a broomstick), then drops to the ground.
+    const blockedAt = (x: number, y: number) =>
+      !shown || x < 0 || x >= shown.width || solidAt(x, y) || solidAt(x, y - 1) || solidAt(x, y - 2);
+    const predictStep = (from: { x: number; y: number }, dir: number, floating: boolean) => {
+      if (!shown) return null;
+      const x = from.x + dir;
+      const climb = floating ? 6 : shown.physics.max_climb ?? 2;
+      let y: number | null = null;
+      for (let c = 0; c <= climb; c++) {
+        if (!blockedAt(x, from.y - c)) {
+          y = from.y - c;
+          break;
+        }
+      }
+      if (y === null) return null;
+      if (!floating) while (y + 1 < shown.height && y < shown.water_level && !solidAt(x, y + 1)) y++;
+      return { x, y };
+    };
+
+    const walkStep = (now: number) => {
+      const wizard = myWizard();
+      if (!wizard || !canAct() || jumping) return;
+      nextStepAt = now + STEP_MS;
+      if (stepsLeft <= 0) return;
+      const from = predicted ?? wizard;
+      const to = predictStep(from, heldDir, (wizard.float ?? 0) > 0);
+      if (!to) {
+        heldDir = 0;
+        if (now - lastBlockedHint > 2500) {
+          lastBlockedHint = now;
+          floatText(wizard, "Too steep! W to jump", "#fde68a", 15, 15);
+        }
+        return;
+      }
+      predicted = { ...to, at: now };
+      stepsLeft -= 1;
+      this.pushEvent("walk", { dir: heldDir });
+    };
+
+    // One cell of broom flight, by the server's rules: sideways it climbs over a bump of
+    // up to 6 cells (`Units.step`), and up or down it stops at rock, the sky's ceiling
+    // and the sea (the `:rise` command). Each move costs a step and is sent to confirm.
+    const flyStep = (now: number) => {
+      const wizard = myWizard();
+      if (!shown || !wizard || !canAct()) return;
+      // Steps keep a steady rhythm whatever the frame rate; a fresh press starts it.
+      nextStepAt = now - nextStepAt > FLY_MS ? now + FLY_MS : nextStepAt + FLY_MS;
+      const start = predicted ?? wizard;
+      let at: { x: number; y: number } = start;
+      if (heldDir && stepsLeft > 0) {
+        const to = predictStep(at, heldDir, true);
+        if (to) {
+          at = to;
+          stepsLeft -= 1;
+          this.pushEvent("walk", { dir: heldDir });
+        }
+      }
+      const y = at.y - heldV;
+      if (heldV && stepsLeft > 0 && y >= 3 && y < shown.water_level && !blockedAt(at.x, y)) {
+        at = { x: at.x, y };
+        stepsLeft -= 1;
+        this.pushEvent("rise", { dir: heldV });
+      }
+      if (at === start) return;
+      predicted = { x: at.x, y: at.y, at: now };
+    };
+    const floating = () => (myWizard()?.float ?? 0) > 0;
+    const moveStep = (now: number) => (floating() ? flyStep(now) : heldDir ? walkStep(now) : undefined);
+
+    const buildLand = () => {
+      if (!shown || !cells) return;
+      landDirty = false;
+      const texture = art.textures[shown.map_id];
+      if (ready(texture)) {
+        terrainCanvas = paintLand(cells, shown.width, shown.height, texture, palette(), scorches);
+        terrainRes = LAND_RES;
+      } else {
+        terrainCanvas = terrainImage(cells, shown.width, shown.height, palette());
+        terrainRes = 1;
+      }
+    };
+
+    const poseOf = (unit: Unit, now: number, moving: boolean, knocked: boolean): Pose => {
+      if (!shown) return "idle";
+      if (shown.phase === "game_ended") return "win";
+      if (knocked) return "tumble";
+      if (jumping?.id === unit.id) return "jump";
+      if (unit.id === shown.viewer_id && now - crouchAt < 300) return "crouch";
+      if (now - (hurtAt.get(unit.id) ?? -1e9) < 650) return "hurt";
+      if (now - (landedAt.get(unit.id) ?? -1e9) < 170) return "land";
+      if (animation && animation.cast.caster_id === unit.id && now < animation.start + 420) return "cast";
+      if (moving) return "walk";
+      const def = spellDef();
+      if (unit.id === shown.viewer_id && canCast() && aim && def && def.input !== "instant") return "aim";
+      if (shown.bot_aim && unit.id === shown.current_id) return "aim";
+      return "idle";
+    };
+
+    // A bot lines up its shot where everyone can see it: the arc grows out from its staff
+    // (or a crosshair settles on the spot) before it lets fly.
+    let botAimSince = 0;
+    let botAimKey = "";
+    const botFacing = (unit: Unit) => {
+      const a = shown?.bot_aim;
+      if (!a) return 1;
+      if (a.x !== undefined) return a.x >= unit.x ? 1 : -1;
+      return Math.cos(((a.angle ?? 0) * Math.PI) / 180) >= 0 ? 1 : -1;
+    };
+    const drawBotAim = (t: number) => {
+      const a = shown?.bot_aim;
+      const bot = shown?.units.find((u) => u.id === shown?.current_id && !u.dead);
+      if (!shown || !a || !bot || animation) return;
+      const key = JSON.stringify(a);
+      if (key !== botAimKey) {
+        botAimKey = key;
+        botAimSince = t;
+      }
+      const k = Math.min(1, (t - botAimSince) / 900);
+      const s = scale();
+      const spell = spellById(a.spell);
+      const color = spell?.color ?? "#ef4444";
+      if (a.x !== undefined && a.y !== undefined) {
+        const r = (1 - k) * 40 + 10;
+        ctx.strokeStyle = color;
+        ctx.lineWidth = 3;
+        ctx.beginPath();
+        ctx.arc(a.x * s, a.y * s, r, 0, Math.PI * 2);
+        ctx.moveTo(a.x * s - r - 6, a.y * s);
+        ctx.lineTo(a.x * s + r + 6, a.y * s);
+        ctx.moveTo(a.x * s, a.y * s - r - 6);
+        ctx.lineTo(a.x * s, a.y * s + r + 6);
+        ctx.stroke();
+        return;
+      }
+      const p = shown.physics;
+      const sp = spell ?? { speed: 1, gravity: 1, wind: 1 };
+      const beam = spell?.input === "beam";
+      const power = beam ? 100 : (a.power ?? 50) * (0.35 + 0.65 * k);
+      const speed = (p.max_speed * sp.speed * Math.max(power, 5)) / 100;
+      const rad = ((a.angle ?? 0) * Math.PI) / 180;
+      let vx = Math.cos(rad) * speed;
+      let vy = -Math.sin(rad) * speed;
+      let x = bot.x + 0.5;
+      let y = bot.y - 2;
+      const steps = beam ? Math.min(spell?.range ?? 30, 30) : 26;
+      for (let i = 0; i < steps; i++) {
+        vx += shown.wind * p.wind_accel * sp.wind * p.dt;
+        vy += p.gravity * sp.gravity * p.dt;
+        x += beam ? Math.cos(rad) : vx * p.dt;
+        y += beam ? -Math.sin(rad) : vy * p.dt;
+        if (solidAt(Math.floor(x), Math.floor(y)) || y >= shown.water_level) break;
+        if (i % 3 !== 2) continue;
+        ctx.globalAlpha = (1 - i / (steps + 4)) * 0.9;
+        ctx.fillStyle = color;
+        ctx.strokeStyle = "rgba(17,24,39,0.6)";
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        ctx.arc(x * s, y * s, 3, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.stroke();
+      }
+      ctx.globalAlpha = 1;
+    };
+
     const render = (now: number) => {
       frame++;
+      if (landDirty) buildLand();
+      if ((heldDir || heldV) && now >= nextStepAt) moveStep(now);
+      // The server has had long enough to confirm the last step; its word stands.
+      if (predicted && now - predicted.at > 600) predicted = null;
       const dt = Math.min(64, now - lastTime);
       lastTime = now;
 
@@ -1887,11 +2259,16 @@ const SpellArena = {
 
       drawBackground(now);
       moveCamera(now, dt);
+      punch *= Math.exp(-dt / 110);
       ctx.save();
+      ctx.translate(W / 2, H / 2);
+      ctx.scale(1 + punch, 1 + punch);
+      ctx.translate(-W / 2, -H / 2);
+      ctx.scale(zoom, zoom);
       ctx.translate(-cam.x * CELL, -cam.y * CELL);
 
       if (shown && terrainCanvas) {
-        ctx.imageSmoothingEnabled = false;
+        ctx.imageSmoothingEnabled = terrainRes > 1;
         if (ceiling && cam.y < 0) {
           // Rock carries on above the world: its top rows mirrored, then solid rock.
           const rows = 24;
@@ -1900,44 +2277,72 @@ const SpellArena = {
           ctx.fillRect(0, (cam.y - 1) * CELL, shown.width * CELL, (-cam.y - rows + 1) * CELL);
           ctx.save();
           ctx.scale(1, -1);
-          ctx.drawImage(terrainCanvas, 0, 0, shown.width, rows, 0, 0, shown.width * CELL, rows * CELL);
+          ctx.drawImage(terrainCanvas, 0, 0, shown.width * terrainRes, rows * terrainRes, 0, 0, shown.width * CELL, rows * CELL);
           ctx.restore();
         }
         ctx.drawImage(terrainCanvas, 0, 0, shown.width * CELL, shown.height * CELL);
+        ctx.imageSmoothingEnabled = true;
         const caster = animation?.cast.caster_id;
+        const first = animation?.cast.segments[0]?.path;
+        const throwDir = first && first.length > 1 ? Math.sign(first[first.length - 1][0] - first[0][0]) : 0;
         const knocked = knockedPositions(now);
+        const moving = new Set<string>();
         const units = shown.units.map((u) => {
           const at = knocked.get(u.id) ?? jumpPosition(u, now);
           if (at) {
             drawn.set(u.id, [at[0], at[1]]);
             return { ...u, x: at[0], y: at[1], dead: false };
           }
-          return { ...u, ...glide(u, dt) };
+          const target = predicted && u.id === shown!.viewer_id && !u.dead ? { ...u, x: predicted.x, y: predicted.y } : u;
+          const from = drawn.get(u.id);
+          const to = glide(target, dt);
+          if (from && dt > 0) velocity.set(u.id, [(to.x - from[0]) / dt, (to.y - from[1]) / dt]);
+          if (Math.abs(to.x - target.x) > 0.03 && !((u.float ?? 0) > 0)) moving.add(u.id);
+          return { ...u, ...to };
         });
 
-        drawZones(now);
+        drawScars(now);
+        drawRunes(now);
         for (const crate of shown.crates) drawCrate(crate, now);
 
         for (const unit of units) {
-          if (unit.kind === "wizard") {
-            const path = jumping?.id === unit.id ? jumping.path : null;
-            const faces = path
-              ? Math.sign(path[path.length - 1][0] - path[0][0]) || 1
-              : unit.id === shown.viewer_id && facing
-                ? facing
-                : unit.id === caster ? 1 : unit.x < shown.width / 2 ? 1 : -1;
-            drawWizard(unit, now, faces);
-          } else {
-            drawMinion(unit, now);
+          const path = jumping?.id === unit.id ? jumping.path : null;
+          // Faces where it aims, else where it is going, else where it last faced.
+          const vx = velocity.get(unit.id)?.[0] ?? 0;
+          if (moving.has(unit.id)) walked.set(unit.id, (walked.get(unit.id) ?? 0) + Math.abs(vx) * dt);
+          const faces = path
+            ? Math.sign(path[path.length - 1][0] - path[0][0]) || 1
+            : unit.id === shown.viewer_id && facing
+              ? facing
+              : unit.id === shown.current_id && shown.bot_aim
+                ? botFacing(unit)
+                : unit.id === caster && throwDir
+                  ? throwDir
+                  : Math.abs(vx) > 0.0005
+                  ? Math.sign(vx)
+                  : (faced.get(unit.id) ?? (unit.x < shown.width / 2 ? 1 : -1));
+          faced.set(unit.id, faces);
+          const flying = !unit.dead && (unit.float ?? 0) > 0;
+          if (flying) {
+            // Rider and broom bob together and lean into the way they fly.
+            const s = scale();
+            const px = (unit.x + 0.5) * s;
+            const py = (unit.y - 0.5) * s;
+            ctx.save();
+            ctx.translate(px, py + Math.sin(now / 220) * 1.5);
+            ctx.rotate(leanOf(unit.id, faces, dt));
+            ctx.translate(-px, -py);
           }
+          drawBroom(unit, now, faces);
+          drawWizard(unit, now, faces, poseOf(unit, now, moving.has(unit.id), knocked.has(unit.id)));
+          if (flying) ctx.restore();
         }
-        for (const unit of units) drawAuras(unit, now);
         drawWater(now);
         for (const unit of units) drawLabels(unit);
         drawTurnMarker(now);
         drawAim(now);
+        drawBotAim(now);
         if (animation && animation.aftermathAt === null) drawFlight(now);
-        drawBeams(now);
         drawAftermath(now);
       } else {
         ctx.fillStyle = "#111827";
@@ -1946,6 +2351,9 @@ const SpellArena = {
         ctx.fillText("Summoning the arena…", W / 2, H / 2);
       }
 
+      drawSmoke(dt);
+      drawRings(now);
+      drawBooms(now);
       drawParticles(dt);
       drawFloaters(dt);
       ctx.restore();
@@ -1953,7 +2361,6 @@ const SpellArena = {
       drawGrand(now);
       drawKnockoutBanner(now);
       ctx.restore();
-      drawMinimap();
       syncChargeUi(now);
       rafId = requestAnimationFrame(render);
     };
@@ -1965,8 +2372,8 @@ const SpellArena = {
       const rect = canvas.getBoundingClientRect();
       const s = scale();
       return [
-        (((event.clientX - rect.left) / rect.width) * W) / s + cam.x,
-        (((event.clientY - rect.top) / rect.height) * H) / s + cam.y,
+        (((event.clientX - rect.left) / rect.width) * W) / (s * zoom) + cam.x,
+        (((event.clientY - rect.top) / rect.height) * H) / (s * zoom) + cam.y,
       ];
     };
 
@@ -1981,7 +2388,10 @@ const SpellArena = {
       castLocked = true;
       lastThrow = Math.round(power);
       thrownUntil = performance.now() + 2500;
+      const thrown = document.getElementById("arena-thrown");
       if (thrown) thrown.textContent = `${spellById(spell)?.name ?? "Spell"} thrown at ${lastThrow}% power`;
+      throwsSeen += 1;
+      store?.setItem(THROWS_KEY, String(throwsSeen));
       this.pushEvent("cast", { spell, angle: Math.round(aim.angle * 10) / 10, power: Math.round(power * 10) / 10 });
     };
 
@@ -1991,6 +2401,7 @@ const SpellArena = {
       const name = spellById(charge.spell)?.name ?? "Spell";
       charge = null;
       thrownUntil = performance.now() + 1500;
+      const thrown = document.getElementById("arena-thrown");
       if (thrown) thrown.textContent = `${name} cancelled`;
       return true;
     };
@@ -1999,7 +2410,7 @@ const SpellArena = {
     const trigger = () => {
       const spell = spellDef();
       const wizard = myWizard();
-      if (!canAct() || !aim || !spell || !wizard || spell.input === "instant" || charge) return;
+      if (!canCast() || !aim || !spell || !wizard || spell.input === "instant" || charge) return;
       if (spell.input === "place") {
         const target = placeTarget();
         if (!target || !target.inRange || target.sinks) return;
@@ -2023,23 +2434,28 @@ const SpellArena = {
       facing = dx >= 0 ? 1 : -1;
     };
 
-    // Jumps go the way the wizard faces, as in Arcanists. While levitating, the jump
-    // keys float up and down instead.
+    // Jumps go the way the wizard faces, as in Arcanists. On a broomstick the jump
+    // keys fly up and down instead.
     const jump = (kind: "high" | "long") => {
       const wizard = myWizard();
-      if (!shown || !wizard || !canAct() || performance.now() - lastWalk < 85) return;
-      lastWalk = performance.now();
+      const now = performance.now();
+      if (!shown || !wizard || !canAct() || jumping || now < crouchAt + 90) return;
+      // The wizard crouches at once; the server's arc follows a moment later.
+      crouchAt = now;
+      heldDir = 0;
       if ((wizard.float ?? 0) > 0) this.pushEvent("rise", { dir: kind === "high" ? 1 : -1 });
       else this.pushEvent("jump", { kind, dir: facing || (wizard.x < shown.width / 2 ? 1 : -1) });
     };
     const onJump = (event: Event) => jump((event as CustomEvent<{ kind: "high" | "long" }>).detail.kind);
 
-    let drag: { x: number; y: number; camX: number; camY: number } | null = null;
+    let drag: { x: number; y: number; camX: number; camY: number; button: number; moved: boolean } | null = null;
     const onPointerMove = (event: PointerEvent) => {
       // A right press while the left is held arrives as a move (a chord), not a pointerdown.
       if (event.button === 2 && cancel()) return;
       const rect = canvas.getBoundingClientRect();
       if (drag) {
+        drag.moved ||= Math.hypot(event.clientX - drag.x, event.clientY - drag.y) > 5;
+        if (!drag.moved) return;
         const perCell = rect.width / VIEW_W;
         cam.x = drag.camX - (event.clientX - drag.x) / perCell;
         cam.y = drag.camY - (event.clientY - drag.y) / perCell;
@@ -2048,6 +2464,7 @@ const SpellArena = {
         return;
       }
       pointer = { x: ((event.clientX - rect.left) / rect.width) * W, y: ((event.clientY - rect.top) / rect.height) * H };
+      edgeArmed = true;
       // Aim follows the mouse while charging too.
       updateAim(event);
       dimNear(event.clientX, event.clientY);
@@ -2060,18 +2477,21 @@ const SpellArena = {
       const rect = canvas.getBoundingClientRect();
       const px = ((event.clientX - rect.left) / rect.width) * W;
       const py = ((event.clientY - rect.top) / rect.height) * H;
-      // Right-click cancels a charge; otherwise right or middle drag pans the view.
+      // Right-click cancels a charge; otherwise a right click opens the spells, as in
+      // Worms, and a right or middle drag pans the view.
       if (event.button === 2 && cancel()) {
         event.preventDefault();
         return;
       }
       if (event.button === 1 || event.button === 2) {
-        drag = { x: event.clientX, y: event.clientY, camX: cam.x, camY: cam.y };
+        drag = { x: event.clientX, y: event.clientY, camX: cam.x, camY: cam.y, button: event.button, moved: false };
         event.preventDefault();
         return;
       }
       if (event.button !== 0) return;
       canvas.focus();
+      // Clicking the arena puts away the spell panel and menu.
+      if (hidePanel("arena-spells") || hidePanel("arena-menu")) return;
       const marker = markers.find((m) => px >= m.x && px <= m.x + m.w && py >= m.y && py <= m.y + m.h);
       if (marker) {
         lookAt(marker.id);
@@ -2083,20 +2503,22 @@ const SpellArena = {
       trigger();
     };
     const onPointerUp = () => {
+      if (drag?.button === 2 && !drag.moved && shown?.participation === "active") toggleSpells();
       drag = null;
       release();
     };
-    // Scrolling (a wheel, or two fingers on a trackpad) pans the view too.
+    // The wheel (or a pinch) zooms; sideways scrolling on a trackpad pans.
     const onWheel = (event: WheelEvent) => {
-      if (!shown || event.ctrlKey) return;
+      if (!shown) return;
       event.preventDefault();
-      const perCell = canvas.getBoundingClientRect().width / VIEW_W;
-      const dx = event.shiftKey ? event.deltaY : event.deltaX;
-      const dy = event.shiftKey ? 0 : event.deltaY;
-      cam.x += dx / perCell;
-      cam.y += dy / perCell;
-      clampCam();
-      freeLookUntil = performance.now() + 5000;
+      if (Math.abs(event.deltaX) > Math.abs(event.deltaY)) {
+        cam.x += event.deltaX / (canvas.getBoundingClientRect().width / VIEW_W);
+        clampCam();
+        freeLookUntil = performance.now() + 5000;
+        return;
+      }
+      const step = Math.exp(-event.deltaY * (event.ctrlKey ? 0.01 : 0.0015));
+      zoomTarget = Math.max(ZOOM_MIN, Math.min(ZOOM_MAX, zoomTarget * step));
     };
     const onContextMenu = (event: Event) => {
       event.preventDefault();
@@ -2111,9 +2533,18 @@ const SpellArena = {
         toggleFull();
         return;
       }
-      if (key === "escape" && cancel()) return;
-      if (key === "escape" && page.classList.contains("arena-full")) {
-        setFull(false);
+      // Esc backs out one step at a time: a charge, then whatever is open, then the menu.
+      if (key === "escape") {
+        event.preventDefault();
+        if (cancel()) return;
+        if (["arena-spells", "arena-help", "arena-drawer", "arena-menu"].some(hidePanel)) return;
+        const menu = panel("arena-menu");
+        if (menu) this.js().show(menu, { display: "grid" });
+        return;
+      }
+      if (key === "tab") {
+        event.preventDefault();
+        if (shown?.participation === "active") toggleSpells();
         return;
       }
       if (key === "h") {
@@ -2137,13 +2568,22 @@ const SpellArena = {
 
       if (key === "a" || key === "arrowleft" || key === "d" || key === "arrowright") {
         event.preventDefault();
-        if (!canAct() || performance.now() - lastWalk < 85) return;
-        lastWalk = performance.now();
-        facing = key === "a" || key === "arrowleft" ? -1 : 1;
-        this.pushEvent("walk", { dir: facing });
+        const dir = key === "a" || key === "arrowleft" ? -1 : 1;
+        if (event.repeat && heldDir === dir) return;
+        heldDir = dir;
+        facing = dir;
+        const now = performance.now();
+        if (now >= nextStepAt) moveStep(now);
       } else if (key === "w" || key === "arrowup" || key === "s" || key === "arrowdown") {
         event.preventDefault();
-        if (!event.repeat) jump(key === "w" || key === "arrowup" ? "high" : "long");
+        const up = key === "w" || key === "arrowup";
+        // On a broomstick the keys fly up and down for as long as they are held.
+        if (floating()) {
+          if (event.repeat) return;
+          heldV = up ? 1 : -1;
+          const now = performance.now();
+          if (now >= nextStepAt) moveStep(now);
+        } else if (!event.repeat) jump(up ? "high" : "long");
       } else if (/^[0-9-]$/.test(key)) {
         const spell = shown.my_spells[key === "0" ? 9 : key === "-" ? 10 : Number(key) - 1];
         if (spell) this.pushEvent("select_spell", { spell });
@@ -2155,17 +2595,23 @@ const SpellArena = {
     const dropCharge = () => {
       charge = null;
       drag = null;
+      heldDir = 0;
+      heldV = 0;
     };
 
     const onKeyUp = (event: KeyboardEvent) => {
       if (event.key === " ") release();
+      const key = event.key.toLowerCase();
+      const dir = key === "a" || key === "arrowleft" ? -1 : key === "d" || key === "arrowright" ? 1 : 0;
+      if (dir && dir === heldDir) heldDir = 0;
+      const v = key === "w" || key === "arrowup" ? 1 : key === "s" || key === "arrowdown" ? -1 : 0;
+      if (v && v === heldV) heldV = 0;
     };
 
     canvas.addEventListener("pointermove", onPointerMove);
     canvas.addEventListener("pointerdown", onPointerDown);
     canvas.addEventListener("pointerleave", onPointerLeave);
     canvas.addEventListener("pointercancel", dropCharge);
-    mini?.addEventListener("pointerdown", minimapJump);
     canvas.addEventListener("wheel", onWheel, { passive: false });
     canvas.addEventListener("contextmenu", onContextMenu);
     canvas.addEventListener("arena:focus", onFocus);
@@ -2203,11 +2649,15 @@ const SpellArena = {
       }
     });
     // Walking into a slope too steep to climb teaches the jump.
-    this.handleEvent("arena_blocked", () => {
+    // A jump with nowhere to go is refused (and costs nothing), with its own hint.
+    this.handleEvent<{ jump?: boolean }>("arena_blocked", ({ jump }) => {
+      predicted = null;
+      heldDir = 0;
+      heldV = 0;
       const wizard = myWizard();
       if (!wizard || performance.now() - lastBlockedHint < 2500) return;
       lastBlockedHint = performance.now();
-      floatText(wizard, "Too steep! W to jump", "#111827", 15);
+      floatText(wizard, jump ? "No room to jump that way" : "Too steep! W to jump", "#fde68a", 15, 15);
     });
     this.handleEvent("arena_unlock", () => {
       castLocked = false;
@@ -2229,7 +2679,7 @@ const SpellArena = {
       canvas.removeEventListener("pointercancel", dropCharge);
       window.removeEventListener("blur", dropCharge);
       canvas.removeEventListener("arena:fullscreen", toggleFull);
-      mini?.removeEventListener("pointerdown", minimapJump);
+      canvas.removeEventListener("arena:spells", toggleSpells);
       canvas.removeEventListener("wheel", onWheel);
       canvas.removeEventListener("contextmenu", onContextMenu);
       canvas.removeEventListener("arena:focus", onFocus);

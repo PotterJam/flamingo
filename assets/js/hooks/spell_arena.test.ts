@@ -20,6 +20,7 @@ function mount() {
       createImageData: (w: number, h: number) => ({ data: new Uint8ClampedArray(w * h * 4) }),
       createLinearGradient: () => gradient,
       createRadialGradient: () => gradient,
+      measureText: () => ({ width: 0 }),
     } as Record<string | symbol, unknown>,
     { get: (o, k) => (k in o ? o[k] : noop) },
   );
@@ -106,20 +107,21 @@ const state = (extra: Record<string, unknown> = {}) => ({
   width: 300,
   height: 100,
   water_level: 95,
+  walk_left: 40,
   terrain: ground,
   units: [{ id: "me", kind: "wizard", owner: "me", x: 100, y: 60, hp: 100, max_hp: 100, dead: false }],
   crates: [],
   last_cast: null,
   players: { me: { name: "Me", color: "#fff" } },
-  spells: [spell("ember"), spell("boulder"), spell("golem", { input: "place", gravity: 0 })],
-  my_spells: ["ember", "boulder", "golem"],
-  selected_spell: "ember",
+  spells: [spell("firebolt"), spell("fuserune"), spell("slab", { input: "place", gravity: 0 })],
+  my_spells: ["firebolt", "fuserune", "slab"],
+  selected_spell: "firebolt",
   physics: { dt: 0.04, gravity: 30, max_speed: 80, wind_accel: 1, playback_speed: 2, place_range: 70 },
   ...extra,
 });
 
 const cast = (id: number) => ({
-  id, caster_id: "me", spell: "ward", segments: [], beams: [], knocks: [], shake: false, auras: [], ko: [],
+  id, caster_id: "me", spell: "broom", segments: [], knocks: [], shake: false, auras: [], ko: [],
   flight_steps: 20, duration_ms: 900,
 });
 
@@ -128,50 +130,50 @@ const casts = (sent: Record<string, unknown>[]) => sent.filter((e) => e.name ===
 test("a charged cast names the spell that was selected when the charge began", () => {
   const a = mount();
   a.server("arena_state", state());
-  a.server("arena_select", { spell: "boulder" });
+  a.server("arena_select", { spell: "fuserune" });
   a.tick(1);
   a.down();
   now = 400;
   a.up();
-  expect(casts(a.sent).map((e) => e.spell)).toEqual(["boulder"]);
+  expect(casts(a.sent).map((e) => e.spell)).toEqual(["fuserune"]);
 });
 
 test("a selection made while a cast plays survives the cast's older snapshot", () => {
   const a = mount();
   a.server("arena_state", state());
   a.server("arena_state", state({ last_cast: cast(1) }));
-  a.server("arena_select", { spell: "boulder" });
+  a.server("arena_select", { spell: "fuserune" });
   a.tick(1);
   a.tick(5000);
   a.tick(10000);
   a.down();
   now = 10400;
   a.up();
-  expect(casts(a.sent).map((e) => e.spell)).toEqual(["boulder"]);
+  expect(casts(a.sent).map((e) => e.spell)).toEqual(["fuserune"]);
 });
 
 test("the server can still move the selection, e.g. off a spell on cooldown", () => {
   const a = mount();
-  a.server("arena_state", state({ selected_spell: "boulder" }));
-  a.server("arena_state", state({ selected_spell: "ember" }));
+  a.server("arena_state", state({ selected_spell: "fuserune" }));
+  a.server("arena_state", state({ selected_spell: "firebolt" }));
   a.tick(1);
   a.down();
   now = 400;
   a.up();
-  expect(casts(a.sent).map((e) => e.spell)).toEqual(["ember"]);
+  expect(casts(a.sent).map((e) => e.spell)).toEqual(["firebolt"]);
 });
 
 test("after casting a picked spell that then cools down, the selection falls back to the server's pick", () => {
   const a = mount();
   a.server("arena_state", state());
-  a.server("arena_select", { spell: "boulder" });
-  // The cast put Boulder on cooldown, so the server moved the selection back to Ember Bolt.
-  a.server("arena_state", state({ selected_spell: "ember" }));
+  a.server("arena_select", { spell: "fuserune" });
+  // The cast put Fuse Rune out of ammo, so the server moved the selection back to Firebolt.
+  a.server("arena_state", state({ selected_spell: "firebolt" }));
   a.tick(1);
   a.down();
   now = 400;
   a.up();
-  expect(casts(a.sent).map((e) => e.spell)).toEqual(["ember"]);
+  expect(casts(a.sent).map((e) => e.spell)).toEqual(["firebolt"]);
 });
 
 // How long until a click casts again, after the given casts arrive while the
@@ -234,10 +236,10 @@ test("a charge does not outlive the turn it started in", () => {
 
 test("a first tap places a placed spell without any hover", () => {
   const a = mount();
-  a.server("arena_state", state({ selected_spell: "golem" }));
+  a.server("arena_state", state({ selected_spell: "slab" }));
   a.tick(1);
   a.down();
-  expect(casts(a.sent).map((e) => [e.name, e.spell])).toEqual([["place", "golem"]]);
+  expect(casts(a.sent).map((e) => [e.name, e.spell])).toEqual([["place", "slab"]]);
 });
 
 test("a rejoin shows the board as it is instead of replaying a cast it missed", () => {
@@ -320,4 +322,48 @@ test("a right-click or Esc cancels a charge and the release then casts nothing",
     a.up();
     expect(casts(a.sent).length).toBe(1);
   }
+});
+
+test("holding D walks at a steady pace without key repeat, and stops at a wall too tall to climb", () => {
+  // The ground from row 61 down, plus a wall at x = 104 rising to row 50.
+  const bytes = Uint8Array.from(atob(ground), (c) => c.charCodeAt(0));
+  for (let y = 50; y <= 60; y++) bytes[(y * 300 + 104) >> 3] |= 1 << (7 - ((y * 300 + 104) & 7));
+  const walled = btoa(String.fromCharCode(...bytes));
+  // A one-cell step at x = 101 is climbed rather than blocking.
+  const stepped = Uint8Array.from(atob(walled), (c) => c.charCodeAt(0));
+  for (let x = 101; x < 104; x++) stepped[(60 * 300 + x) >> 3] |= 1 << (7 - ((60 * 300 + x) & 7));
+
+  const a = mount();
+  a.server("arena_state", state({ terrain: btoa(String.fromCharCode(...stepped)) }));
+  a.tick(1);
+  a.key("d");
+  for (let t = 2; t < 2000; t += 16) a.tick(t);
+  const walks = a.sent.filter((e) => e.name === "walk");
+  // Three steps (101, 102, 103), then the wall: nothing more is sent.
+  expect(walks).toEqual([1, 1, 1].map((dir) => ({ name: "walk", dir })));
+});
+
+test("on a broomstick a held key flies on until the broom's fuel, not the turn's walk, runs out", () => {
+  const a = mount();
+  a.server("arena_state", state());
+  a.tick(1);
+  // Mounting the broom mid-turn tops the steps up from 40 to 80.
+  a.server("arena_state", state({ walk_left: 80, units: [{ ...state().units[0], float: 1 }] }));
+  a.tick(2);
+  a.key("d");
+  for (let t = 3; t < 6000; t += 16) a.tick(t);
+  expect(a.sent.filter((e) => e.name === "walk")).toHaveLength(80);
+});
+
+test("during the retreat after a cast the wizard still walks, but casts nothing", () => {
+  const a = mount();
+  a.server("arena_state", state({ retreat: true }));
+  a.tick(1);
+  a.down();
+  now = 400;
+  a.up();
+  a.key("d");
+  for (let t = 2; t < 300; t += 16) a.tick(t);
+  expect(casts(a.sent)).toEqual([]);
+  expect(a.sent.some((e) => e.name === "walk")).toBe(true);
 });

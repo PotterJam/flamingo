@@ -87,8 +87,6 @@ defmodule Flamingo.GameModes.Spellslingers.Physics do
     |> Enum.sort()
     |> Enum.reduce({state, []}, fn {id, {vx, vy}}, {state, knocks} ->
       unit = state.units[id]
-      # A ward that survived the hit keeps its wizard mostly planted.
-      {vx, vy} = if unit && Map.get(unit, :ward, 0) > 0, do: {vx * 0.3, vy * 0.3}, else: {vx, vy}
 
       if (unit && Units.alive_unit?(unit)) and :math.sqrt(vx * vx + vy * vy) >= 6 do
         {unit, path} =
