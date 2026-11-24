@@ -53,29 +53,30 @@ defmodule Flamingo.GameModes.Spellslingers.Physics do
 
   def unit_hit(state, px, py, considered?) do
     Enum.find_value(state.units, fn {id, unit} ->
-      height = Units.hit_height(unit)
-
-      if considered?.(id) and Units.alive_unit?(unit) and abs(px - (unit.x + 0.5)) <= 1.6 and
-           py >= unit.y + 1 - height and py <= unit.y + 1.2,
-         do: id
+      if considered?.(id) and Units.alive_unit?(unit) and Units.distance_to(unit, {px, py}) == 0,
+        do: id
     end)
   end
 
+  # A blast reaches whatever it comes near as drawn, so it catches a flamingo's head as
+  # well as its legs. Falloff counts from a cell inside the unit, which keeps the damage
+  # near what it was when blasts measured from the unit's middle.
   def explode(fx, actor, {x, y}, radius, damage, knock) do
     state = fx.state |> Terrain.carve([{x, y, radius}]) |> Crates.destroy_crates(x, y, radius + 1)
-    reach = radius + 2
+    reach = radius + 1
 
     state.units
     |> Map.values()
     |> Enum.sort_by(& &1.id)
     |> Enum.reduce(%{fx | state: state}, fn unit, fx ->
       {cx, cy} = Units.center(unit)
-      distance = :math.sqrt((cx - x) ** 2 + (cy - y) ** 2)
+      distance = Units.distance_to(unit, {x, y})
 
       if Units.alive_unit?(unit) and distance <= reach do
-        falloff = max(0.35, 1 - distance / (reach + 1))
+        falloff = max(0.35, 1 - (distance + 1) / (reach + 2))
         fx = Fx.hit(fx, unit.id, round(damage * falloff), actor)
-        Fx.add_impulse(fx, unit.id, cx - x, cy - y, distance, knock * falloff)
+        away = :math.sqrt((cx - x) ** 2 + (cy - y) ** 2)
+        Fx.add_impulse(fx, unit.id, cx - x, cy - y, away, knock * falloff)
       else
         fx
       end

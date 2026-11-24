@@ -122,6 +122,9 @@ defmodule Flamingo.GameModes.Spellslingers.Spells do
     {(tx - unit.x) / time, -vy}
   end
 
+  defp lay(fx, rune, message),
+    do: %{fx | state: Units.log(%{fx.state | runes: fx.state.runes ++ [rune]}, message)}
+
   defp fizzle(fx), do: %{fx | state: Units.log(fx.state, "…and it fizzles out.")}
 
   defp blast(fx, actor, pos, spell),
@@ -289,8 +292,7 @@ defmodule Flamingo.GameModes.Spellslingers.Spells do
       |> Enum.filter(&(Units.alive_unit?(&1) and &1.id != actor))
       |> Enum.sort_by(& &1.id)
       |> Enum.reduce(fx, fn unit, fx ->
-        {cx, cy} = Units.center(unit)
-        reached = Enum.find_index(points, fn {x, y} -> (cx - x) ** 2 + (cy - y) ** 2 <= 6 end)
+        reached = Enum.find_index(points, &(Units.distance_to(unit, &1) <= 1.5))
 
         if reached,
           do: Fx.hit(%{fx | at: div(reached, 2) + 1}, unit.id, spell.damage, actor),
@@ -301,18 +303,29 @@ defmodule Flamingo.GameModes.Spellslingers.Spells do
     %{fx | state: Units.unbury_all(fx.state)}
   end
 
-  # The keg drops at the caster's feet and waits for the end of their turn.
+  # The egg drops from under the caster, falling to the ground when they are in the air,
+  # and waits there for the end of their turn. Flamingos don't catch it on the way down.
   def effect(:blastrune, fx, actor, _spell, _angle, _power) do
     wizard = fx.state.units[actor]
     {x, y} = {wizard.x + 0.5, wizard.y + 0.5}
-    fx = add_segment(fx, [{x, y - 3}, {x, y - 1.5}, {x, y}], 0, "blastrune", 0, true)
-    rune = %{owner: actor, x: x, y: y}
+    drop = %{gravity: 1.0, wind: 0.0}
+    {fall, {kind, {_, at}}} = Physics.fly(%{fx.state | units: %{}}, {x, y}, {0.0, 0.0}, drop, nil)
+    # It rests on top of the cell it lands on.
+    landed = if kind == :terrain, do: floor(at) - 0.5, else: at
+    path = [{x, y - 3}, {x, y - 1.5} | Enum.drop(fall, -1)] ++ [{x, landed}]
+    fx = add_segment(fx, path, 0, "blastrune", 0, kind == :terrain)
+    who = Units.player_name(fx.state, actor)
 
-    state =
-      %{fx.state | runes: fx.state.runes ++ [rune]}
-      |> Units.log("An egg fizzes at #{Units.player_name(fx.state, actor)}'s feet. Run!")
+    cond do
+      kind != :terrain ->
+        %{fx | state: Units.log(fx.state, "…and the egg drops into the sea.")}
 
-    %{fx | state: state}
+      landed > y ->
+        lay(fx, %{owner: actor, x: x, y: landed}, "#{who} drops an egg from the sky. Run!")
+
+      true ->
+        lay(fx, %{owner: actor, x: x, y: landed}, "An egg fizzes at #{who}'s feet. Run!")
+    end
   end
 
   def effect(:meteors, %{target: {x, _}} = fx, actor, spell, _angle, _power) do

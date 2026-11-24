@@ -480,6 +480,38 @@ defmodule Flamingo.GameModes.SpellslingersTest do
     assert next.current_id == second
   end
 
+  test "an egg laid in flight falls to the ground below" do
+    {state, r} = started()
+    [first, second] = state.turn_order
+    state = calm(%{state | sudden_after: 99}) |> flat(%{first => 100, second => 140})
+    state = put_in(state.units[first], %{state.units[first] | y: 60, float: 1})
+
+    {:ok, %{state: cast}} =
+      Spellslingers.command(state, first, {:cast, "blastrune", 0, 0}, context(r, first))
+
+    assert [%{owner: ^first, x: 100.5, y: 80.5}] = cast.runes
+
+    assert [[100.5, 80.5] | _] =
+             cast.last_cast.segments |> hd() |> Map.fetch!(:path) |> Enum.reverse()
+  end
+
+  test "shots and blasts reach the flamingo as drawn, head to feet" do
+    {state, _r} = started()
+    [first, second] = state.turn_order
+    state = flat(state, %{first => 100, second => 160})
+    hit = fn x, up -> Physics.unit_hit(state, x, 81 - up, &(&1 == first)) end
+
+    # The head stands about 8 cells above the feet; the legs are thin and the body round.
+    assert hit.(100.5, 7.5) == first
+    assert hit.(101.9, 4) == first
+    assert hit.(100.5, 8.6) == nil
+    assert hit.(101.9, 1) == nil
+
+    # A small blast beside the head catches it.
+    fx = Physics.explode(Spellslingers.Fx.new(state, nil), second, {104.5, 74}, 3, 20, 0)
+    assert fx.state.units[first].hp < 150
+  end
+
   test "the anvil smashes down through the land, blasting at every slam" do
     {state, r} = started()
     [first, second] = state.turn_order

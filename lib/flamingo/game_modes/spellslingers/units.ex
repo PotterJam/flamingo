@@ -93,10 +93,32 @@ defmodule Flamingo.GameModes.Spellslingers.Units do
   def unit_height(%{kind: :crate}), do: 1
   def unit_height(_), do: 2
 
-  # Shots connect with everything drawn, so a wizard's hat counts as well as its body.
-  def hit_height(%{kind: :wizard}), do: 5.2
-  def hit_height(unit), do: unit_height(unit) + 0.4
+  # Shots connect with everything drawn. A flamingo is drawn about 8 cells tall: thin
+  # legs, a round body, then the neck and head. Each part is {half width, bottom, top}
+  # in cells above the feet, around the column's middle. The server never knows which
+  # way a flamingo faces, so the head reaches both ways.
+  @flamingo_parts [{0.9, -0.2, 2.6}, {1.7, 2.6, 5.2}, {1.3, 5.2, 8.1}]
 
+  def hit_parts(%{kind: :wizard}), do: @flamingo_parts
+  def hit_parts(unit), do: [{1.6, -0.2, unit_height(unit) + 0.4}]
+
+  @doc "How far the point is from the unit as drawn, or 0 when it is on the unit."
+  def distance_to(unit, {x, y}) do
+    dx = abs(x - unit.x - 0.5)
+    up = unit.y + 1 - y
+
+    unit
+    |> hit_parts()
+    |> Enum.map(fn {half, bottom, top} ->
+      ex = max(dx - half, 0)
+      ey = Enum.max([bottom - up, up - top, 0])
+      :math.sqrt(ex * ex + ey * ey)
+    end)
+    |> Enum.min()
+  end
+
+  # The middle of the unit as drawn: seekers and AI aim there and blasts push away from it.
+  def center(%{kind: :wizard} = unit), do: {unit.x + 0.5, unit.y + 1 - 3.9}
   def center(unit), do: {unit.x + 0.5, unit.y + 1 - unit_height(unit) / 2}
 
   def blocked?(state, unit, x, y) do
