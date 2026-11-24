@@ -46,13 +46,39 @@ custom classes must fully style the input
   - You must import the vendor deps into app.js and app.css to use them
   - **Never write inline <script>custom js</script> tags within templates**
 
-### UI/UX & design guidelines
+### UI doctrine
 
-- **Produce world-class UI designs** with a focus on usability, aesthetics, and modern design principles
-- Implement **subtle micro-interactions** (e.g., button hover effects, and smooth transitions)
-- Ensure **clean typography, spacing, and layout balance** for a refined, premium look
-- Focus on **delightful details** like hover effects, loading states, and smooth page transitions
-- Prefer improving or extending shared design-system components over local one-off markup or ad hoc classes. If a control exposes a gap in `<.button>`, `<.input>`, `<.icon>`, or another shared component, add the missing variant/size/API there when it is generally useful.
+Restrained neobrutalism. Flat, bold, plain. When in doubt, take it out.
+
+**Form**
+- **Subtract first.** Show the least that does the job. Every first draft carries too much.
+- **Say it once.** Never present the same fact twice in one view.
+- **Earn existence.** Nothing decorative. Nothing appears before it is useful.
+- **Same thing, same look.** A concept is presented the same way wherever it appears. One component per concept, shared across modes and screens.
+- **Derive, don't invent.** New UI grows from what already exists. A gap in a shared component is fixed in the shared component.
+- **Emphasis is scarce.** Weight, shadow, colour, size and boldness signal importance. Spend them only on what matters most.
+- **Group, don't fence.** One container per view. Structure comes from proximity and alignment, not lines and nested boxes.
+- **Colour means something.** It signals identity, state or interaction, always from the system palette, and is never arbitrary.
+- **One voice.** One typeface for everything, with display type kept for rare moments.
+- **Smaller than you think.** Default to compact. Scale up only on request.
+- **Even and tight.** Spacing is uniform, symmetric and on the scale. Related things sit together, and nothing floats in empty space.
+
+**Words**
+- **Plain and short.** No flourish, no personality copy. Cut until meaning would break.
+- **Precise over generic.** Labels say exactly what happens or where you go.
+
+**Behaviour**
+- **Order by what the player cares about.** Hierarchy follows their priorities, not the data model.
+- **Nothing jumps.** Layout stays stable as state changes.
+- **Motion explains change.** It is never ornamental, and always has a reduced-motion fallback.
+- **Interaction looks the same everywhere.** One convention for hover, selection and actions.
+- **Ephemeral UI stays local.** No server round trip for state that doesn't need sharing.
+- **Restyling never removes behaviour.**
+
+**Process**
+- **Work on the real screen.** Make it reachable, show it, and inspect it yourself before handing over.
+- **Do exactly what was asked.** Ask when a request is ambiguous. Don't touch what's next to it.
+- **Small diffs.** No unrequested features or appearance-only tests.
 
 
 <!-- phoenix-gen-auth-start -->
