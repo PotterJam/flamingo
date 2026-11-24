@@ -1,5 +1,5 @@
 import { createSpellSounds } from "./spell_sounds";
-import { BOOM_CELL, BOOM_FRAMES, CRATE_FRAME, CRATE_SIZE, CRYSTAL, LAND_RES, SPELL_CELL, WIZARD, WIZARD_H, WIZARD_W, carveLand, loadArt, paintLand, ready, wizardSheet } from "./arena_art";
+import { BOOM_CELL, BOOM_FRAMES, CRATE_FRAME, CRATE_SIZE, LAND_RES, SPELL_CELL, WINGTIP, WIZARD, WIZARD_H, WIZARD_W, carveLand, loadArt, paintLand, ready, wizardSheet } from "./arena_art";
 
 // Renders the Spellslingers arena: destructible terrain, wizards, crates, blast runes, aiming,
 // and the playback of each cast. The server owns every rule and all physics; this hook
@@ -161,10 +161,10 @@ type Palette = {
 // the land, the clods a blast throws, and its murky water.
 const PALETTES: Record<string, Palette> = {
   isles: {
-    sky: ["#4a1f1a", "#8a3a24", "#d9822b"],
-    hills: "#5b3a2a",
-    water: "rgba(70, 86, 48, 0.84)",
-    grass: [[160, 136, 64], [118, 98, 44], [82, 66, 30]],
+    sky: ["#a77a9e", "#e3948c", "#f4bd8c"],
+    hills: "#c98a8a",
+    water: "rgba(64, 160, 164, 0.82)",
+    grass: [[150, 178, 82], [108, 138, 58], [72, 98, 42]],
     soil: [[74, 58, 44], [54, 44, 36]],
     rock: [[116, 74, 40], [42, 38, 36], [92, 82, 72]],
   },
@@ -177,10 +177,10 @@ const PALETTES: Record<string, Palette> = {
     rock: [[214, 160, 170], [120, 80, 84], [170, 120, 124]],
   },
   castles: {
-    sky: ["#5a2412", "#c2531c", "#f29a3a"],
-    hills: "#6b3a26",
-    water: "rgba(58, 60, 66, 0.86)",
-    grass: [[156, 146, 124], [112, 104, 90], [78, 72, 62]],
+    sky: ["#c0707a", "#e8906a", "#f6c07a"],
+    hills: "#c9886e",
+    water: "rgba(80, 150, 160, 0.84)",
+    grass: [[150, 172, 90], [110, 132, 64], [76, 96, 46]],
     soil: [[122, 102, 90], [96, 84, 76]],
     rock: [[142, 72, 52], [70, 64, 60], [112, 100, 92]],
   },
@@ -468,9 +468,17 @@ const SpellArena = {
     const solidAt = (x: number, y: number) =>
       !!shown && !!cells && x >= 0 && x < shown.width && y >= 0 && y < shown.height && cells[y * shown.width + x] === 1;
 
+    // Cells of the world's edges the camera may show past each side, and how far the
+    // land is drawn on past them, fading out.
+    const EDGE_VIEW = 14;
+    const EDGE_FADE = 22;
     const clampCam = () => {
       if (!shown) return;
-      cam.x = Math.max(0, Math.min(shown.width - VIEW_W, cam.x));
+      // A little past the left and right edges shows the land fading into the distance,
+      // so the world never stops dead at the screen's edge.
+      const lo = -EDGE_VIEW;
+      const hi = shown.width + EDGE_VIEW - VIEW_W;
+      cam.x = hi < lo ? (shown.width - VIEW_W) / 2 : Math.max(lo, Math.min(hi, cam.x));
       // A view taller than the world sits on its bottom, with sky or rock above. The
       // view may also rise a little past the top, so a broom flying at the ceiling
       // keeps its rider and name on screen.
@@ -607,9 +615,12 @@ const SpellArena = {
           const s = scale();
           const [cx, cy] = drawn.get(caster.id) ?? [caster.x, caster.y];
           const color = colorOf(cast.spell, "#facc15");
-          burst((cx + 0.5) * s, (cy - 5) * s, color, 22, 110);
-          burst((cx + 0.5) * s, (cy - 5) * s, "#fff", 10, 70);
-          rings.push({ x: (cx + 0.5) * s, y: (cy - 5) * s, r: 22, born: at + intro, color });
+          const [fx, fy] = WINGTIP[WIZARD.release];
+          const ox = (cx + 0.5) * s + (faced.get(caster.id) ?? 1) * fx * SHEET_TALL * s;
+          const oy = (cy + 1) * s - fy * SHEET_TALL * s;
+          burst(ox, oy, color, 22, 110);
+          burst(ox, oy, "#fff", 10, 70);
+          rings.push({ x: ox, y: oy, r: 22, born: at + intro, color });
         }
       } else {
         show(state);
@@ -739,10 +750,12 @@ const SpellArena = {
       ctx.fillStyle = palette().water;
       ctx.beginPath();
       const worldW = shown.width * s;
+      const x0 = -EDGE_FADE * s;
+      const x1 = worldW + EDGE_FADE * s;
       const bottom = (shown.height + dockPad + 4) * s;
-      ctx.moveTo(0, bottom);
-      for (let x = 0; x <= worldW; x += 10) ctx.lineTo(x, top + Math.sin(x * 0.04 + t / 400) * 3);
-      ctx.lineTo(worldW, bottom);
+      ctx.moveTo(x0, bottom);
+      for (let x = x0; x <= x1; x += 10) ctx.lineTo(x, top + Math.sin(x * 0.04 + t / 400) * 3);
+      ctx.lineTo(x1, bottom);
       ctx.fill();
       // Deeper down the sea turns opaque, so rock under it and open water read as one
       // sea instead of lighter and darker blocks with hard seams between them.
@@ -750,31 +763,49 @@ const SpellArena = {
       deep.addColorStop(0, "rgba(0,0,0,0)");
       deep.addColorStop(1, palette().water.replace(/[\d.]+\)$/, "1)"));
       ctx.fillStyle = deep;
-      ctx.fillRect(0, top + 0.5 * s, worldW, bottom - top);
+      ctx.fillRect(x0, top + 0.5 * s, x1 - x0, bottom - top);
       // A lighter band of rolling swell just under the surface.
       ctx.fillStyle = "rgba(255,255,255,0.13)";
       ctx.beginPath();
-      for (let x = 0; x <= worldW; x += 10) ctx.lineTo(x, top + 2 * s + Math.sin(x * 0.025 - t / 650) * 3);
-      for (let x = worldW; x >= 0; x -= 10) ctx.lineTo(x, top + 3.2 * s + Math.sin(x * 0.03 - t / 500) * 3);
+      for (let x = x0; x <= x1; x += 10) ctx.lineTo(x, top + 2 * s + Math.sin(x * 0.025 - t / 650) * 3);
+      for (let x = x1; x >= x0; x -= 10) ctx.lineTo(x, top + 3.2 * s + Math.sin(x * 0.03 - t / 500) * 3);
       ctx.fill();
       ctx.strokeStyle = "rgba(255,255,255,0.85)";
       ctx.lineWidth = 3;
       ctx.beginPath();
-      for (let x = 0; x <= worldW; x += 10) ctx.lineTo(x, top + Math.sin(x * 0.04 + t / 400) * 3);
+      for (let x = x0; x <= x1; x += 10) ctx.lineTo(x, top + Math.sin(x * 0.04 + t / 400) * 3);
       ctx.stroke();
     };
 
-    // A miner's pose comes from what it is doing; the sheet is painted facing right.
-    type Pose = "idle" | "crouch" | "walk" | "aim" | "cast" | "jump" | "land" | "hurt" | "tumble" | "win";
-    // How tall the sheet's cell is drawn, in cells; a standing miner fills about 0.75 of
-    // it. Nameplates sit LABEL_TALL cells above the boots, just over the hat.
-    const SHEET_TALL = 10;
+    // A flamingo's pose comes from what it is doing; the sheet is painted facing right.
+    type Pose = "idle" | "crouch" | "walk" | "aim" | "cast" | "jump" | "land" | "hurt" | "tumble" | "win" | "fly";
+    // How tall the sheet's cell is drawn, in cells; a standing flamingo fills about 0.9 of
+    // it. Nameplates sit LABEL_TALL cells above the feet, just over the head tuft.
+    const SHEET_TALL = 8.8;
     const LABEL_TALL = 8.6;
-    // How far each miner has walked, which drives its stride so the boots never skate.
+    // How far each flamingo has walked, which drives its stride so the feet never skate.
     const walked = new Map<string, number>();
     const faced = new Map<string, number>();
     const landedAt = new Map<string, number>();
-    // The way a miner is aiming, in degrees above its facing (negative is down).
+    // When each flamingo last moved along the ground, so a pause between steps isn't a stop.
+    const movedAt = new Map<string, number>();
+    // The last frame's length, for the springs below.
+    let frameDt = 16;
+    // Each flamingo's animation: its pose and since when, a squash-and-stretch spring (sq
+    // above 0 stretches it tall, below 0 squashes it wide), an eased tilt, and the frame it
+    // showed last, which fades out over the new one so poses blend instead of snapping.
+    type Anim = { pose: Pose; since: number; sq: number; v: number; tilt: number; frame: number; prev: number; swapAt: number };
+    const anims = new Map<string, Anim>();
+    const animOf = (id: string, t: number) => {
+      let a = anims.get(id);
+      if (!a) anims.set(id, (a = { pose: "idle", since: t, sq: 0, v: 0, tilt: 0, frame: WIZARD.idle, prev: WIZARD.idle, swapAt: -1e9 }));
+      return a;
+    };
+    // The kick each pose gives the spring as it starts: a stretch on take-off and on a
+    // throw, a squash on landing and on being hit. It rings out with a little overshoot.
+    const POP: Partial<Record<Pose, number>> = { jump: 2.6, land: -3.6, hurt: -2.4, cast: 2, crouch: -1.6, aim: 0.7, walk: 0.5, idle: -0.6, fly: 1.6, win: 1.6, tumble: 1.2 };
+    const BLEND_MS = 90;
+    // The way a flamingo is aiming, in degrees above its facing (negative is down).
     const aimLift = (unit: Unit, facing: number) => {
       let deg: number | null = null;
       if (unit.id === shown?.viewer_id && aim) deg = aim.angle;
@@ -794,7 +825,7 @@ const SpellArena = {
       const color = shown.players[unit.id]?.color ?? "#9ca3af";
 
       if (unit.dead) {
-        // A gravestone where the miner fell.
+        // A gravestone where the flamingo fell.
         ctx.lineWidth = 2;
         ctx.strokeStyle = "#111827";
         ctx.fillStyle = "#a8a29e";
@@ -815,78 +846,153 @@ const SpellArena = {
       const sheet = wizardSheet(img, color);
       const h = SHEET_TALL * s;
       const w = (h * WIZARD_W) / WIZARD_H;
+      const a = animOf(unit.id, t);
+      if (a.pose !== pose) {
+        a.v += POP[pose] ?? 0;
+        a.pose = pose;
+        a.since = t;
+      }
+      const since = t - a.since;
       let frameAt: number = WIZARD.idle;
-      let sx = 1;
-      let sy = 1;
+      // Squash added on top of the spring, a lift off the ground, a spin, and a shake.
+      let squash = 0;
       let lift = 0;
       let spin = 0;
       let jitter = 0;
-      // Each miner keeps its own rhythm, so a crowd doesn't blink in step.
+      let tilt = 0;
+      // Each flamingo keeps its own rhythm, so a flock doesn't blink in step.
       const own = (unit.x * 0.37 + unit.id.length * 1.3) * 1000;
       const phase = (t + own) / 1000;
       switch (pose) {
         case "idle": {
-          // Breathes, blinks now and then, and every so often scratches under the hat.
-          sy = 1 + Math.sin(phase * 2.6) * 0.018;
-          sx = 1 - Math.sin(phase * 2.6) * 0.01;
-          const blink = (t + own) % 3700;
-          const scratch = (t + own * 3) % 11000;
-          if (scratch < 1100) frameAt = WIZARD.scratch;
-          else if (blink < 130) frameAt = WIZARD.blink;
+          // Settles from both feet onto one, breathes, blinks, and now and then preens
+          // or glances over its shoulder.
+          squash = Math.sin(phase * 2.4) * 0.016;
+          const blink = (t + own) % 3900;
+          const preen = (t + own * 3) % 12000;
+          const glance = (t + own * 7) % 9000;
+          if (since < 260) frameAt = WIZARD.stand;
+          else if (preen < 1500) frameAt = WIZARD.preen;
+          else if (glance < 900) frameAt = WIZARD.glance;
+          else if (blink < 140) frameAt = WIZARD.blink;
           break;
         }
         case "crouch":
           frameAt = WIZARD.crouch;
+          squash = -0.05;
           break;
         case "walk":
           frameAt = WIZARD.walk + (Math.floor((walked.get(unit.id) ?? 0) / 0.7) % 8);
+          // Leans into the strut.
+          tilt = 0.05;
           break;
         case "aim": {
           const up = aimLift(unit, facing);
           frameAt = up > 32 ? WIZARD.aimUp : up < -28 ? WIZARD.aimDown : WIZARD.aim;
-          // Winds the pick back over the shoulder as the throw charges past half.
-          if (charge && unit.id === shown.viewer_id && chargePower(t) > 55) frameAt = WIZARD.windup;
-          sy = 1 + Math.sin(phase * 3) * 0.01;
+          squash = Math.sin(phase * 3) * 0.01;
+          if (charge && unit.id === shown.viewer_id) {
+            // Rears back and trembles more the harder it charges.
+            const power = chargePower(t) / 100;
+            if (power > 0.45) frameAt = WIZARD.windup;
+            squash = -power * 0.06;
+            jitter = Math.sin(t / 24) * power * 1.3;
+            tilt = -power * 0.06;
+          }
           break;
         }
-        case "cast":
-          frameAt = WIZARD.release;
+        case "cast": {
+          // Flings the wing, then overbalances after it.
+          const el = animation ? t - animation.start : 0;
+          frameAt = el < 170 ? WIZARD.release : WIZARD.follow;
+          tilt = el < 170 ? 0.04 : 0.07;
           break;
+        }
         case "jump": {
-          // Crouched on take-off, then rising or falling with the arc.
           frameAt = WIZARD.rise;
-          if (jumping?.id === unit.id && shown) {
+          if (jumping?.id === unit.id) {
             const p = shown.physics;
+            const path = jumping.path;
             const step = ((t - jumping.start) / 1000) * (p.playback_speed / p.dt);
-            const i = Math.max(0, Math.min(jumping.path.length - 2, Math.floor(step)));
-            const vy = jumping.path[i + 1][1] - jumping.path[i][1];
-            frameAt = step < 1.5 ? WIZARD.crouch : vy > 0.05 ? WIZARD.fall : WIZARD.rise;
+            const i = Math.max(0, Math.min(path.length - 2, Math.floor(step)));
+            const vx = path[i + 1][0] - path[i][0];
+            const vy = path[i + 1][1] - path[i][1];
+            let top = path[0][1];
+            for (const q of path) top = Math.min(top, q[1]);
+            // A long jump is low and far: the flamingo flutters across it.
+            const long = Math.abs(path[path.length - 1][0] - path[0][0]) > (path[0][1] - top) * 2.2;
+            const left = path.length - 1 - step;
+            if (step < 1.2) frameAt = WIZARD.crouch;
+            else if (left < 2.5 && vy > 0) frameAt = WIZARD.fall;
+            else if (long) {
+              const flap = Math.floor((t - jumping.start) / 85) % 2;
+              frameAt = flap ? WIZARD.flapDown : WIZARD.flapUp;
+              squash = flap ? -0.03 : 0.03;
+              if (frame % 9 === 0) burst(cx - facing * 12, feet - h * 0.45, "#f9a8d4", 1, 18);
+            } else frameAt = vy < -0.15 ? WIZARD.rise : vy > 0.15 ? WIZARD.fall : WIZARD.flapDown;
+            // Noses up on the way up and down on the way down.
+            tilt = Math.atan2(vy, Math.max(0.3, Math.abs(vx))) * 0.3;
           }
+          break;
+        }
+        case "fly": {
+          // Taking flight: wings beat steadily, feathers drift off behind.
+          frameAt = Math.floor((t + own) / 115) % 2 ? WIZARD.flapDown : WIZARD.flapUp;
+          squash = frameAt === WIZARD.flapDown ? -0.03 : 0.03;
+          lift = frameAt === WIZARD.flapDown ? 1.5 : 0;
+          if (frame % 12 === 0) burst(cx - facing * 14, feet - h * 0.4, "#f9a8d4", 1, 16);
           break;
         }
         case "land":
           frameAt = WIZARD.land;
           break;
-        case "hurt":
-          frameAt = WIZARD.hurt;
-          jitter = Math.sin(t / 22) * 1.4;
+        case "hurt": {
+          const el = t - (hurtAt.get(unit.id) ?? t);
+          if (el < 320) {
+            frameAt = WIZARD.hurt;
+            jitter = Math.sin(t / 22) * 2.2 * (1 - el / 320);
+          } else {
+            frameAt = WIZARD.dizzy;
+            tilt = Math.sin(t / 110) * 0.12;
+          }
           break;
+        }
         case "tumble":
           // Curled into a ball and rolling the way it was thrown.
           frameAt = WIZARD.tumble;
           spin = (t / 90) * facing;
           break;
-        case "win":
-          frameAt = Math.floor((t + own) / 320) % 2 ? WIZARD.cheer : WIZARD.jig;
-          lift = Math.abs(Math.sin((t + own) / 320 * Math.PI)) * 3;
+        case "win": {
+          const beat = (t + own) / 380;
+          frameAt = Math.floor(beat) % 2 ? WIZARD.cheer : WIZARD.dance;
+          const hop = Math.abs(Math.sin(beat * Math.PI));
+          lift = hop * 5;
+          squash = (hop - 0.5) * 0.08;
           break;
+        }
       }
 
-      // A soft shadow on the ground, smaller as the miner leaves it.
-      if (pose !== "jump" && pose !== "tumble" && !((unit.float ?? 0) > 0)) {
+      // The spring, stepped by this frame's time.
+      const dt = Math.min(frameDt, 40) / 1000;
+      a.v += (-340 * a.sq - 15 * a.v) * dt;
+      a.sq += a.v * dt;
+      a.tilt += (tilt - a.tilt) * (1 - Math.exp(-frameDt / 90));
+      if (frameAt !== a.frame) {
+        // Walk frames follow each other; anything else blends from the frame before.
+        if (frameAt >= WIZARD.idle || a.frame >= WIZARD.idle) {
+          a.prev = a.frame;
+          a.swapAt = t;
+        }
+        a.frame = frameAt;
+      }
+      const sq = Math.max(-0.3, Math.min(0.3, a.sq + squash));
+      const sy = 1 + sq;
+      const sx = 1 - sq * 0.55;
+
+      // A soft shadow on the ground, smaller as the flamingo leaves it.
+      if (pose !== "jump" && pose !== "tumble" && pose !== "fly") {
         ctx.fillStyle = "rgba(0,0,0,0.22)";
         ctx.beginPath();
-        ctx.ellipse(cx, feet, h * 0.24 - lift * 0.4, 2, 0, 0, Math.PI * 2);
+        ctx.ellipse(cx, feet, Math.max(2, h * 0.16 * sx - lift * 0.4), 2, 0, 0, Math.PI * 2);
         ctx.fill();
       }
 
@@ -894,20 +1000,30 @@ const SpellArena = {
       ctx.translate(cx + jitter, feet - lift);
       if (spin) {
         // The ball sits low in its cell; it rolls about its own middle.
-        ctx.translate(0, -h * 0.3);
+        ctx.translate(0, -h * 0.25);
         ctx.rotate(spin);
-        ctx.translate(0, h * 0.3);
+        ctx.translate(0, h * 0.25);
+      } else if (a.tilt) {
+        ctx.translate(0, -h * 0.4);
+        ctx.rotate(a.tilt * facing);
+        ctx.translate(0, h * 0.4);
       }
       ctx.scale(facing * sx, sy);
       ctx.drawImage(sheet, frameAt * WIZARD_W, 0, WIZARD_W, WIZARD_H, -w / 2, -h, w, h);
+      const blend = (t - a.swapAt) / BLEND_MS;
+      if (blend < 1 && a.prev !== frameAt) {
+        ctx.globalAlpha = 1 - blend;
+        ctx.drawImage(sheet, a.prev * WIZARD_W, 0, WIZARD_W, WIZARD_H, -w / 2, -h, w, h);
+        ctx.globalAlpha = 1;
+      }
       ctx.restore();
 
-      // The crystal on the pick swells and glows while a throw charges.
+      // The wing tip swells with light while a throw charges.
       if (pose === "aim" && charge && unit.id === shown.viewer_id) {
         const power = chargePower(t) / 100;
-        const [fx, fy] = CRYSTAL[frameAt] ?? CRYSTAL[WIZARD.aim];
-        const ox = cx + facing * fx * h;
-        const oy = feet - fy * h;
+        const [fx, fy] = WINGTIP[frameAt] ?? WINGTIP[WIZARD.aim];
+        const ox = cx + jitter + facing * fx * h * sx;
+        const oy = feet - fy * h * sy;
         const r = 4 + power * 10 + Math.sin(t / 60) * 1.2;
         const glow = ctx.createRadialGradient(ox, oy, 0, ox, oy, r);
         const tint = colorOf(charge.spell, "#facc15");
@@ -953,22 +1069,15 @@ const SpellArena = {
       return true;
     };
 
-    // The pick hook's chain: iron links from (x0, y0) to (x1, y1), sagging a little.
+    // The shrimp's fishing line from (x0, y0) to (x1, y1), sagging a little.
     const chain = (x0: number, y0: number, x1: number, y1: number) => {
-      const length = Math.hypot(x1 - x0, y1 - y0);
-      const links = Math.max(2, Math.floor(length / 5));
-      const sag = Math.min(14, length * 0.06);
-      const angle = Math.atan2(y1 - y0, x1 - x0);
-      ctx.lineWidth = 1.6;
-      for (let i = 0; i < links; i++) {
-        const k = (i + 0.5) / links;
-        const lx = x0 + (x1 - x0) * k;
-        const ly = y0 + (y1 - y0) * k + Math.sin(k * Math.PI) * sag;
-        ctx.strokeStyle = i % 2 ? "#57534e" : "#a8a29e";
-        ctx.beginPath();
-        ctx.ellipse(lx, ly, i % 2 ? 2.8 : 3.4, i % 2 ? 1.2 : 2, angle, 0, Math.PI * 2);
-        ctx.stroke();
-      }
+      const sag = Math.min(16, Math.hypot(x1 - x0, y1 - y0) * 0.08);
+      ctx.strokeStyle = "rgba(255,255,255,0.9)";
+      ctx.lineWidth = 1.4;
+      ctx.beginPath();
+      ctx.moveTo(x0, y0);
+      ctx.quadraticCurveTo((x0 + x1) / 2, (y0 + y1) / 2 + sag, x1, y1);
+      ctx.stroke();
     };
 
     // Blast runes fizz at their caster's feet until the turn ends, then go off.
@@ -1022,18 +1131,6 @@ const SpellArena = {
       const lean = (leans.get(id) ?? 0) + (want - (leans.get(id) ?? 0)) * (1 - Math.exp(-dt / 120));
       leans.set(id, lean);
       return lean;
-    };
-
-    // A wizard on a broomstick rides it, with a trail of sparkles.
-    // The sheet paints it diagonally, bristles bottom left; a quarter turn lays it flat
-    // with the handle ahead of the rider.
-    const drawBroom = (unit: Unit, t: number, face: number) => {
-      if (unit.dead || (unit.float ?? 0) <= 0) return;
-      const s = scale();
-      const cx = (unit.x + 0.5) * s;
-      const feet = (unit.y + 1) * s;
-      sprite("broom", cx, feet - 2, 42, Math.PI / 4 + 0.1, face);
-      if (frame % 3 === 0) burst(cx - face * 16 + Math.random() * 4, feet, "#fde68a", 1, 16);
     };
 
     const drawFloaters = (dt: number) => {
@@ -1287,22 +1384,6 @@ const SpellArena = {
       shakeUntil = Math.max(shakeUntil, performance.now() + ms);
     };
 
-    const lightning = (x0: number, y0: number, x1: number, y1: number, color: string) => {
-      ctx.strokeStyle = color;
-      ctx.lineWidth = 3;
-      ctx.beginPath();
-      ctx.moveTo(x0, y0);
-      for (let i = 1; i < 8; i++) {
-        const k = i / 8;
-        ctx.lineTo(x0 + (x1 - x0) * k + (Math.random() - 0.5) * 10, y0 + (y1 - y0) * k + (Math.random() - 0.5) * 10);
-      }
-      ctx.lineTo(x1, y1);
-      ctx.stroke();
-      ctx.strokeStyle = "#fff";
-      ctx.lineWidth = 1;
-      ctx.stroke();
-    };
-
     // Steps elapsed in the server's simulation timeline.
     const castStep = (now: number, since: number, speed = 1) => {
       const p = shown!.physics;
@@ -1332,7 +1413,8 @@ const SpellArena = {
       }
       if (!due.size) return;
       // The health bars along the bottom drop with it too.
-      this.pushEvent("arena_hits_shown", { cast: animation.cast.id, hits: [...due.values()].map(({ id, hp }) => ({ id, hp })) });
+      const shownHits = { cast: animation.cast.id, hits: [...due.values()].map(({ id, hp }) => ({ id, hp })) };
+      setTimeout(() => this.pushEvent("arena_hits_shown", shownHits), 450);
       const next = {
         ...shown,
         units: shown.units.map((u) => {
@@ -1356,8 +1438,10 @@ const SpellArena = {
           if ((x + 0.5 - cx) ** 2 + (y + 0.5 - cy) ** 2 <= r * r) cells[y * shown.width + x] = 0;
         }
       }
-      if (terrainCanvas && terrainRes === LAND_RES) carveLand(terrainCanvas, cx, cy, r);
-      else landDirty = true;
+      if (terrainCanvas && terrainRes === LAND_RES) {
+        carveLand(terrainCanvas, cx, cy, r);
+        if (cx - r < EDGE_FADE || cx + r > shown.width - EDGE_FADE || (ceiling && cy - r < 24)) buildEdges();
+      } else landDirty = true;
     };
 
     // A blast lands, all on the same frame: the fireball and ring flash out, the crater
@@ -1400,21 +1484,28 @@ const SpellArena = {
 
     // The painted explosion plays through its frames: a flash, the fireball swelling to
     // its peak, then breaking up into smoke that drifts off.
-    const BOOM_MS = 75;
+    const BOOM_MS = 85;
     const drawBooms = (now: number) => {
       booms = booms.filter((b) => now - b.born < BOOM_MS * BOOM_FRAMES);
       const img = art.boom;
       if (!ready(img)) return;
       for (const b of booms) {
         const age = now - b.born;
-        const n = Math.min(BOOM_FRAMES - 1, Math.floor(age / BOOM_MS));
-        const grow = 0.75 + Math.min(1, age / (BOOM_MS * 3)) * 0.35;
+        const at = age / BOOM_MS;
+        const n = Math.min(BOOM_FRAMES - 1, Math.floor(at));
+        const f = at - n;
+        const grow = 0.7 + (1 - (1 - Math.min(1, age / (BOOM_MS * 3))) ** 3) * 0.42;
         const size = b.size * grow;
-        ctx.globalAlpha = n >= 5 ? 1 - (age - BOOM_MS * 5) / (BOOM_MS * 3) : 1;
+        const fade = at >= 5 ? Math.max(0, 1 - (age - BOOM_MS * 5) / (BOOM_MS * 3)) : 1;
         ctx.save();
-        ctx.translate(b.x, b.y - size * 0.12 * (n / BOOM_FRAMES));
+        ctx.translate(b.x, b.y - size * 0.12 * (at / BOOM_FRAMES));
         ctx.scale(b.flip, 1);
+        ctx.globalAlpha = fade;
         ctx.drawImage(img, n * BOOM_CELL, 0, BOOM_CELL, BOOM_CELL, -size / 2, -size / 2, size, size);
+        if (n + 1 < BOOM_FRAMES) {
+          ctx.globalAlpha = fade * f;
+          ctx.drawImage(img, (n + 1) * BOOM_CELL, 0, BOOM_CELL, BOOM_CELL, -size / 2, -size / 2, size, size);
+        }
         ctx.restore();
       }
       ctx.globalAlpha = 1;
@@ -1482,7 +1573,10 @@ const SpellArena = {
 
     // How each spell looks in flight: its painted sprite, turned the way it flies (or
     // spinning, or hopping), with a trail; beams and swings are drawn as what they are.
-    const ORIENT: Record<string, number> = { firebolt: 0, seeker: 0, embers: Math.PI / 2, meteors: (3 * Math.PI) / 4, surge: (3 * Math.PI) / 4, starfall: -Math.PI / 4 };
+    // Sprites painted heading somewhere turn to fly that way (the shrimp falls down and
+    // to the left); round ones spin as they go; the fly and the crab face the way they go.
+    const ORIENT: Record<string, number> = { starfall: (3 * Math.PI) / 4 };
+    const SPINS = new Set(["firebolt", "fuserune", "embers", "thunderegg", "meteors", "surge", "holyorb"]);
     const SIZE: Record<string, number> = { firebolt: 22, fuserune: 18, embers: 14, thunderegg: 20, seeker: 22, hexhare: 24, holyorb: 28, anvil: 48, meteors: 26, starfall: 24, surge: 24, blastrune: 22, slab: 40 };
     const drawProjectile = (segment: Segment, local: number, x: number, y: number, color: string, cast: Cast) => {
       const s = scale();
@@ -1491,9 +1585,20 @@ const SpellArena = {
       const heading = Math.atan2(y - py, x - px);
 
       if (id === "lance") {
+        // The quill flies point first with a pink streak behind it.
         const [sx, sy] = segment.path[0];
-        lightning(sx * s, sy * s, x * s, y * s, color);
-        burst(x * s, y * s, "#fff", 2, 40);
+        const streak = ctx.createLinearGradient(sx * s, sy * s, x * s, y * s);
+        streak.addColorStop(0, "rgba(236,72,153,0)");
+        streak.addColorStop(1, color);
+        ctx.strokeStyle = streak;
+        ctx.lineWidth = 3;
+        ctx.lineCap = "round";
+        ctx.beginPath();
+        ctx.moveTo(sx * s, sy * s);
+        ctx.lineTo(x * s, y * s);
+        ctx.stroke();
+        sprite("lance", x * s, y * s, 26, heading);
+        if (frame % 2 === 0) burst(x * s, y * s, "#fbcfe8", 1, 30);
         return;
       }
       if (id === "tunnel") {
@@ -1510,10 +1615,10 @@ const SpellArena = {
         return;
       }
       if (id === "hook") {
-        // The pick flies out on its chain, point first.
+        // The shrimp flies out on its line, swinging a little.
         const [ox, oy] = segment.path[0];
         chain(ox * s, oy * s, x * s, y * s);
-        sprite("hook", x * s, y * s, 28, heading + Math.PI / 4);
+        sprite("hook", x * s, y * s, 26, Math.sin(now() / 90) * 0.3);
         return;
       }
       if (id === "blink") {
@@ -1543,9 +1648,9 @@ const SpellArena = {
       let angle = 0;
       let flip = 1;
       if (id in ORIENT) angle = heading - ORIENT[id];
-      else if (id === "hexhare") flip = x >= px ? 1 : -1;
-      else if (id === "fuserune" || id === "thunderegg") angle = local * 0.35 * (x >= px ? 1 : -1);
-      else if (id === "holyorb") {
+      else if (id === "hexhare" || id === "seeker") flip = x >= px ? 1 : -1;
+      else if (SPINS.has(id)) angle = local * 0.3 * (x >= px ? 1 : -1);
+      if (id === "holyorb") {
         // It sings as it flies: a halo of light around it.
         const glow = ctx.createRadialGradient(x * s, y * s, 2, x * s, y * s, size * 1.3);
         glow.addColorStop(0, "rgba(254, 240, 138, 0.8)");
@@ -1579,7 +1684,7 @@ const SpellArena = {
         const [ex, ey] = segment.path[segment.path.length - 1];
         burst(ex * s, ey * s, "#fff", 18, 120);
         rings.push({ x: ex * s, y: ey * s, r: 20, born: performance.now(), color });
-        floaters.push({ x: ex * s, y: (ey - 4) * s, text: "HOOKED!", color: "#fde047", size: 22, life: 900, max: 900 });
+        floaters.push({ x: ex * s, y: (ey - 4) * s, text: "CAN'T RESIST!", color: "#fde047", size: 22, life: 900, max: 900 });
         punch = Math.min(0.09, punch + 0.04);
         shake(5, 200);
         return;
@@ -1687,7 +1792,7 @@ const SpellArena = {
       const elapsed = now - animation.aftermathAt;
       const step = castStep(now, animation.aftermathAt, knockSpeed(cast));
 
-      // A hooked miner is reeled in on the chain until they land.
+      // A tempted flamingo lunges after the shrimp on its line until it lands.
       if (cast.spell === "hook") {
         const s = scale();
         const caster = shown.units.find((u) => u.id === cast.caster_id);
@@ -1696,7 +1801,7 @@ const SpellArena = {
           const [kx, ky] = pointAt(knock.path, step);
           const [cx, cy] = drawn.get(caster.id) ?? [caster.x, caster.y];
           chain((cx + 0.5) * s, (cy - 1) * s, (kx + 0.5) * s, (ky - 1.5) * s);
-          sprite("hook", (kx + 0.5) * s, (ky - 1.5) * s, 24, Math.PI / 4);
+          sprite("hook", (kx + 0.5) * s, (ky - 1.5) * s, 22, Math.sin(now / 90) * 0.3);
         }
       }
 
@@ -1894,22 +1999,22 @@ const SpellArena = {
         drawn.set(unit.id, [unit.x, unit.y]);
         return { x: unit.x, y: unit.y };
       }
+      // Walking and flight both close on the next cell at a steady speed, a little
+      // faster than the steps arrive, so the flamingo glides instead of lurching once a
+      // cell. Each axis keeps its own pace, so a diagonal keeps up with its steps, and a
+      // long way behind (a drop off a ledge) closes faster.
+      const pace = (unit.float ?? 0) > 0 ? FLY_MS : STEP_MS;
+      const chase = (from: number, to: number) => {
+        const d = Math.abs(to - from);
+        const move = Math.min(d, Math.max((dt / pace) * 1.08, d * (1 - Math.exp(-dt / 140))));
+        return from + Math.sign(to - from) * move;
+      };
+      const x = chase(prev[0], unit.x);
+      const y = chase(prev[1], unit.y);
       if ((unit.float ?? 0) > 0) {
-        // Flight closes on the broom's next cell at a steady speed, a little faster
-        // than the steps arrive, so it glides instead of lurching once a cell.
-        // Each axis keeps its own pace, so a diagonal keeps up with its steps.
-        const chase = (from: number, to: number) => {
-          const d = Math.abs(to - from);
-          const move = Math.min(d, Math.max((dt / FLY_MS) * 1.08, d * (1 - Math.exp(-dt / 140))));
-          return from + Math.sign(to - from) * move;
-        };
-        const at: [number, number] = [chase(prev[0], unit.x), chase(prev[1], unit.y)];
-        drawn.set(unit.id, at);
-        return { x: at[0], y: at[1] };
+        drawn.set(unit.id, [x, y]);
+        return { x, y };
       }
-      const k = 1 - Math.exp(-dt / 55);
-      const x = prev[0] + (unit.x - prev[0]) * k;
-      const y = prev[1] + (unit.y - prev[1]) * k;
       if (Math.abs(unit.x - x) > 0.05 && frame % 3 === 0) burst((x + 0.5) * s, (unit.y + 1) * s, "#a8a29e", 1, 18);
       drawn.set(unit.id, [x, y]);
       return { x, y };
@@ -2144,6 +2249,61 @@ const SpellArena = {
     const floating = () => (myWizard()?.float ?? 0) > 0;
     const moveStep = (now: number) => (floating() ? flyStep(now) : heldDir ? walkStep(now) : undefined);
 
+    // The land carries on past each edge as its own mirror image, fading into the
+    // backdrop, so the world's left and right ends don't look cut off; a cave's ceiling
+    // carries on above in the same way, fading into solid rock.
+    let edges: { left: HTMLCanvasElement; right: HTMLCanvasElement; top: HTMLCanvasElement | null } | null = null;
+    const buildEdges = () => {
+      if (!shown || !terrainCanvas) return;
+      const R = terrainRes;
+      const n = EDGE_FADE * R;
+      const h = shown.height * R;
+      const strip = (w: number, hh: number, paint: (c: CanvasRenderingContext2D) => void, fade: CanvasGradient | ((c: CanvasRenderingContext2D) => CanvasGradient)) => {
+        const canvas = document.createElement("canvas");
+        canvas.width = w;
+        canvas.height = hh;
+        const c = canvas.getContext("2d")!;
+        paint(c);
+        c.globalCompositeOperation = "destination-in";
+        c.fillStyle = typeof fade === "function" ? fade(c) : fade;
+        c.fillRect(0, 0, w, hh);
+        return canvas;
+      };
+      const across = (c: CanvasRenderingContext2D, from: number, to: number) => {
+        const g = c.createLinearGradient(from, 0, to, 0);
+        g.addColorStop(0, "rgba(0,0,0,1)");
+        g.addColorStop(0.35, "rgba(0,0,0,0.75)");
+        g.addColorStop(1, "rgba(0,0,0,0)");
+        return g;
+      };
+      const land = terrainCanvas;
+      const left = strip(n, h, (c) => {
+        c.translate(n, 0);
+        c.scale(-1, 1);
+        c.drawImage(land, 0, 0, n, h, 0, 0, n, h);
+      }, (c) => across(c, n, 0));
+      const right = strip(n, h, (c) => {
+        c.translate(n, 0);
+        c.scale(-1, 1);
+        c.drawImage(land, land.width - n, 0, n, h, 0, 0, n, h);
+      }, (c) => across(c, 0, n));
+      let top: HTMLCanvasElement | null = null;
+      if (ceiling) {
+        const rows = 24 * R;
+        top = strip(land.width, rows, (c) => {
+          c.translate(0, rows);
+          c.scale(1, -1);
+          c.drawImage(land, 0, 0, land.width, rows, 0, 0, land.width, rows);
+        }, (c) => {
+          const g = c.createLinearGradient(0, rows, 0, 0);
+          g.addColorStop(0, "rgba(0,0,0,1)");
+          g.addColorStop(1, "rgba(0,0,0,0)");
+          return g;
+        });
+      }
+      edges = { left, right, top };
+    };
+
     const buildLand = () => {
       if (!shown || !cells) return;
       landDirty = false;
@@ -2155,6 +2315,7 @@ const SpellArena = {
         terrainCanvas = terrainImage(cells, shown.width, shown.height, palette());
         terrainRes = 1;
       }
+      buildEdges();
     };
 
     const poseOf = (unit: Unit, now: number, moving: boolean, knocked: boolean): Pose => {
@@ -2162,6 +2323,7 @@ const SpellArena = {
       if (shown.phase === "game_ended") return "win";
       if (knocked) return "tumble";
       if (jumping?.id === unit.id) return "jump";
+      if ((unit.float ?? 0) > 0) return "fly";
       if (unit.id === shown.viewer_id && now - crouchAt < 300) return "crouch";
       if (now - (hurtAt.get(unit.id) ?? -1e9) < 650) return "hurt";
       if (now - (landedAt.get(unit.id) ?? -1e9) < 170) return "land";
@@ -2246,13 +2408,15 @@ const SpellArena = {
       // The server has had long enough to confirm the last step; its word stands.
       if (predicted && now - predicted.at > 600) predicted = null;
       const dt = Math.min(64, now - lastTime);
+      frameDt = dt;
       lastTime = now;
 
       ctx.setTransform(pixelScale, 0, 0, pixelScale, 0, 0);
       ctx.save();
       if (now < shakeUntil) {
-        const k = (shakeUntil - now) / 700;
-        ctx.translate((Math.random() - 0.5) * shakePower * 2 * k, (Math.random() - 0.5) * shakePower * 2 * k);
+        const k = Math.min(1, (shakeUntil - now) / 450);
+        const amp = shakePower * k * k * 0.75;
+        ctx.translate((Math.sin(now / 21) + Math.sin(now / 13.7) * 0.6) * amp, (Math.cos(now / 19) + Math.sin(now / 11.3) * 0.6) * amp);
       } else {
         shakePower = 0;
       }
@@ -2269,16 +2433,17 @@ const SpellArena = {
 
       if (shown && terrainCanvas) {
         ctx.imageSmoothingEnabled = terrainRes > 1;
-        if (ceiling && cam.y < 0) {
-          // Rock carries on above the world: its top rows mirrored, then solid rock.
+        if (edges?.top && cam.y < 0) {
+          // Rock carries on above the cave: its top rows mirrored, deepening into solid rock.
           const rows = 24;
-          const rock = palette().rock[0];
+          const rock = palette().rock[1];
           ctx.fillStyle = `rgb(${rock[0]}, ${rock[1]}, ${rock[2]})`;
-          ctx.fillRect(0, (cam.y - 1) * CELL, shown.width * CELL, (-cam.y - rows + 1) * CELL);
-          ctx.save();
-          ctx.scale(1, -1);
-          ctx.drawImage(terrainCanvas, 0, 0, shown.width * terrainRes, rows * terrainRes, 0, 0, shown.width * CELL, rows * CELL);
-          ctx.restore();
+          ctx.fillRect(-EDGE_FADE * CELL, (cam.y - 2) * CELL, (shown.width + EDGE_FADE * 2) * CELL, (2 - cam.y) * CELL);
+          ctx.drawImage(edges.top, 0, -rows * CELL, shown.width * CELL, rows * CELL);
+        }
+        if (edges) {
+          ctx.drawImage(edges.left, -EDGE_FADE * CELL, 0, EDGE_FADE * CELL, shown.height * CELL);
+          ctx.drawImage(edges.right, shown.width * CELL, 0, EDGE_FADE * CELL, shown.height * CELL);
         }
         ctx.drawImage(terrainCanvas, 0, 0, shown.width * CELL, shown.height * CELL);
         ctx.imageSmoothingEnabled = true;
@@ -2297,7 +2462,8 @@ const SpellArena = {
           const from = drawn.get(u.id);
           const to = glide(target, dt);
           if (from && dt > 0) velocity.set(u.id, [(to.x - from[0]) / dt, (to.y - from[1]) / dt]);
-          if (Math.abs(to.x - target.x) > 0.03 && !((u.float ?? 0) > 0)) moving.add(u.id);
+          if (Math.abs(to.x - target.x) > 0.03 && !((u.float ?? 0) > 0)) movedAt.set(u.id, now);
+          if (now - (movedAt.get(u.id) ?? -1e9) < 140) moving.add(u.id);
           return { ...u, ...to };
         });
 
@@ -2333,7 +2499,6 @@ const SpellArena = {
             ctx.rotate(leanOf(unit.id, faces, dt));
             ctx.translate(-px, -py);
           }
-          drawBroom(unit, now, faces);
           drawWizard(unit, now, faces, poseOf(unit, now, moving.has(unit.id), knocked.has(unit.id)));
           if (flying) ctx.restore();
         }

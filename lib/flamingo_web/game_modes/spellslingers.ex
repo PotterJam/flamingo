@@ -8,7 +8,7 @@ defmodule FlamingoWeb.GameModes.Spellslingers do
   def title, do: "Spells"
 
   def description,
-    do: "Wizards take turns hurling spells across a crumbling island"
+    do: "Flamingos take turns hurling spells across a crumbling island"
 
   def theme,
     do: %{
@@ -49,7 +49,7 @@ defmodule FlamingoWeb.GameModes.Spellslingers do
       <.input
         field={@form[:bots]}
         type="select"
-        label="AI wizards"
+        label="AI flamingos"
         options={bot_options()}
         id="arena-bots-select"
       />

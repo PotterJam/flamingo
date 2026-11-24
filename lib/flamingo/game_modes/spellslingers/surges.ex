@@ -22,7 +22,7 @@ defmodule Flamingo.GameModes.Spellslingers.Surges do
 
   def surge_before(state, :meteors) do
     state
-    |> Units.log("Rockfall! Boulders come down from above!")
+    |> Units.log("Coconut storm! Coconuts come down from above!")
     |> Spells.run(nil, "surge", nil, fn fx ->
       Enum.reduce(0..3, %{fx | shake: true}, fn i, fx ->
         {r, rng} = :rand.uniform_s(fx.state.rng)
@@ -40,12 +40,12 @@ defmodule Flamingo.GameModes.Spellslingers.Surges do
       end)
 
     %{state | ammo: ammo}
-    |> Units.log("Lucky seam! Everyone finds one more of everything.")
+    |> Units.log("Lucky tide! Everyone finds one more of everything.")
   end
 
   def surge_before(state, :crates) do
     state
-    |> Units.log("Supplies come down the shaft.")
+    |> Units.log("Supplies wash up on the shore.")
     |> Crates.drop_crate()
     |> Crates.drop_crate()
   end
@@ -56,7 +56,7 @@ defmodule Flamingo.GameModes.Spellslingers.Surges do
     {sign, rng} = Rng.pick([-1, 1], state.rng)
 
     %{state | wind: sign * 10, rng: rng}
-    |> Units.log("A howling draught sweeps the mine.")
+    |> Units.log("A howling gale sweeps the lagoon.")
   end
 
   def surge_after(state, _), do: state

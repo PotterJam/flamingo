@@ -258,10 +258,10 @@ defmodule Flamingo.GameModes.Spellslingers.Spells do
         Fx.push(fx, id, pull(fx.state, fx.state.units[id], fx.state.units[actor]))
 
       {:rock, _} ->
-        %{fx | state: Units.log(fx.state, "…and the hook clangs off the rock.")}
+        %{fx | state: Units.log(fx.state, "…and the shrimp snags on the rock.")}
 
       nil ->
-        %{fx | state: Units.log(fx.state, "…and the hook catches nothing.")}
+        %{fx | state: Units.log(fx.state, "…and nobody bites.")}
     end
   end
 
@@ -312,7 +312,7 @@ defmodule Flamingo.GameModes.Spellslingers.Spells do
 
     state =
       %{fx.state | runes: fx.state.runes ++ [rune]}
-      |> Units.log("A powder keg hisses at #{Units.player_name(fx.state, actor)}'s feet. Run!")
+      |> Units.log("An egg fizzes at #{Units.player_name(fx.state, actor)}'s feet. Run!")
 
     %{fx | state: state}
   end
@@ -333,7 +333,7 @@ defmodule Flamingo.GameModes.Spellslingers.Spells do
     x = clamp(x, 8, @width - 9)
     y = clamp(y, 4, fx.state.water_level - 1)
     state = Units.raise_ground(fx.state, for(dx <- -7..7, do: {x + dx, y + 0.5, 1.2}))
-    %{fx | state: Units.log(state, "A slab of stone hangs in the air.")}
+    %{fx | state: Units.log(state, "A shelf of mud hangs in the air.")}
   end
 
   # On a broom the wizard hovers for the rest of the turn with a fresh tank of flight.
@@ -342,7 +342,7 @@ defmodule Flamingo.GameModes.Spellslingers.Spells do
 
     state =
       %{Units.put_unit(fx.state, %{wizard | float: 1}) | walk_left: @broom_fuel}
-      |> Units.log("#{Units.player_name(fx.state, actor)} takes to the air on a broomstick!")
+      |> Units.log("#{Units.player_name(fx.state, actor)} takes flight!")
 
     %{fx | state: state, auras: [%{id: actor, kind: "broom"} | fx.auras]}
   end
@@ -367,12 +367,12 @@ defmodule Flamingo.GameModes.Spellslingers.Spells do
   def effect(:anvil, %{target: {x, _}} = fx, actor, spell, _angle, _power) do
     x = clamp(x, 2, @width - 3)
     start = {x, Terrain.sky_row(fx.state, floor(x)) - 6.0}
-    state = Units.log(fx.state, "Look out above: an anvil!")
+    state = Units.log(fx.state, "Look out above: a lawn flamingo!")
     slam(%{fx | state: state, shake: true}, actor, spell, start, 0, 6)
   end
 
   def effect(:quake, fx, actor, spell, _angle, _power) do
-    state = Units.log(fx.state, "Cave-in! The ground heaves!")
+    state = Units.log(fx.state, "The flock stomps! The ground heaves!")
     spots = Units.standable_spots(state, 1)
 
     # With no ground left to stand on there is nothing to crack, but it still shakes.
@@ -401,7 +401,7 @@ defmodule Flamingo.GameModes.Spellslingers.Spells do
   def effect(:starfall, fx, actor, spell, _angle, _power) do
     count = 16
     span = (@width - 16) / (count - 1)
-    state = Units.log(fx.state, "Molten slag rains down!")
+    state = Units.log(fx.state, "It's raining red-hot shrimp!")
 
     {order, rng} = Rng.shuffle(Enum.to_list(0..(count - 1)), state.rng)
 
@@ -458,7 +458,7 @@ defmodule Flamingo.GameModes.Spellslingers.Spells do
 
     cond do
       hare.y >= fx.state.water_level ->
-        %{fx | state: Units.log(fx.state, "…and the hare swims off.")}
+        %{fx | state: Units.log(fx.state, "…and the crab swims off.")}
 
       n >= @hops or prey?(fx.state, actor, n, pos) ->
         fx = add_segment(fx, [pos, pos], start, spell.id, spell.radius, true)

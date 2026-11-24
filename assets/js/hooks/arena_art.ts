@@ -5,13 +5,13 @@
 
 const BASE = "/images/spellslingers";
 
-// Miner sheet frames, left to right, each WIZARD_W x WIZARD_H with the boots centred on
-// the bottom edge, painted facing right: an 8-frame walk cycle, then single poses.
+// Flamingo sheet frames, left to right, each WIZARD_W x WIZARD_H with the feet centred on
+// the bottom edge, painted facing right: an 8-frame strut, then single poses.
 export const WIZARD = {
   walk: 0,
   idle: 8,
   blink: 9,
-  scratch: 10,
+  preen: 10,
   aimUp: 11,
   aim: 12,
   aimDown: 13,
@@ -19,25 +19,33 @@ export const WIZARD = {
   release: 15,
   crouch: 16,
   rise: 17,
-  fall: 18,
-  land: 19,
-  hurt: 20,
-  tumble: 21,
-  cheer: 22,
-  jig: 23,
+  flapUp: 18,
+  flapDown: 19,
+  fall: 20,
+  land: 21,
+  hurt: 22,
+  tumble: 23,
+  stand: 24,
+  follow: 25,
+  recover: 26,
+  dizzy: 27,
+  glance: 28,
+  cheer: 29,
+  dance: 30,
+  front: 31,
 } as const;
-// Where the crystal on the pick sits in the aiming and throwing frames, as fractions of
-// the cell's height: across from the boots, and up from them.
-export const CRYSTAL: Record<number, [number, number]> = {
-  8: [0.224, 0.536],
-  11: [0.323, 0.742],
-  12: [0.464, 0.408],
-  13: [0.302, 0.159],
-  14: [-0.159, 0.704],
-  15: [0.381, 0.184],
+// Where the wing tip is in the aiming and throwing frames, as fractions of the cell's
+// height: across from the feet, and up from them. Spells glow and leave from there.
+export const WINGTIP: Record<number, [number, number]> = {
+  11: [0.423, 0.83],
+  12: [0.57, 0.487],
+  13: [0.51, 0.177],
+  14: [-0.07, 0.627],
+  15: [0.607, 0.507],
+  25: [0.543, 0.563],
 };
-export const WIZARD_W = 280;
-export const WIZARD_H = 240;
+export const WIZARD_W = 400;
+export const WIZARD_H = 300;
 // Crate sheet frames, each CRATE_SIZE square, standing on the bottom edge.
 export const CRATE_FRAME: Record<string, number> = { health: 0, mana: 1 };
 export const CRATE_SIZE = 200;
@@ -111,8 +119,8 @@ function hslRgb([h, s, l]: Rgb): Rgb {
   return [f(h + 1 / 3) * 255, f(h) * 255, f(h - 1 / 3) * 255];
 }
 
-// The wizard is painted in one blue robe; each player's copy swaps that blue for their
-// colour, keeping the painted light and shade.
+// The flamingo is painted with one blue neckerchief; each player's copy swaps that blue
+// for their colour, keeping the painted light and shade.
 const tinted = new Map<string, HTMLCanvasElement>();
 export function wizardSheet(img: HTMLImageElement, color: string) {
   const cached = tinted.get(color);

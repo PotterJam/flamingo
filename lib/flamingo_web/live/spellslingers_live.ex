@@ -205,7 +205,7 @@ defmodule FlamingoWeb.SpellslingersLive do
         id="arena-status-line"
         class="rounded-base border-2 border-border bg-paper px-3 py-1 text-sm font-black"
       >
-        Rockfall! Boulders are coming down…
+        Coconut storm! Coconuts are coming down…
       </p>
       <p
         :if={@phase == :arena_aim and @retreat?}
@@ -669,7 +669,9 @@ defmodule FlamingoWeb.SpellslingersLive do
             </div>
           </div>
         </div>
-        <div id="arena-spell-info" class="border-2 border-border bg-paper">
+        <%!-- Every pane sits in the same grid cell, so the panel is always as tall as the
+             tallest one and pointing along the grid never resizes or shifts it --%>
+        <div id="arena-spell-info" class="grid border-2 border-border bg-paper">
           <.spell_info :for={spell <- @spells} spell={spell} shown?={spell.id == @shown} />
         </div>
       </div>
@@ -722,7 +724,7 @@ defmodule FlamingoWeb.SpellslingersLive do
           <span class="inline-flex items-center gap-1">
             <.key_cap key="W" /> high jump <.key_cap key="S" /> long jump
           </span>
-          <span>Cross gaps with the Steam Pack, or Burrow to anywhere.</span>
+          <span>Cross gaps with Take Flight, or Migrate to anywhere.</span>
         </.help_step>
         <.help_step n={2} image="help-throw" title="Throw">
           <span>Hold the mouse to charge, aim with the pointer, let go to throw.</span>
@@ -741,7 +743,7 @@ defmodule FlamingoWeb.SpellslingersLive do
           <.key_cap key="Tab" /> or right-click: kit
         </span>
         <span class="inline-flex items-center gap-1.5">
-          <.key_cap key="1" />…<.key_cap key="-" /> pick a tool
+          <.key_cap key="1" />…<.key_cap key="-" /> pick a spell
         </span>
         <span>Scroll to zoom, right-drag to look around</span>
         <span class="inline-flex items-center gap-1.5"><.key_cap key="F" /> full screen</span>
@@ -1001,7 +1003,10 @@ defmodule FlamingoWeb.SpellslingersLive do
       assign(assigns, how_icon: how_icon, how_text: how_text, stats: card_stats(assigns.spell))
 
     ~H"""
-    <div data-info={@spell.id} class={["spell-card-pop", if(@shown?, do: "block", else: "hidden")]}>
+    <div
+      data-info={@spell.id}
+      class={["spell-card-pop [grid-area:1/1]", if(@shown?, do: "visible", else: "invisible")]}
+    >
       <img
         src={"/images/spellslingers/guide/#{@spell.id}.webp"}
         alt=""

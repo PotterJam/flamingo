@@ -44,13 +44,13 @@ const besideWizard = (r: Box, c: DOMRect): [number, number] => {
 const steps = (walk: string, jump: string): Step[] => [
   {
     target: WIZARD,
-    text: "Your turn! This is you. Move the mouse to aim at another wizard.",
+    text: "Your turn! This is you. Move the mouse to aim at another flamingo.",
     place: besideWizard,
     done: (seen) => seen.aimed > 25,
   },
   {
     target: "#arena-spell-chip",
-    text: "Your spell. Tab or right-click opens the whole arsenal, the same for every wizard; the badge on each is how many you have left. Crates bring more.",
+    text: "Your spell. Tab or right-click opens the whole arsenal, the same for every flamingo; the badge on each is how many you have left. Crates bring more.",
     place: (r, c) => [r.left, r.top - c.height - 16],
     // Once they have looked through the panel and closed it again.
     done: (seen) => seen.spells && !spellsOpen(),

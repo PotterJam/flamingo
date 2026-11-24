@@ -1,8 +1,9 @@
 // The spell panel works like Worms' weapon panel: pointing at a spell shows its picture
 // and numbers in the pane beside the grid at once, with no wait; away from the grid the
 // pane goes back to the spell you have selected. The server renders every spell's pane
-// and shows the selected one. This hook only overrides which pane is visible, through a
-// style rule in an ignored element, so LiveView patches keep it.
+// and shows the selected one; all the panes share one grid cell, so the pane is always
+// the tallest one's size and the panel never jumps. This hook only overrides which pane
+// is visible, through a style rule in an ignored element, so LiveView patches keep it.
 
 interface CardsHook {
   el: HTMLElement;
@@ -14,7 +15,7 @@ export const SpellCards = {
     const hot = root.querySelector<HTMLStyleElement>("style[data-info-hot]")!;
     const show = (id: string | null) => {
       hot.textContent = id
-        ? `#arena-spells [data-info] { display: none; } #arena-spells [data-info="${CSS.escape(id)}"] { display: block; }`
+        ? `#arena-spells [data-info]:not([data-info="${CSS.escape(id)}"]) { visibility: hidden; animation: none; } #arena-spells [data-info="${CSS.escape(id)}"] { visibility: visible; }`
         : "";
     };
     const spellAt = (node: EventTarget | null) =>

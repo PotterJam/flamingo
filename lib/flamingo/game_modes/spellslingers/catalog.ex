@@ -1,6 +1,6 @@
 defmodule Flamingo.GameModes.Spellslingers.Catalog do
   @moduledoc """
-  The arsenal: every tool and explosive a miner carries, as in Worms. Everyone has the
+  The arsenal: every trick a flamingo has up its wing, as in Worms. Everyone has the
   same kit, each with its ammo and the number of its thrower's turns before it unlocks.
   """
 
@@ -29,10 +29,11 @@ defmodule Flamingo.GameModes.Spellslingers.Catalog do
   @spells [
             %{
               id: "firebolt",
-              name: "Coal Bomb",
-              blurb: "Your trusty lobbed lump of lit coal. Rides the wind, blasts a crater.",
+              name: "Mud Pie",
+              blurb:
+                "Your trusty lobbed pie of sticky nest mud. Rides the wind, blasts a crater.",
               effect: :blast,
-              color: "#f97316",
+              color: "#c2410c",
               sprite: 0,
               radius: 11,
               damage: 45,
@@ -40,11 +41,11 @@ defmodule Flamingo.GameModes.Spellslingers.Catalog do
             },
             %{
               id: "fuserune",
-              name: "Fuse Stone",
+              name: "Beach Ball",
               blurb:
-                "A stone packed with powder that bounces and rolls, then bursts on its fourth landing. Lob it into holes and round corners.",
+                "A striped beach ball stuffed with fizz that bounces and rolls, then bursts on its fourth landing. Bounce it into holes and round corners.",
               effect: :bounce,
-              color: "#fb923c",
+              color: "#06b6d4",
               sprite: 1,
               radius: 10,
               damage: 42,
@@ -53,11 +54,11 @@ defmodule Flamingo.GameModes.Spellslingers.Catalog do
             },
             %{
               id: "embers",
-              name: "Cinder Burst",
+              name: "Pomegranate",
               blurb:
-                "Bursts on impact and scatters five burning cinders that blast where they fall.",
+                "Bursts on impact and scatters five fizzing seeds that blast where they fall.",
               effect: :swarm,
-              color: "#ef4444",
+              color: "#e11d48",
               sprite: 2,
               radius: 7,
               damage: 22,
@@ -65,11 +66,11 @@ defmodule Flamingo.GameModes.Spellslingers.Catalog do
             },
             %{
               id: "thunderegg",
-              name: "Thunder Geode",
+              name: "Pineapple",
               blurb:
-                "Cracks open on impact and flings five geode shards that each go off like a Coal Bomb. Stand well back.",
+                "Splits open on impact and flings five chunks that each go off like a Mud Pie. Stand well back.",
               effect: :egg,
-              color: "#3b82f6",
+              color: "#eab308",
               sprite: 3,
               radius: 9,
               damage: 30,
@@ -78,10 +79,10 @@ defmodule Flamingo.GameModes.Spellslingers.Catalog do
             },
             %{
               id: "seeker",
-              name: "Ghost Canary",
-              blurb: "A lobbed canary that hunts the nearest enemy once it starts to fall.",
+              name: "Brine Fly",
+              blurb: "A buzzing brine fly that hunts the nearest enemy once it starts to fall.",
               effect: :seeker,
-              color: "#22d3ee",
+              color: "#14b8a6",
               sprite: 4,
               radius: 9,
               damage: 38,
@@ -89,11 +90,11 @@ defmodule Flamingo.GameModes.Spellslingers.Catalog do
             },
             %{
               id: "hexhare",
-              name: "Dynamite Hare",
+              name: "Wind-up Crab",
               blurb:
-                "Throw it and it hops on along the ground the way you threw it, then explodes on the first miner it meets.",
+                "Throw it and it scuttles on along the ground the way you threw it, then explodes on the first flamingo it meets.",
               effect: :hare,
-              color: "#a855f7",
+              color: "#dc2626",
               sprite: 5,
               radius: 12,
               damage: 55,
@@ -102,11 +103,11 @@ defmodule Flamingo.GameModes.Spellslingers.Catalog do
             },
             %{
               id: "lance",
-              name: "Spark Spike",
+              name: "Quill Dart",
               blurb:
-                "A red-hot rivet fired dead straight. Ignores gravity and wind; hits the first thing.",
+                "A stiff pink flight feather flicked dead straight. Ignores gravity and wind; hits the first thing.",
               effect: :blast,
-              color: "#fde047",
+              color: "#ec4899",
               sprite: 11,
               radius: 4,
               damage: 26,
@@ -117,11 +118,11 @@ defmodule Flamingo.GameModes.Spellslingers.Catalog do
             },
             %{
               id: "hook",
-              name: "Pick Hook",
+              name: "Shrimp on a String",
               blurb:
-                "Fling your pick on its chain. It bites the first miner along your aim and yanks them through the air to your feet: off their perch, out of cover, or into the sea.",
+                "Dangle a juicy shrimp on a line. The first flamingo along your aim can't resist: it lunges after it through the air to your feet, off its perch, out of cover, or into the sea.",
               effect: :hook,
-              color: "#d97706",
+              color: "#fb7185",
               sprite: 12,
               damage: 12,
               gravity: 0.0,
@@ -130,10 +131,10 @@ defmodule Flamingo.GameModes.Spellslingers.Catalog do
             },
             %{
               id: "tunnel",
-              name: "Rock Drill",
-              blurb: "A steam drill that bores a tunnel straight through the land.",
+              name: "Beak Dredge",
+              blurb: "Plunge your beak in and dredge a tunnel straight through the land.",
               effect: :tunnel,
-              color: "#f59e0b",
+              color: "#a16207",
               sprite: 13,
               damage: 10,
               gravity: 0.0,
@@ -143,9 +144,9 @@ defmodule Flamingo.GameModes.Spellslingers.Catalog do
             %{
               id: "blastrune",
               aimless: true,
-              name: "Powder Keg",
+              name: "Nest Egg",
               blurb:
-                "Drops a powder keg at your feet. It goes off when your turn ends, so drop it next to someone and run.",
+                "Lays a speckled egg at your feet. It hatches with a bang when your turn ends, so lay it next to someone and run.",
               effect: :blastrune,
               color: "#d946ef",
               sprite: 6,
@@ -157,10 +158,10 @@ defmodule Flamingo.GameModes.Spellslingers.Catalog do
               id: "meteors",
               place: true,
               sky: true,
-              name: "Rockfall",
-              blurb: "Point anywhere on the map: five boulders rake the ground there from above.",
+              name: "Coconut Drop",
+              blurb: "Point anywhere on the map: five coconuts rain down on the ground there.",
               effect: :meteors,
-              color: "#fb923c",
+              color: "#92400e",
               sprite: 7,
               radius: 6,
               damage: 26,
@@ -169,8 +170,8 @@ defmodule Flamingo.GameModes.Spellslingers.Catalog do
             %{
               id: "slab",
               place: true,
-              name: "Rail Slab",
-              blurb: "Bolt a slab of stone in mid-air: a bridge, a roof, a perch.",
+              name: "Mud Shelf",
+              blurb: "Slap a shelf of nest mud into the air: a bridge, a roof, a perch.",
               effect: :slab,
               color: "#a8a29e",
               sprite: 14
@@ -178,32 +179,32 @@ defmodule Flamingo.GameModes.Spellslingers.Catalog do
             %{
               id: "broom",
               quick: true,
-              name: "Steam Pack",
+              name: "Take Flight",
               blurb:
-                "Quick: strap it on and fly with WASD for 40 cells, then throw from the air. You drift down when the turn ends.",
+                "Quick: spread your wings and fly with WASD for 40 cells, then throw from the air. You flutter down when the turn ends.",
               effect: :broom,
-              color: "#a16207",
+              color: "#f472b6",
               sprite: 10
             },
             %{
               id: "blink",
               place: true,
               sky: true,
-              name: "Burrow",
+              name: "Migrate",
               blurb:
-                "Dig down and pop up at any open spot on the map. You still get your retreat.",
+                "Fly off and touch down at any open spot on the map. You still get your retreat.",
               effect: :blink,
-              color: "#a855f7",
+              color: "#f472b6",
               sprite: 15
             },
             %{
               id: "holyorb",
               grand: true,
-              name: "Holy Lantern",
+              name: "Disco Ball",
               blurb:
-                "Big one. Bounces once, sings, then erupts in the biggest single blast there is.",
+                "Big one. Bounces once, spins and sings, then erupts in the biggest single blast there is.",
               effect: :holy,
-              color: "#facc15",
+              color: "#e879f9",
               sprite: 9,
               radius: 17,
               damage: 80,
@@ -216,11 +217,11 @@ defmodule Flamingo.GameModes.Spellslingers.Catalog do
               grand: true,
               place: true,
               sky: true,
-              name: "Anvil Drop",
+              name: "Lawn Flamingo",
               blurb:
-                "Big one. A colossal anvil falls anywhere and smashes down through the land, blasting at every slam.",
+                "Big one. A colossal plastic lawn flamingo plunges from the sky stakes first and smashes down through the land, blasting at every slam.",
               effect: :anvil,
-              color: "#94a3b8",
+              color: "#f472b6",
               sprite: 8,
               radius: 8,
               damage: 30,
@@ -230,10 +231,11 @@ defmodule Flamingo.GameModes.Spellslingers.Catalog do
               id: "quake",
               grand: true,
               aimless: true,
-              name: "Cave-In",
-              blurb: "Big one. The whole island heaves: everyone else is hurt and thrown about.",
+              name: "Flock Stomp",
+              blurb:
+                "Big one. The whole flock stamps in time: the island heaves, and everyone else is hurt and thrown about.",
               effect: :quake,
-              color: "#b45309",
+              color: "#be185d",
               sprite: 17,
               damage: 18,
               knock: 30
@@ -242,10 +244,10 @@ defmodule Flamingo.GameModes.Spellslingers.Catalog do
               id: "starfall",
               grand: true,
               aimless: true,
-              name: "Slag Storm",
-              blurb: "Big one. Molten slag rains down on every part of the map at once.",
+              name: "Shrimp Storm",
+              blurb: "Big one. Red-hot shrimp rain down on every part of the map at once.",
               effect: :starfall,
-              color: "#fde047",
+              color: "#f97316",
               sprite: 16,
               radius: 6,
               damage: 22,
