@@ -59,6 +59,51 @@ defmodule FlamingoWeb.SpellslingersLiveTest do
     assert has_element?(arena, "#arena-canvas")
   end
 
+  test "a spell picked on someone else's turn waits, unwarned, for yours", %{conn: conn} do
+    room_id = "spellslingers-pick-#{System.unique_integer([:positive])}"
+    {:ok, ^room_id} = RoomSupervisor.start_room(room_id)
+    tokens = [join_connected(room_id, "Alice"), join_connected(room_id, "Bob")]
+    {:ok, lobby, _html} = live(conn, ~p"/game/#{room_id}?resume_token=#{hd(tokens)}")
+    lobby |> element("#game-mode-spellslingers") |> render_click()
+    lobby |> form("#settings-form") |> render_submit()
+
+    views =
+      for token <- tokens do
+        {:ok, view, _html} = live(conn, ~p"/game/#{room_id}/spellslingers?resume_token=#{token}")
+        render_hook(view, "arena_loaded", %{})
+        view
+      end
+
+    room = :global.whereis_name({:flamingo_room, room_id})
+    %{phase_timer: %{key: :arena_intro, generation: intro}} = :sys.get_state(room)
+    send(room, {:game_timeout, :phase, :arena_intro, intro})
+    game = fn -> :sys.get_state(room).game end
+    %{phase: :arena_aim, current_id: first} = game.()
+
+    {[waiting], [playing]} =
+      Enum.split_with(views, &has_element?(&1, "#arena-pass[disabled]"))
+
+    # Picking the broom would cast it on your own turn; off it, it is only selected.
+    render_hook(waiting, "select_spell", %{"spell" => "broom"})
+    assert has_element?(waiting, "#arena-selected-spell", "Take Flight")
+    refute has_element?(waiting, "#flash-error")
+    assert %{current_id: ^first, quick_used: false, cast_count: 0} = game.()
+
+    render_hook(playing, "pass", %{})
+    refute game.().current_id == first
+    assert has_element?(waiting, "#arena-selected-spell", "Take Flight")
+
+    # Casting off your turn is still refused.
+    render_hook(playing, "cast", %{"spell" => "firebolt", "angle" => 45, "power" => 50})
+    assert %{cast_count: 0} = game.()
+
+    # On your turn it goes off, and the used-up quick spell lets go of the selection.
+    render_hook(waiting, "select_spell", %{"spell" => "broom"})
+    assert %{quick_used: true} = game.()
+    assert has_element?(waiting, "#arena-selected-spell", "Mud Pie")
+    refute has_element?(waiting, "#flash-error")
+  end
+
   test "a lone host can start a duel against AI wizards from the lobby", %{conn: conn} do
     room_id = "spellslingers-bots-#{System.unique_integer([:positive])}"
     {:ok, ^room_id} = RoomSupervisor.start_room(room_id)

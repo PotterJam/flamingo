@@ -1287,15 +1287,23 @@ defmodule FlamingoWeb.SpellslingersLive do
 
       quick? ->
         case Rooms.command(socket.assigns.room_id, {:cast, spell, 0, 0}) do
-          {:error, reason} -> {:noreply, put_flash(socket, :error, command_error(reason))}
-          _ -> {:noreply, socket}
+          # Picked while someone else plays, it waits as the selection for your
+          # turn, when Space or a click uses it.
+          {:error, :not_your_turn} ->
+            {:noreply, select(socket, spell)}
+
+          {:error, reason} ->
+            {:noreply,
+             socket
+             |> put_flash(:error, command_error(reason))
+             |> push_event("arena_unlock", %{})}
+
+          _ ->
+            {:noreply, socket}
         end
 
       true ->
-        {:noreply,
-         socket
-         |> assign(:selected_spell, spell)
-         |> push_event("arena_select", %{spell: spell})}
+        {:noreply, select(socket, spell)}
     end
   end
 
@@ -1367,6 +1375,9 @@ defmodule FlamingoWeb.SpellslingersLive do
   # Malformed payloads issue no command.
   def handle_event(_event, _params, socket), do: {:noreply, socket}
 
+  defp select(socket, spell),
+    do: socket |> assign(:selected_spell, spell) |> push_event("arena_select", %{spell: spell})
+
   # Keys push numbers; the on-screen buttons send phx-value strings.
   defp parse_dir(dir) when dir in [-1, "-1"], do: -1
   defp parse_dir(_dir), do: 1
@@ -1399,12 +1410,19 @@ defmodule FlamingoWeb.SpellslingersLive do
     initial? = is_nil(socket.assigns.viewer_id)
     old_phase = socket.assigns.phase
 
+    # The quick spell used this turn is the current player's; on someone else's
+    # turn yours are still ready for your next.
+    quick_used =
+      Map.get(snapshot, :quick_used, false) and snapshot.current_id == snapshot.viewer_id
+
+    picked = socket.assigns.selected_spell
+
     selected =
-      if Map.has_key?(snapshot.locked, socket.assigns.selected_spell) or
-           socket.assigns.selected_spell not in snapshot.my_spells or
-           Map.get(snapshot.ammo, socket.assigns.selected_spell) == 0,
+      if Map.has_key?(snapshot.locked, picked) or picked not in snapshot.my_spells or
+           Map.get(snapshot.ammo, picked) == 0 or
+           (quick_used and match?(%{quick: true}, Spellslingers.spell(picked))),
          do: "firebolt",
-         else: socket.assigns.selected_spell
+         else: picked
 
     socket =
       assign(socket,
@@ -1425,7 +1443,7 @@ defmodule FlamingoWeb.SpellslingersLive do
         walk_budget: snapshot.walk_budget,
         jump_cost: snapshot.jump_cost,
         locked: snapshot.locked,
-        quick_used: Map.get(snapshot, :quick_used, false),
+        quick_used: quick_used,
         final_result: snapshot.final_result,
         my_spells: snapshot.my_spells,
         ammo: snapshot.ammo,

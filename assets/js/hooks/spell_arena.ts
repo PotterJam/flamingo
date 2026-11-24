@@ -2912,7 +2912,15 @@ const SpellArena = {
     const trigger = () => {
       const spell = spellDef();
       const wizard = myWizard();
-      if (!canCast() || !aim || !spell || !wizard || spell.input === "instant" || charge) return;
+      if (!canCast() || !spell || !wizard || charge) return;
+      // An instant spell picked during someone else's turn waits as the selection;
+      // using it goes the same way as picking it on your turn.
+      if (spell.input === "instant") {
+        castLocked = true;
+        this.pushEvent("select_spell", { spell: spell.id });
+        return;
+      }
+      if (!aim) return;
       if (spell.input === "place") {
         const target = placeTarget();
         if (!target || !target.inRange || target.sinks) return;
