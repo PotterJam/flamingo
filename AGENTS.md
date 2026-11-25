@@ -2,6 +2,42 @@
 
 Flamingo is an Elixir/Phoenix LiveView application where players guess what another player is drawing.
 
+## Code style
+
+### Hard rules
+
+- Zero agent authored comments. Only humans may write comments.
+
+### Design & architecture
+
+- Simplicity always wins. YAGNI and KISS are defining tenets in my code style.
+- Push branches up and loops down. Branching out invalid states leads to simpler sub-problems and tighter computation loops.
+- Reuse existing codebase patterns always. If a helper exists, use it. If a module exists, use it. If we use a library for a task elsewhere, use it.
+- Single source of truth for _data_. Derive where possible.
+- Prefer to inline helpers and functions until at least 2 valid orthogonal users need the same code. Duplicated code is free, a bad abstraction is not. If two consumers may diverge in future they don't share code.
+- Types should model variants where possible not flags or magic strings.
+- Public interfaces are important, prefer deep modules like Philosophy of Software Design.
+- Defer decisions that aren't one way doors.
+
+### Testing
+
+- Test observable behaviour. Verify is generally a smell and should be avoided. Instead decompose problems into data in -> data out and keep orchestration at a different level. Where a method only orchestrates a verify may be the only option and is preferred over constructing Fake implementations.
+- Never lower visibility to test. Making something public just to test is _explicitly banned_.
+- Test cases should cover the behaviour contract, not line of code coverage.
+- Extend existing tests when possible instead of new tests.
+- Prefer `expected = actual` instead of asserting each field individually.
+
+### Correctness
+
+- Only defend cases that can happen given the possible inputs. Over-defensive code will be rejected.
+- Branching and parsing early allows the main code to be simpler and hold fewer assumptions.
+
+### TypeScript & markup
+
+- Don't specify return types when the function can infer them.
+- No `unknown`, we control the domain and all boundaries so the type of everything will be describable.
+- Complex boolean logic and conditionals should be hoisted out of markup into variables and referenced in the markup.
+
 Don't add "Testing" sections to pr descriptions, pr descriptions should be based on the motivation behind the change and anything unusual at first glance in the pr. Commits already describe the implementation so thats superfluous information
 
 ---
